@@ -161,7 +161,7 @@ print(sample)
 result = processor.run()
 ```
 
-### 2. Structured Data Extraction
+### 2. Structured Data Extraction (JSON)
 
 ```python
 from ondine import PipelineBuilder
@@ -191,7 +191,48 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-### 3. With Cost Control
+### 3. Type-Safe Structured Output (Pydantic)
+
+```python
+from pydantic import BaseModel
+from ondine import PipelineBuilder
+from ondine.stages.response_parser_stage import PydanticParser
+
+# Define your Pydantic model for type-safe validation
+class ProductInfo(BaseModel):
+    brand: str
+    model: str
+    price: float
+    condition: str
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_dataframe(
+        df,
+        input_columns=["product_description"],
+        output_columns=["brand", "model", "price", "condition"]
+    )
+    .with_prompt("""
+        Extract product information and return JSON:
+        {
+          "brand": "manufacturer name",
+          "model": "product model",
+          "price": 999.99,
+          "condition": "new|used|refurbished"
+        }
+
+        Description: {product_description}
+    """)
+    .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
+    .with_parser(PydanticParser(ProductInfo, strict=True))  # Type-safe validation!
+    .build()
+)
+
+result = pipeline.execute()
+# Results are validated against ProductInfo model
+```
+
+### 4. With Cost Control
 
 ```python
 pipeline = (
@@ -219,7 +260,7 @@ if estimate.total_cost > 10.0:
 result = pipeline.execute()
 ```
 
-### 4. Multiple Input Columns
+### 5. Multiple Input Columns
 
 ```python
 pipeline = (
@@ -244,7 +285,7 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-### 5. Azure OpenAI
+### 6. Azure OpenAI
 
 ```python
 pipeline = (
@@ -262,7 +303,7 @@ pipeline = (
 )
 ```
 
-### 6. Anthropic Claude
+### 7. Anthropic Claude
 
 ```python
 pipeline = (
@@ -279,7 +320,7 @@ pipeline = (
 )
 ```
 
-### 7. Local Inference with MLX (Apple Silicon)
+### 8. Local Inference with MLX (Apple Silicon)
 
 ```python
 # 100% free, private, offline-capable inference on M1/M2/M3/M4 Macs
@@ -303,7 +344,7 @@ pipeline = (
 - macOS with Apple Silicon (M1/M2/M3/M4)
 - Install with: `pip install ondine[mlx]`
 
-### 8. Provider Presets (Simplified Configuration)
+### 9. Provider Presets (Simplified Configuration)
 
 ```python
 from ondine import PipelineBuilder
@@ -349,7 +390,7 @@ pipeline.with_llm_spec(custom_vllm)
 - IDE autocomplete for discovery
 - 80% code reduction vs parameter-based config
 
-### 9. Custom OpenAI-Compatible APIs (Parameter-Based)
+### 10. Custom OpenAI-Compatible APIs (Parameter-Based)
 
 ```python
 # Alternative: Configure providers with individual parameters
@@ -376,7 +417,7 @@ pipeline = (
 - **vLLM** (self-hosted): Your custom endpoint
 - **Any OpenAI-compatible API**
 
-### 10. Multi-Column Output with JSON Parsing
+### 11. Multi-Column Output with JSON Parsing
 
 ```python
 # Single LLM call generates multiple output columns
@@ -404,7 +445,7 @@ result = pipeline.execute()
 # Result has 3 new columns: brand, category, price
 ```
 
-### 11. Pipeline Composition (Multi-Column with Dependencies)
+### 12. Pipeline Composition (Multi-Column with Dependencies)
 
 ```python
 from ondine import PipelineComposer
@@ -692,15 +733,15 @@ MIT License - see LICENSE file for details
 ### Version 1.0.0 (October 2025)
 
 **New Features:**
-- ✅ **Provider Presets**: Pre-configured LLMSpec objects for common providers (80% code reduction)
-- ✅ **Simplified Configuration**: New `with_llm_spec()` method accepting LLMSpec objects
-- ✅ **MLX Integration**: Local inference on Apple Silicon (M1/M2/M3/M4) - 100% free, private, offline
-- ✅ **OpenAI-Compatible Provider**: Support for Ollama, vLLM, Together.AI, and custom APIs
-- ✅ **Multi-Column Processing**: Generate multiple output columns with JSON parsing
-- ✅ **Pipeline Composition**: Chain pipelines with dependencies between columns
-- ✅ **CLI Provider Discovery**: `ondine list-providers` command to explore all providers
-- ✅ **Auto-Retry for Multi-Column**: Automatic retry now checks all output columns for failures
-- ✅ **Custom LLM Clients**: Extend `LLMClient` base class for exotic APIs
+- **Provider Presets**: Pre-configured LLMSpec objects for common providers (80% code reduction)
+- **Simplified Configuration**: New `with_llm_spec()` method accepting LLMSpec objects
+- **MLX Integration**: Local inference on Apple Silicon (M1/M2/M3/M4) - 100% free, private, offline
+- **OpenAI-Compatible Provider**: Support for Ollama, vLLM, Together.AI, and custom APIs
+- **Multi-Column Processing**: Generate multiple output columns with JSON parsing
+- **Pipeline Composition**: Chain pipelines with dependencies between columns
+- **CLI Provider Discovery**: `ondine list-providers` command to explore all providers
+- **Auto-Retry for Multi-Column**: Automatic retry now checks all output columns for failures
+- **Custom LLM Clients**: Extend `LLMClient` base class for exotic APIs
 
 **Improvements:**
 - Zero configuration errors with validated presets

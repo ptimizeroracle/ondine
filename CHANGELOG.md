@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2025-10-27
 
-### 🎉 Initial Release
+### Initial Release
 
 **Ondine** - Production-grade SDK for batch processing tabular datasets with LLMs.
 
-#### ✨ Core Features
+#### Core Features
 
 - **Quick API**: 3-line hello world with smart defaults and auto-detection
 - **Simple API**: Fluent builder pattern for full control
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cost Control**: Pre-execution estimation, budget limits, real-time tracking
 - **Production Ready**: Zero data loss on crashes, resume from checkpoint
 
-#### 🔌 LLM Provider Support
+#### LLM Provider Support
 
 - OpenAI (GPT-4, GPT-3.5, etc.)
 - Azure OpenAI
@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ollama (local models)
 - Custom OpenAI-compatible APIs (Together.AI, vLLM, etc.)
 
-#### 🏗️ Architecture
+#### Architecture
 
 - **Plugin System**: `@provider` and `@stage` decorators for extensibility
 - **Multi-Column Processing**: Generate multiple outputs with composition or JSON parsing
@@ -37,14 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Streaming**: Process large datasets without loading into memory
 - **Async Execution**: Parallel processing with configurable concurrency
 
-#### 📦 APIs
+#### APIs
 
 - `QuickPipeline.create()` - Simplified API with smart defaults
 - `PipelineBuilder` - Full control with fluent builder pattern
 - `PipelineComposer` - Multi-column composition from YAML
 - CLI: `ondine process`, `ondine inspect`, `ondine validate`, `ondine estimate`
 
-#### 🧪 Quality
+#### Quality
 
 - 95%+ test coverage
 - Type hints throughout
@@ -52,14 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD with GitHub Actions
 - Security scanning with TruffleHog
 
-#### 📚 Documentation
+#### Documentation
 
 - Comprehensive README with examples
 - 18 example scripts covering all features
 - Technical reference documentation
 - Architecture Decision Records (ADRs)
 
-#### 🎯 Use Cases
+#### Use Cases
 
 - Data cleaning and standardization
 - Content categorization and tagging
@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 🚀 Upcoming Features
+### Upcoming Features
 
 - **RAG Integration**: Retrieval-Augmented Generation for context-aware processing
 - **Enhanced Observability**: More metrics and tracing options

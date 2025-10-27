@@ -1,8 +1,8 @@
 # Contributing to Ondine
 
-Thank you for your interest in contributing to Ondine! 🌾
+Thank you for your interest in contributing to Ondine!
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Fork and Clone**
    ```bash
@@ -27,7 +27,7 @@ Thank you for your interest in contributing to Ondine! 🌾
    git checkout -b feature/your-feature-name
    ```
 
-## 🧪 Development Workflow
+## Development Workflow
 
 ### Running Tests
 
@@ -80,10 +80,10 @@ just lint
 just check
 
 # View all available commands
-just --list
+   just --list
 ```
 
-## 📝 Code Guidelines
+## Code Guidelines
 
 ### Style
 
@@ -126,7 +126,7 @@ feat: add support for custom retry strategies
 - Update documentation
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 Ondine follows a **5-layer clean architecture**:
 
@@ -145,7 +145,7 @@ Ondine uses decorators for extensibility:
 
 See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.py` for details.
 
-## 🔌 Adding New Features
+## Adding New Features
 
 ### Adding a New LLM Provider
 
@@ -165,7 +165,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
 5. Add example in `examples/`
 6. Update documentation
 
-## 🐛 Reporting Bugs
+## Reporting Bugs
 
 1. Check if the bug is already reported in [Issues](https://github.com/ptimizeroracle/Ondine/issues)
 2. If not, create a new issue with:
@@ -175,7 +175,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
    - Environment details (OS, Python version, Ondine version)
    - Minimal reproducible example
 
-## 💡 Suggesting Features
+## Suggesting Features
 
 1. Check [existing feature requests](https://github.com/ptimizeroracle/Ondine/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
 2. Open a new issue with:
@@ -184,7 +184,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
    - Example usage
    - Why this would benefit users
 
-## 📦 Pull Request Process
+## Pull Request Process
 
 1. **Before submitting:**
    - Ensure all tests pass: `just test`
@@ -202,27 +202,27 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
    - Maintainers will merge your PR
    - Your contribution will be included in the next release!
 
-## 🎯 Good First Issues
+## Good First Issues
 
 Look for issues labeled [`good first issue`](https://github.com/ptimizeroracle/Ondine/labels/good%20first%20issue) - these are great for newcomers!
 
-## 📞 Getting Help
+## Getting Help
 
 - **Questions?** Open a [Discussion](https://github.com/ptimizeroracle/Ondine/discussions)
 - **Bugs?** Open an [Issue](https://github.com/ptimizeroracle/Ondine/issues)
 - **Chat?** Join our community (link coming soon)
 
-## 📜 Code of Conduct
+## Code of Conduct
 
 - Be respectful and inclusive
 - Welcome newcomers
 - Focus on constructive feedback
 - Help others learn and grow
 
-## 🙏 Thank You!
+## Thank You!
 
-Every contribution, no matter how small, makes Ondine better. We appreciate your time and effort! 🌾
+Every contribution, no matter how small, makes Ondine better. We appreciate your time and effort!
 
 ---
 
-**Happy coding!** 🚀
+**Happy coding!**

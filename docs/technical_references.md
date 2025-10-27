@@ -1,4 +1,4 @@
-# 🔬 Ondine - Complete Technical Reference
+# Ondine - Complete Technical Reference
 
 **Version**: 1.0.0
 **Last Updated**: October 18, 2025
@@ -13,7 +13,7 @@
 
 ---
 
-## 📚 Table of Contents
+## Table of Contents
 
 - [Part 1: Architecture Overview](#part-1-architecture-overview)
 - [Part 2: External Dependencies](#part-2-external-dependencies)
@@ -305,12 +305,12 @@ Enable integration with any LLM API that implements the OpenAI chat completions 
 **Responsibility**: Connect to custom OpenAI-compatible API endpoints
 
 **Supports**:
-- ✅ **Ollama** (local LLM server)
-- ✅ **vLLM** (self-hosted inference)
-- ✅ **Together.AI** (cloud API)
-- ✅ **Anyscale** (cloud API)
-- ✅ **LocalAI** (self-hosted)
-- ✅ **Any custom OpenAI-compatible API**
+- **Ollama** (local LLM server)
+- **vLLM** (self-hosted inference)
+- **Together.AI** (cloud API)
+- **Anyscale** (cloud API)
+- **LocalAI** (self-hosted)
+- **Any custom OpenAI-compatible API**
 
 ### Configuration
 
@@ -352,10 +352,10 @@ self.client = OpenAI(
 ```
 
 **Rationale**:
-- ✅ DRY: Reuse existing, well-tested code
-- ✅ Reliability: llama-index handles edge cases
-- ✅ Compatibility: Ensures OpenAI format compliance
-- ✅ Maintainability: Updates to OpenAI client benefit us
+- DRY: Reuse existing, well-tested code
+- Reliability: llama-index handles edge cases
+- Compatibility: Ensures OpenAI format compliance
+- Maintainability: Updates to OpenAI client benefit us
 
 ### Example Configurations
 
@@ -631,7 +631,7 @@ handler.calculate_delay(10) # 60.0 seconds (capped at max_delay)
 
 ### Thread Safety
 
-- ✅ **Thread-safe**: Yes (stateless operation, no shared mutable state)
+- **Thread-safe**: Yes (stateless operation, no shared mutable state)
 - Each `execute()` call is independent
 - tenacity handles thread safety internally
 
@@ -700,7 +700,7 @@ Implements token bucket algorithm for rate limiting API calls.
 - Each request consumes tokens
 - If no tokens available, wait until refilled
 
-**Thread Safety**: ✅ **Thread-safe** via `threading.Lock`
+**Thread Safety**: **Thread-safe** via `threading.Lock`
 
 **Attributes**:
 ```python
@@ -961,7 +961,7 @@ timestamp: float    # When request occurred
 
 **Single Responsibility**: ONLY handles cost accounting, not enforcement (that's BudgetController's job)
 
-**Thread Safety**: ✅ **Thread-safe** via `threading.Lock`
+**Thread Safety**: **Thread-safe** via `threading.Lock`
 
 **Attributes**:
 ```python
@@ -1491,12 +1491,12 @@ Enable integration with any LLM API that implements the OpenAI chat completions 
 **Responsibility**: Connect to custom OpenAI-compatible API endpoints
 
 **Supports**:
-- ✅ **Ollama** (local LLM server)
-- ✅ **vLLM** (self-hosted inference)
-- ✅ **Together.AI** (cloud API)
-- ✅ **Anyscale** (cloud API)
-- ✅ **LocalAI** (self-hosted)
-- ✅ **Any custom OpenAI-compatible API**
+- **Ollama** (local LLM server)
+- **vLLM** (self-hosted inference)
+- **Together.AI** (cloud API)
+- **Anyscale** (cloud API)
+- **LocalAI** (self-hosted)
+- **Any custom OpenAI-compatible API**
 
 ### Configuration
 
@@ -1524,10 +1524,10 @@ self.client = OpenAI(
 ```
 
 **Rationale**:
-- ✅ DRY: Reuse well-tested code
-- ✅ Reliability: Edge cases handled
-- ✅ Compatibility: Ensures OpenAI format
-- ✅ Maintainability: Benefit from upstream updates
+- DRY: Reuse well-tested code
+- Reliability: Edge cases handled
+- Compatibility: Ensures OpenAI format
+- Maintainability: Benefit from upstream updates
 
 ### Example: Together.AI
 ```yaml
@@ -1566,11 +1566,11 @@ Enable fast, free, local LLM inference on Apple Silicon using Apple's MLX framew
 **Responsibility**: Local in-process LLM inference using MLX framework
 
 **Key Features**:
-- ✅ In-process (no server management)
-- ✅ Model caching (load once, use many times)
-- ✅ Lazy imports (only when MLX provider used)
-- ✅ Dependency injection (clean testing)
-- ✅ Free inference ($0 cost)
+- In-process (no server management)
+- Model caching (load once, use many times)
+- Lazy imports (only when MLX provider used)
+- Dependency injection (clean testing)
+- Free inference ($0 cost)
 
 ### Architecture
 
@@ -1599,9 +1599,9 @@ client = MLXClient(spec, _mlx_lm_module=mock_mlx)  # Inject mock
 ```
 
 **Rationale**:
-- ✅ Testable: No sys.modules hacks
-- ✅ Clear: Explicit what's being injected
-- ✅ Backward compatible: Parameter is optional
+- Testable: No sys.modules hacks
+- Clear: Explicit what's being injected
+- Backward compatible: Parameter is optional
 
 ### Model Caching Strategy
 
@@ -1665,7 +1665,7 @@ Error: [original error]
 
 ### Thread Safety
 
-- ⚠️ **Not thread-safe**: MLX models are not thread-safe
+- **Not thread-safe**: MLX models are not thread-safe
 - **Recommendation**: Use `concurrency=1` in ProcessingSpec
 - **Why**: MLX optimized for Apple Neural Engine (single-threaded)
 
@@ -1735,11 +1735,11 @@ Simplify LLM provider configuration by providing pre-configured specifications f
 **Design Pattern**: Static Registry Pattern
 
 **Key Features**:
-- ✅ Zero boilerplate for common providers (80% code reduction)
-- ✅ Pre-validated configurations (correct URLs, pricing)
-- ✅ No hardcoded API keys (security by design)
-- ✅ IDE autocomplete support
-- ✅ Pydantic validation throughout
+- Zero boilerplate for common providers (80% code reduction)
+- Pre-validated configurations (correct URLs, pricing)
+- No hardcoded API keys (security by design)
+- IDE autocomplete support
+- Pydantic validation throughout
 
 ### Available Presets
 
@@ -2101,7 +2101,7 @@ is_tracing_enabled()  # Returns False (always)
 
 ### Thread Safety
 
-- ✅ **Thread-safe**: Yes (OpenTelemetry handles concurrency)
+- **Thread-safe**: Yes (OpenTelemetry handles concurrency)
 - Span creation/completion uses OpenTelemetry's thread-local context
 
 ### Performance
@@ -2151,7 +2151,7 @@ result = pipeline.execute()  # Traces exported
 
 ---
 
-**Document Status**: 🚧 IN PROGRESS (Layer 0 complete, Layer 1 documented with MLX, Presets, and Observability)
+**Document Status**: IN PROGRESS (Layer 0 complete, Layer 1 documented with MLX, Presets, and Observability)
 
 **Next Sections**:
 - 3.6 `utils/logging_utils.py`
