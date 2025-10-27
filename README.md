@@ -648,6 +648,48 @@ See [`examples/18_observability.py`](examples/18_observability.py) for complete 
 
 ## Configuration Options
 
+### Execution Modes
+
+**Standard Execution** (default)
+```python
+pipeline = PipelineBuilder.create().from_csv(...).build()
+result = pipeline.execute()
+```
+Use when: Dataset fits in memory (< 50K rows typical), straightforward processing.
+
+**Async Execution** (concurrent processing)
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv(...)
+    .with_async_execution(max_concurrency=10)
+    .build()
+)
+result = await pipeline.execute_async()
+```
+Use when: Need high throughput, LLM API supports async, running in async context (FastAPI, aiohttp).
+
+**Streaming Execution** (memory-efficient)
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv(...)
+    .with_streaming(chunk_size=1000)
+    .build()
+)
+for chunk_result in pipeline.execute_stream():
+    # Process each chunk as it completes
+    chunk_result.data.to_csv("output_chunk.csv", mode="a")
+```
+Use when: Large datasets (100K+ rows), limited memory, need constant memory footprint, early results desired.
+
+**When NOT to use streaming:**
+- Dataset under 50K rows (overhead not justified)
+- Need entire dataset in memory for post-processing
+- Pipeline has dependencies between rows
+
+See `examples/08_streaming_large_files.py` for detailed streaming example.
+
 ### Processing Configuration
 
 ```python
