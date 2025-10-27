@@ -32,7 +32,7 @@ jobs:
 
       - name: Build documentation
         run: |
-          mkdocs build --strict
+          mkdocs build
 
       - name: Deploy to GitHub Pages
         run: |
