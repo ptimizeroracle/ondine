@@ -14,6 +14,7 @@
  ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀
 ```
 
+[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
 [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ptimizeroracle/Ondine/branch/main/graph/badge.svg)](https://codecov.io/gh/ptimizeroracle/Ondine)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -136,6 +137,20 @@ export HUGGING_FACE_HUB_TOKEN="your-token-here"  # For model downloads
 
 # Local providers (Ollama, vLLM) don't need API keys
 ```
+
+## Documentation
+
+**Complete documentation is available at: https://ptimizeroracle.github.io/ondine**
+
+The documentation includes:
+- Installation and setup guides
+- Quickstart tutorial (build your first pipeline in 5 minutes)
+- Core concepts and architecture
+- Execution modes (sync, async, streaming)
+- Structured output with Pydantic
+- Cost control and optimization
+- Provider-specific guides
+- Complete API reference (auto-generated from source)
 
 ## Usage Examples
 
@@ -737,8 +752,10 @@ uv run pytest tests/test_pipeline.py
 
 ## Documentation
 
+**Full documentation**: https://ptimizeroracle.github.io/ondine
+
+Additional resources:
 - **README.md** (this file): Quick start and usage guide
-- **LLM_DATASET_ENGINE.md**: Complete architecture and design documentation
 - **examples/**: Example scripts demonstrating various features
 - **Code docstrings**: Inline documentation for all public APIs
 
