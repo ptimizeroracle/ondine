@@ -28,7 +28,7 @@ class TestCLI:
         """Test CLI version command."""
         result = self.runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "1.0.0" in result.output
+        assert "1.0.3" in result.output
 
     def test_process_help(self):
         """Test process command help."""
