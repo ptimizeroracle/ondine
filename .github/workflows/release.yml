@@ -12,6 +12,7 @@ jobs:
   build-and-publish:
     name: Build and publish to PyPI
     runs-on: ubuntu-latest
+    environment: Ondine  # Use the Ondine environment with PYPI_API_TOKEN
 
     steps:
     - name: Checkout code
