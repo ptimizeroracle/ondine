@@ -1,0 +1,22 @@
+# Codecov configuration
+coverage:
+  status:
+    project:
+      default:
+        target: 65%           # Project must maintain 65% coverage
+        threshold: 2%         # Allow 2% drop
+    patch:
+      default:
+        target: 70%           # New code should have 70% coverage
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/**/*"
+  - "examples/**/*"
+  - "docs/**/*"
+  - "**/__pycache__"
+  - ".venv"

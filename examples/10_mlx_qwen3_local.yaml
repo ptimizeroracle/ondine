@@ -1,0 +1,71 @@
+# Example: Using MLX with Qwen3 on Apple Silicon
+#
+# MLX is Apple's optimized ML framework for M-series chips.
+# This configuration enables fast, free, local LLM inference.
+#
+# Requirements:
+# - macOS with Apple Silicon (M1/M2/M3/M4)
+# - pip install ondine[mlx]
+# - HuggingFace token: export HUGGING_FACE_HUB_TOKEN="your_token"
+#
+# Setup:
+# 1. Install MLX: pip install ondine[mlx]
+# 2. Set token: export HUGGING_FACE_HUB_TOKEN="your_token"
+# 3. Run: ondine process --config examples/10_mlx_qwen3_local.yaml
+#
+# Benefits:
+# - 100% Free (no API costs)
+# - Privacy (data never leaves your Mac)
+# - Fast inference (optimized for Apple Silicon)
+# - Model cached after first download
+
+dataset:
+  source_type: csv
+  source_path: test_data.csv  # Replace with your data
+  input_columns:
+    - text
+  output_columns:
+    - sentiment
+    - confidence
+
+prompt:
+  template: |
+    Analyze the sentiment of the following text and provide a confidence score.
+
+    Text: {text}
+
+    Return JSON format:
+    {
+      "sentiment": "positive|negative|neutral",
+      "confidence": "0.0-1.0"
+    }
+  response_format: json
+  json_fields:
+    - sentiment
+    - confidence
+
+llm:
+  provider: mlx
+  model: mlx-community/Qwen3-1.7B-4bit  # Fast, small model
+  max_tokens: 100
+  # Local models are free!
+  input_cost_per_1k_tokens: 0.0
+  output_cost_per_1k_tokens: 0.0
+
+processing:
+  batch_size: 10
+  concurrency: 1  # MLX works best with concurrency=1 on M-series
+  error_policy: skip
+  checkpoint_interval: 100
+
+output:
+  destination_type: csv
+  destination_path: mlx_output.csv
+
+# Available Qwen3 models (MLX-optimized):
+# - mlx-community/Qwen3-1.7B-4bit (fast, ~1GB)
+# - mlx-community/Qwen3-1.7B (better quality, ~3GB)
+# - mlx-community/Qwen3-7B-4bit (slower, better, ~4GB)
+#
+# Note: First run downloads model (1-5 minutes)
+# Subsequent runs use cached model (instant!)

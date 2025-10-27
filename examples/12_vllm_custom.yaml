@@ -1,0 +1,68 @@
+# Example: Using vLLM Custom Deployment
+#
+# vLLM is a high-throughput LLM inference engine.
+# This example shows how to connect to your own vLLM deployment.
+#
+# Setup:
+# 1. Deploy vLLM server (see https://docs.vllm.ai/)
+#    Example: python -m vllm.entrypoints.openai.api_server \
+#             --model meta-llama/Llama-3.1-70B-Instruct \
+#             --port 8000
+# 2. Update base_url below to point to your vLLM server
+# 3. Run this config!
+#
+# Benefits:
+# - Maximum throughput
+# - Self-hosted (full control)
+# - Optimized for batch processing
+# - Great for large-scale data processing
+
+dataset:
+  source_type: excel
+  source_path: examples/sample_data.xlsx
+  input_columns:
+    - product_description
+  output_columns:
+    - category
+    - tags
+
+prompt:
+  template: |
+    Analyze this product and extract:
+    1. Category (clothing, electronics, home, office, sports, etc.)
+    2. Relevant tags (comma-separated)
+
+    Product: {product_description}
+
+    Return JSON format:
+    {
+      "category": "...",
+      "tags": "..."
+    }
+  response_format: json
+  json_fields:
+    - category
+    - tags
+
+llm:
+  provider: openai_compatible
+  provider_name: "vLLM-Custom"
+  model: meta-llama/Llama-3.1-70B-Instruct
+  base_url: http://your-vllm-server:8000/v1  # UPDATE THIS
+  # api_key not usually needed for internal vLLM deployments
+  temperature: 0.0
+  max_tokens: 200
+  # Self-hosted = free!
+  input_cost_per_1k_tokens: 0.0
+  output_cost_per_1k_tokens: 0.0
+
+processing:
+  batch_size: 100  # vLLM handles large batches well
+  concurrency: 20  # High concurrency for maximum throughput
+  checkpoint_interval: 500
+  error_policy: retry
+  max_retries: 2
+
+output:
+  destination_type: excel
+  destination_path: examples/vllm_output.xlsx

@@ -1,0 +1,55 @@
+# Example: Using Together.AI
+#
+# Together.AI offers fast, affordable LLM inference with many open-source models.
+#
+# Setup:
+# 1. Sign up at https://together.ai/
+# 2. Get your API key from the dashboard
+# 3. Set environment variable: export TOGETHER_API_KEY="your-key-here"
+# 4. Run this config!
+#
+# Benefits:
+# - Very affordable (~60% cheaper than OpenAI)
+# - Fast inference
+# - Many open-source models (Llama, Mixtral, etc.)
+# - Good for production workloads
+
+dataset:
+  source_type: csv
+  source_path: examples/sample_data.csv
+  input_columns:
+    - question
+  output_columns:
+    - answer
+
+prompt:
+  template: |
+    Answer the following question concisely and accurately.
+
+    Question: {question}
+
+    Answer:
+  response_format: raw
+
+llm:
+  provider: openai_compatible
+  provider_name: "Together.AI"
+  model: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  base_url: https://api.together.xyz/v1
+  api_key: ${TOGETHER_API_KEY}  # Or set directly (not recommended)
+  temperature: 0.7
+  max_tokens: 500
+  # Together.AI pricing (as of 2025)
+  input_cost_per_1k_tokens: "0.0006"  # $0.60 per 1M input tokens
+  output_cost_per_1k_tokens: "0.0006"  # $0.60 per 1M output tokens
+
+processing:
+  batch_size: 50
+  concurrency: 10  # Together.AI handles concurrency well
+  rate_limit_rpm: 600  # Free tier: 600 RPM
+  error_policy: retry
+  max_retries: 3
+
+output:
+  destination_type: csv
+  destination_path: examples/together_output.csv

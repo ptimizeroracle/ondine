@@ -1,0 +1,49 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Excel files
+*.xlsx
+*.xls
+
+# Temporary directory
+tmp/
+
+# macOS files
+.DS_Store
+
+# Test/example YAML files with data
+*bacon*.yaml
+test_similarity_composition.py
+ground_truth*.xlsx
+examples/similarity_*.yaml
+examples/swap_risk_assessment.yaml
+
+# Processing scripts with data
+process_all_*.py
+
+# Test/example scripts (not part of the framework)
+product_similarity_*.py
+product_similarity_*.xlsx
+
+# Checkpoints directory
+.checkpoints/
+.env
+test_*.csv
+test_*.yaml
+test_output.*
+
+# Generated architecture diagrams (regenerated from model.yaml)
+docs/architecture/diagrams/
+
+# Local documentation files (keep locally, don't commit)
+docs/DESIGN_IMPROVEMENT.md
+docs/ARCHITECTURE.md
+docs/architecture/

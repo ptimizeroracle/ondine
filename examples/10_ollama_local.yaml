@@ -1,0 +1,53 @@
+# Example: Using Local Ollama
+#
+# This configuration demonstrates using Ondine with Ollama running locally.
+# Ollama is a free, open-source LLM runner that supports many models.
+#
+# Setup:
+# 1. Install Ollama: https://ollama.ai/
+# 2. Pull a model: ollama pull llama3.1:70b
+# 3. Run this config!
+#
+# Benefits:
+# - 100% Free (no API costs)
+# - Privacy (data never leaves your machine)
+# - Fast inference (local GPU)
+# - No API key needed
+
+dataset:
+  source_type: csv
+  source_path: examples/sample_data.csv
+  input_columns:
+    - text
+  output_columns:
+    - sentiment
+
+prompt:
+  template: |
+    Analyze the sentiment of the following text.
+    Respond with only: positive, negative, or neutral.
+
+    Text: {text}
+
+    Sentiment:
+
+llm:
+  provider: openai_compatible
+  provider_name: "Ollama-Local"
+  model: llama3.1:70b  # or any model you've pulled
+  base_url: http://localhost:11434/v1
+  # No API key needed for local Ollama
+  temperature: 0.0
+  max_tokens: 10
+  # Local models are free!
+  input_cost_per_1k_tokens: 0.0
+  output_cost_per_1k_tokens: 0.0
+
+processing:
+  batch_size: 10
+  concurrency: 1  # Local models usually work best with concurrency=1
+  error_policy: skip
+
+output:
+  destination_type: csv
+  destination_path: examples/ollama_output.csv

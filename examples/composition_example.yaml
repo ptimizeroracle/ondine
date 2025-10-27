@@ -1,0 +1,43 @@
+# Example: Multi-Column Composition Configuration
+# This demonstrates how to process multiple independent columns
+#
+# NOTE: This is a template example showing the YAML structure.
+# For a working implementation, see examples/multi_column_composition_example.py
+# which demonstrates the same concept using the Python API.
+#
+# To use this YAML approach, you would need to create the referenced config files:
+# - examples/product_match_score.yaml
+# - examples/product_match_explanation.yaml
+# - examples/product_recommendation.yaml
+#
+# For now, use the Python API example instead.
+
+composition:
+  input: "products.xlsx"
+
+  pipelines:
+    # Column 1: Match score (independent)
+    - column: match_score
+      config: examples/product_match_score.yaml
+
+    # Column 2: Match explanation (depends on score)
+    - column: match_explanation
+      depends_on: [match_score]
+      config: examples/product_match_explanation.yaml
+
+    # Column 3: Recommendation (depends on both)
+    - column: recommendation
+      depends_on: [match_score, match_explanation]
+      config: examples/product_recommendation.yaml
+
+# How it works:
+# 1. Loads products.xlsx with columns: current_product, candidate_product
+# 2. Runs product_match_score.yaml → generates match_score column (0-100%)
+# 3. Runs product_match_explanation.yaml → uses match_score to generate detailed explanation
+# 4. Runs product_recommendation.yaml → uses both to generate recommendation (Replace/Keep/Alternative)
+# 5. Final output has all 3 new columns
+
+# Usage (once config files are created):
+#   from ondine.api import PipelineComposer
+#   composer = PipelineComposer.from_yaml("examples/composition_example.yaml")
+#   result = composer.execute()
