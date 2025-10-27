@@ -1,6 +1,6 @@
 [project]
 name = "ondine"
-version = "1.0.2"
+version = "1.0.3"
 description = "Ondine - The LLM Dataset Engine. Production-grade SDK for processing tabular datasets using LLMs with reliability, observability, and cost control"
 requires-python = ">=3.10"
 authors = [
@@ -45,7 +45,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/ptimizeroracle/Ondine"
 Repository = "https://github.com/ptimizeroracle/Ondine"
-Documentation = "https://github.com/ptimizeroracle/Ondine#readme"
+Documentation = "https://ptimizeroracle.github.io/ondine"
 Issues = "https://github.com/ptimizeroracle/Ondine/issues"
 
 [project.optional-dependencies]
