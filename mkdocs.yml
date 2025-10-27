@@ -95,7 +95,49 @@ nav:
       - Pipeline Composition: guides/pipeline-composition.md
   - API Reference:
       - Overview: api/index.md
-      - ... | api/SUMMARY.md
+      - High-Level API:
+          - Pipeline: api/api/pipeline.md
+          - PipelineBuilder: api/api/pipeline_builder.md
+          - QuickPipeline: api/api/quick.md
+          - PipelineComposer: api/api/pipeline_composer.md
+          - DatasetProcessor: api/api/dataset_processor.md
+      - Core:
+          - Specifications: api/core/specifications.md
+          - Models: api/core/models.md
+          - Error Handler: api/core/error_handler.md
+      - Stages:
+          - PipelineStage: api/stages/pipeline_stage.md
+          - Data Loader: api/stages/data_loader_stage.md
+          - Prompt Formatter: api/stages/prompt_formatter_stage.md
+          - LLM Invocation: api/stages/llm_invocation_stage.md
+          - Response Parser: api/stages/response_parser_stage.md
+          - Parser Factory: api/stages/parser_factory.md
+          - Result Writer: api/stages/result_writer_stage.md
+      - Orchestration:
+          - Pipeline Executor: api/orchestration/pipeline_executor.md
+          - Sync Executor: api/orchestration/sync_executor.md
+          - Async Executor: api/orchestration/async_executor.md
+          - Streaming Executor: api/orchestration/streaming_executor.md
+          - Execution Context: api/orchestration/execution_context.md
+          - State Manager: api/orchestration/state_manager.md
+          - Observers: api/orchestration/observers.md
+      - Adapters:
+          - LLM Client: api/adapters/llm_client.md
+          - Data IO: api/adapters/data_io.md
+          - Checkpoint Storage: api/adapters/checkpoint_storage.md
+      - Utilities:
+          - Cost Tracker: api/utils/cost_tracker.md
+          - Budget Controller: api/utils/budget_controller.md
+          - Rate Limiter: api/utils/rate_limiter.md
+          - Retry Handler: api/utils/retry_handler.md
+          - Logging: api/utils/logging_utils.md
+      - Configuration:
+          - Config Loader: api/config/config_loader.md
+      - CLI:
+          - Commands: api/cli/main.md
+      - Integrations:
+          - Airflow: api/integrations/airflow.md
+          - Prefect: api/integrations/prefect.md
   - Architecture:
       - Technical Reference: architecture/technical-reference.md
   - Contributing: contributing.md
