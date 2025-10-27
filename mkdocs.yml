@@ -95,7 +95,7 @@ nav:
       - Pipeline Composition: guides/pipeline-composition.md
   - API Reference:
       - Overview: api/index.md
-      - api/
+      - ... | api/SUMMARY.md
   - Architecture:
       - Technical Reference: architecture/technical-reference.md
   - Contributing: contributing.md
