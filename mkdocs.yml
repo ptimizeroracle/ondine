@@ -1,0 +1,109 @@
+site_name: Ondine Documentation
+site_description: Production-grade SDK for processing tabular datasets with LLMs
+site_url: https://ptimizeroracle.github.io/ondine
+repo_url: https://github.com/ptimizeroracle/ondine
+repo_name: ptimizeroracle/ondine
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.path
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            separate_signature: true
+            merge_init_into_class: true
+            show_if_no_docstring: false
+            filters:
+              - "!^_"  # Exclude private members
+            members_order: source
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Core Concepts: getting-started/core-concepts.md
+  - Guides:
+      - Execution Modes: guides/execution-modes.md
+      - Structured Output: guides/structured-output.md
+      - Cost Control: guides/cost-control.md
+      - Providers:
+          - OpenAI: guides/providers/openai.md
+          - Anthropic Claude: guides/providers/anthropic.md
+          - Groq: guides/providers/groq.md
+          - Azure OpenAI: guides/providers/azure.md
+          - Local MLX: guides/providers/local-mlx.md
+          - Custom APIs: guides/providers/custom.md
+      - Multi-Column Processing: guides/multi-column.md
+      - Pipeline Composition: guides/pipeline-composition.md
+  - API Reference:
+      - Overview: api/index.md
+      - api/
+  - Architecture:
+      - Technical Reference: architecture/technical-reference.md
+  - Contributing: contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ptimizeroracle/ondine
+  version:
+    provider: mike
+
