@@ -40,10 +40,15 @@ test_*.csv
 test_*.yaml
 test_output.*
 
+# MkDocs build output
+site/
+
+# IDE files
+.idea/
+
 # Generated architecture diagrams (regenerated from model.yaml)
 docs/architecture/diagrams/
 
 # Local documentation files (keep locally, don't commit)
 docs/DESIGN_IMPROVEMENT.md
 docs/ARCHITECTURE.md
-docs/architecture/
