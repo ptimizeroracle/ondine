@@ -5,6 +5,7 @@ Provides utilities to sanitize sensitive data in prompts and responses
 before including them in distributed traces.
 """
 
+import hashlib
 import re
 from typing import Any
 
@@ -68,21 +69,21 @@ def sanitize_prompt(prompt: str, include_prompts: bool = False) -> str:
         include_prompts: If True, return original prompt (opt-in)
 
     Returns:
-        Sanitized prompt (hash) or original if opted in
+        Sanitized prompt (stable hash) or original if opted in
 
     Examples:
         >>> sanitize_prompt("User email: test@example.com")
-        '<sanitized-1234>'
+        '<sanitized-a1b2c3d4>'
         >>> sanitize_prompt("Test prompt", include_prompts=True)
         'Test prompt'
     """
     if include_prompts:
         return prompt
 
-    # Return hash to detect duplicates without exposing content
-    # Use modulo to keep hash short and readable
-    hash_value = hash(prompt) % 10000
-    return f"<sanitized-{hash_value}>"
+    # Stable short digest for deduplication without content disclosure
+    # Use SHA-256 for deterministic hashing across runs (unlike built-in hash())
+    digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+    return f"<sanitized-{digest}>"
 
 
 def sanitize_response(response: str, include_prompts: bool = False) -> str:
