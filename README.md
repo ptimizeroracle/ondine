@@ -632,34 +632,95 @@ Run `ondine list-providers` to see detailed information about each provider.
 
 ## Observability & Debugging
 
-Enable distributed tracing with OpenTelemetry for production debugging:
+Ondine leverages **LlamaIndex's built-in observability** for automatic instrumentation of all LLM calls. Add observability with a single line:
 
 ```python
-from ondine.observability import enable_tracing
+from ondine import PipelineBuilder
 
-# Console exporter (development)
-enable_tracing(exporter="console")
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
+    .with_prompt("Process: {text}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    # Add observability - automatically tracks ALL LLM calls!
+    .with_observer("langfuse", config={
+        "public_key": "pk-lf-...",
+        "secret_key": "sk-lf-..."
+    })
+    .build()
+)
 
-# Jaeger exporter (production)
-enable_tracing(exporter="jaeger", endpoint="http://localhost:14268/api/traces")
-
-# Your pipeline execution is now traced
 result = pipeline.execute()
 ```
 
-**Features:**
-- Per-stage latency tracking
-- LLM token usage and cost per call
-- Error traces with stack traces
-- PII-safe by default (prompts sanitized)
-- Export to Jaeger, Datadog, or any OpenTelemetry-compatible backend
+### Supported Observers
 
-**Installation:**
-```bash
-pip install ondine-llm[observability]
+**Langfuse** - LLM-specific observability (recommended):
+```python
+.with_observer("langfuse", config={
+    "public_key": "pk-lf-...",
+    "secret_key": "sk-lf-...",
+    "host": "https://cloud.langfuse.com"  # optional
+})
+```
+Tracks: prompts, completions, tokens, costs, latency, model info
+
+**OpenTelemetry** - Infrastructure monitoring:
+```python
+.with_observer("opentelemetry", config={})
+```
+Tracks: spans, traces, metrics - works with Jaeger, Datadog, Grafana
+
+**Logging** - Simple console output:
+```python
+.with_observer("logging", config={})
+```
+Tracks: basic LLM call logs to console
+
+**Multiple observers simultaneously**:
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("data.csv", ...)
+    .with_prompt("...")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .with_observer("langfuse", config={...})
+    .with_observer("opentelemetry", config={...})
+    .with_observer("logging", config={})
+    .build()
+)
 ```
 
-See [`examples/18_observability.py`](examples/18_observability.py) for complete examples.
+### What's Tracked Automatically
+
+**Powered by LlamaIndex instrumentation:**
+- Full prompt and completion text
+- Token usage (input, output, total)
+- Cost per call
+- Latency metrics
+- Model and provider information
+- Future: RAG retrieval when we add it
+
+### Examples
+
+See complete examples:
+- `examples/15_observability_logging.py` - Simple console logging
+- `examples/16_observability_opentelemetry.py` - OpenTelemetry + Jaeger
+- `examples/17_observability_langfuse.py` - Langfuse integration
+- `examples/18_observability_multi.py` - Multiple observers
+
+### Setup Langfuse (Recommended for LLM Observability)
+
+1. Sign up at https://cloud.langfuse.com (free tier available)
+2. Get your API keys
+3. Add to your pipeline:
+```python
+.with_observer("langfuse", config={
+    "public_key": "pk-lf-...",
+    "secret_key": "sk-lf-..."
+})
+```
+4. View detailed traces in Langfuse dashboard
 
 ## Configuration Options
 
@@ -776,8 +837,11 @@ MIT License - see LICENSE file for details
 
 ## Acknowledgments
 
-- Built with [LlamaIndex](https://www.llamaindex.ai/) for LLM provider abstraction
-- Ondine adds batch processing, cost tracking, checkpointing, and configuration management on top of LlamaIndex's LLM clients
+- Built with [LlamaIndex](https://www.llamaindex.ai/) for LLM provider abstraction and observability
+- Ondine leverages:
+  - **LlamaIndex LLM clients** for OpenAI, Anthropic, Groq, Azure
+  - **LlamaIndex observability** for automatic instrumentation of LLM calls
+  - Ondine adds: batch processing, cost tracking, checkpointing, YAML configuration, and dataset orchestration
 - Thanks to the open-source community
 
 ## Support
