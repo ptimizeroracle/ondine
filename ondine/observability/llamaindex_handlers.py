@@ -146,4 +146,3 @@ class LlamaIndexHandlerManager:
         # but setting it to None or creating a no-op handler works
         cls._active_handler = None
         logger.info("LlamaIndex handler reset")
-

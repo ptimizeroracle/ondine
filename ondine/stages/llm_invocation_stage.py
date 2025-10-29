@@ -227,7 +227,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # - Latency metrics
         # - Model information
 
-
     def validate_input(self, batches: list[PromptBatch]) -> ValidationResult:
         """Validate prompt batches."""
         result = ValidationResult(is_valid=True)
