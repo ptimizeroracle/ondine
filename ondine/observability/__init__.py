@@ -1,66 +1,108 @@
 """
 Observability toolkit for Ondine pipelines.
 
-Provides distributed tracing with OpenTelemetry for production debugging
-and performance monitoring.
+Provides event-driven observability with support for multiple backends:
+- OpenTelemetry for infrastructure monitoring (Jaeger, Datadog, etc.)
+- Langfuse for LLM-specific observability (prompts, tokens, costs)
+- Logging for simple console/file output
 
 Usage:
-    >>> from ondine.observability import enable_tracing, TracingObserver
-    >>> enable_tracing(exporter="jaeger", endpoint="http://localhost:14268")
-    >>> # Traces will be exported to Jaeger
+    >>> from ondine import PipelineBuilder
+    >>>
+    >>> # Add observability to pipeline
+    >>> pipeline = (
+    ...     PipelineBuilder.create()
+    ...     .from_csv("data.csv", ...)
+    ...     .with_prompt("...")
+    ...     .with_llm(provider="openai", model="gpt-4o-mini")
+    ...     .with_observer("langfuse", config={
+    ...         "public_key": "pk-lf-...",
+    ...         "secret_key": "sk-lf-..."
+    ...     })
+    ...     .build()
+    ... )
+
+    >>> # Create custom observers
+    >>> from ondine.observability import PipelineObserver, observer
+    >>>
+    >>> @observer("custom")
+    >>> class CustomObserver(PipelineObserver):
+    ...     def on_llm_call(self, event):
+    ...         print(f"LLM: {event.model} - ${event.cost}")
 """
 
-# Check if OpenTelemetry is available (optional dependency)
+# Core observability infrastructure (always available)
+from ondine.observability.base import PipelineObserver
+from ondine.observability.dispatcher import ObserverDispatcher
+from ondine.observability.events import (
+    ErrorEvent,
+    LLMCallEvent,
+    PipelineEndEvent,
+    PipelineStartEvent,
+    StageEndEvent,
+    StageStartEvent,
+)
+
+# Import official observers (will auto-register)
+from ondine.observability.observers import (  # noqa: F401
+    LoggingObserver,
+    OpenTelemetryObserver,
+)
+from ondine.observability.registry import ObserverRegistry, observer
+from ondine.observability.sanitizer import sanitize_event, sanitize_text
+
+# Langfuse is optional - only import if available
 try:
-    from opentelemetry import trace  # noqa: F401
+    from ondine.observability.observers import LangfuseObserver  # noqa: F401
 
-    OBSERVABILITY_AVAILABLE = True
+    LANGFUSE_AVAILABLE = True
 except ImportError:
-    OBSERVABILITY_AVAILABLE = False
+    LANGFUSE_AVAILABLE = False
 
-# Conditional imports based on availability
-if OBSERVABILITY_AVAILABLE:
-    from .observer import TracingObserver
-    from .tracer import disable_tracing, enable_tracing, is_tracing_enabled
+# Legacy TracingObserver support (backward compatibility)
+try:
+    from ondine.observability.observer import TracingObserver  # noqa: F401
+    from ondine.observability.tracer import (  # noqa: F401
+        disable_tracing,
+        enable_tracing,
+        is_tracing_enabled,
+    )
 
-    __all__ = [
-        "enable_tracing",
-        "disable_tracing",
-        "is_tracing_enabled",
-        "TracingObserver",
-    ]
-else:
-    # Graceful degradation - provide helpful error messages
-    def enable_tracing(*args, **kwargs):
-        """Placeholder when observability is not installed."""
-        raise ImportError(
-            "Observability features require OpenTelemetry.\n"
-            "Install with: pip install ondine[observability]\n"
-            "Or: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-jaeger"
-        )
+    LEGACY_OBSERVABILITY = True
+except ImportError:
+    LEGACY_OBSERVABILITY = False
 
-    def disable_tracing(*args, **kwargs):
-        """Placeholder when observability is not installed."""
-        raise ImportError(
-            "Observability features require: pip install ondine[observability]"
-        )
+# Build __all__ dynamically
+__all__ = [
+    # Core infrastructure
+    "PipelineObserver",
+    "ObserverRegistry",
+    "ObserverDispatcher",
+    "observer",
+    # Event models
+    "PipelineStartEvent",
+    "StageStartEvent",
+    "LLMCallEvent",
+    "StageEndEvent",
+    "ErrorEvent",
+    "PipelineEndEvent",
+    # Sanitization
+    "sanitize_text",
+    "sanitize_event",
+    # Official observers
+    "OpenTelemetryObserver",
+    "LoggingObserver",
+]
 
-    def is_tracing_enabled() -> bool:
-        """Always returns False when observability is not installed."""
-        return False
+if LANGFUSE_AVAILABLE:
+    __all__.append("LangfuseObserver")
 
-    class TracingObserver:  # type: ignore
-        """Placeholder when observability is not installed."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "TracingObserver requires OpenTelemetry.\n"
-                "Install with: pip install ondine[observability]"
-            )
-
-    __all__ = [
-        "enable_tracing",
-        "disable_tracing",
-        "is_tracing_enabled",
-        "TracingObserver",
-    ]
+if LEGACY_OBSERVABILITY:
+    __all__.extend(
+        [
+            "TracingObserver",
+            "enable_tracing",
+            "disable_tracing",
+            "is_tracing_enabled",
+        ]
+    )

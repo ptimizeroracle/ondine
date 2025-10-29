@@ -44,15 +44,25 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
 
-  # Architecture validation
+  # Run unit tests before commit
   - repo: local
     hooks:
-      - id: validate-architecture
-        name: Validate Architecture Model
-        entry: uv run python tools/validate_architecture.py --quick
+      - id: pytest-unit
+        name: Run Unit Tests
+        entry: uv run pytest tests/unit/ -q --tb=line
         language: system
         pass_filenames: false
-        files: ^(docs/architecture/model\.yaml|ondine/.*)$
+        always_run: true
+
+  # Architecture validation (disabled - model.yaml not in use)
+  # - repo: local
+  #   hooks:
+  #     - id: validate-architecture
+  #       name: Validate Architecture Model
+  #       entry: uv run python tools/validate_architecture.py --quick
+  #       language: system
+  #       pass_filenames: false
+  #       files: ^(docs/architecture/model\.yaml|ondine/.*)$
 
 
 ci:

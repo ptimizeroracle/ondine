@@ -1,6 +1,7 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import concurrent.futures
+import time
 from decimal import Decimal
 from typing import Any
 
@@ -121,8 +122,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         ) as executor:
             # Submit all tasks and keep them in order
             futures = [
-                executor.submit(self._invoke_with_retry_and_ratelimit, prompt)
-                for prompt in prompts
+                executor.submit(
+                    self._invoke_with_retry_and_ratelimit,
+                    prompt,
+                    context,
+                    context.last_processed_row + idx if context else idx,
+                )
+                for idx, prompt in enumerate(prompts)
             ]
 
             self.logger.info(f"Submitted {len(futures)} parallel tasks to executor")
@@ -189,8 +195,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return responses
 
-    def _invoke_with_retry_and_ratelimit(self, prompt: str) -> Any:
+    def _invoke_with_retry_and_ratelimit(
+        self, prompt: str, context: Any = None, row_index: int = 0
+    ) -> Any:
         """Invoke LLM with rate limiting and retries."""
+        time.time()
 
         def _invoke() -> Any:
             # Acquire rate limit token
@@ -210,6 +219,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         # Execute with retry handler
         return self.retry_handler.execute(_invoke)
+
+        # LlamaIndex automatically instruments the LLM call above!
+        # No need to manually emit events - LlamaIndex's handlers capture:
+        # - Prompt and completion
+        # - Token usage and costs
+        # - Latency metrics
+        # - Model information
 
     def validate_input(self, batches: list[PromptBatch]) -> ValidationResult:
         """Validate prompt batches."""

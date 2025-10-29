@@ -1,13 +1,14 @@
 """Unit tests for response parsers."""
 
 import pytest
+from pydantic import BaseModel
+
 from ondine.stages import (
     JSONParser,
     PydanticParser,
     RawTextParser,
     RegexParser,
 )
-from pydantic import BaseModel
 
 
 class TestRawTextParser:

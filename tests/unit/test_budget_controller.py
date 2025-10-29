@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 import pytest
+
 from ondine.utils import BudgetController, BudgetExceededError
 
 

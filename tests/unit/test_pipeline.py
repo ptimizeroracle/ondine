@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 import pandas as pd
+
 from ondine.api.pipeline import Pipeline
 from ondine.core.specifications import (
     DatasetSpec,

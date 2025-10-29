@@ -10,6 +10,7 @@ These tests ensure the full pipeline works with:
 from decimal import Decimal
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 from ondine.core.specifications import ErrorPolicy
 

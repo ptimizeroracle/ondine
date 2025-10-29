@@ -7,12 +7,13 @@ Implements Memento pattern for checkpoint serialization.
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID, uuid4
 
 from ondine.core.models import ProcessingStats
 
 if TYPE_CHECKING:
+    from ondine.observability.dispatcher import ObserverDispatcher
     from ondine.orchestration.observers import ExecutionObserver
 
 
@@ -73,8 +74,15 @@ class ExecutionContext:
     failed_rows: int = 0
     skipped_rows: int = 0
 
-    # Observers for progress notifications
+    # Observers for progress notifications (backward compatibility)
     observers: list["ExecutionObserver"] = field(default_factory=list)
+
+    # New observability system
+    observer_dispatcher: Optional["ObserverDispatcher"] = None
+
+    # Distributed tracing
+    trace_id: str = field(default_factory=lambda: str(uuid4()))
+    span_id: str = field(default_factory=lambda: str(uuid4()))
 
     def update_stage(self, stage_index: int) -> None:
         """Update current stage."""

@@ -5,6 +5,7 @@ Tests the plugin system for custom pipeline stages.
 """
 
 import pytest
+
 from ondine.stages.pipeline_stage import PipelineStage
 from ondine.stages.stage_registry import StageRegistry, stage
 

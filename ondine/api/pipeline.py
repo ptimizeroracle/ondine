@@ -229,7 +229,45 @@ class Pipeline:
         # Attach observers to context for progress notifications
         context.observers = self.observers
 
-        # Notify observers of start
+        # Initialize new observability system if observers configured
+        observer_configs = self.specifications.metadata.get("observers", [])
+        if observer_configs:
+            from ondine.observability.dispatcher import ObserverDispatcher
+            from ondine.observability.registry import ObserverRegistry
+
+            # Instantiate observers from configuration
+            new_observers = []
+            for observer_name, observer_config in observer_configs:
+                try:
+                    observer_class = ObserverRegistry.get(observer_name)
+                    observer_instance = observer_class(config=observer_config)
+                    new_observers.append(observer_instance)
+                    self.logger.info(f"Initialized observer: {observer_name}")
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to initialize observer '{observer_name}': {e}"
+                    )
+
+            # Create dispatcher and attach to context
+            if new_observers:
+                context.observer_dispatcher = ObserverDispatcher(new_observers)
+
+                # Emit pipeline start event
+                from ondine.observability.events import PipelineStartEvent
+
+                start_event = PipelineStartEvent(
+                    pipeline_id=self.id,
+                    run_id=context.session_id,
+                    timestamp=datetime.now(),
+                    trace_id=context.trace_id,
+                    span_id=context.span_id,
+                    config={},
+                    metadata=self.specifications.metadata,
+                    total_rows=0,  # Will be updated after data loading
+                )
+                context.observer_dispatcher.dispatch("pipeline_start", start_event)
+
+        # Notify legacy observers of start
         for observer in self.observers:
             observer.on_pipeline_start(self, context)
 
@@ -269,9 +307,41 @@ class Pipeline:
             # Cleanup checkpoints on success
             state_manager.cleanup_checkpoints(context.session_id)
 
-            # Notify observers of completion
+            # Notify legacy observers of completion
             for observer in self.observers:
                 observer.on_pipeline_complete(context, result)
+
+            # Emit pipeline end event for new observability system
+            if context.observer_dispatcher:
+                from ondine.observability.events import PipelineEndEvent
+
+                end_event = PipelineEndEvent(
+                    pipeline_id=self.id,
+                    run_id=context.session_id,
+                    success=True,
+                    timestamp=datetime.now(),
+                    trace_id=context.trace_id,
+                    span_id=context.span_id,
+                    total_duration_ms=(
+                        (context.end_time - context.start_time).total_seconds() * 1000
+                        if context.end_time
+                        else 0
+                    ),
+                    rows_processed=result.metrics.processed_rows,
+                    rows_succeeded=result.metrics.processed_rows
+                    - result.metrics.failed_rows,
+                    rows_failed=result.metrics.failed_rows,
+                    rows_skipped=result.metrics.skipped_rows,
+                    total_cost=result.costs.total_cost,
+                    total_tokens=result.costs.total_tokens,
+                    input_tokens=result.costs.input_tokens,
+                    output_tokens=result.costs.output_tokens,
+                )
+                context.observer_dispatcher.dispatch("pipeline_end", end_event)
+
+                # Flush and close observers
+                context.observer_dispatcher.flush_all()
+                context.observer_dispatcher.close_all()
 
             return result
 
@@ -283,9 +353,31 @@ class Pipeline:
                 f"Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
             )
 
-            # Notify observers of error
+            # Notify legacy observers of error
             for observer in self.observers:
                 observer.on_pipeline_error(context, e)
+
+            # Emit error event for new observability system
+            if context.observer_dispatcher:
+                from ondine.observability.events import ErrorEvent
+
+                error_event = ErrorEvent(
+                    pipeline_id=self.id,
+                    run_id=context.session_id,
+                    timestamp=datetime.now(),
+                    trace_id=context.trace_id,
+                    span_id=context.span_id,
+                    error=e,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    stack_trace="",  # Could add full traceback if needed
+                )
+                context.observer_dispatcher.dispatch("error", error_event)
+
+                # Flush and close observers even on error
+                context.observer_dispatcher.flush_all()
+                context.observer_dispatcher.close_all()
+
             raise
 
     def _execute_stages(

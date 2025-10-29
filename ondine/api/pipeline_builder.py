@@ -56,6 +56,7 @@ class PipelineBuilder:
         self._custom_parser: any | None = None
         self._custom_llm_client: any | None = None
         self._custom_stages: list[dict] = []  # For custom stage injection
+        self._observers: list[tuple[str, dict]] = []  # For observability
 
     @staticmethod
     def create() -> "PipelineBuilder":
@@ -694,6 +695,79 @@ class PipelineBuilder:
 
         return self
 
+    def with_observer(
+        self, name: str, config: dict[str, any] | None = None
+    ) -> "PipelineBuilder":
+        """
+        Add observability observer to the pipeline.
+
+        Observers receive events during pipeline execution for monitoring,
+        logging, and tracing.
+
+        Args:
+            name: Observer identifier (e.g., "langfuse", "opentelemetry", "logging")
+            config: Observer-specific configuration dictionary
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: If observer not registered
+
+        Example:
+            # OpenTelemetry for infrastructure monitoring
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", ...)
+                .with_prompt("...")
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .with_observer("opentelemetry", config={
+                    "tracer_name": "my_pipeline",
+                    "include_prompts": False
+                })
+                .build()
+            )
+
+            # Langfuse for LLM-specific observability
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", ...)
+                .with_prompt("...")
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .with_observer("langfuse", config={
+                    "public_key": "pk-lf-...",
+                    "secret_key": "sk-lf-..."
+                })
+                .build()
+            )
+
+            # Multiple observers
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", ...)
+                .with_prompt("...")
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .with_observer("langfuse", config={...})
+                .with_observer("opentelemetry", config={...})
+                .with_observer("logging", config={"log_level": "DEBUG"})
+                .build()
+            )
+        """
+        from ondine.observability.registry import ObserverRegistry
+
+        # Validate observer is registered
+        if not ObserverRegistry.is_registered(name):
+            available = ", ".join(ObserverRegistry.list_observers())
+            raise ValueError(
+                f"Observer '{name}' not registered. "
+                f"Available observers: {available or 'none'}"
+            )
+
+        # Store observer config for later instantiation
+        self._observers.append((name, config or {}))
+
+        return self
+
     def build(self) -> Pipeline:
         """
         Build final Pipeline.
@@ -714,7 +788,7 @@ class PipelineBuilder:
         if not self._llm_spec and not self._custom_llm_client:
             raise ValueError("Either LLM specification or custom LLM client required")
 
-        # Prepare metadata with custom parser, custom client, and/or custom stages if provided
+        # Prepare metadata with custom parser, custom client, custom stages, and observers
         metadata = {}
         if self._custom_parser is not None:
             metadata["custom_parser"] = self._custom_parser
@@ -722,6 +796,8 @@ class PipelineBuilder:
             metadata["custom_llm_client"] = self._custom_llm_client
         if self._custom_stages:
             metadata["custom_stages"] = self._custom_stages
+        if self._observers:
+            metadata["observers"] = self._observers
 
         # Create specifications bundle
         # If custom client provided but no llm_spec, create a dummy spec

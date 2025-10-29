@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+
 from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_composer import PipelineComposer
 from ondine.core.models import CostEstimate, ExecutionResult

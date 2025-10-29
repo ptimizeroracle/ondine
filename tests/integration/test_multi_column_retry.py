@@ -9,6 +9,7 @@ from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import pandas as pd
+
 from ondine.api import PipelineBuilder
 from ondine.core.models import LLMResponse
 

@@ -27,7 +27,7 @@ Production-grade SDK for batch processing tabular datasets with LLMs. Built on L
 - **Simple API**: Fluent builder pattern for full control when needed
 - **Reliability**: Automatic retries, checkpointing, error policies (99.9% completion rate)
 - **Cost Control**: Pre-execution estimation, budget limits, real-time tracking
-- **Observability**: Progress bars, structured logging, metrics, cost reports
+- **Observability**: LlamaIndex-powered automatic LLM tracking (Langfuse, OpenTelemetry), progress bars, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
 - **Production Ready**: Zero data loss on crashes, resume from checkpoint
 - **Multiple Providers**: OpenAI, Azure OpenAI, Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs
@@ -106,8 +106,8 @@ Or with optional dependencies:
 # For Apple Silicon local inference
 pip install ondine[mlx]
 
-# For observability (OpenTelemetry)
-pip install ondine[observability]
+# Observability is now built-in (OpenTelemetry + Langfuse)
+# No separate install needed!
 
 # For development
 pip install ondine[dev]
