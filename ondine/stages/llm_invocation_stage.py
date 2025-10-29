@@ -1,6 +1,7 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import concurrent.futures
+import time
 from decimal import Decimal
 from typing import Any
 
