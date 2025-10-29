@@ -1,8 +1,11 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import concurrent.futures
+import time
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.error_handler import ErrorAction, ErrorHandler
@@ -121,8 +124,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         ) as executor:
             # Submit all tasks and keep them in order
             futures = [
-                executor.submit(self._invoke_with_retry_and_ratelimit, prompt)
-                for prompt in prompts
+                executor.submit(
+                    self._invoke_with_retry_and_ratelimit,
+                    prompt,
+                    context,
+                    context.last_processed_row + idx if context else idx,
+                )
+                for idx, prompt in enumerate(prompts)
             ]
 
             self.logger.info(f"Submitted {len(futures)} parallel tasks to executor")
@@ -189,8 +197,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return responses
 
-    def _invoke_with_retry_and_ratelimit(self, prompt: str) -> Any:
+    def _invoke_with_retry_and_ratelimit(
+        self, prompt: str, context: Any = None, row_index: int = 0
+    ) -> Any:
         """Invoke LLM with rate limiting and retries."""
+        start_time = time.time()
 
         def _invoke() -> Any:
             # Acquire rate limit token
@@ -209,7 +220,50 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 raise
 
         # Execute with retry handler
-        return self.retry_handler.execute(_invoke)
+        response = self.retry_handler.execute(_invoke)
+
+        # Calculate latency
+        latency_ms = (time.time() - start_time) * 1000
+
+        # Emit LLM call event if observer dispatcher is available
+        if (
+            context
+            and hasattr(context, "observer_dispatcher")
+            and context.observer_dispatcher
+        ):
+            from ondine.observability.events import LLMCallEvent
+
+            event = LLMCallEvent(
+                pipeline_id=context.pipeline_id,
+                run_id=context.session_id,
+                stage_name=self.name,
+                row_index=row_index,
+                timestamp=datetime.now(),
+                trace_id=context.trace_id,
+                span_id=str(uuid4()),
+                parent_span_id=context.span_id,
+                # LLM request
+                prompt=prompt,
+                model=self.llm_client.model,
+                provider=self.llm_client.spec.provider.value
+                if hasattr(self.llm_client.spec.provider, "value")
+                else str(self.llm_client.spec.provider),
+                temperature=self.llm_client.temperature,
+                max_tokens=self.llm_client.max_tokens,
+                # LLM response
+                completion=response.text,
+                finish_reason="stop",
+                # Metadata
+                input_tokens=response.tokens_in,
+                output_tokens=response.tokens_out,
+                total_tokens=response.tokens_in + response.tokens_out,
+                cost=response.cost,
+                latency_ms=latency_ms,
+            )
+
+            context.observer_dispatcher.dispatch("llm_call", event)
+
+        return response
 
     def validate_input(self, batches: list[PromptBatch]) -> ValidationResult:
         """Validate prompt batches."""
