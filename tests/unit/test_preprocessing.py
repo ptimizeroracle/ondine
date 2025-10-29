@@ -1,6 +1,7 @@
 """Tests for input preprocessing functionality."""
 
 import pandas as pd
+
 from ondine.utils.input_preprocessing import (
     ControlCharRemover,
     PreprocessingStats,

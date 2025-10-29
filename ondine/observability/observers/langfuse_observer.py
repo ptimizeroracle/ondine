@@ -6,7 +6,7 @@ of prompts, completions, tokens, and costs.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ondine.observability.base import PipelineObserver
 from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
@@ -19,33 +19,33 @@ logger = logging.getLogger(__name__)
 class LangfuseObserver(PipelineObserver):
     """
     Observer that delegates to LlamaIndex's Langfuse handler.
-    
+
     LlamaIndex automatically tracks:
     - ✅ Full prompts and completions
     - ✅ Token usage and costs
     - ✅ Latency metrics
     - ✅ Model information
     - ✅ Prompt versioning
-    
+
     Configuration:
         - public_key: Langfuse public key (required)
         - secret_key: Langfuse secret key (required)
         - host: Langfuse host URL (optional, defaults to cloud)
-    
+
     Example:
         observer = LangfuseObserver(config={
             "public_key": "pk-lf-...",
             "secret_key": "sk-lf-...",
         })
-    
+
     Raises:
         ValueError: If required config (public_key, secret_key) missing
     """
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize Langfuse observer.
-        
+
         Configures LlamaIndex's global Langfuse handler.
         """
         super().__init__(config)
@@ -66,7 +66,7 @@ class LangfuseObserver(PipelineObserver):
     def on_llm_call(self, event: Any) -> None:
         """
         LLM calls are automatically tracked by LlamaIndex.
-        
+
         No action needed - LlamaIndex's Langfuse handler captures:
         - Full prompt and completion text
         - Token usage and costs

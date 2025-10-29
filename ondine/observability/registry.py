@@ -4,7 +4,7 @@ Observer registry for plugin-based observability.
 Allows dynamic registration and discovery of observer implementations.
 """
 
-from typing import Callable, Type
+from collections.abc import Callable
 
 from ondine.observability.base import PipelineObserver
 
@@ -26,10 +26,10 @@ class ObserverRegistry:
         observer = observer_class(config={...})
     """
 
-    _observers: dict[str, Type[PipelineObserver]] = {}
+    _observers: dict[str, type[PipelineObserver]] = {}
 
     @classmethod
-    def register(cls, name: str, observer_class: Type[PipelineObserver]) -> None:
+    def register(cls, name: str, observer_class: type[PipelineObserver]) -> None:
         """
         Register an observer implementation.
 
@@ -55,7 +55,7 @@ class ObserverRegistry:
         cls._observers[name] = observer_class
 
     @classmethod
-    def get(cls, name: str) -> Type[PipelineObserver]:
+    def get(cls, name: str) -> type[PipelineObserver]:
         """
         Get observer class by name.
 
@@ -129,7 +129,7 @@ def observer(name: str) -> Callable:
                 logging.info(f"LLM: {event.model}")
     """
 
-    def decorator(observer_class: Type[PipelineObserver]) -> Type[PipelineObserver]:
+    def decorator(observer_class: type[PipelineObserver]) -> type[PipelineObserver]:
         ObserverRegistry.register(name, observer_class)
         return observer_class
 

@@ -42,14 +42,14 @@ from ondine.observability.events import (
     StageEndEvent,
     StageStartEvent,
 )
-from ondine.observability.registry import ObserverRegistry, observer
-from ondine.observability.sanitizer import sanitize_event, sanitize_text
 
 # Import official observers (will auto-register)
 from ondine.observability.observers import (  # noqa: F401
     LoggingObserver,
     OpenTelemetryObserver,
 )
+from ondine.observability.registry import ObserverRegistry, observer
+from ondine.observability.sanitizer import sanitize_event, sanitize_text
 
 # Langfuse is optional - only import if available
 try:
@@ -61,8 +61,8 @@ except ImportError:
 
 # Legacy TracingObserver support (backward compatibility)
 try:
-    from ondine.observability.observer import TracingObserver
-    from ondine.observability.tracer import (
+    from ondine.observability.observer import TracingObserver  # noqa: F401
+    from ondine.observability.tracer import (  # noqa: F401
         disable_tracing,
         enable_tracing,
         is_tracing_enabled,

@@ -6,7 +6,7 @@ while adding pipeline-level observability on top.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ondine.observability.base import PipelineObserver
 from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
@@ -19,27 +19,27 @@ logger = logging.getLogger(__name__)
 class OpenTelemetryObserver(PipelineObserver):
     """
     Observer that delegates to LlamaIndex's OpenTelemetry handler.
-    
+
     LlamaIndex automatically instruments:
     - ✅ All LLM calls (prompts, completions, tokens, latency)
     - ✅ Embeddings
     - ✅ Retrieval operations (when using QueryEngines)
-    
+
     This observer configures the LlamaIndex handler and can add
     pipeline-level spans on top if needed.
-    
+
     Configuration:
         - Any config accepted by LlamaIndex's OpenTelemetry handler
         - See: https://docs.llamaindex.ai/en/stable/module_guides/observability/
-    
+
     Example:
         observer = OpenTelemetryObserver(config={})
     """
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize OpenTelemetry observer.
-        
+
         Configures LlamaIndex's global OpenTelemetry handler.
         """
         super().__init__(config)
@@ -53,7 +53,7 @@ class OpenTelemetryObserver(PipelineObserver):
     def on_llm_call(self, event: Any) -> None:
         """
         LLM calls are automatically traced by LlamaIndex.
-        
+
         No action needed - LlamaIndex's OpenTelemetry handler captures:
         - Prompt and completion
         - Token usage

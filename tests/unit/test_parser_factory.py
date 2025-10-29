@@ -1,6 +1,7 @@
 """Unit tests for parser factory."""
 
 import pytest
+
 from ondine.core.specifications import PromptSpec
 from ondine.stages import (
     JSONParser,

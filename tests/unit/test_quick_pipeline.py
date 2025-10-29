@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pandas as pd
 import pytest
+
 from ondine.api.quick import QuickPipeline
 
 

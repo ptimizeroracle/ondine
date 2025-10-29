@@ -6,7 +6,7 @@ or send data to external observability systems.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from ondine.observability.events import (
     ErrorEvent,
@@ -43,7 +43,7 @@ class PipelineObserver(ABC):
                 print(f"LLM called: {event.model} - ${event.cost}")
     """
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize observer with configuration.
 

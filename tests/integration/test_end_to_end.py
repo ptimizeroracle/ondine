@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 import pytest
+
 from ondine import PipelineBuilder
 from ondine.stages import JSONParser
 

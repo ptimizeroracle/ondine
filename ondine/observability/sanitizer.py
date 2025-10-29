@@ -6,7 +6,7 @@ before including them in distributed traces.
 """
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from ondine.observability.events import LLMCallEvent
 
@@ -29,7 +29,7 @@ PII_PATTERNS = {
 
 def sanitize_text(
     text: str,
-    patterns: Optional[dict[str, re.Pattern]] = None,
+    patterns: dict[str, re.Pattern] | None = None,
     replacement: str = "[REDACTED]",
 ) -> str:
     """
@@ -108,9 +108,9 @@ def sanitize_response(response: str, include_prompts: bool = False) -> str:
 
 def sanitize_event(
     event: LLMCallEvent,
-    config: Optional[dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
 ) -> LLMCallEvent:
-    """
+    r"""
     Sanitize an LLM call event based on configuration.
 
     Args:

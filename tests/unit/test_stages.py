@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pandas as pd
 import pytest
+
 from ondine.core.models import LLMResponse, PromptBatch, RowMetadata
 from ondine.core.specifications import (
     DatasetSpec,
@@ -21,7 +22,6 @@ from ondine.stages import (
     RegexParser,
     ResponseParserStage,
 )
-
 from tests.conftest import MockLLMClient
 
 

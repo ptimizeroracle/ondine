@@ -5,7 +5,7 @@ Delegates to LlamaIndex's Simple handler for automatic LLM call logging.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ondine.observability.base import PipelineObserver
 from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
@@ -33,7 +33,7 @@ class LoggingObserver(PipelineObserver):
         observer = LoggingObserver(config={})
     """
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize logging observer.
 

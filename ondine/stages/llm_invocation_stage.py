@@ -199,7 +199,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         self, prompt: str, context: Any = None, row_index: int = 0
     ) -> Any:
         """Invoke LLM with rate limiting and retries."""
-        start_time = time.time()
+        time.time()
 
         def _invoke() -> Any:
             # Acquire rate limit token
@@ -218,7 +218,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 raise
 
         # Execute with retry handler
-        response = self.retry_handler.execute(_invoke)
+        return self.retry_handler.execute(_invoke)
 
         # LlamaIndex automatically instruments the LLM call above!
         # No need to manually emit events - LlamaIndex's handlers capture:
@@ -227,7 +227,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # - Latency metrics
         # - Model information
 
-        return response
 
     def validate_input(self, batches: list[PromptBatch]) -> ValidationResult:
         """Validate prompt batches."""

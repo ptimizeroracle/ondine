@@ -6,7 +6,7 @@ via Ondine's observer API.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -14,26 +14,26 @@ logger = logging.getLogger(__name__)
 class LlamaIndexHandlerManager:
     """
     Manages LlamaIndex global handlers.
-    
+
     LlamaIndex provides built-in handlers for various observability platforms.
     This manager configures them based on Ondine's observer configuration.
     """
 
-    _active_handler: Optional[str] = None
+    _active_handler: str | None = None
 
     @classmethod
     def configure_handler(cls, handler_type: str, config: dict[str, Any]) -> None:
         """
         Configure a LlamaIndex global handler.
-        
+
         Note: LlamaIndex only supports ONE global handler at a time.
         Calling this multiple times will replace the previous handler.
         For multiple observers, use configure_multi_handler() instead.
-        
+
         Args:
             handler_type: Handler type ("opentelemetry", "langfuse", "simple", etc.)
             config: Handler-specific configuration
-        
+
         Raises:
             ImportError: If LlamaIndex or handler dependencies not installed
         """
@@ -101,19 +101,19 @@ class LlamaIndexHandlerManager:
     ) -> None:
         """
         Configure multiple LlamaIndex handlers simultaneously.
-        
+
         Uses LlamaIndex's lower-level dispatcher API to register multiple
         event handlers at once, since set_global_handler() only supports one.
-        
+
         Args:
             handlers: List of (handler_type, config) tuples
-        
+
         Note: This is more advanced and may require custom event handler
         implementations for some platforms.
         """
         from llama_index.core.instrumentation import get_dispatcher
 
-        dispatcher = get_dispatcher()
+        get_dispatcher()
 
         logger.info(f"Configuring {len(handlers)} LlamaIndex handlers via dispatcher")
 
@@ -130,10 +130,10 @@ class LlamaIndexHandlerManager:
                 )
 
     @classmethod
-    def get_active_handler(cls) -> Optional[str]:
+    def get_active_handler(cls) -> str | None:
         """
         Get the currently active handler type.
-        
+
         Returns:
             Handler type string or None if no handler active
         """

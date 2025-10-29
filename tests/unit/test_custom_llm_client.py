@@ -8,6 +8,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from ondine.adapters.llm_client import OpenAICompatibleClient, create_llm_client
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMProvider, LLMSpec
