@@ -80,9 +80,12 @@ def sanitize_prompt(prompt: str, include_prompts: bool = False) -> str:
     if include_prompts:
         return prompt
 
+    # Convert to string (defensive: handles non-string types like Mock objects in tests)
+    prompt_str = str(prompt)
+
     # Stable short digest for deduplication without content disclosure
     # Use SHA-256 for deterministic hashing across runs (unlike built-in hash())
-    digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha256(prompt_str.encode("utf-8")).hexdigest()[:8]
     return f"<sanitized-{digest}>"
 
 

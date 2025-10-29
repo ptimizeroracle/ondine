@@ -44,6 +44,16 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
 
+  # Run unit tests before commit
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: Run Unit Tests
+        entry: uv run pytest tests/unit/ -q --tb=line
+        language: system
+        pass_filenames: false
+        always_run: true
+
   # Architecture validation (disabled - model.yaml not in use)
   # - repo: local
   #   hooks:
