@@ -1,0 +1,94 @@
+# Azure OpenAI with Managed Identity Configuration
+#
+# This configuration uses Azure Managed Identity for keyless authentication.
+# No API keys needed!
+#
+# Prerequisites:
+# 1. Running on Azure infrastructure (VM, Container App, Function, etc.)
+# 2. Managed Identity assigned to the resource
+# 3. Identity has "Cognitive Services OpenAI User" role
+# 4. Install: pip install ondine[azure]
+#
+# For local development:
+# - Run: az login
+# - DefaultAzureCredential will use your Azure CLI credentials
+#
+# Usage:
+#   ondine process --config azure_managed_identity_config.yaml
+
+name: "product_enrichment_pipeline"
+version: "1.0"
+description: "Product enrichment using Azure OpenAI with Managed Identity"
+
+# Dataset configuration
+dataset:
+  source_type: "csv"
+  source_path: "products.csv"
+  input_columns:
+    - "product_description"
+  output_columns:
+    - "category"
+    - "key_features"
+    - "target_audience"
+  delimiter: ","
+  encoding: "utf-8"
+
+# Prompt configuration
+prompt:
+  template: |
+    Analyze this product description: {product_description}
+
+    Provide:
+    1. category: The product category (e.g., Electronics, Clothing, Home & Garden)
+    2. key_features: Main features (comma-separated, max 5)
+    3. target_audience: Who would buy this? (e.g., "Tech enthusiasts", "Families")
+
+    Format as JSON:
+    {{"category": "...", "key_features": "...", "target_audience": "..."}}
+
+  system_message: "You are a product categorization expert. Provide accurate, concise analysis."
+
+  response_format: "json"
+
+# LLM configuration - MANAGED IDENTITY
+llm:
+  provider: "azure_openai"
+  model: "gpt-4"
+
+  # Azure-specific configuration
+  azure_endpoint: "https://your-resource.openai.azure.com/"
+  azure_deployment: "gpt-4-deployment"
+  api_version: "2024-02-15-preview"
+
+  # Managed Identity authentication (NO API KEY!)
+  use_managed_identity: true
+
+  # LLM parameters
+  temperature: 0.7
+  max_tokens: 500
+
+# Processing configuration
+processing:
+  batch_size: 50
+  concurrency: 10
+  checkpoint_interval: 100
+  max_retries: 3
+  retry_delay: 2.0
+  error_policy: "skip"
+  rate_limit_rpm: 60
+  max_budget: "5.00"
+  checkpoint_dir: ".checkpoints"
+
+# Output configuration
+output:
+  destination_type: "csv"
+  destination_path: "enriched_products.csv"
+  merge_strategy: "replace"
+  atomic_write: true
+
+# Metadata
+metadata:
+  project: "product_enrichment"
+  owner: "data_team"
+  environment: "production"
+  region: "swedencentral"
