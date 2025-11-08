@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="../ondine-log.png" alt="Ondine Logo" width="600"/>
+  <img src="../ondine-log-removebg-preview.png" alt="Ondine Logo" width="600"/>
 
   # Ondine - LLM Dataset Engine
 </div>
