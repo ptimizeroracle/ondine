@@ -159,6 +159,14 @@ class LLMSpec(BaseModel):
     api_version: str | None = Field(
         default="2024-02-15-preview", description="Azure API version"
     )
+    use_managed_identity: bool = Field(
+        default=False,
+        description="Use Azure Managed Identity for authentication (no API key needed)",
+    )
+    azure_ad_token: str | None = Field(
+        default=None,
+        description="Pre-fetched Azure AD token (alternative to use_managed_identity)",
+    )
 
     # Custom/OpenAI-compatible provider fields
     base_url: str | None = Field(

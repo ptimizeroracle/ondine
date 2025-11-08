@@ -30,7 +30,7 @@ Production-grade SDK for batch processing tabular datasets with LLMs. Built on L
 - **Observability**: LlamaIndex-powered automatic LLM tracking (Langfuse, OpenTelemetry), progress bars, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
 - **Production Ready**: Zero data loss on crashes, resume from checkpoint
-- **Multiple Providers**: OpenAI, Azure OpenAI, Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs
+- **Multiple Providers**: OpenAI, Azure OpenAI (with Managed Identity), Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
 - **Multi-Column Processing**: Generate multiple output columns with composition or JSON parsing
 - **Custom Providers**: Integrate any OpenAI-compatible API (Together.AI, vLLM, Ollama, custom endpoints)
@@ -106,6 +106,9 @@ Or with optional dependencies:
 # For Apple Silicon local inference
 pip install ondine[mlx]
 
+# For Azure Managed Identity (keyless auth)
+pip install ondine[azure]
+
 # Observability is now built-in (OpenTelemetry + Langfuse)
 # No separate install needed!
 
@@ -144,4 +147,3 @@ Ondine excels at:
 ## License
 
 MIT License - see [LICENSE](https://github.com/ptimizeroracle/ondine/blob/main/LICENSE) for details.
-
