@@ -3260,7 +3260,7 @@ wheels = [
 
 [[package]]
 name = "ondine"
-version = "1.0.4"
+version = "1.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
