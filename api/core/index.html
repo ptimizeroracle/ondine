@@ -2351,6 +2351,51 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#ondine.core.ConfigurationError" class="md-nav__link">
+    <span class="md-ellipsis">
+      ConfigurationError
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.core.InvalidAPIKeyError" class="md-nav__link">
+    <span class="md-ellipsis">
+      InvalidAPIKeyError
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.core.ModelNotFoundError" class="md-nav__link">
+    <span class="md-ellipsis">
+      ModelNotFoundError
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.core.NonRetryableError" class="md-nav__link">
+    <span class="md-ellipsis">
+      NonRetryableError
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.core.QuotaExceededError" class="md-nav__link">
+    <span class="md-ellipsis">
+      QuotaExceededError
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ondine.core.CheckpointInfo" class="md-nav__link">
     <span class="md-ellipsis">
       CheckpointInfo
@@ -2766,6 +2811,267 @@
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.core.ConfigurationError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ConfigurationError</span>
+
+
+<a href="#ondine.core.ConfigurationError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="NonRetryableError (ondine.core.exceptions.NonRetryableError)" href="exceptions/#ondine.core.exceptions.NonRetryableError">NonRetryableError</a></code></p>
+
+
+        <p>Invalid configuration or missing required resources.</p>
+<p>Raised when:
+- Input file doesn't exist
+- Invalid parameter values
+- Missing required configuration
+- Incompatible settings</p>
+
+
+<details class="example" open>
+  <summary>Example</summary>
+  <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># This will raise ConfigurationError if file doesn&#39;t exist</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;nonexistent.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>  <span class="c1"># Fails here</span>
+</span></code></pre></div>
+</details>
+
+<details class="resolution" open>
+  <summary>Resolution</summary>
+  <p>Fix configuration or ensure required files/resources exist.</p>
+</details>
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.core.InvalidAPIKeyError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">InvalidAPIKeyError</span>
+
+
+<a href="#ondine.core.InvalidAPIKeyError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="NonRetryableError (ondine.core.exceptions.NonRetryableError)" href="exceptions/#ondine.core.exceptions.NonRetryableError">NonRetryableError</a></code></p>
+
+
+        <p>API key is invalid, missing, or authentication failed.</p>
+<p>Raised when:
+- API key environment variable not set
+- API key is invalid or expired
+- Authentication fails (401, 403)
+- Insufficient permissions</p>
+
+
+<details class="example" open>
+  <summary>Example</summary>
+  <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># This will raise InvalidAPIKeyError if OPENAI_API_KEY not set</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>  <span class="c1"># Fails here if no API key</span>
+</span></code></pre></div>
+</details>
+
+<details class="resolution" open>
+  <summary>Resolution</summary>
+  <p>Set valid API key in environment variable or configuration.</p>
+</details>
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.core.ModelNotFoundError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ModelNotFoundError</span>
+
+
+<a href="#ondine.core.ModelNotFoundError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="NonRetryableError (ondine.core.exceptions.NonRetryableError)" href="exceptions/#ondine.core.exceptions.NonRetryableError">NonRetryableError</a></code></p>
+
+
+        <p>Model doesn't exist or has been decommissioned.</p>
+<p>Raised when:
+- LLM provider returns "model not found" error
+- Model has been decommissioned/deprecated
+- Invalid model name specified</p>
+
+
+<details class="example" open>
+  <summary>Example</summary>
+  <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># This will raise ModelNotFoundError if model is invalid</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;groq&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llama-3.1-70b-versatile&quot;</span><span class="p">)</span>  <span class="c1"># Decommissioned</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</span></code></pre></div>
+</details>
+
+<details class="resolution" open>
+  <summary>Resolution</summary>
+  <p>Update model name to a valid, current model.</p>
+</details>
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.core.NonRetryableError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">NonRetryableError</span>
+
+
+<a href="#ondine.core.NonRetryableError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="Exception">Exception</span></code></p>
+
+
+        <p>Base class for errors that should not be retried.</p>
+<p>These are fatal errors that indicate configuration issues, invalid inputs,
+or permanent failures that cannot be resolved by retrying the operation.</p>
+<p>Examples of non-retryable errors:
+- Model doesn't exist or has been decommissioned
+- Invalid API key or authentication failure
+- File not found or invalid configuration
+- Quota/credits exhausted (not rate limit)</p>
+<p>Retryable errors (handled separately):
+- Rate limit errors (429)
+- Network timeouts or connection errors
+- Temporary API unavailability (503)</p>
+
+
+<details class="example" open>
+  <summary>Example</summary>
+  <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">except</span> <span class="n">NonRetryableError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="c1"># Fatal error - don&#39;t retry, fix configuration</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Pipeline failed with fatal error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span></code></pre></div>
+</details>
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.core.QuotaExceededError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">QuotaExceededError</span>
+
+
+<a href="#ondine.core.QuotaExceededError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="NonRetryableError (ondine.core.exceptions.NonRetryableError)" href="exceptions/#ondine.core.exceptions.NonRetryableError">NonRetryableError</a></code></p>
+
+
+        <p>API quota or credits exhausted.</p>
+<p>Raised when:
+- Account credits/quota exhausted
+- Billing issue or payment required
+- Account suspended</p>
+
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p>This is different from rate limiting (429), which is retryable.
+Quota errors indicate a permanent issue until credits are added.</p>
+</details>
+
+<details class="example" open>
+  <summary>Example</summary>
+  <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">except</span> <span class="n">QuotaExceededError</span><span class="p">:</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="c1"># Need to add credits or upgrade plan</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Account quota exceeded - add credits&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+</details>
+
+<details class="resolution" open>
+  <summary>Resolution</summary>
+  <p>Add credits, upgrade plan, or resolve billing issues.</p>
+</details>
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
