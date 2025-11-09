@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
   # LLM Dataset Engine
 </div>
