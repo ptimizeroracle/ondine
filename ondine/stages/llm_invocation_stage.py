@@ -125,8 +125,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             )
             response_batches.append(response_batch)
 
-            # Update context
-            context.add_cost(total_cost, total_tokens)
+            # Update context row tracking (costs already added per-row in concurrent loop)
             context.update_row(batch.metadata[-1].row_index if batch.metadata else 0)
 
         # Finish progress tracking
@@ -212,7 +211,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             text="[SKIPPED]",
                             tokens_in=0,
                             tokens_out=0,
-                            model=self.llm_client.spec.model,
+                            model=self.llm_client.model,
                             cost=Decimal("0.0"),
                             latency_ms=0.0,
                             metadata={"error": str(e), "action": "skipped"},
