@@ -122,9 +122,9 @@ class TestMultiColumnRetry:
         # First pass: 10 rows
         # Retry: 3 rows (indices 2, 5, 8) - because col2/col3 had failures
         # Total: 13 LLM calls (not 10!)
-        assert (
-            len(processed_rows) == 13
-        ), f"Expected 13 calls (10 + 3 retry), got {len(processed_rows)}"
+        assert len(processed_rows) == 13, (
+            f"Expected 13 calls (10 + 3 retry), got {len(processed_rows)}"
+        )
 
         # Verify each failed row was retried exactly once
         assert processed_rows.count(2) == 2  # Once in pass 1, once in retry

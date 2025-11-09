@@ -72,9 +72,9 @@ PROVIDER_METADATA = {
 }
 
 # Validate metadata completeness at module load
-assert set(LLMProvider) == set(
-    PROVIDER_METADATA.keys()
-), "PROVIDER_METADATA must include all LLMProvider values"
+assert set(LLMProvider) == set(PROVIDER_METADATA.keys()), (
+    "PROVIDER_METADATA must include all LLMProvider values"
+)
 
 
 ONDINE_ART = r"""

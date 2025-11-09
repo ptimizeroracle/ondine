@@ -103,9 +103,9 @@ class TestLLMProviderPresets:
         ]
 
         for preset in presets:
-            assert (
-                preset.api_key is None
-            ), f"{preset.model} has hardcoded API key - security risk!"
+            assert preset.api_key is None, (
+                f"{preset.model} has hardcoded API key - security risk!"
+            )
 
     def test_presets_are_valid_llmspec_instances(self):
         """Test all presets are valid LLMSpec instances."""
@@ -117,9 +117,9 @@ class TestLLMProviderPresets:
 
         for preset_name in preset_attrs:
             preset = getattr(LLMProviderPresets, preset_name)
-            assert isinstance(
-                preset, LLMSpec
-            ), f"{preset_name} is not an LLMSpec instance"
+            assert isinstance(preset, LLMSpec), (
+                f"{preset_name} is not an LLMSpec instance"
+            )
 
             # Validate using Pydantic
             preset.model_validate(preset.model_dump())

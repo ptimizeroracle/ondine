@@ -1,0 +1,86 @@
+# Azure OpenAI with API Key Configuration (Traditional)
+#
+# This configuration uses API key authentication (backward compatible).
+#
+# Prerequisites:
+# 1. Azure OpenAI resource created
+# 2. API key from Azure Portal
+# 3. Set environment variable: export AZURE_OPENAI_API_KEY="your-key"
+#
+# Usage:
+#   ondine process --config azure_api_key_config.yaml
+
+name: "support_ticket_classification"
+version: "1.0"
+description: "Support ticket classification using Azure OpenAI with API key"
+
+# Dataset configuration
+dataset:
+  source_type: "csv"
+  source_path: "support_tickets.csv"
+  input_columns:
+    - "ticket_description"
+  output_columns:
+    - "category"
+    - "priority"
+    - "suggested_action"
+  delimiter: ","
+  encoding: "utf-8"
+
+# Prompt configuration
+prompt:
+  template: |
+    Classify this support ticket: {ticket_description}
+
+    Provide:
+    1. category: technical, billing, account, shipping, or general
+    2. priority: high, medium, or low
+    3. suggested_action: Brief action recommendation
+
+    Format as JSON:
+    {{"category": "...", "priority": "...", "suggested_action": "..."}}
+
+  system_message: "You are a customer support classification expert."
+
+  response_format: "json"
+
+# LLM configuration - API KEY
+llm:
+  provider: "azure_openai"
+  model: "gpt-4"
+
+  # Azure-specific configuration
+  azure_endpoint: "https://your-resource.openai.azure.com/"
+  azure_deployment: "gpt-4-deployment"
+  api_version: "2024-02-15-preview"
+
+  # API Key authentication (reads from AZURE_OPENAI_API_KEY env var)
+  # api_key: ${AZURE_OPENAI_API_KEY}  # Optional: explicit env var reference
+
+  # LLM parameters
+  temperature: 0.3
+  max_tokens: 300
+
+# Processing configuration
+processing:
+  batch_size: 100
+  concurrency: 5
+  checkpoint_interval: 500
+  max_retries: 3
+  retry_delay: 1.0
+  error_policy: "skip"
+  rate_limit_rpm: 60
+  max_budget: "10.00"
+
+# Output configuration
+output:
+  destination_type: "csv"
+  destination_path: "classified_tickets.csv"
+  merge_strategy: "replace"
+  atomic_write: true
+
+# Metadata
+metadata:
+  project: "support_automation"
+  owner: "support_team"
+  environment: "production"

@@ -171,12 +171,8 @@ class AzureOpenAIClient(LLMClient):
     """Azure OpenAI LLM client implementation."""
 
     def __init__(self, spec: LLMSpec):
-        """Initialize Azure OpenAI client."""
+        """Initialize Azure OpenAI client with API key or Managed Identity."""
         super().__init__(spec)
-
-        api_key = spec.api_key or os.getenv("AZURE_OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("AZURE_OPENAI_API_KEY not found in spec or environment")
 
         if not spec.azure_endpoint:
             raise ValueError("azure_endpoint required for Azure OpenAI")
@@ -184,15 +180,75 @@ class AzureOpenAIClient(LLMClient):
         if not spec.azure_deployment:
             raise ValueError("azure_deployment required for Azure OpenAI")
 
-        self.client = AzureOpenAI(
-            model=spec.model,
-            deployment_name=spec.azure_deployment,
-            api_key=api_key,
-            azure_endpoint=spec.azure_endpoint,
-            api_version=spec.api_version or "2024-02-15-preview",
-            temperature=spec.temperature,
-            max_tokens=spec.max_tokens,
-        )
+        # Authentication: Three options in priority order
+        # 1. Managed Identity (preferred for Azure deployments)
+        # 2. Pre-fetched Azure AD token
+        # 3. API key (backward compatible)
+
+        if spec.use_managed_identity:
+            # Use Azure Managed Identity
+            try:
+                from azure.identity import DefaultAzureCredential
+            except ImportError:
+                raise ImportError(
+                    "Azure Managed Identity requires azure-identity. "
+                    "Install with: pip install ondine[azure]"
+                )
+
+            try:
+                credential = DefaultAzureCredential()
+                token = credential.get_token(
+                    "https://cognitiveservices.azure.com/.default"
+                )
+
+                self.client = AzureOpenAI(
+                    model=spec.model,
+                    deployment_name=spec.azure_deployment,
+                    azure_ad_token=token.token,
+                    azure_endpoint=spec.azure_endpoint,
+                    api_version=spec.api_version or "2024-02-15-preview",
+                    temperature=spec.temperature,
+                    max_tokens=spec.max_tokens,
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to authenticate with Azure Managed Identity: {e}. "
+                    "Ensure the resource has a Managed Identity assigned with "
+                    "'Cognitive Services OpenAI User' role."
+                ) from e
+
+        elif spec.azure_ad_token:
+            # Use pre-fetched token
+            self.client = AzureOpenAI(
+                model=spec.model,
+                deployment_name=spec.azure_deployment,
+                azure_ad_token=spec.azure_ad_token,
+                azure_endpoint=spec.azure_endpoint,
+                api_version=spec.api_version or "2024-02-15-preview",
+                temperature=spec.temperature,
+                max_tokens=spec.max_tokens,
+            )
+
+        else:
+            # Use API key (existing behavior - backward compatible)
+            api_key = spec.api_key or os.getenv("AZURE_OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "Azure OpenAI requires either:\n"
+                    "  1. use_managed_identity=True (for keyless auth), or\n"
+                    "  2. api_key parameter, or\n"
+                    "  3. AZURE_OPENAI_API_KEY environment variable"
+                )
+
+            self.client = AzureOpenAI(
+                model=spec.model,
+                deployment_name=spec.azure_deployment,
+                api_key=api_key,
+                azure_endpoint=spec.azure_endpoint,
+                api_version=spec.api_version or "2024-02-15-preview",
+                temperature=spec.temperature,
+                max_tokens=spec.max_tokens,
+            )
 
         # Initialize tokenizer
         try:
