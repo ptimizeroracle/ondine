@@ -105,9 +105,9 @@ class TestAutoRetryActualExecution:
         # First pass: 10 rows
         # Retry: 3 rows (indices 2, 5, 8)
         # Total: 13 LLM calls (not 20!)
-        assert (
-            len(processed_rows) == 13
-        ), f"Expected 13 calls (10 + 3 retry), got {len(processed_rows)}"
+        assert len(processed_rows) == 13, (
+            f"Expected 13 calls (10 + 3 retry), got {len(processed_rows)}"
+        )
 
         # Verify each failed row was retried exactly once
         assert processed_rows.count(2) == 2  # Once in pass 1, once in retry
@@ -170,9 +170,9 @@ class TestAutoRetryActualExecution:
 
         # Should call LLM exactly: 3 (initial) + 3 (retry 1) + 3 (retry 2) = 9 times
         # NOT infinite loop
-        assert (
-            call_count["count"] == 9
-        ), f"Expected 9 calls (3 + 3 + 3), got {call_count['count']}"
+        assert call_count["count"] == 9, (
+            f"Expected 9 calls (3 + 3 + 3), got {call_count['count']}"
+        )
 
     def test_retry_configuration_validates(self):
         """Should configure retry settings correctly."""
