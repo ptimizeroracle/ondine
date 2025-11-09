@@ -434,13 +434,13 @@ class TestExecutionResultContract:
         result.end_time = result.start_time + timedelta(seconds=1)
 
         # Verify deprecated attributes don't exist
-        assert not hasattr(
-            result, "rows_processed"
-        ), "Use result.metrics.total_rows instead of result.rows_processed"
+        assert not hasattr(result, "rows_processed"), (
+            "Use result.metrics.total_rows instead of result.rows_processed"
+        )
         assert not hasattr(result, "cost"), "Use result.costs instead of result.cost"
-        assert not hasattr(
-            result, "execution_time"
-        ), "Use result.duration instead of result.execution_time"
+        assert not hasattr(result, "execution_time"), (
+            "Use result.duration instead of result.execution_time"
+        )
 
     def test_pipeline_result_attributes_after_execution(self):
         """Test that pipeline result has correct attributes accessible to user scripts."""
