@@ -36,7 +36,7 @@ jobs:
       - name: Check with interrogate
         run: |
           uv pip install interrogate
-          uv run interrogate ondine/ --fail-under 80 --verbose 1
+          uv run interrogate ondine/ --fail-under=80 -v
 
       - name: Report results
         if: failure()
