@@ -1,0 +1,41 @@
+name: Validate Documentation Examples
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'examples/**'
+      - 'tools/validate_docs_examples.py'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'examples/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Validate documentation examples
+        run: |
+          uv run python tools/validate_docs_examples.py
+
+      - name: Report results
+        if: failure()
+        run: |
+          echo "❌ Documentation validation failed!"
+          echo "Found non-existent API usage or incorrect examples."
+          echo "Please fix the errors above before merging."
+          exit 1

@@ -1,7 +1,5 @@
 <div align="center">
-  <img src="../assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
-
-  # Ondine - LLM Dataset Engine
+  <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 </div>
 
 [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
@@ -9,7 +7,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Production-grade SDK for batch processing tabular datasets with LLMs. Built on LlamaIndex for provider abstraction, adds batch orchestration, automatic cost tracking, checkpointing, and YAML configuration for dataset transformation at scale.
+SDK for batch processing tabular datasets with LLMs. Built on LlamaIndex for provider abstraction, adds batch orchestration, automatic cost tracking, checkpointing, and YAML configuration for dataset transformation at scale.
 
 ## Features
 
@@ -127,10 +125,9 @@ Ondine excels at:
 
 ## Why Ondine?
 
-- **Production-Grade**: Checkpointing, auto-retry, budget controls, observability
+- **Reliable**: Checkpointing, auto-retry, budget controls, observability
 - **Developer-Friendly**: Fluent API, YAML config, CLI tools, extensive examples
 - **Cost-Aware**: Pre-run estimation, real-time tracking, budget limits
-- **Reliable**: 99.9% completion rate in production workloads
 - **Flexible**: Multiple providers, custom stages, extensible architecture
 - **Well-Tested**: 95%+ code coverage, integration tests with real APIs
 

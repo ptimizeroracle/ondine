@@ -1,5 +1,5 @@
 site_name: Ondine Documentation
-site_description: Production-grade SDK for processing tabular datasets with LLMs
+site_description: SDK for processing tabular datasets with LLMs
 site_url: https://ptimizeroracle.github.io/ondine
 repo_url: https://github.com/ptimizeroracle/ondine
 repo_name: ptimizeroracle/ondine
@@ -149,3 +149,13 @@ extra:
   version:
     provider: mike
 
+extra_css: []
+extra_javascript: []
+
+# Copy assets to site
+docs_dir: docs
+site_dir: site
+
+# Include assets directory
+watch:
+  - ondine/

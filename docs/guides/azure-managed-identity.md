@@ -102,13 +102,14 @@ Format as JSON: {{"category": "...", "features": "..."}}
         use_managed_identity=True,
         temperature=0.7,
     )
-    .with_processing(batch_size=10, concurrency=5)
+    .with_batch_size(10)
+    .with_concurrency(5)
     .build()
 )
 
 result = pipeline.execute()
-print(f"Processed: {result.total_rows} rows")
-print(f"Cost: ${result.total_cost:.4f}")
+print(f"Processed: {result.metrics.total_rows} rows")
+print(f"Cost: ${result.costs.total_cost:.4f}")
 ```
 
 #### Example 2: Environment-Aware Configuration

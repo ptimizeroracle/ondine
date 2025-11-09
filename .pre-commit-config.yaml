@@ -44,6 +44,16 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
 
+  # Docstring quality checks
+  - repo: local
+    hooks:
+      - id: pydocstyle
+        name: Check Docstring Quality
+        entry: uv run pydocstyle
+        language: system
+        types: [python]
+        files: ^ondine/
+
   # Run unit tests before commit
   - repo: local
     hooks:

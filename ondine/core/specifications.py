@@ -52,7 +52,32 @@ class MergeStrategy(str, Enum):
 
 
 class DatasetSpec(BaseModel):
-    """Specification for data source configuration."""
+    """
+    Specification for data source configuration.
+
+    Defines how to load input data and which columns to process. Supports CSV,
+    Excel, Parquet, and in-memory DataFrames.
+
+    Attributes:
+        source_type: Type of data source (csv, excel, parquet, dataframe)
+        source_path: Path to file (None for DataFrame sources)
+        input_columns: Column names to use in prompts (must exist in data)
+        output_columns: Column names for LLM results (must not overlap with input)
+        filters: Optional filters to apply when loading data
+        sheet_name: Sheet name or index for Excel files (default: 0)
+        delimiter: CSV delimiter character (default: ",")
+        encoding: File encoding (default: "utf-8")
+
+    Example:
+        ```python
+        spec = DatasetSpec(
+            source_type=DataSourceType.CSV,
+            source_path="products.csv",
+            input_columns=["title", "description"],
+            output_columns=["category", "price_range"]
+        )
+        ```
+    """
 
     source_type: DataSourceType
     source_path: str | Path | None = None
@@ -138,7 +163,49 @@ class PromptSpec(BaseModel):
 
 
 class LLMSpec(BaseModel):
-    """Specification for LLM provider configuration."""
+    """
+    Specification for LLM provider configuration.
+
+    Defines which LLM provider to use, model settings, and authentication. Supports
+    OpenAI, Azure OpenAI, Anthropic, Groq, MLX, and custom OpenAI-compatible APIs.
+
+    Attributes:
+        provider: LLM provider (openai, azure_openai, anthropic, groq, mlx, openai_compatible)
+        model: Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4", "llama-3.3-70b-versatile")
+        api_key: API key (optional, reads from environment if not provided)
+        temperature: Sampling temperature (0.0-2.0, default: 0.0 for deterministic output)
+        max_tokens: Maximum output tokens (optional, uses model default)
+        top_p: Nucleus sampling parameter (0.0-1.0, default: 1.0)
+
+    Example:
+        ```python
+        # OpenAI
+        spec = LLMSpec(
+            provider=LLMProvider.OPENAI,
+            model="gpt-4o-mini",
+            temperature=0.3
+        )
+
+        # Groq (fast and affordable)
+        spec = LLMSpec(
+            provider=LLMProvider.GROQ,
+            model="llama-3.3-70b-versatile",
+            temperature=0.0
+        )
+
+        # Azure with Managed Identity (no API key needed)
+        spec = LLMSpec(
+            provider=LLMProvider.AZURE_OPENAI,
+            model="gpt-4",
+            azure_endpoint="https://your-resource.openai.azure.com/",
+            azure_deployment="gpt-4-deployment",
+            use_managed_identity=True
+        )
+        ```
+
+    Note:
+        Use LLMProviderPresets for pre-configured common providers.
+    """
 
     provider: LLMProvider
     model: str = Field(..., min_length=1, description="Model identifier")
@@ -222,7 +289,48 @@ class LLMSpec(BaseModel):
 
 
 class ProcessingSpec(BaseModel):
-    """Specification for processing parameters."""
+    """
+    Specification for processing parameters.
+
+    Controls how the pipeline executes: batch sizes, concurrency, error handling,
+    rate limiting, and budget constraints.
+
+    Attributes:
+        batch_size: Number of rows per batch (1-1000, default: 100)
+        concurrency: Number of parallel LLM requests (1-20, default: 5)
+        checkpoint_interval: Save checkpoint every N rows (default: 500)
+        max_retries: Maximum retry attempts for failed requests (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 1.0)
+        error_policy: How to handle errors (retry, skip, fail, use_default)
+        rate_limit_rpm: Requests per minute limit (optional, no limit if None)
+        max_budget: Maximum cost in USD (optional, no limit if None)
+
+    Example:
+        ```python
+        # Conservative settings (free tier)
+        spec = ProcessingSpec(
+            batch_size=50,
+            concurrency=5,
+            rate_limit_rpm=25,
+            max_budget=Decimal("5.0")
+        )
+
+        # Aggressive settings (paid tier)
+        spec = ProcessingSpec(
+            batch_size=200,
+            concurrency=20,
+            rate_limit_rpm=100,
+            max_budget=Decimal("50.0")
+        )
+
+        # Fault-tolerant settings
+        spec = ProcessingSpec(
+            max_retries=5,
+            error_policy=ErrorPolicy.RETRY,
+            checkpoint_interval=100
+        )
+        ```
+    """
 
     batch_size: int = Field(default=100, gt=0, le=1000, description="Rows per batch")
     concurrency: int = Field(default=5, gt=0, le=20, description="Parallel requests")
