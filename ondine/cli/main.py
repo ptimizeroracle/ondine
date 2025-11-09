@@ -132,7 +132,7 @@ def cli(ctx):
     """
     🌊 ONDINE - LLM Dataset Engine
 
-    Process tabular datasets using LLMs with production-grade reliability,
+    Process tabular datasets using LLMs with built-in reliability,
     cost control, and observability.
 
     Examples:

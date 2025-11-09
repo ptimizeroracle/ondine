@@ -1,0 +1,49 @@
+name: Docstring Quality Check
+
+on:
+  pull_request:
+    paths:
+      - 'ondine/**/*.py'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ondine/**/*.py'
+
+jobs:
+  check-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv sync --extra dev
+
+      - name: Check docstring coverage
+        run: |
+          uv run python tools/check_docstring_coverage.py
+
+      - name: Generate quality report
+        run: |
+          uv run python tools/generate_docstring_report.py
+
+      - name: Check with interrogate
+        run: |
+          uv run interrogate ondine/ --fail-under=80 -v
+
+      - name: Report results
+        if: failure()
+        run: |
+          echo "❌ Docstring quality check failed!"
+          echo "Coverage dropped below 80% or quality issues detected."
+          exit 1

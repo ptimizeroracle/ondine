@@ -34,16 +34,17 @@ def main():
             use_managed_identity=True,  # Keyless authentication!
             temperature=0.7,
         )
-        .with_processing(batch_size=10, concurrency=5)
+        .with_batch_size(10)
+        .with_concurrency(5)
         .build()
     )
 
     print("\nExecuting pipeline with Managed Identity...")
     result = pipeline.execute()
 
-    print(f"\nProcessed {result.total_rows} rows")
-    print(f"Cost: ${result.total_cost:.4f}")
-    print(f"Success rate: {result.success_count}/{result.total_rows}")
+    print(f"\nProcessed {result.metrics.total_rows} rows")
+    print(f"Cost: ${result.costs.total_cost:.4f}")
+    print(f"Success rate: {result.metrics.success_count}/{result.metrics.total_rows}")
 
 
 if __name__ == "__main__":

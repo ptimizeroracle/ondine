@@ -22,8 +22,28 @@ class PipelineStage(ABC, Generic[TInput, TOutput]):
     """
     Abstract base class for all pipeline stages.
 
-    Implements Template Method pattern with hooks for extensibility.
-    All stages follow Single Responsibility and are composable.
+    Implements Template Method pattern with hooks for extensibility. All stages
+    follow Single Responsibility Principle and are composable via the Chain of
+    Responsibility pattern.
+
+    Stages in the pipeline:
+    1. DataLoaderStage - Load data from source
+    2. PromptFormatterStage - Format prompts with data
+    3. LLMInvocationStage - Call LLM API
+    4. ResponseParserStage - Parse LLM responses
+    5. ResultWriterStage - Write results to output
+
+    Example:
+        ```python
+        class CustomStage(PipelineStage[pd.DataFrame, pd.DataFrame]):
+            def process(self, input_data, context):
+                # Custom processing logic
+                return processed_data
+
+            def validate_input(self, input_data):
+                # Validation logic
+                return ValidationResult(is_valid=True)
+        ```
     """
 
     def __init__(self, name: str):

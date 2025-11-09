@@ -65,6 +65,8 @@ dev = [
     "pip-licenses>=4.3.0",
     "ipython>=8.20.0",
     "jupyter>=1.0.0",
+    "pydocstyle>=6.3.0",
+    "interrogate>=1.7.0",
 ]
 mlx = [
     "mlx>=0.29.0",
@@ -184,3 +186,22 @@ filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
     "ignore::pydantic._internal._generate_schema.UnsupportedFieldAttributeWarning",
 ]
+
+[tool.pydocstyle]
+convention = "google"
+add_ignore = ["D100", "D104"]  # Don't require docstrings for __init__.py files
+match = "(?!test_).*\\.py"  # Exclude test files
+match_dir = "^(?!tests|build|dist|\\.)"  # Exclude test/build directories
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-magic = true
+ignore-module = false
+ignore-nested-functions = true
+ignore-private = true
+ignore-property-decorators = true
+ignore-semiprivate = true
+fail-under = 80  # Require 80% docstring coverage
+exclude = ["tests", "build", "dist"]
+verbose = 1
