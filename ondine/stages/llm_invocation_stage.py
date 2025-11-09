@@ -91,6 +91,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 f"{self.name}: {context.total_rows} rows",
                 total_rows=total_prompts,
             )
+            # Store for access in concurrent loop
+            self._current_progress_task = progress_task
 
         for _batch_idx, batch in enumerate(batches):
             self.logger.info(
@@ -109,11 +111,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             total_cost = sum(r.cost for r in responses)
             latencies = [r.latency_ms for r in responses]
 
-            # Update progress tracker
-            if progress_tracker and progress_task:
-                progress_tracker.update(
-                    progress_task, advance=len(batch.prompts), cost=total_cost
-                )
+            # Progress is updated per-row in the concurrent loop above
+            # No need to update here
 
             # Create response batch
             response_batch = ResponseBatch(
@@ -160,6 +159,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             # Collect results in submission order
             responses = []
+            progress_tracker = getattr(context, "progress_tracker", None)
+            progress_task = getattr(self, "_current_progress_task", None)
+
             for idx, future in enumerate(futures):
                 # Update progress periodically
                 if (idx + 1) % max(
@@ -173,6 +175,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 try:
                     response = future.result()
                     responses.append(response)
+
+                    # Update progress tracker per row
+                    if progress_tracker and progress_task:
+                        progress_tracker.update(
+                            progress_task, advance=1, cost=response.cost
+                        )
 
                     # Update context with row progress and cost
                     if context:
