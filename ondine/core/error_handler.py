@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from ondine.core.exceptions import NonRetryableError
 from ondine.core.specifications import ErrorPolicy
 from ondine.utils import get_logger
 
@@ -116,7 +117,20 @@ class ErrorHandler:
             exc_info=True,
         )
 
-        # Check for FATAL errors that should always fail immediately
+        # Check for NonRetryableError first (fail fast)
+        if isinstance(error, NonRetryableError):
+            logger.error(
+                f"❌ NON-RETRYABLE ERROR: {error}\n"
+                f"   Type: {type(error).__name__}\n"
+                f"   This error cannot be recovered. Pipeline will terminate.\n"
+                f"   Please fix the configuration and try again."
+            )
+            return ErrorDecision(
+                action=ErrorAction.FAIL,
+                context=context,
+            )
+
+        # Check for FATAL errors that should always fail immediately (legacy)
         if self._is_fatal_error(error):
             logger.error(
                 f"❌ FATAL ERROR: {error}\n"

@@ -94,6 +94,9 @@ class RetryHandler:
         """
         Execute function with retry logic.
 
+        Only retries exceptions in self.retryable_exceptions tuple.
+        NonRetryableError and its subclasses are re-raised immediately.
+
         Args:
             func: Function to execute
 
@@ -101,7 +104,8 @@ class RetryHandler:
             Result from function
 
         Raises:
-            Exception: If all retries exhausted
+            NonRetryableError: Fatal errors (model not found, invalid API key, etc.)
+            Exception: If all retries exhausted for retryable errors
         """
         retryer = Retrying(
             stop=stop_after_attempt(self.max_attempts),
