@@ -194,6 +194,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         # Use default response
                         responses.append(decision.default_value)
                     elif decision.action == ErrorAction.FAIL:
+                        # Cancel all remaining futures to stop processing immediately
+                        for remaining_future in futures[idx + 1 :]:
+                            remaining_future.cancel()
                         # Re-raise to fail pipeline
                         raise
                     # RETRY is handled by retry_handler already
