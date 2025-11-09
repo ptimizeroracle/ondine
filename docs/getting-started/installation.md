@@ -105,27 +105,43 @@ Ondine requires API keys for LLM providers. Set them as environment variables:
 ### OpenAI
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."  # pragma: allowlist secret
 ```
 
 ### Azure OpenAI
 
+**Option 1: Managed Identity (Recommended for Production)**
+
 ```bash
-export AZURE_OPENAI_API_KEY="..."
+# Install Azure dependencies
+pip install ondine[azure]
+
+# For local development, login with Azure CLI
+az login
+
+# No API keys needed! Uses Managed Identity automatically.
+```
+
+**Option 2: API Key (Traditional)**
+
+```bash
+export AZURE_OPENAI_API_KEY="..."  # pragma: allowlist secret
 export AZURE_OPENAI_ENDPOINT="https://..."
 export AZURE_OPENAI_API_VERSION="2024-02-15-preview"
 ```
 
+See [Azure Managed Identity Guide](../guides/azure-managed-identity.md) for detailed setup.
+
 ### Anthropic Claude
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_API_KEY="sk-ant-..."  # pragma: allowlist secret
 ```
 
 ### Groq
 
 ```bash
-export GROQ_API_KEY="gsk_..."
+export GROQ_API_KEY="gsk_..."  # pragma: allowlist secret
 ```
 
 ### Environment File
@@ -181,4 +197,3 @@ If you get authentication errors:
 - [Quickstart Guide](quickstart.md) - Build your first pipeline
 - [Core Concepts](core-concepts.md) - Understand the architecture
 - [Provider Configuration](../guides/providers/openai.md) - Configure LLM providers
-

@@ -282,7 +282,7 @@ Ondine supports multiple LLM providers through the **Adapter pattern**, allowing
 | Provider | Category | Platform | Cost | Use Case |
 |----------|----------|----------|------|----------|
 | **OpenAI** | Cloud API | All | $$ | Production, high quality |
-| **Azure OpenAI** | Cloud API | All | $$ | Enterprise, compliance |
+| **Azure OpenAI** | Cloud API | All | $$ | Enterprise, compliance, **Managed Identity support** |
 | **Anthropic** | Cloud API | All | $$$ | Claude models, long context |
 | **Groq** | Cloud API | All | Free tier | Fast inference, development |
 | **OpenAI-Compatible** | Custom/Local/Cloud | All | Varies | Ollama, vLLM, Together.AI, custom APIs |
@@ -290,7 +290,7 @@ Ondine supports multiple LLM providers through the **Adapter pattern**, allowing
 ### Provider Selection Guide
 
 **Choose OpenAI if**: Production quality, mature ecosystem, GPT-4
-**Choose Azure if**: Enterprise compliance, private deployments
+**Choose Azure if**: Enterprise compliance, private deployments, keyless authentication
 **Choose Anthropic if**: Claude models, 100K+ context
 **Choose Groq if**: Fast inference, free tier, development
 **Choose OpenAI-Compatible if**: Custom endpoints, Ollama, vLLM, Together.AI, self-hosted
@@ -1468,7 +1468,7 @@ Ondine supports multiple LLM providers through the **Adapter pattern**, allowing
 | Provider | Category | Platform | Cost | Use Case |
 |----------|----------|----------|------|----------|
 | **OpenAI** | Cloud API | All | $$ | Production, high quality |
-| **Azure OpenAI** | Cloud API | All | $$ | Enterprise, compliance |
+| **Azure OpenAI** | Cloud API | All | $$ | Enterprise, compliance, **Managed Identity support** |
 | **Anthropic** | Cloud API | All | $$$ | Claude models, long context |
 | **Groq** | Cloud API | All | Free tier | Fast inference, development |
 | **MLX** | Local | macOS (Apple Silicon) | Free | Privacy, offline, no costs |
@@ -1558,7 +1558,325 @@ def validate_provider_requirements(self):
 
 ---
 
-## 5.3 MLX Provider (Apple Silicon)
+## 5.3 Azure OpenAI Provider (Enterprise)
+
+### Purpose
+Enable enterprise-grade Azure OpenAI integration with support for both API key and Managed Identity authentication.
+
+### Class: `AzureOpenAIClient`
+
+**Inheritance**: `LLMClient` (Adapter pattern)
+
+**Platform**: All (cloud-based)
+
+**Responsibility**: Azure OpenAI Service integration with enterprise authentication
+
+**Key Features**:
+- Managed Identity support (keyless authentication)
+- API key authentication (backward compatible)
+- Pre-fetched token support (advanced scenarios)
+- Multi-region deployment support
+- Azure RBAC integration
+
+### Authentication Methods
+
+Azure OpenAI supports three authentication methods (in priority order):
+
+#### 1. Managed Identity (Recommended for Production)
+
+**Purpose**: Keyless authentication using Azure AD
+
+**Requirements**:
+- `pip install ondine[azure]` (installs `azure-identity>=1.15.0`)
+- Managed Identity assigned to Azure resource
+- RBAC role: "Cognitive Services OpenAI User"
+
+**Configuration**:
+```python
+.with_llm(
+    provider="azure_openai",
+    model="gpt-4",
+    azure_endpoint="https://your-resource.openai.azure.com/",
+    azure_deployment="gpt-4-deployment",
+    use_managed_identity=True  # ← Keyless!
+)
+```
+
+**YAML Configuration**:
+```yaml
+llm:
+  provider: "azure_openai"
+  model: "gpt-4"
+  azure_endpoint: "https://your-resource.openai.azure.com/"
+  azure_deployment: "gpt-4-deployment"
+  use_managed_identity: true  # No API key needed!
+```
+
+**How It Works**:
+```python
+from azure.identity import DefaultAzureCredential
+
+# Ondine automatically:
+credential = DefaultAzureCredential()
+token = credential.get_token("https://cognitiveservices.azure.com/.default")
+
+# Passes token to LlamaIndex
+self.client = AzureOpenAI(
+    azure_ad_token=token.token,  # ← Token, not API key
+    azure_endpoint=spec.azure_endpoint,
+    deployment_name=spec.azure_deployment,
+)
+```
+
+**DefaultAzureCredential Resolution Order**:
+1. Environment variables (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET)
+2. Managed Identity (if running on Azure VM/Container/Function)
+3. Azure CLI credentials (if `az login` executed)
+4. Visual Studio Code credentials
+5. Azure PowerShell credentials
+
+**Benefits**:
+- ✅ No API keys in code or environment
+- ✅ Automatic credential rotation (Azure AD handles it)
+- ✅ Fine-grained RBAC via Azure roles
+- ✅ Audit trail through Azure AD logs
+- ✅ Works across dev/staging/production
+
+**Local Development**:
+```bash
+# Login with Azure CLI
+az login
+
+# Run your script (uses your Azure CLI credentials)
+python your_script.py
+```
+
+**Production Deployment**:
+```bash
+# Assign Managed Identity to Azure resource
+az vm identity assign --name my-vm --resource-group my-rg
+
+# Grant RBAC role
+az role assignment create \
+  --assignee <managed-identity-id> \
+  --role "Cognitive Services OpenAI User" \
+  --scope <openai-resource-id>
+
+# Run your script (uses Managed Identity automatically)
+python your_script.py
+```
+
+#### 2. Pre-fetched Azure AD Token (Advanced)
+
+**Purpose**: Manual token management for custom scenarios
+
+**Configuration**:
+```python
+from azure.identity import DefaultAzureCredential
+
+# Fetch token manually
+credential = DefaultAzureCredential()
+token = credential.get_token("https://cognitiveservices.azure.com/.default")
+
+.with_llm(
+    provider="azure_openai",
+    model="gpt-4",
+    azure_endpoint="https://your-resource.openai.azure.com/",
+    azure_deployment="gpt-4-deployment",
+    azure_ad_token=token.token  # ← Pre-fetched token
+)
+```
+
+**Use Cases**:
+- Custom token lifecycle management
+- Token caching strategies
+- Integration with existing auth systems
+
+#### 3. API Key (Backward Compatible)
+
+**Purpose**: Traditional authentication method
+
+**Configuration**:
+```python
+.with_llm(
+    provider="azure_openai",
+    model="gpt-4",
+    azure_endpoint="https://your-resource.openai.azure.com/",
+    azure_deployment="gpt-4-deployment",
+    api_key=os.getenv("AZURE_OPENAI_API_KEY")  # ← API key
+)
+```
+
+**YAML Configuration**:
+```yaml
+llm:
+  provider: "azure_openai"
+  model: "gpt-4"
+  azure_endpoint: "https://your-resource.openai.azure.com/"
+  azure_deployment: "gpt-4-deployment"
+  api_key: ${AZURE_OPENAI_API_KEY}  # From environment
+```
+
+**Setup**:
+```bash
+export AZURE_OPENAI_API_KEY="your-key-from-azure-portal"  # pragma: allowlist secret
+```
+
+### Architecture
+
+```python
+class AzureOpenAIClient(LLMClient):
+    def __init__(self, spec: LLMSpec):
+        # Validate required fields
+        if not spec.azure_endpoint:
+            raise ValueError("azure_endpoint required")
+        if not spec.azure_deployment:
+            raise ValueError("azure_deployment required")
+
+        # Authentication priority:
+        if spec.use_managed_identity:
+            # 1. Managed Identity (preferred)
+            credential = DefaultAzureCredential()
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
+            self.client = AzureOpenAI(azure_ad_token=token.token, ...)
+
+        elif spec.azure_ad_token:
+            # 2. Pre-fetched token
+            self.client = AzureOpenAI(azure_ad_token=spec.azure_ad_token, ...)
+
+        else:
+            # 3. API key (backward compatible)
+            api_key = spec.api_key or os.getenv("AZURE_OPENAI_API_KEY")
+            self.client = AzureOpenAI(api_key=api_key, ...)
+```
+
+### Configuration Fields
+
+**Required**:
+- `provider: "azure_openai"`
+- `azure_endpoint`: Azure OpenAI resource endpoint
+- `azure_deployment`: Deployment name (maps to model)
+
+**Authentication (choose one)**:
+- `use_managed_identity: bool` - Use Azure Managed Identity (recommended)
+- `azure_ad_token: str` - Pre-fetched Azure AD token
+- `api_key: str` - API key from Azure Portal
+
+**Optional**:
+- `api_version: str` - API version (default: "2024-02-15-preview")
+- `temperature: float` - Sampling temperature
+- `max_tokens: int` - Maximum output tokens
+
+### Multi-Region Support
+
+Azure OpenAI is available in multiple regions for data residency and latency optimization:
+
+```python
+# Region-specific endpoints
+regions = {
+    "eastus": "https://eastus-resource.openai.azure.com/",
+    "westeurope": "https://westeurope-resource.openai.azure.com/",
+    "swedencentral": "https://swedencentral-resource.openai.azure.com/",
+    "japaneast": "https://japaneast-resource.openai.azure.com/",
+}
+
+# Environment-aware configuration
+region = os.getenv("AZURE_REGION", "eastus")
+endpoint = regions[region]
+
+.with_llm(
+    provider="azure_openai",
+    azure_endpoint=endpoint,
+    use_managed_identity=True
+)
+```
+
+### Error Handling
+
+**Missing Dependency**:
+```
+ImportError: Azure Managed Identity requires azure-identity.
+Install with: pip install ondine[azure]
+```
+
+**Authentication Failure**:
+```
+ValueError: Failed to authenticate with Azure Managed Identity: <error>.
+Ensure the resource has a Managed Identity assigned with
+'Cognitive Services OpenAI User' role.
+```
+
+**Missing Configuration**:
+```
+ValueError: Azure OpenAI requires either:
+  1. use_managed_identity=True (for keyless auth), or
+  2. api_key parameter, or
+  3. AZURE_OPENAI_API_KEY environment variable
+```
+
+### Dependencies
+
+```python
+from llama_index.llms.azure_openai import AzureOpenAI  # LlamaIndex wrapper
+from azure.identity import DefaultAzureCredential       # Optional (for Managed Identity)
+import tiktoken                                         # Token estimation
+```
+
+### Used By
+
+- `create_llm_client()` factory
+- Any pipeline with `provider: azure_openai`
+- Examples: `azure_managed_identity.py`, `azure_managed_identity_config.yaml`
+
+### Testing Strategy
+
+**Unit Tests (11 tests)**:
+- Managed Identity authentication flow
+- Pre-fetched token authentication
+- API key authentication (backward compatibility)
+- Error handling (missing dependencies, failed authentication)
+- Priority ordering (Managed Identity > Token > API Key)
+- Missing configuration validation
+
+**Integration Tests**:
+- Require actual Azure credentials (optional)
+- Test real Azure AD authentication
+- Verify RBAC permissions
+
+### Security Best Practices
+
+1. **Production**: Use Managed Identity (no secrets)
+2. **Development**: Use `az login` (personal credentials)
+3. **CI/CD**: Use Service Principal or Federated Identity
+4. **Never**: Hardcode API keys in source code
+
+### Performance Characteristics
+
+**Managed Identity**:
+- Token fetch: ~100-200ms (first call)
+- Token cached: ~1 hour (Azure AD default)
+- Subsequent calls: No auth overhead
+
+**API Key**:
+- No auth overhead (key is static)
+- Manual rotation required
+
+### Known Limitations
+
+- Managed Identity only works on Azure infrastructure
+- Token refresh not automatic (pipeline must be restarted after 1 hour for long runs)
+- Cannot use Managed Identity with non-Azure OpenAI providers
+
+### Future Improvements
+
+- [ ] Automatic token refresh for long-running pipelines
+- [ ] Support for User-Assigned Managed Identity (currently uses DefaultAzureCredential)
+- [ ] Token caching across pipeline instances
+- [ ] Integration with Azure Key Vault for API key storage
+
+---
+
+## 5.4 MLX Provider (Apple Silicon)
 
 ### Purpose
 Enable fast, free, local LLM inference on Apple Silicon using Apple's MLX framework.
@@ -2027,7 +2345,7 @@ Ondine delegates LLM call tracking to LlamaIndex's native handlers:
 **Methods**:
 ```python
 def on_pipeline_start(event) -> None:  # Optional
-def on_stage_start(event) -> None:     # Optional  
+def on_stage_start(event) -> None:     # Optional
 def on_llm_call(event) -> None:        # REQUIRED (abstract)
 def on_stage_end(event) -> None:       # Optional
 def on_error(event) -> None:           # Optional
@@ -2086,7 +2404,7 @@ class OpenTelemetryObserver(PipelineObserver):
     def __init__(self, config):
         # Configure LlamaIndex OpenTelemetry handler
         LlamaIndexHandlerManager.configure_handler("opentelemetry", config)
-    
+
     def on_llm_call(self, event):
         # LlamaIndex handles this automatically!
         pass
@@ -2110,7 +2428,7 @@ class OpenTelemetryObserver(PipelineObserver):
 ```python
 {
     "public_key": "pk-lf-...",
-    "secret_key": "sk-lf-...",
+    "secret_key": "sk-lf-...",  # pragma: allowlist secret
     "host": "https://cloud.langfuse.com"  # optional
 }
 ```
@@ -2151,11 +2469,11 @@ class OpenTelemetryObserver(PipelineObserver):
 def configure_handler(handler_type: str, config: dict):
     """Configure a LlamaIndex global handler."""
     from llama_index.core import set_global_handler
-    
+
     if handler_type == "opentelemetry":
         set_global_handler("opentelemetry", **config)
     elif handler_type == "langfuse":
-        set_global_handler("langfuse", 
+        set_global_handler("langfuse",
             public_key=config["public_key"],
             secret_key=config["secret_key"])
     elif handler_type == "simple":

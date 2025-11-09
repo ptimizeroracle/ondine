@@ -1,18 +1,8 @@
-# Ondine - LLM Dataset Engine
+<div align="center">
+  <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
-```
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌ ▀▀▀▀█░█▀▀▀▀ ▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌▐░▌    ▐░▌▐░▌
-▐░▌       ▐░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌ ▐░▌   ▐░▌▐░█▄▄▄▄▄▄▄▄▄
-▐░▌       ▐░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌  ▐░▌  ▐░▌▐░░░░░░░░░░░▌
-▐░▌       ▐░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌   ▐░▌ ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌    ▐░▌▐░▌▐░▌
-▐░█▄▄▄▄▄▄▄█░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌▄▄▄▄█░█▄▄▄▄ ▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-```
+  # Ondine - LLM Dataset Engine
+</div>
 
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
 [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
@@ -121,9 +111,9 @@ pip install "ondine[mlx]"
 
 ```bash
 # For cloud providers
-export OPENAI_API_KEY="your-key-here"
+export OPENAI_API_KEY="your-key-here"  # pragma: allowlist secret
 # or
-export AZURE_OPENAI_API_KEY="your-key-here"
+export AZURE_OPENAI_API_KEY="your-key-here"  # pragma: allowlist secret
 export AZURE_OPENAI_ENDPOINT="https://your-endpoint.openai.azure.com/"
 # or
 export ANTHROPIC_API_KEY="your-key-here"
@@ -603,7 +593,7 @@ The SDK follows a **layered architecture**:
 | Provider | Platform | Cost | Use Case | Setup |
 |----------|----------|------|----------|-------|
 | **OpenAI** | Cloud (All) | $$ | Production, high quality | `OPENAI_API_KEY` |
-| **Azure OpenAI** | Cloud (All) | $$ | Enterprise, compliance | `AZURE_OPENAI_API_KEY` |
+| **Azure OpenAI** | Cloud (All) | $$ | Enterprise, compliance, **Managed Identity support** | `AZURE_OPENAI_API_KEY` or Managed Identity |
 | **Anthropic** | Cloud (All) | $$$ | Long context, Claude models | `ANTHROPIC_API_KEY` |
 | **Groq** | Cloud (All) | Free tier | Fast inference, development | `GROQ_API_KEY` |
 | **MLX** | macOS (M1/M2/M3/M4) | Free | Local, private, offline | `pip install ondine[mlx]` |
@@ -645,7 +635,7 @@ pipeline = (
     # Add observability - automatically tracks ALL LLM calls!
     .with_observer("langfuse", config={
         "public_key": "pk-lf-...",
-        "secret_key": "sk-lf-..."
+        "secret_key": "sk-lf-..."  # pragma: allowlist secret
     })
     .build()
 )

@@ -52,3 +52,6 @@ docs/architecture/diagrams/
 # Local documentation files (keep locally, don't commit)
 docs/DESIGN_IMPROVEMENT.md
 docs/ARCHITECTURE.md
+
+# Local working directory
+.local/
