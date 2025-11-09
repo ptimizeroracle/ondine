@@ -25,6 +25,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
+      - name: Install dependencies
+        run: |
+          uv sync --extra dev
+
       - name: Check docstring coverage
         run: |
           uv run python tools/check_docstring_coverage.py
@@ -35,7 +39,6 @@ jobs:
 
       - name: Check with interrogate
         run: |
-          uv pip install interrogate
           uv run interrogate ondine/ --fail-under=80 -v
 
       - name: Report results
