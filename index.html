@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
     
     
       
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ondine-llm-dataset-engine" class="md-skip">
+        <a href="#features" class="md-skip">
           Skip to content
         </a>
       
@@ -399,8 +399,6 @@
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
-        
-      
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
           
@@ -432,8 +430,6 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
-  
-    
   
   
     <label class="md-nav__title" for="__toc">
@@ -2464,8 +2460,6 @@
   
   
   
-    
-  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -2579,19 +2573,14 @@
   
 
 
-<h1 id="ondine-llm-dataset-engine">Ondine - LLM Dataset Engine<a class="headerlink" href="#ondine-llm-dataset-engine" title="Permanent link">&para;</a></h1>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a> ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌ ▀▀▀▀█░█▀▀▀▀ ▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌▐░▌    ▐░▌▐░▌
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>▐░▌       ▐░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌ ▐░▌   ▐░▌▐░█▄▄▄▄▄▄▄▄▄
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>▐░▌       ▐░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌  ▐░▌  ▐░▌▐░░░░░░░░░░░▌
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>▐░▌       ▐░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌   ▐░▌ ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌    ▐░▌▐░▌▐░▌
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>▐░█▄▄▄▄▄▄▄█░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌▄▄▄▄█░█▄▄▄▄ ▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄▄▄
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░░▌
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a> ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-</span></code></pre></div>
+  <h1>Home</h1>
+
+<div align="center">
+  <img src="../assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
+
+  # Ondine - LLM Dataset Engine
+</div>
+
 <p><a href="https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg" /></a>
 <a href="https://codecov.io/gh/ptimizeroracle/Ondine"><img alt="codecov" src="https://codecov.io/gh/ptimizeroracle/Ondine/branch/main/graph/badge.svg" /></a>
 <a href="https://www.python.org/downloads/"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg" /></a>
@@ -2606,7 +2595,7 @@
 <li><strong>Observability</strong>: LlamaIndex-powered automatic LLM tracking (Langfuse, OpenTelemetry), progress bars, cost reports</li>
 <li><strong>Extensibility</strong>: Plugin architecture, custom stages, multiple LLM providers</li>
 <li><strong>Production Ready</strong>: Zero data loss on crashes, resume from checkpoint</li>
-<li><strong>Multiple Providers</strong>: OpenAI, Azure OpenAI, Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs</li>
+<li><strong>Multiple Providers</strong>: OpenAI, Azure OpenAI (with Managed Identity), Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs</li>
 <li><strong>Local Inference</strong>: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable</li>
 <li><strong>Multi-Column Processing</strong>: Generate multiple output columns with composition or JSON parsing</li>
 <li><strong>Custom Providers</strong>: Integrate any OpenAI-compatible API (Together.AI, vLLM, Ollama, custom endpoints)</li>
@@ -2614,19 +2603,19 @@
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <h3 id="option-1-quick-api-recommended">Option 1: Quick API (Recommended)<a class="headerlink" href="#option-1-quick-api-recommended" title="Permanent link">&para;</a></h3>
 <p>The simplest way to get started - just provide your data, prompt, and model:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuickPipeline</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Process data with smart defaults</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="n">QuickPipeline</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Clean this text: </span><span class="si">{description}</span><span class="s2">&quot;</span><span class="p">,</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Execute pipeline</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processed </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">metrics</span><span class="o">.</span><span class="n">processed_rows</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuickPipeline</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Process data with smart defaults</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="n">QuickPipeline</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">data</span><span class="o">=</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Clean this text: </span><span class="si">{description}</span><span class="s2">&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Execute pipeline</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processed </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">metrics</span><span class="o">.</span><span class="n">processed_rows</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p><strong>What's auto-detected:</strong></p>
 <ul>
@@ -2637,41 +2626,44 @@
 </ul>
 <h3 id="option-2-builder-api-full-control">Option 2: Builder API (Full Control)<a class="headerlink" href="#option-2-builder-api-full-control" title="Permanent link">&para;</a></h3>
 <p>For advanced use cases requiring explicit configuration:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Build with explicit settings</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>              <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cleaned&quot;</span><span class="p">])</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="o">.</span><span class="n">with_prompt</span><span class="p">(</span><span class="s2">&quot;Clean this text: </span><span class="si">{description}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="o">.</span><span class="n">with_batch_size</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="o">.</span><span class="n">with_concurrency</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">)</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="c1"># Estimate cost before running</span>
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="n">estimate</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">estimate_cost</span><span class="p">()</span>
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Estimated cost: $</span><span class="si">{</span><span class="n">estimate</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
-</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="c1"># Execute pipeline</span>
-</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
-</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Build with explicit settings</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>              <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cleaned&quot;</span><span class="p">])</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="o">.</span><span class="n">with_prompt</span><span class="p">(</span><span class="s2">&quot;Clean this text: </span><span class="si">{description}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="o">.</span><span class="n">with_batch_size</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="o">.</span><span class="n">with_concurrency</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># Estimate cost before running</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">estimate</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">estimate_cost</span><span class="p">()</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Estimated cost: $</span><span class="si">{</span><span class="n">estimate</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="c1"># Execute pipeline</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <p>Install with pip or uv:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine
 </span></code></pre></div>
 <p>Or with optional dependencies:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># For Apple Silicon local inference</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>mlx<span class="o">]</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Observability is now built-in (OpenTelemetry + Langfuse)</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># No separate install needed!</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># For development</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>dev<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># For Apple Silicon local inference</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>mlx<span class="o">]</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># For Azure Managed Identity (keyless auth)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>azure<span class="o">]</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Observability is now built-in (OpenTelemetry + Langfuse)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># No separate install needed!</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># For development</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>dev<span class="o">]</span>
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>

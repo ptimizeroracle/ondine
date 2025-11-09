@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
     
     
       
@@ -11403,37 +11403,37 @@ logging, and tracing.</p>
 
             <details class="quote">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-181">181</a></span>
-<span class="normal"><a href="#__codelineno-0-182">182</a></span>
-<span class="normal"><a href="#__codelineno-0-183">183</a></span>
-<span class="normal"><a href="#__codelineno-0-184">184</a></span>
-<span class="normal"><a href="#__codelineno-0-185">185</a></span>
-<span class="normal"><a href="#__codelineno-0-186">186</a></span>
-<span class="normal"><a href="#__codelineno-0-187">187</a></span>
-<span class="normal"><a href="#__codelineno-0-188">188</a></span>
-<span class="normal"><a href="#__codelineno-0-189">189</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-189">189</a></span>
 <span class="normal"><a href="#__codelineno-0-190">190</a></span>
 <span class="normal"><a href="#__codelineno-0-191">191</a></span>
 <span class="normal"><a href="#__codelineno-0-192">192</a></span>
 <span class="normal"><a href="#__codelineno-0-193">193</a></span>
 <span class="normal"><a href="#__codelineno-0-194">194</a></span>
 <span class="normal"><a href="#__codelineno-0-195">195</a></span>
-<span class="normal"><a href="#__codelineno-0-196">196</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-181"><a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;base_url&quot;</span><span class="p">)</span>
-</span><span id="__span-0-182"><a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-183"><a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_base_url_format</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-184"><a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate base_url is a valid HTTP(S) URL with a host.&quot;&quot;&quot;</span>
-</span><span id="__span-0-185"><a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-186"><a id="__codelineno-0-186" name="__codelineno-0-186"></a>        <span class="k">return</span> <span class="n">v</span>
-</span><span id="__span-0-187"><a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">urlparse</span>
-</span><span id="__span-0-188"><a id="__codelineno-0-188" name="__codelineno-0-188"></a>
-</span><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189"></a>    <span class="n">parsed</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-</span><span id="__span-0-190"><a id="__codelineno-0-190" name="__codelineno-0-190"></a>    <span class="k">if</span> <span class="n">parsed</span><span class="o">.</span><span class="n">scheme</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;http&quot;</span><span class="p">,</span> <span class="s2">&quot;https&quot;</span><span class="p">}:</span>
-</span><span id="__span-0-191"><a id="__codelineno-0-191" name="__codelineno-0-191"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;base_url must start with http:// or https://&quot;</span><span class="p">)</span>
-</span><span id="__span-0-192"><a id="__codelineno-0-192" name="__codelineno-0-192"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">parsed</span><span class="o">.</span><span class="n">netloc</span><span class="p">:</span>
-</span><span id="__span-0-193"><a id="__codelineno-0-193" name="__codelineno-0-193"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-</span><span id="__span-0-194"><a id="__codelineno-0-194" name="__codelineno-0-194"></a>            <span class="s2">&quot;base_url must include a host (e.g., localhost, api.example.com)&quot;</span>
-</span><span id="__span-0-195"><a id="__codelineno-0-195" name="__codelineno-0-195"></a>        <span class="p">)</span>
-</span><span id="__span-0-196"><a id="__codelineno-0-196" name="__codelineno-0-196"></a>    <span class="k">return</span> <span class="n">v</span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span>
+<span class="normal"><a href="#__codelineno-0-197">197</a></span>
+<span class="normal"><a href="#__codelineno-0-198">198</a></span>
+<span class="normal"><a href="#__codelineno-0-199">199</a></span>
+<span class="normal"><a href="#__codelineno-0-200">200</a></span>
+<span class="normal"><a href="#__codelineno-0-201">201</a></span>
+<span class="normal"><a href="#__codelineno-0-202">202</a></span>
+<span class="normal"><a href="#__codelineno-0-203">203</a></span>
+<span class="normal"><a href="#__codelineno-0-204">204</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;base_url&quot;</span><span class="p">)</span>
+</span><span id="__span-0-190"><a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-191"><a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_base_url_format</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-192"><a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate base_url is a valid HTTP(S) URL with a host.&quot;&quot;&quot;</span>
+</span><span id="__span-0-193"><a id="__codelineno-0-193" name="__codelineno-0-193"></a>    <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-194"><a id="__codelineno-0-194" name="__codelineno-0-194"></a>        <span class="k">return</span> <span class="n">v</span>
+</span><span id="__span-0-195"><a id="__codelineno-0-195" name="__codelineno-0-195"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">urlparse</span>
+</span><span id="__span-0-196"><a id="__codelineno-0-196" name="__codelineno-0-196"></a>
+</span><span id="__span-0-197"><a id="__codelineno-0-197" name="__codelineno-0-197"></a>    <span class="n">parsed</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+</span><span id="__span-0-198"><a id="__codelineno-0-198" name="__codelineno-0-198"></a>    <span class="k">if</span> <span class="n">parsed</span><span class="o">.</span><span class="n">scheme</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;http&quot;</span><span class="p">,</span> <span class="s2">&quot;https&quot;</span><span class="p">}:</span>
+</span><span id="__span-0-199"><a id="__codelineno-0-199" name="__codelineno-0-199"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;base_url must start with http:// or https://&quot;</span><span class="p">)</span>
+</span><span id="__span-0-200"><a id="__codelineno-0-200" name="__codelineno-0-200"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">parsed</span><span class="o">.</span><span class="n">netloc</span><span class="p">:</span>
+</span><span id="__span-0-201"><a id="__codelineno-0-201" name="__codelineno-0-201"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+</span><span id="__span-0-202"><a id="__codelineno-0-202" name="__codelineno-0-202"></a>            <span class="s2">&quot;base_url must include a host (e.g., localhost, api.example.com)&quot;</span>
+</span><span id="__span-0-203"><a id="__codelineno-0-203" name="__codelineno-0-203"></a>        <span class="p">)</span>
+</span><span id="__span-0-204"><a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="k">return</span> <span class="n">v</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -11462,21 +11462,21 @@ logging, and tracing.</p>
 
             <details class="quote">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-198">198</a></span>
-<span class="normal"><a href="#__codelineno-0-199">199</a></span>
-<span class="normal"><a href="#__codelineno-0-200">200</a></span>
-<span class="normal"><a href="#__codelineno-0-201">201</a></span>
-<span class="normal"><a href="#__codelineno-0-202">202</a></span>
-<span class="normal"><a href="#__codelineno-0-203">203</a></span>
-<span class="normal"><a href="#__codelineno-0-204">204</a></span>
-<span class="normal"><a href="#__codelineno-0-205">205</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-198"><a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;azure_endpoint&quot;</span><span class="p">,</span> <span class="s2">&quot;azure_deployment&quot;</span><span class="p">)</span>
-</span><span id="__span-0-199"><a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-200"><a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_azure_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-201"><a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate Azure-specific configuration.&quot;&quot;&quot;</span>
-</span><span id="__span-0-202"><a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="k">if</span> <span class="n">info</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;provider&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">LLMProvider</span><span class="o">.</span><span class="n">AZURE_OPENAI</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-203"><a id="__codelineno-0-203" name="__codelineno-0-203"></a>        <span class="n">field_name</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">field_name</span>
-</span><span id="__span-0-204"><a id="__codelineno-0-204" name="__codelineno-0-204"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s2"> required for Azure OpenAI provider&quot;</span><span class="p">)</span>
-</span><span id="__span-0-205"><a id="__codelineno-0-205" name="__codelineno-0-205"></a>    <span class="k">return</span> <span class="n">v</span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span>
+<span class="normal"><a href="#__codelineno-0-213">213</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-206"><a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;azure_endpoint&quot;</span><span class="p">,</span> <span class="s2">&quot;azure_deployment&quot;</span><span class="p">)</span>
+</span><span id="__span-0-207"><a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-208"><a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_azure_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-209"><a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate Azure-specific configuration.&quot;&quot;&quot;</span>
+</span><span id="__span-0-210"><a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="k">if</span> <span class="n">info</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;provider&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">LLMProvider</span><span class="o">.</span><span class="n">AZURE_OPENAI</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-211"><a id="__codelineno-0-211" name="__codelineno-0-211"></a>        <span class="n">field_name</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">field_name</span>
+</span><span id="__span-0-212"><a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s2"> required for Azure OpenAI provider&quot;</span><span class="p">)</span>
+</span><span id="__span-0-213"><a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="k">return</span> <span class="n">v</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -11501,19 +11501,19 @@ logging, and tracing.</p>
 
             <details class="quote">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-207">207</a></span>
-<span class="normal"><a href="#__codelineno-0-208">208</a></span>
-<span class="normal"><a href="#__codelineno-0-209">209</a></span>
-<span class="normal"><a href="#__codelineno-0-210">210</a></span>
-<span class="normal"><a href="#__codelineno-0-211">211</a></span>
-<span class="normal"><a href="#__codelineno-0-212">212</a></span>
-<span class="normal"><a href="#__codelineno-0-213">213</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-207"><a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
-</span><span id="__span-0-208"><a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_provider_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LLMSpec&quot;</span><span class="p">:</span>
-</span><span id="__span-0-209"><a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate provider-specific requirements.&quot;&quot;&quot;</span>
-</span><span id="__span-0-210"><a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="c1"># Check openai_compatible requires base_url</span>
-</span><span id="__span-0-211"><a id="__codelineno-0-211" name="__codelineno-0-211"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider</span> <span class="o">==</span> <span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-212"><a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;base_url required for openai_compatible provider&quot;</span><span class="p">)</span>
-</span><span id="__span-0-213"><a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="k">return</span> <span class="bp">self</span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-215"><a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+</span><span id="__span-0-216"><a id="__codelineno-0-216" name="__codelineno-0-216"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_provider_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LLMSpec&quot;</span><span class="p">:</span>
+</span><span id="__span-0-217"><a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate provider-specific requirements.&quot;&quot;&quot;</span>
+</span><span id="__span-0-218"><a id="__codelineno-0-218" name="__codelineno-0-218"></a>    <span class="c1"># Check openai_compatible requires base_url</span>
+</span><span id="__span-0-219"><a id="__codelineno-0-219" name="__codelineno-0-219"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider</span> <span class="o">==</span> <span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-220"><a id="__codelineno-0-220" name="__codelineno-0-220"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;base_url required for openai_compatible provider&quot;</span><span class="p">)</span>
+</span><span id="__span-0-221"><a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="k">return</span> <span class="bp">self</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -11636,15 +11636,15 @@ logging, and tracing.</p>
 
             <details class="quote">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-257">257</a></span>
-<span class="normal"><a href="#__codelineno-0-258">258</a></span>
-<span class="normal"><a href="#__codelineno-0-259">259</a></span>
-<span class="normal"><a href="#__codelineno-0-260">260</a></span>
-<span class="normal"><a href="#__codelineno-0-261">261</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-257"><a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;checkpoint_dir&quot;</span><span class="p">)</span>
-</span><span id="__span-0-258"><a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-259"><a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_checkpoint_dir</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-</span><span id="__span-0-260"><a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
-</span><span id="__span-0-261"><a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;checkpoint_dir&quot;</span><span class="p">)</span>
+</span><span id="__span-0-266"><a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-267"><a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_checkpoint_dir</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+</span><span id="__span-0-268"><a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
+</span><span id="__span-0-269"><a id="__codelineno-0-269" name="__codelineno-0-269"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>

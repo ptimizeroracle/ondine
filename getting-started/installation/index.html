@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
     
     
       
@@ -2920,36 +2920,47 @@
 <h2 id="api-keys-setup">API Keys Setup<a class="headerlink" href="#api-keys-setup" title="Permanent link">&para;</a></h2>
 <p>Ondine requires API keys for LLM providers. Set them as environment variables:</p>
 <h3 id="openai">OpenAI<a class="headerlink" href="#openai" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;sk-...&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;sk-...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
 </span></code></pre></div>
 <h3 id="azure-openai">Azure OpenAI<a class="headerlink" href="#azure-openai" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_ENDPOINT</span><span class="o">=</span><span class="s2">&quot;https://...&quot;</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_API_VERSION</span><span class="o">=</span><span class="s2">&quot;2024-02-15-preview&quot;</span>
+<p><strong>Option 1: Managed Identity (Recommended for Production)</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Install Azure dependencies</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>azure<span class="o">]</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># For local development, login with Azure CLI</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>az<span class="w"> </span>login
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># No API keys needed! Uses Managed Identity automatically.</span>
 </span></code></pre></div>
+<p><strong>Option 2: API Key (Traditional)</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_ENDPOINT</span><span class="o">=</span><span class="s2">&quot;https://...&quot;</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_API_VERSION</span><span class="o">=</span><span class="s2">&quot;2024-02-15-preview&quot;</span>
+</span></code></pre></div>
+<p>See <a href="../../guides/azure-managed-identity/">Azure Managed Identity Guide</a> for detailed setup.</p>
 <h3 id="anthropic-claude">Anthropic Claude<a class="headerlink" href="#anthropic-claude" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;sk-ant-...&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;sk-ant-...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
 </span></code></pre></div>
 <h3 id="groq">Groq<a class="headerlink" href="#groq" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;gsk_...&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;gsk_...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
 </span></code></pre></div>
 <h3 id="environment-file">Environment File<a class="headerlink" href="#environment-file" title="Permanent link">&para;</a></h3>
 <p>For convenience, create a <code>.env</code> file in your project root:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># .env</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_...
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># .env</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_...
 </span></code></pre></div>
 <p>Ondine automatically loads <code>.env</code> files using python-dotenv.</p>
 <h2 id="upgrade">Upgrade<a class="headerlink" href="#upgrade" title="Permanent link">&para;</a></h2>
 <p>To upgrade to the latest version:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>ondine
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>ondine
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="import-error-no-module-named-ondine">Import Error: No module named 'ondine'<a class="headerlink" href="#import-error-no-module-named-ondine" title="Permanent link">&para;</a></h3>
 <p>Make sure you're in the correct Python environment:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import sys; print(sys.executable)&quot;</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>pip<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>ondine
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import sys; print(sys.executable)&quot;</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>pip<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>ondine
 </span></code></pre></div>
 <h3 id="mlx-installation-issues">MLX Installation Issues<a class="headerlink" href="#mlx-installation-issues" title="Permanent link">&para;</a></h3>
 <p>MLX only works on Apple Silicon. If you get import errors:</p>

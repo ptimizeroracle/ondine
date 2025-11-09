@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
     
     
       
@@ -3041,7 +3041,7 @@
 <td>Cloud API</td>
 <td>All</td>
 <td>$$</td>
-<td>Enterprise, compliance</td>
+<td>Enterprise, compliance, <strong>Managed Identity support</strong></td>
 </tr>
 <tr>
 <td><strong>Anthropic</strong></td>
@@ -3068,7 +3068,7 @@
 </table>
 <h3 id="provider-selection-guide">Provider Selection Guide<a class="headerlink" href="#provider-selection-guide" title="Permanent link">&para;</a></h3>
 <p><strong>Choose OpenAI if</strong>: Production quality, mature ecosystem, GPT-4
-<strong>Choose Azure if</strong>: Enterprise compliance, private deployments
+<strong>Choose Azure if</strong>: Enterprise compliance, private deployments, keyless authentication
 <strong>Choose Anthropic if</strong>: Claude models, 100K+ context
 <strong>Choose Groq if</strong>: Fast inference, free tier, development
 <strong>Choose OpenAI-Compatible if</strong>: Custom endpoints, Ollama, vLLM, Together.AI, self-hosted</p>
@@ -3968,7 +3968,7 @@
 <td>Cloud API</td>
 <td>All</td>
 <td>$$</td>
-<td>Enterprise, compliance</td>
+<td>Enterprise, compliance, <strong>Managed Identity support</strong></td>
 </tr>
 <tr>
 <td><strong>Anthropic</strong></td>
@@ -4054,8 +4054,261 @@
 </span><span id="__span-51-5"><a id="__codelineno-51-5" name="__codelineno-51-5" href="#__codelineno-51-5"></a>    <span class="k">return</span> <span class="bp">self</span>
 </span></code></pre></div>
 <hr />
-<h2 id="53-mlx-provider-apple-silicon">5.3 MLX Provider (Apple Silicon)<a class="headerlink" href="#53-mlx-provider-apple-silicon" title="Permanent link">&para;</a></h2>
+<h2 id="53-azure-openai-provider-enterprise">5.3 Azure OpenAI Provider (Enterprise)<a class="headerlink" href="#53-azure-openai-provider-enterprise" title="Permanent link">&para;</a></h2>
 <h3 id="purpose_6">Purpose<a class="headerlink" href="#purpose_6" title="Permanent link">&para;</a></h3>
+<p>Enable enterprise-grade Azure OpenAI integration with support for both API key and Managed Identity authentication.</p>
+<h3 id="class-azureopenaiclient">Class: <code>AzureOpenAIClient</code><a class="headerlink" href="#class-azureopenaiclient" title="Permanent link">&para;</a></h3>
+<p><strong>Inheritance</strong>: <code>LLMClient</code> (Adapter pattern)</p>
+<p><strong>Platform</strong>: All (cloud-based)</p>
+<p><strong>Responsibility</strong>: Azure OpenAI Service integration with enterprise authentication</p>
+<p><strong>Key Features</strong>:
+- Managed Identity support (keyless authentication)
+- API key authentication (backward compatible)
+- Pre-fetched token support (advanced scenarios)
+- Multi-region deployment support
+- Azure RBAC integration</p>
+<h3 id="authentication-methods">Authentication Methods<a class="headerlink" href="#authentication-methods" title="Permanent link">&para;</a></h3>
+<p>Azure OpenAI supports three authentication methods (in priority order):</p>
+<h4 id="1-managed-identity-recommended-for-production">1. Managed Identity (Recommended for Production)<a class="headerlink" href="#1-managed-identity-recommended-for-production" title="Permanent link">&para;</a></h4>
+<p><strong>Purpose</strong>: Keyless authentication using Azure AD</p>
+<p><strong>Requirements</strong>:
+- <code>pip install ondine[azure]</code> (installs <code>azure-identity&gt;=1.15.0</code>)
+- Managed Identity assigned to Azure resource
+- RBAC role: "Cognitive Services OpenAI User"</p>
+<p><strong>Configuration</strong>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-52-1"><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
+</span><span id="__span-52-2"><a id="__codelineno-52-2" name="__codelineno-52-2" href="#__codelineno-52-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;azure_openai&quot;</span><span class="p">,</span>
+</span><span id="__span-52-3"><a id="__codelineno-52-3" name="__codelineno-52-3" href="#__codelineno-52-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4&quot;</span><span class="p">,</span>
+</span><span id="__span-52-4"><a id="__codelineno-52-4" name="__codelineno-52-4" href="#__codelineno-52-4"></a>    <span class="n">azure_endpoint</span><span class="o">=</span><span class="s2">&quot;https://your-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-52-5"><a id="__codelineno-52-5" name="__codelineno-52-5" href="#__codelineno-52-5"></a>    <span class="n">azure_deployment</span><span class="o">=</span><span class="s2">&quot;gpt-4-deployment&quot;</span><span class="p">,</span>
+</span><span id="__span-52-6"><a id="__codelineno-52-6" name="__codelineno-52-6" href="#__codelineno-52-6"></a>    <span class="n">use_managed_identity</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># ← Keyless!</span>
+</span><span id="__span-52-7"><a id="__codelineno-52-7" name="__codelineno-52-7" href="#__codelineno-52-7"></a><span class="p">)</span>
+</span></code></pre></div></p>
+<p><strong>YAML Configuration</strong>:
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-53-1"><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="nt">llm</span><span class="p">:</span>
+</span><span id="__span-53-2"><a id="__codelineno-53-2" name="__codelineno-53-2" href="#__codelineno-53-2"></a><span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;azure_openai&quot;</span>
+</span><span id="__span-53-3"><a id="__codelineno-53-3" name="__codelineno-53-3" href="#__codelineno-53-3"></a><span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpt-4&quot;</span>
+</span><span id="__span-53-4"><a id="__codelineno-53-4" name="__codelineno-53-4" href="#__codelineno-53-4"></a><span class="w">  </span><span class="nt">azure_endpoint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://your-resource.openai.azure.com/&quot;</span>
+</span><span id="__span-53-5"><a id="__codelineno-53-5" name="__codelineno-53-5" href="#__codelineno-53-5"></a><span class="w">  </span><span class="nt">azure_deployment</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpt-4-deployment&quot;</span>
+</span><span id="__span-53-6"><a id="__codelineno-53-6" name="__codelineno-53-6" href="#__codelineno-53-6"></a><span class="w">  </span><span class="nt">use_managed_identity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># No API key needed!</span>
+</span></code></pre></div></p>
+<p><strong>How It Works</strong>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-54-1"><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">azure.identity</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultAzureCredential</span>
+</span><span id="__span-54-2"><a id="__codelineno-54-2" name="__codelineno-54-2" href="#__codelineno-54-2"></a>
+</span><span id="__span-54-3"><a id="__codelineno-54-3" name="__codelineno-54-3" href="#__codelineno-54-3"></a><span class="c1"># Ondine automatically:</span>
+</span><span id="__span-54-4"><a id="__codelineno-54-4" name="__codelineno-54-4" href="#__codelineno-54-4"></a><span class="n">credential</span> <span class="o">=</span> <span class="n">DefaultAzureCredential</span><span class="p">()</span>
+</span><span id="__span-54-5"><a id="__codelineno-54-5" name="__codelineno-54-5" href="#__codelineno-54-5"></a><span class="n">token</span> <span class="o">=</span> <span class="n">credential</span><span class="o">.</span><span class="n">get_token</span><span class="p">(</span><span class="s2">&quot;https://cognitiveservices.azure.com/.default&quot;</span><span class="p">)</span>
+</span><span id="__span-54-6"><a id="__codelineno-54-6" name="__codelineno-54-6" href="#__codelineno-54-6"></a>
+</span><span id="__span-54-7"><a id="__codelineno-54-7" name="__codelineno-54-7" href="#__codelineno-54-7"></a><span class="c1"># Passes token to LlamaIndex</span>
+</span><span id="__span-54-8"><a id="__codelineno-54-8" name="__codelineno-54-8" href="#__codelineno-54-8"></a><span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">AzureOpenAI</span><span class="p">(</span>
+</span><span id="__span-54-9"><a id="__codelineno-54-9" name="__codelineno-54-9" href="#__codelineno-54-9"></a>    <span class="n">azure_ad_token</span><span class="o">=</span><span class="n">token</span><span class="o">.</span><span class="n">token</span><span class="p">,</span>  <span class="c1"># ← Token, not API key</span>
+</span><span id="__span-54-10"><a id="__codelineno-54-10" name="__codelineno-54-10" href="#__codelineno-54-10"></a>    <span class="n">azure_endpoint</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">azure_endpoint</span><span class="p">,</span>
+</span><span id="__span-54-11"><a id="__codelineno-54-11" name="__codelineno-54-11" href="#__codelineno-54-11"></a>    <span class="n">deployment_name</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">azure_deployment</span><span class="p">,</span>
+</span><span id="__span-54-12"><a id="__codelineno-54-12" name="__codelineno-54-12" href="#__codelineno-54-12"></a><span class="p">)</span>
+</span></code></pre></div></p>
+<p><strong>DefaultAzureCredential Resolution Order</strong>:
+1. Environment variables (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET)
+2. Managed Identity (if running on Azure VM/Container/Function)
+3. Azure CLI credentials (if <code>az login</code> executed)
+4. Visual Studio Code credentials
+5. Azure PowerShell credentials</p>
+<p><strong>Benefits</strong>:
+- ✅ No API keys in code or environment
+- ✅ Automatic credential rotation (Azure AD handles it)
+- ✅ Fine-grained RBAC via Azure roles
+- ✅ Audit trail through Azure AD logs
+- ✅ Works across dev/staging/production</p>
+<p><strong>Local Development</strong>:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-55-1"><a id="__codelineno-55-1" name="__codelineno-55-1" href="#__codelineno-55-1"></a><span class="c1"># Login with Azure CLI</span>
+</span><span id="__span-55-2"><a id="__codelineno-55-2" name="__codelineno-55-2" href="#__codelineno-55-2"></a>az<span class="w"> </span>login
+</span><span id="__span-55-3"><a id="__codelineno-55-3" name="__codelineno-55-3" href="#__codelineno-55-3"></a>
+</span><span id="__span-55-4"><a id="__codelineno-55-4" name="__codelineno-55-4" href="#__codelineno-55-4"></a><span class="c1"># Run your script (uses your Azure CLI credentials)</span>
+</span><span id="__span-55-5"><a id="__codelineno-55-5" name="__codelineno-55-5" href="#__codelineno-55-5"></a>python<span class="w"> </span>your_script.py
+</span></code></pre></div></p>
+<p><strong>Production Deployment</strong>:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-56-1"><a id="__codelineno-56-1" name="__codelineno-56-1" href="#__codelineno-56-1"></a><span class="c1"># Assign Managed Identity to Azure resource</span>
+</span><span id="__span-56-2"><a id="__codelineno-56-2" name="__codelineno-56-2" href="#__codelineno-56-2"></a>az<span class="w"> </span>vm<span class="w"> </span>identity<span class="w"> </span>assign<span class="w"> </span>--name<span class="w"> </span>my-vm<span class="w"> </span>--resource-group<span class="w"> </span>my-rg
+</span><span id="__span-56-3"><a id="__codelineno-56-3" name="__codelineno-56-3" href="#__codelineno-56-3"></a>
+</span><span id="__span-56-4"><a id="__codelineno-56-4" name="__codelineno-56-4" href="#__codelineno-56-4"></a><span class="c1"># Grant RBAC role</span>
+</span><span id="__span-56-5"><a id="__codelineno-56-5" name="__codelineno-56-5" href="#__codelineno-56-5"></a>az<span class="w"> </span>role<span class="w"> </span>assignment<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-56-6"><a id="__codelineno-56-6" name="__codelineno-56-6" href="#__codelineno-56-6"></a><span class="w">  </span>--assignee<span class="w"> </span>&lt;managed-identity-id&gt;<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-56-7"><a id="__codelineno-56-7" name="__codelineno-56-7" href="#__codelineno-56-7"></a><span class="w">  </span>--role<span class="w"> </span><span class="s2">&quot;Cognitive Services OpenAI User&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-56-8"><a id="__codelineno-56-8" name="__codelineno-56-8" href="#__codelineno-56-8"></a><span class="w">  </span>--scope<span class="w"> </span>&lt;openai-resource-id&gt;
+</span><span id="__span-56-9"><a id="__codelineno-56-9" name="__codelineno-56-9" href="#__codelineno-56-9"></a>
+</span><span id="__span-56-10"><a id="__codelineno-56-10" name="__codelineno-56-10" href="#__codelineno-56-10"></a><span class="c1"># Run your script (uses Managed Identity automatically)</span>
+</span><span id="__span-56-11"><a id="__codelineno-56-11" name="__codelineno-56-11" href="#__codelineno-56-11"></a>python<span class="w"> </span>your_script.py
+</span></code></pre></div></p>
+<h4 id="2-pre-fetched-azure-ad-token-advanced">2. Pre-fetched Azure AD Token (Advanced)<a class="headerlink" href="#2-pre-fetched-azure-ad-token-advanced" title="Permanent link">&para;</a></h4>
+<p><strong>Purpose</strong>: Manual token management for custom scenarios</p>
+<p><strong>Configuration</strong>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-57-1"><a id="__codelineno-57-1" name="__codelineno-57-1" href="#__codelineno-57-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">azure.identity</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultAzureCredential</span>
+</span><span id="__span-57-2"><a id="__codelineno-57-2" name="__codelineno-57-2" href="#__codelineno-57-2"></a>
+</span><span id="__span-57-3"><a id="__codelineno-57-3" name="__codelineno-57-3" href="#__codelineno-57-3"></a><span class="c1"># Fetch token manually</span>
+</span><span id="__span-57-4"><a id="__codelineno-57-4" name="__codelineno-57-4" href="#__codelineno-57-4"></a><span class="n">credential</span> <span class="o">=</span> <span class="n">DefaultAzureCredential</span><span class="p">()</span>
+</span><span id="__span-57-5"><a id="__codelineno-57-5" name="__codelineno-57-5" href="#__codelineno-57-5"></a><span class="n">token</span> <span class="o">=</span> <span class="n">credential</span><span class="o">.</span><span class="n">get_token</span><span class="p">(</span><span class="s2">&quot;https://cognitiveservices.azure.com/.default&quot;</span><span class="p">)</span>
+</span><span id="__span-57-6"><a id="__codelineno-57-6" name="__codelineno-57-6" href="#__codelineno-57-6"></a>
+</span><span id="__span-57-7"><a id="__codelineno-57-7" name="__codelineno-57-7" href="#__codelineno-57-7"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
+</span><span id="__span-57-8"><a id="__codelineno-57-8" name="__codelineno-57-8" href="#__codelineno-57-8"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;azure_openai&quot;</span><span class="p">,</span>
+</span><span id="__span-57-9"><a id="__codelineno-57-9" name="__codelineno-57-9" href="#__codelineno-57-9"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4&quot;</span><span class="p">,</span>
+</span><span id="__span-57-10"><a id="__codelineno-57-10" name="__codelineno-57-10" href="#__codelineno-57-10"></a>    <span class="n">azure_endpoint</span><span class="o">=</span><span class="s2">&quot;https://your-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-57-11"><a id="__codelineno-57-11" name="__codelineno-57-11" href="#__codelineno-57-11"></a>    <span class="n">azure_deployment</span><span class="o">=</span><span class="s2">&quot;gpt-4-deployment&quot;</span><span class="p">,</span>
+</span><span id="__span-57-12"><a id="__codelineno-57-12" name="__codelineno-57-12" href="#__codelineno-57-12"></a>    <span class="n">azure_ad_token</span><span class="o">=</span><span class="n">token</span><span class="o">.</span><span class="n">token</span>  <span class="c1"># ← Pre-fetched token</span>
+</span><span id="__span-57-13"><a id="__codelineno-57-13" name="__codelineno-57-13" href="#__codelineno-57-13"></a><span class="p">)</span>
+</span></code></pre></div></p>
+<p><strong>Use Cases</strong>:
+- Custom token lifecycle management
+- Token caching strategies
+- Integration with existing auth systems</p>
+<h4 id="3-api-key-backward-compatible">3. API Key (Backward Compatible)<a class="headerlink" href="#3-api-key-backward-compatible" title="Permanent link">&para;</a></h4>
+<p><strong>Purpose</strong>: Traditional authentication method</p>
+<p><strong>Configuration</strong>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-58-1"><a id="__codelineno-58-1" name="__codelineno-58-1" href="#__codelineno-58-1"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
+</span><span id="__span-58-2"><a id="__codelineno-58-2" name="__codelineno-58-2" href="#__codelineno-58-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;azure_openai&quot;</span><span class="p">,</span>
+</span><span id="__span-58-3"><a id="__codelineno-58-3" name="__codelineno-58-3" href="#__codelineno-58-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4&quot;</span><span class="p">,</span>
+</span><span id="__span-58-4"><a id="__codelineno-58-4" name="__codelineno-58-4" href="#__codelineno-58-4"></a>    <span class="n">azure_endpoint</span><span class="o">=</span><span class="s2">&quot;https://your-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-58-5"><a id="__codelineno-58-5" name="__codelineno-58-5" href="#__codelineno-58-5"></a>    <span class="n">azure_deployment</span><span class="o">=</span><span class="s2">&quot;gpt-4-deployment&quot;</span><span class="p">,</span>
+</span><span id="__span-58-6"><a id="__codelineno-58-6" name="__codelineno-58-6" href="#__codelineno-58-6"></a>    <span class="n">api_key</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AZURE_OPENAI_API_KEY&quot;</span><span class="p">)</span>  <span class="c1"># ← API key</span>
+</span><span id="__span-58-7"><a id="__codelineno-58-7" name="__codelineno-58-7" href="#__codelineno-58-7"></a><span class="p">)</span>
+</span></code></pre></div></p>
+<p><strong>YAML Configuration</strong>:
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-59-1"><a id="__codelineno-59-1" name="__codelineno-59-1" href="#__codelineno-59-1"></a><span class="nt">llm</span><span class="p">:</span>
+</span><span id="__span-59-2"><a id="__codelineno-59-2" name="__codelineno-59-2" href="#__codelineno-59-2"></a><span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;azure_openai&quot;</span>
+</span><span id="__span-59-3"><a id="__codelineno-59-3" name="__codelineno-59-3" href="#__codelineno-59-3"></a><span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpt-4&quot;</span>
+</span><span id="__span-59-4"><a id="__codelineno-59-4" name="__codelineno-59-4" href="#__codelineno-59-4"></a><span class="w">  </span><span class="nt">azure_endpoint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://your-resource.openai.azure.com/&quot;</span>
+</span><span id="__span-59-5"><a id="__codelineno-59-5" name="__codelineno-59-5" href="#__codelineno-59-5"></a><span class="w">  </span><span class="nt">azure_deployment</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gpt-4-deployment&quot;</span>
+</span><span id="__span-59-6"><a id="__codelineno-59-6" name="__codelineno-59-6" href="#__codelineno-59-6"></a><span class="w">  </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${AZURE_OPENAI_API_KEY}</span><span class="w">  </span><span class="c1"># From environment</span>
+</span></code></pre></div></p>
+<p><strong>Setup</strong>:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-60-1"><a id="__codelineno-60-1" name="__codelineno-60-1" href="#__codelineno-60-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-key-from-azure-portal&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
+</span></code></pre></div></p>
+<h3 id="architecture_1">Architecture<a class="headerlink" href="#architecture_1" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-61-1"><a id="__codelineno-61-1" name="__codelineno-61-1" href="#__codelineno-61-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AzureOpenAIClient</span><span class="p">(</span><span class="n">LLMClient</span><span class="p">):</span>
+</span><span id="__span-61-2"><a id="__codelineno-61-2" name="__codelineno-61-2" href="#__codelineno-61-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">LLMSpec</span><span class="p">):</span>
+</span><span id="__span-61-3"><a id="__codelineno-61-3" name="__codelineno-61-3" href="#__codelineno-61-3"></a>        <span class="c1"># Validate required fields</span>
+</span><span id="__span-61-4"><a id="__codelineno-61-4" name="__codelineno-61-4" href="#__codelineno-61-4"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">azure_endpoint</span><span class="p">:</span>
+</span><span id="__span-61-5"><a id="__codelineno-61-5" name="__codelineno-61-5" href="#__codelineno-61-5"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;azure_endpoint required&quot;</span><span class="p">)</span>
+</span><span id="__span-61-6"><a id="__codelineno-61-6" name="__codelineno-61-6" href="#__codelineno-61-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">azure_deployment</span><span class="p">:</span>
+</span><span id="__span-61-7"><a id="__codelineno-61-7" name="__codelineno-61-7" href="#__codelineno-61-7"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;azure_deployment required&quot;</span><span class="p">)</span>
+</span><span id="__span-61-8"><a id="__codelineno-61-8" name="__codelineno-61-8" href="#__codelineno-61-8"></a>
+</span><span id="__span-61-9"><a id="__codelineno-61-9" name="__codelineno-61-9" href="#__codelineno-61-9"></a>        <span class="c1"># Authentication priority:</span>
+</span><span id="__span-61-10"><a id="__codelineno-61-10" name="__codelineno-61-10" href="#__codelineno-61-10"></a>        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">use_managed_identity</span><span class="p">:</span>
+</span><span id="__span-61-11"><a id="__codelineno-61-11" name="__codelineno-61-11" href="#__codelineno-61-11"></a>            <span class="c1"># 1. Managed Identity (preferred)</span>
+</span><span id="__span-61-12"><a id="__codelineno-61-12" name="__codelineno-61-12" href="#__codelineno-61-12"></a>            <span class="n">credential</span> <span class="o">=</span> <span class="n">DefaultAzureCredential</span><span class="p">()</span>
+</span><span id="__span-61-13"><a id="__codelineno-61-13" name="__codelineno-61-13" href="#__codelineno-61-13"></a>            <span class="n">token</span> <span class="o">=</span> <span class="n">credential</span><span class="o">.</span><span class="n">get_token</span><span class="p">(</span><span class="s2">&quot;https://cognitiveservices.azure.com/.default&quot;</span><span class="p">)</span>
+</span><span id="__span-61-14"><a id="__codelineno-61-14" name="__codelineno-61-14" href="#__codelineno-61-14"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">AzureOpenAI</span><span class="p">(</span><span class="n">azure_ad_token</span><span class="o">=</span><span class="n">token</span><span class="o">.</span><span class="n">token</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-61-15"><a id="__codelineno-61-15" name="__codelineno-61-15" href="#__codelineno-61-15"></a>
+</span><span id="__span-61-16"><a id="__codelineno-61-16" name="__codelineno-61-16" href="#__codelineno-61-16"></a>        <span class="k">elif</span> <span class="n">spec</span><span class="o">.</span><span class="n">azure_ad_token</span><span class="p">:</span>
+</span><span id="__span-61-17"><a id="__codelineno-61-17" name="__codelineno-61-17" href="#__codelineno-61-17"></a>            <span class="c1"># 2. Pre-fetched token</span>
+</span><span id="__span-61-18"><a id="__codelineno-61-18" name="__codelineno-61-18" href="#__codelineno-61-18"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">AzureOpenAI</span><span class="p">(</span><span class="n">azure_ad_token</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">azure_ad_token</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-61-19"><a id="__codelineno-61-19" name="__codelineno-61-19" href="#__codelineno-61-19"></a>
+</span><span id="__span-61-20"><a id="__codelineno-61-20" name="__codelineno-61-20" href="#__codelineno-61-20"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-61-21"><a id="__codelineno-61-21" name="__codelineno-61-21" href="#__codelineno-61-21"></a>            <span class="c1"># 3. API key (backward compatible)</span>
+</span><span id="__span-61-22"><a id="__codelineno-61-22" name="__codelineno-61-22" href="#__codelineno-61-22"></a>            <span class="n">api_key</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AZURE_OPENAI_API_KEY&quot;</span><span class="p">)</span>
+</span><span id="__span-61-23"><a id="__codelineno-61-23" name="__codelineno-61-23" href="#__codelineno-61-23"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">AzureOpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="configuration-fields">Configuration Fields<a class="headerlink" href="#configuration-fields" title="Permanent link">&para;</a></h3>
+<p><strong>Required</strong>:
+- <code>provider: "azure_openai"</code>
+- <code>azure_endpoint</code>: Azure OpenAI resource endpoint
+- <code>azure_deployment</code>: Deployment name (maps to model)</p>
+<p><strong>Authentication (choose one)</strong>:
+- <code>use_managed_identity: bool</code> - Use Azure Managed Identity (recommended)
+- <code>azure_ad_token: str</code> - Pre-fetched Azure AD token
+- <code>api_key: str</code> - API key from Azure Portal</p>
+<p><strong>Optional</strong>:
+- <code>api_version: str</code> - API version (default: "2024-02-15-preview")
+- <code>temperature: float</code> - Sampling temperature
+- <code>max_tokens: int</code> - Maximum output tokens</p>
+<h3 id="multi-region-support">Multi-Region Support<a class="headerlink" href="#multi-region-support" title="Permanent link">&para;</a></h3>
+<p>Azure OpenAI is available in multiple regions for data residency and latency optimization:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-62-1"><a id="__codelineno-62-1" name="__codelineno-62-1" href="#__codelineno-62-1"></a><span class="c1"># Region-specific endpoints</span>
+</span><span id="__span-62-2"><a id="__codelineno-62-2" name="__codelineno-62-2" href="#__codelineno-62-2"></a><span class="n">regions</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-62-3"><a id="__codelineno-62-3" name="__codelineno-62-3" href="#__codelineno-62-3"></a>    <span class="s2">&quot;eastus&quot;</span><span class="p">:</span> <span class="s2">&quot;https://eastus-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-62-4"><a id="__codelineno-62-4" name="__codelineno-62-4" href="#__codelineno-62-4"></a>    <span class="s2">&quot;westeurope&quot;</span><span class="p">:</span> <span class="s2">&quot;https://westeurope-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-62-5"><a id="__codelineno-62-5" name="__codelineno-62-5" href="#__codelineno-62-5"></a>    <span class="s2">&quot;swedencentral&quot;</span><span class="p">:</span> <span class="s2">&quot;https://swedencentral-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-62-6"><a id="__codelineno-62-6" name="__codelineno-62-6" href="#__codelineno-62-6"></a>    <span class="s2">&quot;japaneast&quot;</span><span class="p">:</span> <span class="s2">&quot;https://japaneast-resource.openai.azure.com/&quot;</span><span class="p">,</span>
+</span><span id="__span-62-7"><a id="__codelineno-62-7" name="__codelineno-62-7" href="#__codelineno-62-7"></a><span class="p">}</span>
+</span><span id="__span-62-8"><a id="__codelineno-62-8" name="__codelineno-62-8" href="#__codelineno-62-8"></a>
+</span><span id="__span-62-9"><a id="__codelineno-62-9" name="__codelineno-62-9" href="#__codelineno-62-9"></a><span class="c1"># Environment-aware configuration</span>
+</span><span id="__span-62-10"><a id="__codelineno-62-10" name="__codelineno-62-10" href="#__codelineno-62-10"></a><span class="n">region</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AZURE_REGION&quot;</span><span class="p">,</span> <span class="s2">&quot;eastus&quot;</span><span class="p">)</span>
+</span><span id="__span-62-11"><a id="__codelineno-62-11" name="__codelineno-62-11" href="#__codelineno-62-11"></a><span class="n">endpoint</span> <span class="o">=</span> <span class="n">regions</span><span class="p">[</span><span class="n">region</span><span class="p">]</span>
+</span><span id="__span-62-12"><a id="__codelineno-62-12" name="__codelineno-62-12" href="#__codelineno-62-12"></a>
+</span><span id="__span-62-13"><a id="__codelineno-62-13" name="__codelineno-62-13" href="#__codelineno-62-13"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
+</span><span id="__span-62-14"><a id="__codelineno-62-14" name="__codelineno-62-14" href="#__codelineno-62-14"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;azure_openai&quot;</span><span class="p">,</span>
+</span><span id="__span-62-15"><a id="__codelineno-62-15" name="__codelineno-62-15" href="#__codelineno-62-15"></a>    <span class="n">azure_endpoint</span><span class="o">=</span><span class="n">endpoint</span><span class="p">,</span>
+</span><span id="__span-62-16"><a id="__codelineno-62-16" name="__codelineno-62-16" href="#__codelineno-62-16"></a>    <span class="n">use_managed_identity</span><span class="o">=</span><span class="kc">True</span>
+</span><span id="__span-62-17"><a id="__codelineno-62-17" name="__codelineno-62-17" href="#__codelineno-62-17"></a><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<p><strong>Missing Dependency</strong>:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-63-1"><a id="__codelineno-63-1" name="__codelineno-63-1" href="#__codelineno-63-1"></a>ImportError: Azure Managed Identity requires azure-identity.
+</span><span id="__span-63-2"><a id="__codelineno-63-2" name="__codelineno-63-2" href="#__codelineno-63-2"></a>Install with: pip install ondine[azure]
+</span></code></pre></div></p>
+<p><strong>Authentication Failure</strong>:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-64-1"><a id="__codelineno-64-1" name="__codelineno-64-1" href="#__codelineno-64-1"></a>ValueError: Failed to authenticate with Azure Managed Identity: &lt;error&gt;.
+</span><span id="__span-64-2"><a id="__codelineno-64-2" name="__codelineno-64-2" href="#__codelineno-64-2"></a>Ensure the resource has a Managed Identity assigned with
+</span><span id="__span-64-3"><a id="__codelineno-64-3" name="__codelineno-64-3" href="#__codelineno-64-3"></a>&#39;Cognitive Services OpenAI User&#39; role.
+</span></code></pre></div></p>
+<p><strong>Missing Configuration</strong>:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-65-1"><a id="__codelineno-65-1" name="__codelineno-65-1" href="#__codelineno-65-1"></a>ValueError: Azure OpenAI requires either:
+</span><span id="__span-65-2"><a id="__codelineno-65-2" name="__codelineno-65-2" href="#__codelineno-65-2"></a>  1. use_managed_identity=True (for keyless auth), or
+</span><span id="__span-65-3"><a id="__codelineno-65-3" name="__codelineno-65-3" href="#__codelineno-65-3"></a>  2. api_key parameter, or
+</span><span id="__span-65-4"><a id="__codelineno-65-4" name="__codelineno-65-4" href="#__codelineno-65-4"></a>  3. AZURE_OPENAI_API_KEY environment variable
+</span></code></pre></div></p>
+<h3 id="dependencies_5">Dependencies<a class="headerlink" href="#dependencies_5" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-66-1"><a id="__codelineno-66-1" name="__codelineno-66-1" href="#__codelineno-66-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">llama_index.llms.azure_openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">AzureOpenAI</span>  <span class="c1"># LlamaIndex wrapper</span>
+</span><span id="__span-66-2"><a id="__codelineno-66-2" name="__codelineno-66-2" href="#__codelineno-66-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">azure.identity</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultAzureCredential</span>       <span class="c1"># Optional (for Managed Identity)</span>
+</span><span id="__span-66-3"><a id="__codelineno-66-3" name="__codelineno-66-3" href="#__codelineno-66-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">tiktoken</span>                                         <span class="c1"># Token estimation</span>
+</span></code></pre></div>
+<h3 id="used-by_5">Used By<a class="headerlink" href="#used-by_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>create_llm_client()</code> factory</li>
+<li>Any pipeline with <code>provider: azure_openai</code></li>
+<li>Examples: <code>azure_managed_identity.py</code>, <code>azure_managed_identity_config.yaml</code></li>
+</ul>
+<h3 id="testing-strategy_1">Testing Strategy<a class="headerlink" href="#testing-strategy_1" title="Permanent link">&para;</a></h3>
+<p><strong>Unit Tests (11 tests)</strong>:
+- Managed Identity authentication flow
+- Pre-fetched token authentication
+- API key authentication (backward compatibility)
+- Error handling (missing dependencies, failed authentication)
+- Priority ordering (Managed Identity &gt; Token &gt; API Key)
+- Missing configuration validation</p>
+<p><strong>Integration Tests</strong>:
+- Require actual Azure credentials (optional)
+- Test real Azure AD authentication
+- Verify RBAC permissions</p>
+<h3 id="security-best-practices">Security Best Practices<a class="headerlink" href="#security-best-practices" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Production</strong>: Use Managed Identity (no secrets)</li>
+<li><strong>Development</strong>: Use <code>az login</code> (personal credentials)</li>
+<li><strong>CI/CD</strong>: Use Service Principal or Federated Identity</li>
+<li><strong>Never</strong>: Hardcode API keys in source code</li>
+</ol>
+<h3 id="performance-characteristics_1">Performance Characteristics<a class="headerlink" href="#performance-characteristics_1" title="Permanent link">&para;</a></h3>
+<p><strong>Managed Identity</strong>:
+- Token fetch: ~100-200ms (first call)
+- Token cached: ~1 hour (Azure AD default)
+- Subsequent calls: No auth overhead</p>
+<p><strong>API Key</strong>:
+- No auth overhead (key is static)
+- Manual rotation required</p>
+<h3 id="known-limitations_5">Known Limitations<a class="headerlink" href="#known-limitations_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Managed Identity only works on Azure infrastructure</li>
+<li>Token refresh not automatic (pipeline must be restarted after 1 hour for long runs)</li>
+<li>Cannot use Managed Identity with non-Azure OpenAI providers</li>
+</ul>
+<h3 id="future-improvements_5">Future Improvements<a class="headerlink" href="#future-improvements_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Automatic token refresh for long-running pipelines</li>
+<li>[ ] Support for User-Assigned Managed Identity (currently uses DefaultAzureCredential)</li>
+<li>[ ] Token caching across pipeline instances</li>
+<li>[ ] Integration with Azure Key Vault for API key storage</li>
+</ul>
+<hr />
+<h2 id="54-mlx-provider-apple-silicon">5.4 MLX Provider (Apple Silicon)<a class="headerlink" href="#54-mlx-provider-apple-silicon" title="Permanent link">&para;</a></h2>
+<h3 id="purpose_7">Purpose<a class="headerlink" href="#purpose_7" title="Permanent link">&para;</a></h3>
 <p>Enable fast, free, local LLM inference on Apple Silicon using Apple's MLX framework.</p>
 <h3 id="class-mlxclient">Class: <code>MLXClient</code><a class="headerlink" href="#class-mlxclient" title="Permanent link">&para;</a></h3>
 <p><strong>Inheritance</strong>: <code>LLMClient</code> (Adapter pattern)</p>
@@ -4067,24 +4320,24 @@
 - Lazy imports (only when MLX provider used)
 - Dependency injection (clean testing)
 - Free inference ($0 cost)</p>
-<h3 id="architecture_1">Architecture<a class="headerlink" href="#architecture_1" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-52-1"><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MLXClient</span><span class="p">(</span><span class="n">LLMClient</span><span class="p">):</span>
-</span><span id="__span-52-2"><a id="__codelineno-52-2" name="__codelineno-52-2" href="#__codelineno-52-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">LLMSpec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-</span><span id="__span-52-3"><a id="__codelineno-52-3" name="__codelineno-52-3" href="#__codelineno-52-3"></a>        <span class="c1"># Lazy import with helpful error</span>
-</span><span id="__span-52-4"><a id="__codelineno-52-4" name="__codelineno-52-4" href="#__codelineno-52-4"></a>        <span class="c1"># Load model once (cached in instance)</span>
-</span><span id="__span-52-5"><a id="__codelineno-52-5" name="__codelineno-52-5" href="#__codelineno-52-5"></a>
-</span><span id="__span-52-6"><a id="__codelineno-52-6" name="__codelineno-52-6" href="#__codelineno-52-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">invoke</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMResponse</span><span class="p">:</span>
-</span><span id="__span-52-7"><a id="__codelineno-52-7" name="__codelineno-52-7" href="#__codelineno-52-7"></a>        <span class="c1"># Use cached model for inference</span>
-</span><span id="__span-52-8"><a id="__codelineno-52-8" name="__codelineno-52-8" href="#__codelineno-52-8"></a>        <span class="c1"># No server calls, all local</span>
+<h3 id="architecture_2">Architecture<a class="headerlink" href="#architecture_2" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-67-1"><a id="__codelineno-67-1" name="__codelineno-67-1" href="#__codelineno-67-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MLXClient</span><span class="p">(</span><span class="n">LLMClient</span><span class="p">):</span>
+</span><span id="__span-67-2"><a id="__codelineno-67-2" name="__codelineno-67-2" href="#__codelineno-67-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">LLMSpec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+</span><span id="__span-67-3"><a id="__codelineno-67-3" name="__codelineno-67-3" href="#__codelineno-67-3"></a>        <span class="c1"># Lazy import with helpful error</span>
+</span><span id="__span-67-4"><a id="__codelineno-67-4" name="__codelineno-67-4" href="#__codelineno-67-4"></a>        <span class="c1"># Load model once (cached in instance)</span>
+</span><span id="__span-67-5"><a id="__codelineno-67-5" name="__codelineno-67-5" href="#__codelineno-67-5"></a>
+</span><span id="__span-67-6"><a id="__codelineno-67-6" name="__codelineno-67-6" href="#__codelineno-67-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">invoke</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMResponse</span><span class="p">:</span>
+</span><span id="__span-67-7"><a id="__codelineno-67-7" name="__codelineno-67-7" href="#__codelineno-67-7"></a>        <span class="c1"># Use cached model for inference</span>
+</span><span id="__span-67-8"><a id="__codelineno-67-8" name="__codelineno-67-8" href="#__codelineno-67-8"></a>        <span class="c1"># No server calls, all local</span>
 </span></code></pre></div>
 <p><strong>Design Decision: Dependency Injection</strong></p>
 <p>The <code>_mlx_lm_module</code> parameter enables clean testing:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-53-1"><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="c1"># Production usage (normal)</span>
-</span><span id="__span-53-2"><a id="__codelineno-53-2" name="__codelineno-53-2" href="#__codelineno-53-2"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>  <span class="c1"># Imports mlx_lm automatically</span>
-</span><span id="__span-53-3"><a id="__codelineno-53-3" name="__codelineno-53-3" href="#__codelineno-53-3"></a>
-</span><span id="__span-53-4"><a id="__codelineno-53-4" name="__codelineno-53-4" href="#__codelineno-53-4"></a><span class="c1"># Testing usage (mocked)</span>
-</span><span id="__span-53-5"><a id="__codelineno-53-5" name="__codelineno-53-5" href="#__codelineno-53-5"></a><span class="n">mock_mlx</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-</span><span id="__span-53-6"><a id="__codelineno-53-6" name="__codelineno-53-6" href="#__codelineno-53-6"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="n">mock_mlx</span><span class="p">)</span>  <span class="c1"># Inject mock</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-68-1"><a id="__codelineno-68-1" name="__codelineno-68-1" href="#__codelineno-68-1"></a><span class="c1"># Production usage (normal)</span>
+</span><span id="__span-68-2"><a id="__codelineno-68-2" name="__codelineno-68-2" href="#__codelineno-68-2"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>  <span class="c1"># Imports mlx_lm automatically</span>
+</span><span id="__span-68-3"><a id="__codelineno-68-3" name="__codelineno-68-3" href="#__codelineno-68-3"></a>
+</span><span id="__span-68-4"><a id="__codelineno-68-4" name="__codelineno-68-4" href="#__codelineno-68-4"></a><span class="c1"># Testing usage (mocked)</span>
+</span><span id="__span-68-5"><a id="__codelineno-68-5" name="__codelineno-68-5" href="#__codelineno-68-5"></a><span class="n">mock_mlx</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+</span><span id="__span-68-6"><a id="__codelineno-68-6" name="__codelineno-68-6" href="#__codelineno-68-6"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="n">mock_mlx</span><span class="p">)</span>  <span class="c1"># Inject mock</span>
 </span></code></pre></div>
 <p><strong>Rationale</strong>:
 - Testable: No sys.modules hacks
@@ -4099,28 +4352,28 @@
 - For 100 rows: Save ~70 seconds vs reload each time!</p>
 <h3 id="token-estimation_1">Token Estimation<a class="headerlink" href="#token-estimation_1" title="Permanent link">&para;</a></h3>
 <p><strong>Primary</strong>: Use MLX tokenizer (model-specific, accurate)
-<div class="language-python highlight"><pre><span></span><code><span id="__span-54-1"><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="n">tokens</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mlx_tokenizer</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">text</span><span class="p">))</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-69-1"><a id="__codelineno-69-1" name="__codelineno-69-1" href="#__codelineno-69-1"></a><span class="n">tokens</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mlx_tokenizer</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">text</span><span class="p">))</span>
 </span></code></pre></div></p>
 <p><strong>Fallback</strong>: Word count (if tokenizer fails)
-<div class="language-python highlight"><pre><span></span><code><span id="__span-55-1"><a id="__codelineno-55-1" name="__codelineno-55-1" href="#__codelineno-55-1"></a><span class="n">tokens</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-70-1"><a id="__codelineno-70-1" name="__codelineno-70-1" href="#__codelineno-70-1"></a><span class="n">tokens</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
 </span></code></pre></div></p>
 <p><strong>Rationale</strong>: Graceful degradation, never fail on token estimation</p>
-<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<h3 id="error-handling_1">Error Handling<a class="headerlink" href="#error-handling_1" title="Permanent link">&para;</a></h3>
 <p><strong>Import Error</strong>:
-<div class="language-text highlight"><pre><span></span><code><span id="__span-56-1"><a id="__codelineno-56-1" name="__codelineno-56-1" href="#__codelineno-56-1"></a>ImportError: MLX not installed. Install with:
-</span><span id="__span-56-2"><a id="__codelineno-56-2" name="__codelineno-56-2" href="#__codelineno-56-2"></a>  pip install ondine[mlx]
-</span><span id="__span-56-3"><a id="__codelineno-56-3" name="__codelineno-56-3" href="#__codelineno-56-3"></a>or:
-</span><span id="__span-56-4"><a id="__codelineno-56-4" name="__codelineno-56-4" href="#__codelineno-56-4"></a>  pip install mlx mlx-lm
-</span><span id="__span-56-5"><a id="__codelineno-56-5" name="__codelineno-56-5" href="#__codelineno-56-5"></a>
-</span><span id="__span-56-6"><a id="__codelineno-56-6" name="__codelineno-56-6" href="#__codelineno-56-6"></a>Note: MLX only works on Apple Silicon (M1/M2/M3/M4 chips)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-71-1"><a id="__codelineno-71-1" name="__codelineno-71-1" href="#__codelineno-71-1"></a>ImportError: MLX not installed. Install with:
+</span><span id="__span-71-2"><a id="__codelineno-71-2" name="__codelineno-71-2" href="#__codelineno-71-2"></a>  pip install ondine[mlx]
+</span><span id="__span-71-3"><a id="__codelineno-71-3" name="__codelineno-71-3" href="#__codelineno-71-3"></a>or:
+</span><span id="__span-71-4"><a id="__codelineno-71-4" name="__codelineno-71-4" href="#__codelineno-71-4"></a>  pip install mlx mlx-lm
+</span><span id="__span-71-5"><a id="__codelineno-71-5" name="__codelineno-71-5" href="#__codelineno-71-5"></a>
+</span><span id="__span-71-6"><a id="__codelineno-71-6" name="__codelineno-71-6" href="#__codelineno-71-6"></a>Note: MLX only works on Apple Silicon (M1/M2/M3/M4 chips)
 </span></code></pre></div></p>
 <p><strong>Model Load Error</strong>:
-<div class="language-text highlight"><pre><span></span><code><span id="__span-57-1"><a id="__codelineno-57-1" name="__codelineno-57-1" href="#__codelineno-57-1"></a>Exception: Failed to load MLX model &#39;model-name&#39;.
-</span><span id="__span-57-2"><a id="__codelineno-57-2" name="__codelineno-57-2" href="#__codelineno-57-2"></a>Ensure the model exists on HuggingFace and you have access.
-</span><span id="__span-57-3"><a id="__codelineno-57-3" name="__codelineno-57-3" href="#__codelineno-57-3"></a>Error: [original error]
+<div class="language-text highlight"><pre><span></span><code><span id="__span-72-1"><a id="__codelineno-72-1" name="__codelineno-72-1" href="#__codelineno-72-1"></a>Exception: Failed to load MLX model &#39;model-name&#39;.
+</span><span id="__span-72-2"><a id="__codelineno-72-2" name="__codelineno-72-2" href="#__codelineno-72-2"></a>Ensure the model exists on HuggingFace and you have access.
+</span><span id="__span-72-3"><a id="__codelineno-72-3" name="__codelineno-72-3" href="#__codelineno-72-3"></a>Error: [original error]
 </span></code></pre></div></p>
 <p><strong>Design</strong>: Actionable error messages with context</p>
-<h3 id="performance-characteristics_1">Performance Characteristics<a class="headerlink" href="#performance-characteristics_1" title="Permanent link">&para;</a></h3>
+<h3 id="performance-characteristics_2">Performance Characteristics<a class="headerlink" href="#performance-characteristics_2" title="Permanent link">&para;</a></h3>
 <p><strong>Tested on Apple Silicon (M2)</strong>:
 - Model: <code>mlx-community/Qwen3-1.7B-4bit</code>
 - Load time: 0.74s (once per pipeline)
@@ -4137,28 +4390,28 @@
 <li><strong>Recommendation</strong>: Use <code>concurrency=1</code> in ProcessingSpec</li>
 <li><strong>Why</strong>: MLX optimized for Apple Neural Engine (single-threaded)</li>
 </ul>
-<h3 id="dependencies_5">Dependencies<a class="headerlink" href="#dependencies_5" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-58-1"><a id="__codelineno-58-1" name="__codelineno-58-1" href="#__codelineno-58-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">mlx_lm</span>  <span class="c1"># Lazy imported</span>
-</span><span id="__span-58-2"><a id="__codelineno-58-2" name="__codelineno-58-2" href="#__codelineno-58-2"></a><span class="c1"># mlx_lm depends on:</span>
-</span><span id="__span-58-3"><a id="__codelineno-58-3" name="__codelineno-58-3" href="#__codelineno-58-3"></a><span class="c1"># - mlx&gt;=0.29.0</span>
-</span><span id="__span-58-4"><a id="__codelineno-58-4" name="__codelineno-58-4" href="#__codelineno-58-4"></a><span class="c1"># - mlx-metal (GPU acceleration)</span>
-</span><span id="__span-58-5"><a id="__codelineno-58-5" name="__codelineno-58-5" href="#__codelineno-58-5"></a><span class="c1"># - transformers (HuggingFace)</span>
+<h3 id="dependencies_6">Dependencies<a class="headerlink" href="#dependencies_6" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-73-1"><a id="__codelineno-73-1" name="__codelineno-73-1" href="#__codelineno-73-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">mlx_lm</span>  <span class="c1"># Lazy imported</span>
+</span><span id="__span-73-2"><a id="__codelineno-73-2" name="__codelineno-73-2" href="#__codelineno-73-2"></a><span class="c1"># mlx_lm depends on:</span>
+</span><span id="__span-73-3"><a id="__codelineno-73-3" name="__codelineno-73-3" href="#__codelineno-73-3"></a><span class="c1"># - mlx&gt;=0.29.0</span>
+</span><span id="__span-73-4"><a id="__codelineno-73-4" name="__codelineno-73-4" href="#__codelineno-73-4"></a><span class="c1"># - mlx-metal (GPU acceleration)</span>
+</span><span id="__span-73-5"><a id="__codelineno-73-5" name="__codelineno-73-5" href="#__codelineno-73-5"></a><span class="c1"># - transformers (HuggingFace)</span>
 </span></code></pre></div>
-<h3 id="used-by_5">Used By<a class="headerlink" href="#used-by_5" title="Permanent link">&para;</a></h3>
+<h3 id="used-by_6">Used By<a class="headerlink" href="#used-by_6" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>create_llm_client()</code> factory</li>
 <li>Any pipeline with <code>provider: mlx</code></li>
 <li>Examples: <code>10_mlx_qwen3_local.py</code>, <code>10_mlx_qwen3_local.yaml</code></li>
 </ul>
-<h3 id="testing-strategy_1">Testing Strategy<a class="headerlink" href="#testing-strategy_1" title="Permanent link">&para;</a></h3>
+<h3 id="testing-strategy_2">Testing Strategy<a class="headerlink" href="#testing-strategy_2" title="Permanent link">&para;</a></h3>
 <p><strong>Dependency Injection Pattern</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-59-1"><a id="__codelineno-59-1" name="__codelineno-59-1" href="#__codelineno-59-1"></a><span class="c1"># Create mock module</span>
-</span><span id="__span-59-2"><a id="__codelineno-59-2" name="__codelineno-59-2" href="#__codelineno-59-2"></a><span class="n">mock_mlx</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-</span><span id="__span-59-3"><a id="__codelineno-59-3" name="__codelineno-59-3" href="#__codelineno-59-3"></a><span class="n">mock_mlx</span><span class="o">.</span><span class="n">load</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="p">(</span><span class="n">mock_model</span><span class="p">,</span> <span class="n">mock_tokenizer</span><span class="p">)</span>
-</span><span id="__span-59-4"><a id="__codelineno-59-4" name="__codelineno-59-4" href="#__codelineno-59-4"></a><span class="n">mock_mlx</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="s2">&quot;response&quot;</span>
-</span><span id="__span-59-5"><a id="__codelineno-59-5" name="__codelineno-59-5" href="#__codelineno-59-5"></a>
-</span><span id="__span-59-6"><a id="__codelineno-59-6" name="__codelineno-59-6" href="#__codelineno-59-6"></a><span class="c1"># Inject for testing</span>
-</span><span id="__span-59-7"><a id="__codelineno-59-7" name="__codelineno-59-7" href="#__codelineno-59-7"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="n">mock_mlx</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-74-1"><a id="__codelineno-74-1" name="__codelineno-74-1" href="#__codelineno-74-1"></a><span class="c1"># Create mock module</span>
+</span><span id="__span-74-2"><a id="__codelineno-74-2" name="__codelineno-74-2" href="#__codelineno-74-2"></a><span class="n">mock_mlx</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+</span><span id="__span-74-3"><a id="__codelineno-74-3" name="__codelineno-74-3" href="#__codelineno-74-3"></a><span class="n">mock_mlx</span><span class="o">.</span><span class="n">load</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="p">(</span><span class="n">mock_model</span><span class="p">,</span> <span class="n">mock_tokenizer</span><span class="p">)</span>
+</span><span id="__span-74-4"><a id="__codelineno-74-4" name="__codelineno-74-4" href="#__codelineno-74-4"></a><span class="n">mock_mlx</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="s2">&quot;response&quot;</span>
+</span><span id="__span-74-5"><a id="__codelineno-74-5" name="__codelineno-74-5" href="#__codelineno-74-5"></a>
+</span><span id="__span-74-6"><a id="__codelineno-74-6" name="__codelineno-74-6" href="#__codelineno-74-6"></a><span class="c1"># Inject for testing</span>
+</span><span id="__span-74-7"><a id="__codelineno-74-7" name="__codelineno-74-7" href="#__codelineno-74-7"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MLXClient</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">_mlx_lm_module</span><span class="o">=</span><span class="n">mock_mlx</span><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Coverage</strong>:
 - 14 unit tests
@@ -4166,14 +4419,14 @@
 - Token estimation with fallback
 - Error handling
 - Factory integration</p>
-<h3 id="known-limitations_5">Known Limitations<a class="headerlink" href="#known-limitations_5" title="Permanent link">&para;</a></h3>
+<h3 id="known-limitations_6">Known Limitations<a class="headerlink" href="#known-limitations_6" title="Permanent link">&para;</a></h3>
 <ul>
 <li>macOS only (MLX doesn't work on Linux/Windows)</li>
 <li>Single-threaded (not optimized for concurrency)</li>
 <li>Model download required (1-5GB per model)</li>
 <li>Requires HuggingFace token for some models</li>
 </ul>
-<h3 id="future-improvements_5">Future Improvements<a class="headerlink" href="#future-improvements_5" title="Permanent link">&para;</a></h3>
+<h3 id="future-improvements_6">Future Improvements<a class="headerlink" href="#future-improvements_6" title="Permanent link">&para;</a></h3>
 <ul>
 <li>[ ] Add MLX streaming support</li>
 <li>[ ] Support custom MLX generation parameters</li>
@@ -4182,7 +4435,7 @@
 </ul>
 <hr />
 <h2 id="54-llm-provider-presets">5.4 LLM Provider Presets<a class="headerlink" href="#54-llm-provider-presets" title="Permanent link">&para;</a></h2>
-<h3 id="purpose_7">Purpose<a class="headerlink" href="#purpose_7" title="Permanent link">&para;</a></h3>
+<h3 id="purpose_8">Purpose<a class="headerlink" href="#purpose_8" title="Permanent link">&para;</a></h3>
 <p>Simplify LLM provider configuration by providing pre-configured specifications for common providers, eliminating boilerplate and configuration errors.</p>
 <h3 id="class-llmproviderpresets">Class: <code>LLMProviderPresets</code><a class="headerlink" href="#class-llmproviderpresets" title="Permanent link">&para;</a></h3>
 <p><strong>Location</strong>: <code>ondine/core/specifications.py</code> (lines 301-453)</p>
@@ -4196,129 +4449,129 @@
 - Pydantic validation throughout</p>
 <h3 id="available-presets">Available Presets<a class="headerlink" href="#available-presets" title="Permanent link">&para;</a></h3>
 <h4 id="openai-presets">OpenAI Presets<a class="headerlink" href="#openai-presets" title="Permanent link">&para;</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-60-1"><a id="__codelineno-60-1" name="__codelineno-60-1" href="#__codelineno-60-1"></a><span class="n">GPT4O_MINI</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-60-2"><a id="__codelineno-60-2" name="__codelineno-60-2" href="#__codelineno-60-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI</span><span class="p">,</span>
-</span><span id="__span-60-3"><a id="__codelineno-60-3" name="__codelineno-60-3" href="#__codelineno-60-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span>
-</span><span id="__span-60-4"><a id="__codelineno-60-4" name="__codelineno-60-4" href="#__codelineno-60-4"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.00015&quot;</span><span class="p">),</span>
-</span><span id="__span-60-5"><a id="__codelineno-60-5" name="__codelineno-60-5" href="#__codelineno-60-5"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0006&quot;</span><span class="p">),</span>
-</span><span id="__span-60-6"><a id="__codelineno-60-6" name="__codelineno-60-6" href="#__codelineno-60-6"></a><span class="p">)</span>
-</span><span id="__span-60-7"><a id="__codelineno-60-7" name="__codelineno-60-7" href="#__codelineno-60-7"></a>
-</span><span id="__span-60-8"><a id="__codelineno-60-8" name="__codelineno-60-8" href="#__codelineno-60-8"></a><span class="n">GPT4O</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-60-9"><a id="__codelineno-60-9" name="__codelineno-60-9" href="#__codelineno-60-9"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI</span><span class="p">,</span>
-</span><span id="__span-60-10"><a id="__codelineno-60-10" name="__codelineno-60-10" href="#__codelineno-60-10"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-60-11"><a id="__codelineno-60-11" name="__codelineno-60-11" href="#__codelineno-60-11"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0025&quot;</span><span class="p">),</span>
-</span><span id="__span-60-12"><a id="__codelineno-60-12" name="__codelineno-60-12" href="#__codelineno-60-12"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.01&quot;</span><span class="p">),</span>
-</span><span id="__span-60-13"><a id="__codelineno-60-13" name="__codelineno-60-13" href="#__codelineno-60-13"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-75-1"><a id="__codelineno-75-1" name="__codelineno-75-1" href="#__codelineno-75-1"></a><span class="n">GPT4O_MINI</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-75-2"><a id="__codelineno-75-2" name="__codelineno-75-2" href="#__codelineno-75-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI</span><span class="p">,</span>
+</span><span id="__span-75-3"><a id="__codelineno-75-3" name="__codelineno-75-3" href="#__codelineno-75-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span>
+</span><span id="__span-75-4"><a id="__codelineno-75-4" name="__codelineno-75-4" href="#__codelineno-75-4"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.00015&quot;</span><span class="p">),</span>
+</span><span id="__span-75-5"><a id="__codelineno-75-5" name="__codelineno-75-5" href="#__codelineno-75-5"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0006&quot;</span><span class="p">),</span>
+</span><span id="__span-75-6"><a id="__codelineno-75-6" name="__codelineno-75-6" href="#__codelineno-75-6"></a><span class="p">)</span>
+</span><span id="__span-75-7"><a id="__codelineno-75-7" name="__codelineno-75-7" href="#__codelineno-75-7"></a>
+</span><span id="__span-75-8"><a id="__codelineno-75-8" name="__codelineno-75-8" href="#__codelineno-75-8"></a><span class="n">GPT4O</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-75-9"><a id="__codelineno-75-9" name="__codelineno-75-9" href="#__codelineno-75-9"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI</span><span class="p">,</span>
+</span><span id="__span-75-10"><a id="__codelineno-75-10" name="__codelineno-75-10" href="#__codelineno-75-10"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
+</span><span id="__span-75-11"><a id="__codelineno-75-11" name="__codelineno-75-11" href="#__codelineno-75-11"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0025&quot;</span><span class="p">),</span>
+</span><span id="__span-75-12"><a id="__codelineno-75-12" name="__codelineno-75-12" href="#__codelineno-75-12"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.01&quot;</span><span class="p">),</span>
+</span><span id="__span-75-13"><a id="__codelineno-75-13" name="__codelineno-75-13" href="#__codelineno-75-13"></a><span class="p">)</span>
 </span></code></pre></div>
 <h4 id="togetherai-presets">Together.AI Presets<a class="headerlink" href="#togetherai-presets" title="Permanent link">&para;</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-61-1"><a id="__codelineno-61-1" name="__codelineno-61-1" href="#__codelineno-61-1"></a><span class="n">TOGETHER_AI_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-61-2"><a id="__codelineno-61-2" name="__codelineno-61-2" href="#__codelineno-61-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
-</span><span id="__span-61-3"><a id="__codelineno-61-3" name="__codelineno-61-3" href="#__codelineno-61-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
-</span><span id="__span-61-4"><a id="__codelineno-61-4" name="__codelineno-61-4" href="#__codelineno-61-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo&quot;</span><span class="p">,</span>
-</span><span id="__span-61-5"><a id="__codelineno-61-5" name="__codelineno-61-5" href="#__codelineno-61-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
-</span><span id="__span-61-6"><a id="__codelineno-61-6" name="__codelineno-61-6" href="#__codelineno-61-6"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0006&quot;</span><span class="p">),</span>
-</span><span id="__span-61-7"><a id="__codelineno-61-7" name="__codelineno-61-7" href="#__codelineno-61-7"></a><span class="p">)</span>
-</span><span id="__span-61-8"><a id="__codelineno-61-8" name="__codelineno-61-8" href="#__codelineno-61-8"></a>
-</span><span id="__span-61-9"><a id="__codelineno-61-9" name="__codelineno-61-9" href="#__codelineno-61-9"></a><span class="n">TOGETHER_AI_LLAMA_8B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-61-10"><a id="__codelineno-61-10" name="__codelineno-61-10" href="#__codelineno-61-10"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
-</span><span id="__span-61-11"><a id="__codelineno-61-11" name="__codelineno-61-11" href="#__codelineno-61-11"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
-</span><span id="__span-61-12"><a id="__codelineno-61-12" name="__codelineno-61-12" href="#__codelineno-61-12"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo&quot;</span><span class="p">,</span>
-</span><span id="__span-61-13"><a id="__codelineno-61-13" name="__codelineno-61-13" href="#__codelineno-61-13"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
-</span><span id="__span-61-14"><a id="__codelineno-61-14" name="__codelineno-61-14" href="#__codelineno-61-14"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0001&quot;</span><span class="p">),</span>
-</span><span id="__span-61-15"><a id="__codelineno-61-15" name="__codelineno-61-15" href="#__codelineno-61-15"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-76-1"><a id="__codelineno-76-1" name="__codelineno-76-1" href="#__codelineno-76-1"></a><span class="n">TOGETHER_AI_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-76-2"><a id="__codelineno-76-2" name="__codelineno-76-2" href="#__codelineno-76-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
+</span><span id="__span-76-3"><a id="__codelineno-76-3" name="__codelineno-76-3" href="#__codelineno-76-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
+</span><span id="__span-76-4"><a id="__codelineno-76-4" name="__codelineno-76-4" href="#__codelineno-76-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo&quot;</span><span class="p">,</span>
+</span><span id="__span-76-5"><a id="__codelineno-76-5" name="__codelineno-76-5" href="#__codelineno-76-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
+</span><span id="__span-76-6"><a id="__codelineno-76-6" name="__codelineno-76-6" href="#__codelineno-76-6"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0006&quot;</span><span class="p">),</span>
+</span><span id="__span-76-7"><a id="__codelineno-76-7" name="__codelineno-76-7" href="#__codelineno-76-7"></a><span class="p">)</span>
+</span><span id="__span-76-8"><a id="__codelineno-76-8" name="__codelineno-76-8" href="#__codelineno-76-8"></a>
+</span><span id="__span-76-9"><a id="__codelineno-76-9" name="__codelineno-76-9" href="#__codelineno-76-9"></a><span class="n">TOGETHER_AI_LLAMA_8B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-76-10"><a id="__codelineno-76-10" name="__codelineno-76-10" href="#__codelineno-76-10"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
+</span><span id="__span-76-11"><a id="__codelineno-76-11" name="__codelineno-76-11" href="#__codelineno-76-11"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
+</span><span id="__span-76-12"><a id="__codelineno-76-12" name="__codelineno-76-12" href="#__codelineno-76-12"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo&quot;</span><span class="p">,</span>
+</span><span id="__span-76-13"><a id="__codelineno-76-13" name="__codelineno-76-13" href="#__codelineno-76-13"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
+</span><span id="__span-76-14"><a id="__codelineno-76-14" name="__codelineno-76-14" href="#__codelineno-76-14"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0001&quot;</span><span class="p">),</span>
+</span><span id="__span-76-15"><a id="__codelineno-76-15" name="__codelineno-76-15" href="#__codelineno-76-15"></a><span class="p">)</span>
 </span></code></pre></div>
 <h4 id="ollama-local-presets-free">Ollama Local Presets (Free)<a class="headerlink" href="#ollama-local-presets-free" title="Permanent link">&para;</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-62-1"><a id="__codelineno-62-1" name="__codelineno-62-1" href="#__codelineno-62-1"></a><span class="n">OLLAMA_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-62-2"><a id="__codelineno-62-2" name="__codelineno-62-2" href="#__codelineno-62-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
-</span><span id="__span-62-3"><a id="__codelineno-62-3" name="__codelineno-62-3" href="#__codelineno-62-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Ollama-Local&quot;</span><span class="p">,</span>
-</span><span id="__span-62-4"><a id="__codelineno-62-4" name="__codelineno-62-4" href="#__codelineno-62-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llama3.1:70b&quot;</span><span class="p">,</span>
-</span><span id="__span-62-5"><a id="__codelineno-62-5" name="__codelineno-62-5" href="#__codelineno-62-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://localhost:11434/v1&quot;</span><span class="p">,</span>
-</span><span id="__span-62-6"><a id="__codelineno-62-6" name="__codelineno-62-6" href="#__codelineno-62-6"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0&quot;</span><span class="p">),</span>  <span class="c1"># FREE!</span>
-</span><span id="__span-62-7"><a id="__codelineno-62-7" name="__codelineno-62-7" href="#__codelineno-62-7"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0&quot;</span><span class="p">),</span>
-</span><span id="__span-62-8"><a id="__codelineno-62-8" name="__codelineno-62-8" href="#__codelineno-62-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-77-1"><a id="__codelineno-77-1" name="__codelineno-77-1" href="#__codelineno-77-1"></a><span class="n">OLLAMA_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-77-2"><a id="__codelineno-77-2" name="__codelineno-77-2" href="#__codelineno-77-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
+</span><span id="__span-77-3"><a id="__codelineno-77-3" name="__codelineno-77-3" href="#__codelineno-77-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Ollama-Local&quot;</span><span class="p">,</span>
+</span><span id="__span-77-4"><a id="__codelineno-77-4" name="__codelineno-77-4" href="#__codelineno-77-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llama3.1:70b&quot;</span><span class="p">,</span>
+</span><span id="__span-77-5"><a id="__codelineno-77-5" name="__codelineno-77-5" href="#__codelineno-77-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://localhost:11434/v1&quot;</span><span class="p">,</span>
+</span><span id="__span-77-6"><a id="__codelineno-77-6" name="__codelineno-77-6" href="#__codelineno-77-6"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0&quot;</span><span class="p">),</span>  <span class="c1"># FREE!</span>
+</span><span id="__span-77-7"><a id="__codelineno-77-7" name="__codelineno-77-7" href="#__codelineno-77-7"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.0&quot;</span><span class="p">),</span>
+</span><span id="__span-77-8"><a id="__codelineno-77-8" name="__codelineno-77-8" href="#__codelineno-77-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <h4 id="groq-anthropic-presets">Groq &amp; Anthropic Presets<a class="headerlink" href="#groq-anthropic-presets" title="Permanent link">&para;</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-63-1"><a id="__codelineno-63-1" name="__codelineno-63-1" href="#__codelineno-63-1"></a><span class="n">GROQ_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-63-2"><a id="__codelineno-63-2" name="__codelineno-63-2" href="#__codelineno-63-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">GROQ</span><span class="p">,</span>
-</span><span id="__span-63-3"><a id="__codelineno-63-3" name="__codelineno-63-3" href="#__codelineno-63-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llama-3.1-70b-versatile&quot;</span><span class="p">,</span>
-</span><span id="__span-63-4"><a id="__codelineno-63-4" name="__codelineno-63-4" href="#__codelineno-63-4"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.00059&quot;</span><span class="p">),</span>
-</span><span id="__span-63-5"><a id="__codelineno-63-5" name="__codelineno-63-5" href="#__codelineno-63-5"></a><span class="p">)</span>
-</span><span id="__span-63-6"><a id="__codelineno-63-6" name="__codelineno-63-6" href="#__codelineno-63-6"></a>
-</span><span id="__span-63-7"><a id="__codelineno-63-7" name="__codelineno-63-7" href="#__codelineno-63-7"></a><span class="n">CLAUDE_SONNET_4</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-63-8"><a id="__codelineno-63-8" name="__codelineno-63-8" href="#__codelineno-63-8"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">ANTHROPIC</span><span class="p">,</span>
-</span><span id="__span-63-9"><a id="__codelineno-63-9" name="__codelineno-63-9" href="#__codelineno-63-9"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-sonnet-4-20250514&quot;</span><span class="p">,</span>
-</span><span id="__span-63-10"><a id="__codelineno-63-10" name="__codelineno-63-10" href="#__codelineno-63-10"></a>    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">8192</span><span class="p">,</span>
-</span><span id="__span-63-11"><a id="__codelineno-63-11" name="__codelineno-63-11" href="#__codelineno-63-11"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.003&quot;</span><span class="p">),</span>
-</span><span id="__span-63-12"><a id="__codelineno-63-12" name="__codelineno-63-12" href="#__codelineno-63-12"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-78-1"><a id="__codelineno-78-1" name="__codelineno-78-1" href="#__codelineno-78-1"></a><span class="n">GROQ_LLAMA_70B</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-78-2"><a id="__codelineno-78-2" name="__codelineno-78-2" href="#__codelineno-78-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">GROQ</span><span class="p">,</span>
+</span><span id="__span-78-3"><a id="__codelineno-78-3" name="__codelineno-78-3" href="#__codelineno-78-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llama-3.1-70b-versatile&quot;</span><span class="p">,</span>
+</span><span id="__span-78-4"><a id="__codelineno-78-4" name="__codelineno-78-4" href="#__codelineno-78-4"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.00059&quot;</span><span class="p">),</span>
+</span><span id="__span-78-5"><a id="__codelineno-78-5" name="__codelineno-78-5" href="#__codelineno-78-5"></a><span class="p">)</span>
+</span><span id="__span-78-6"><a id="__codelineno-78-6" name="__codelineno-78-6" href="#__codelineno-78-6"></a>
+</span><span id="__span-78-7"><a id="__codelineno-78-7" name="__codelineno-78-7" href="#__codelineno-78-7"></a><span class="n">CLAUDE_SONNET_4</span> <span class="o">=</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-78-8"><a id="__codelineno-78-8" name="__codelineno-78-8" href="#__codelineno-78-8"></a>    <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">ANTHROPIC</span><span class="p">,</span>
+</span><span id="__span-78-9"><a id="__codelineno-78-9" name="__codelineno-78-9" href="#__codelineno-78-9"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-sonnet-4-20250514&quot;</span><span class="p">,</span>
+</span><span id="__span-78-10"><a id="__codelineno-78-10" name="__codelineno-78-10" href="#__codelineno-78-10"></a>    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">8192</span><span class="p">,</span>
+</span><span id="__span-78-11"><a id="__codelineno-78-11" name="__codelineno-78-11" href="#__codelineno-78-11"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0.003&quot;</span><span class="p">),</span>
+</span><span id="__span-78-12"><a id="__codelineno-78-12" name="__codelineno-78-12" href="#__codelineno-78-12"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="factory-method-create_custom_openai_compatible">Factory Method: <code>create_custom_openai_compatible()</code><a class="headerlink" href="#factory-method-create_custom_openai_compatible" title="Permanent link">&para;</a></h3>
 <p><strong>Purpose</strong>: Simplify custom provider configuration (vLLM, LocalAI, etc.)</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-64-1"><a id="__codelineno-64-1" name="__codelineno-64-1" href="#__codelineno-64-1"></a><span class="nd">@classmethod</span>
-</span><span id="__span-64-2"><a id="__codelineno-64-2" name="__codelineno-64-2" href="#__codelineno-64-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_custom_openai_compatible</span><span class="p">(</span>
-</span><span id="__span-64-3"><a id="__codelineno-64-3" name="__codelineno-64-3" href="#__codelineno-64-3"></a>    <span class="bp">cls</span><span class="p">,</span>
-</span><span id="__span-64-4"><a id="__codelineno-64-4" name="__codelineno-64-4" href="#__codelineno-64-4"></a>    <span class="n">provider_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-64-5"><a id="__codelineno-64-5" name="__codelineno-64-5" href="#__codelineno-64-5"></a>    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-64-6"><a id="__codelineno-64-6" name="__codelineno-64-6" href="#__codelineno-64-6"></a>    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-64-7"><a id="__codelineno-64-7" name="__codelineno-64-7" href="#__codelineno-64-7"></a>    <span class="n">input_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-64-8"><a id="__codelineno-64-8" name="__codelineno-64-8" href="#__codelineno-64-8"></a>    <span class="n">output_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-64-9"><a id="__codelineno-64-9" name="__codelineno-64-9" href="#__codelineno-64-9"></a>    <span class="o">**</span><span class="n">kwargs</span>
-</span><span id="__span-64-10"><a id="__codelineno-64-10" name="__codelineno-64-10" href="#__codelineno-64-10"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMSpec</span><span class="p">:</span>
-</span><span id="__span-64-11"><a id="__codelineno-64-11" name="__codelineno-64-11" href="#__codelineno-64-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Factory for custom OpenAI-compatible providers.&quot;&quot;&quot;</span>
-</span><span id="__span-64-12"><a id="__codelineno-64-12" name="__codelineno-64-12" href="#__codelineno-64-12"></a>    <span class="k">return</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-64-13"><a id="__codelineno-64-13" name="__codelineno-64-13" href="#__codelineno-64-13"></a>        <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
-</span><span id="__span-64-14"><a id="__codelineno-64-14" name="__codelineno-64-14" href="#__codelineno-64-14"></a>        <span class="n">provider_name</span><span class="o">=</span><span class="n">provider_name</span><span class="p">,</span>
-</span><span id="__span-64-15"><a id="__codelineno-64-15" name="__codelineno-64-15" href="#__codelineno-64-15"></a>        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-</span><span id="__span-64-16"><a id="__codelineno-64-16" name="__codelineno-64-16" href="#__codelineno-64-16"></a>        <span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span>
-</span><span id="__span-64-17"><a id="__codelineno-64-17" name="__codelineno-64-17" href="#__codelineno-64-17"></a>        <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_cost_per_1k</span><span class="p">)),</span>
-</span><span id="__span-64-18"><a id="__codelineno-64-18" name="__codelineno-64-18" href="#__codelineno-64-18"></a>        <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_cost_per_1k</span><span class="p">)),</span>
-</span><span id="__span-64-19"><a id="__codelineno-64-19" name="__codelineno-64-19" href="#__codelineno-64-19"></a>        <span class="o">**</span><span class="n">kwargs</span>
-</span><span id="__span-64-20"><a id="__codelineno-64-20" name="__codelineno-64-20" href="#__codelineno-64-20"></a>    <span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-79-1"><a id="__codelineno-79-1" name="__codelineno-79-1" href="#__codelineno-79-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-79-2"><a id="__codelineno-79-2" name="__codelineno-79-2" href="#__codelineno-79-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_custom_openai_compatible</span><span class="p">(</span>
+</span><span id="__span-79-3"><a id="__codelineno-79-3" name="__codelineno-79-3" href="#__codelineno-79-3"></a>    <span class="bp">cls</span><span class="p">,</span>
+</span><span id="__span-79-4"><a id="__codelineno-79-4" name="__codelineno-79-4" href="#__codelineno-79-4"></a>    <span class="n">provider_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-79-5"><a id="__codelineno-79-5" name="__codelineno-79-5" href="#__codelineno-79-5"></a>    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-79-6"><a id="__codelineno-79-6" name="__codelineno-79-6" href="#__codelineno-79-6"></a>    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-79-7"><a id="__codelineno-79-7" name="__codelineno-79-7" href="#__codelineno-79-7"></a>    <span class="n">input_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-79-8"><a id="__codelineno-79-8" name="__codelineno-79-8" href="#__codelineno-79-8"></a>    <span class="n">output_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-79-9"><a id="__codelineno-79-9" name="__codelineno-79-9" href="#__codelineno-79-9"></a>    <span class="o">**</span><span class="n">kwargs</span>
+</span><span id="__span-79-10"><a id="__codelineno-79-10" name="__codelineno-79-10" href="#__codelineno-79-10"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMSpec</span><span class="p">:</span>
+</span><span id="__span-79-11"><a id="__codelineno-79-11" name="__codelineno-79-11" href="#__codelineno-79-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Factory for custom OpenAI-compatible providers.&quot;&quot;&quot;</span>
+</span><span id="__span-79-12"><a id="__codelineno-79-12" name="__codelineno-79-12" href="#__codelineno-79-12"></a>    <span class="k">return</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-79-13"><a id="__codelineno-79-13" name="__codelineno-79-13" href="#__codelineno-79-13"></a>        <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
+</span><span id="__span-79-14"><a id="__codelineno-79-14" name="__codelineno-79-14" href="#__codelineno-79-14"></a>        <span class="n">provider_name</span><span class="o">=</span><span class="n">provider_name</span><span class="p">,</span>
+</span><span id="__span-79-15"><a id="__codelineno-79-15" name="__codelineno-79-15" href="#__codelineno-79-15"></a>        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+</span><span id="__span-79-16"><a id="__codelineno-79-16" name="__codelineno-79-16" href="#__codelineno-79-16"></a>        <span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span>
+</span><span id="__span-79-17"><a id="__codelineno-79-17" name="__codelineno-79-17" href="#__codelineno-79-17"></a>        <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_cost_per_1k</span><span class="p">)),</span>
+</span><span id="__span-79-18"><a id="__codelineno-79-18" name="__codelineno-79-18" href="#__codelineno-79-18"></a>        <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_cost_per_1k</span><span class="p">)),</span>
+</span><span id="__span-79-19"><a id="__codelineno-79-19" name="__codelineno-79-19" href="#__codelineno-79-19"></a>        <span class="o">**</span><span class="n">kwargs</span>
+</span><span id="__span-79-20"><a id="__codelineno-79-20" name="__codelineno-79-20" href="#__codelineno-79-20"></a>    <span class="p">)</span>
 </span></code></pre></div>
 <h3 id="usage-with-pipelinebuilderwith_llm_spec">Usage with <code>PipelineBuilder.with_llm_spec()</code><a class="headerlink" href="#usage-with-pipelinebuilderwith_llm_spec" title="Permanent link">&para;</a></h3>
 <p><strong>New Method</strong>: <code>with_llm_spec(spec: LLMSpec) -&gt; PipelineBuilder</code></p>
 <p><strong>Location</strong>: <code>ondine/api/pipeline_builder.py</code> (lines 260-311)</p>
 <p><strong>Purpose</strong>: Accept pre-built LLMSpec objects instead of individual parameters</p>
 <p><strong>Example Usage</strong>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-65-1"><a id="__codelineno-65-1" name="__codelineno-65-1" href="#__codelineno-65-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.core.specifications</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMProviderPresets</span>
-</span><span id="__span-65-2"><a id="__codelineno-65-2" name="__codelineno-65-2" href="#__codelineno-65-2"></a>
-</span><span id="__span-65-3"><a id="__codelineno-65-3" name="__codelineno-65-3" href="#__codelineno-65-3"></a><span class="c1"># Simple preset usage</span>
-</span><span id="__span-65-4"><a id="__codelineno-65-4" name="__codelineno-65-4" href="#__codelineno-65-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-65-5"><a id="__codelineno-65-5" name="__codelineno-65-5" href="#__codelineno-65-5"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
-</span><span id="__span-65-6"><a id="__codelineno-65-6" name="__codelineno-65-6" href="#__codelineno-65-6"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">])</span>
-</span><span id="__span-65-7"><a id="__codelineno-65-7" name="__codelineno-65-7" href="#__codelineno-65-7"></a>    <span class="o">.</span><span class="n">with_prompt</span><span class="p">(</span><span class="s2">&quot;Process: </span><span class="si">{text}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-65-8"><a id="__codelineno-65-8" name="__codelineno-65-8" href="#__codelineno-65-8"></a>    <span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">)</span>
-</span><span id="__span-65-9"><a id="__codelineno-65-9" name="__codelineno-65-9" href="#__codelineno-65-9"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-</span><span id="__span-65-10"><a id="__codelineno-65-10" name="__codelineno-65-10" href="#__codelineno-65-10"></a><span class="p">)</span>
-</span><span id="__span-65-11"><a id="__codelineno-65-11" name="__codelineno-65-11" href="#__codelineno-65-11"></a>
-</span><span id="__span-65-12"><a id="__codelineno-65-12" name="__codelineno-65-12" href="#__codelineno-65-12"></a><span class="c1"># Override preset settings</span>
-</span><span id="__span-65-13"><a id="__codelineno-65-13" name="__codelineno-65-13" href="#__codelineno-65-13"></a><span class="n">custom</span> <span class="o">=</span> <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
-</span><span id="__span-65-14"><a id="__codelineno-65-14" name="__codelineno-65-14" href="#__codelineno-65-14"></a>    <span class="n">update</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span> <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">500</span><span class="p">}</span>
-</span><span id="__span-65-15"><a id="__codelineno-65-15" name="__codelineno-65-15" href="#__codelineno-65-15"></a><span class="p">)</span>
-</span><span id="__span-65-16"><a id="__codelineno-65-16" name="__codelineno-65-16" href="#__codelineno-65-16"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">custom</span><span class="p">)</span>
-</span><span id="__span-65-17"><a id="__codelineno-65-17" name="__codelineno-65-17" href="#__codelineno-65-17"></a>
-</span><span id="__span-65-18"><a id="__codelineno-65-18" name="__codelineno-65-18" href="#__codelineno-65-18"></a><span class="c1"># Custom provider via factory</span>
-</span><span id="__span-65-19"><a id="__codelineno-65-19" name="__codelineno-65-19" href="#__codelineno-65-19"></a><span class="n">custom_vllm</span> <span class="o">=</span> <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">create_custom_openai_compatible</span><span class="p">(</span>
-</span><span id="__span-65-20"><a id="__codelineno-65-20" name="__codelineno-65-20" href="#__codelineno-65-20"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;My vLLM Server&quot;</span><span class="p">,</span>
-</span><span id="__span-65-21"><a id="__codelineno-65-21" name="__codelineno-65-21" href="#__codelineno-65-21"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;mistral-7b-instruct&quot;</span><span class="p">,</span>
-</span><span id="__span-65-22"><a id="__codelineno-65-22" name="__codelineno-65-22" href="#__codelineno-65-22"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://my-server:8000/v1&quot;</span><span class="p">,</span>
-</span><span id="__span-65-23"><a id="__codelineno-65-23" name="__codelineno-65-23" href="#__codelineno-65-23"></a>    <span class="n">temperature</span><span class="o">=</span><span class="mf">0.7</span>
-</span><span id="__span-65-24"><a id="__codelineno-65-24" name="__codelineno-65-24" href="#__codelineno-65-24"></a><span class="p">)</span>
-</span><span id="__span-65-25"><a id="__codelineno-65-25" name="__codelineno-65-25" href="#__codelineno-65-25"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">custom_vllm</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-80-1"><a id="__codelineno-80-1" name="__codelineno-80-1" href="#__codelineno-80-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.core.specifications</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMProviderPresets</span>
+</span><span id="__span-80-2"><a id="__codelineno-80-2" name="__codelineno-80-2" href="#__codelineno-80-2"></a>
+</span><span id="__span-80-3"><a id="__codelineno-80-3" name="__codelineno-80-3" href="#__codelineno-80-3"></a><span class="c1"># Simple preset usage</span>
+</span><span id="__span-80-4"><a id="__codelineno-80-4" name="__codelineno-80-4" href="#__codelineno-80-4"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-80-5"><a id="__codelineno-80-5" name="__codelineno-80-5" href="#__codelineno-80-5"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-80-6"><a id="__codelineno-80-6" name="__codelineno-80-6" href="#__codelineno-80-6"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">])</span>
+</span><span id="__span-80-7"><a id="__codelineno-80-7" name="__codelineno-80-7" href="#__codelineno-80-7"></a>    <span class="o">.</span><span class="n">with_prompt</span><span class="p">(</span><span class="s2">&quot;Process: </span><span class="si">{text}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-80-8"><a id="__codelineno-80-8" name="__codelineno-80-8" href="#__codelineno-80-8"></a>    <span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">)</span>
+</span><span id="__span-80-9"><a id="__codelineno-80-9" name="__codelineno-80-9" href="#__codelineno-80-9"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-80-10"><a id="__codelineno-80-10" name="__codelineno-80-10" href="#__codelineno-80-10"></a><span class="p">)</span>
+</span><span id="__span-80-11"><a id="__codelineno-80-11" name="__codelineno-80-11" href="#__codelineno-80-11"></a>
+</span><span id="__span-80-12"><a id="__codelineno-80-12" name="__codelineno-80-12" href="#__codelineno-80-12"></a><span class="c1"># Override preset settings</span>
+</span><span id="__span-80-13"><a id="__codelineno-80-13" name="__codelineno-80-13" href="#__codelineno-80-13"></a><span class="n">custom</span> <span class="o">=</span> <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
+</span><span id="__span-80-14"><a id="__codelineno-80-14" name="__codelineno-80-14" href="#__codelineno-80-14"></a>    <span class="n">update</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span> <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">500</span><span class="p">}</span>
+</span><span id="__span-80-15"><a id="__codelineno-80-15" name="__codelineno-80-15" href="#__codelineno-80-15"></a><span class="p">)</span>
+</span><span id="__span-80-16"><a id="__codelineno-80-16" name="__codelineno-80-16" href="#__codelineno-80-16"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">custom</span><span class="p">)</span>
+</span><span id="__span-80-17"><a id="__codelineno-80-17" name="__codelineno-80-17" href="#__codelineno-80-17"></a>
+</span><span id="__span-80-18"><a id="__codelineno-80-18" name="__codelineno-80-18" href="#__codelineno-80-18"></a><span class="c1"># Custom provider via factory</span>
+</span><span id="__span-80-19"><a id="__codelineno-80-19" name="__codelineno-80-19" href="#__codelineno-80-19"></a><span class="n">custom_vllm</span> <span class="o">=</span> <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">create_custom_openai_compatible</span><span class="p">(</span>
+</span><span id="__span-80-20"><a id="__codelineno-80-20" name="__codelineno-80-20" href="#__codelineno-80-20"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;My vLLM Server&quot;</span><span class="p">,</span>
+</span><span id="__span-80-21"><a id="__codelineno-80-21" name="__codelineno-80-21" href="#__codelineno-80-21"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;mistral-7b-instruct&quot;</span><span class="p">,</span>
+</span><span id="__span-80-22"><a id="__codelineno-80-22" name="__codelineno-80-22" href="#__codelineno-80-22"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://my-server:8000/v1&quot;</span><span class="p">,</span>
+</span><span id="__span-80-23"><a id="__codelineno-80-23" name="__codelineno-80-23" href="#__codelineno-80-23"></a>    <span class="n">temperature</span><span class="o">=</span><span class="mf">0.7</span>
+</span><span id="__span-80-24"><a id="__codelineno-80-24" name="__codelineno-80-24" href="#__codelineno-80-24"></a><span class="p">)</span>
+</span><span id="__span-80-25"><a id="__codelineno-80-25" name="__codelineno-80-25" href="#__codelineno-80-25"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">custom_vllm</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="comparison-before-vs-after">Comparison: Before vs After<a class="headerlink" href="#comparison-before-vs-after" title="Permanent link">&para;</a></h3>
 <p><strong>Before (parameter-based)</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-66-1"><a id="__codelineno-66-1" name="__codelineno-66-1" href="#__codelineno-66-1"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
-</span><span id="__span-66-2"><a id="__codelineno-66-2" name="__codelineno-66-2" href="#__codelineno-66-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai_compatible&quot;</span><span class="p">,</span>
-</span><span id="__span-66-3"><a id="__codelineno-66-3" name="__codelineno-66-3" href="#__codelineno-66-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
-</span><span id="__span-66-4"><a id="__codelineno-66-4" name="__codelineno-66-4" href="#__codelineno-66-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo&quot;</span><span class="p">,</span>
-</span><span id="__span-66-5"><a id="__codelineno-66-5" name="__codelineno-66-5" href="#__codelineno-66-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
-</span><span id="__span-66-6"><a id="__codelineno-66-6" name="__codelineno-66-6" href="#__codelineno-66-6"></a>    <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;$</span><span class="si">{TOGETHER_API_KEY}</span><span class="s2">&quot;</span><span class="p">,</span>
-</span><span id="__span-66-7"><a id="__codelineno-66-7" name="__codelineno-66-7" href="#__codelineno-66-7"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="mf">0.0006</span><span class="p">,</span>
-</span><span id="__span-66-8"><a id="__codelineno-66-8" name="__codelineno-66-8" href="#__codelineno-66-8"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="mf">0.0006</span>
-</span><span id="__span-66-9"><a id="__codelineno-66-9" name="__codelineno-66-9" href="#__codelineno-66-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-81-1"><a id="__codelineno-81-1" name="__codelineno-81-1" href="#__codelineno-81-1"></a><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span>
+</span><span id="__span-81-2"><a id="__codelineno-81-2" name="__codelineno-81-2" href="#__codelineno-81-2"></a>    <span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai_compatible&quot;</span><span class="p">,</span>
+</span><span id="__span-81-3"><a id="__codelineno-81-3" name="__codelineno-81-3" href="#__codelineno-81-3"></a>    <span class="n">provider_name</span><span class="o">=</span><span class="s2">&quot;Together.AI&quot;</span><span class="p">,</span>
+</span><span id="__span-81-4"><a id="__codelineno-81-4" name="__codelineno-81-4" href="#__codelineno-81-4"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo&quot;</span><span class="p">,</span>
+</span><span id="__span-81-5"><a id="__codelineno-81-5" name="__codelineno-81-5" href="#__codelineno-81-5"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://api.together.xyz/v1&quot;</span><span class="p">,</span>
+</span><span id="__span-81-6"><a id="__codelineno-81-6" name="__codelineno-81-6" href="#__codelineno-81-6"></a>    <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;$</span><span class="si">{TOGETHER_API_KEY}</span><span class="s2">&quot;</span><span class="p">,</span>
+</span><span id="__span-81-7"><a id="__codelineno-81-7" name="__codelineno-81-7" href="#__codelineno-81-7"></a>    <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="mf">0.0006</span><span class="p">,</span>
+</span><span id="__span-81-8"><a id="__codelineno-81-8" name="__codelineno-81-8" href="#__codelineno-81-8"></a>    <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="mf">0.0006</span>
+</span><span id="__span-81-9"><a id="__codelineno-81-9" name="__codelineno-81-9" href="#__codelineno-81-9"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>After (preset-based)</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-67-1"><a id="__codelineno-67-1" name="__codelineno-67-1" href="#__codelineno-67-1"></a><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-82-1"><a id="__codelineno-82-1" name="__codelineno-82-1" href="#__codelineno-82-1"></a><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Result</strong>: 80% code reduction, zero configuration errors</p>
 <h3 id="design-decisions">Design Decisions<a class="headerlink" href="#design-decisions" title="Permanent link">&para;</a></h3>
@@ -4338,25 +4591,25 @@
 - Flexible: Override any field</p>
 <h3 id="security-validation">Security Validation<a class="headerlink" href="#security-validation" title="Permanent link">&para;</a></h3>
 <p><strong>Test</strong>: All presets must have <code>api_key=None</code>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-68-1"><a id="__codelineno-68-1" name="__codelineno-68-1" href="#__codelineno-68-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_presets_have_no_api_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span id="__span-68-2"><a id="__codelineno-68-2" name="__codelineno-68-2" href="#__codelineno-68-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Security requirement: No hardcoded API keys.&quot;&quot;&quot;</span>
-</span><span id="__span-68-3"><a id="__codelineno-68-3" name="__codelineno-68-3" href="#__codelineno-68-3"></a>    <span class="n">presets</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-68-4"><a id="__codelineno-68-4" name="__codelineno-68-4" href="#__codelineno-68-4"></a>        <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="p">,</span>
-</span><span id="__span-68-5"><a id="__codelineno-68-5" name="__codelineno-68-5" href="#__codelineno-68-5"></a>        <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">,</span>
-</span><span id="__span-68-6"><a id="__codelineno-68-6" name="__codelineno-68-6" href="#__codelineno-68-6"></a>        <span class="c1"># ... all presets</span>
-</span><span id="__span-68-7"><a id="__codelineno-68-7" name="__codelineno-68-7" href="#__codelineno-68-7"></a>    <span class="p">]</span>
-</span><span id="__span-68-8"><a id="__codelineno-68-8" name="__codelineno-68-8" href="#__codelineno-68-8"></a>    <span class="k">for</span> <span class="n">preset</span> <span class="ow">in</span> <span class="n">presets</span><span class="p">:</span>
-</span><span id="__span-68-9"><a id="__codelineno-68-9" name="__codelineno-68-9" href="#__codelineno-68-9"></a>        <span class="k">assert</span> <span class="n">preset</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-83-1"><a id="__codelineno-83-1" name="__codelineno-83-1" href="#__codelineno-83-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_presets_have_no_api_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-83-2"><a id="__codelineno-83-2" name="__codelineno-83-2" href="#__codelineno-83-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Security requirement: No hardcoded API keys.&quot;&quot;&quot;</span>
+</span><span id="__span-83-3"><a id="__codelineno-83-3" name="__codelineno-83-3" href="#__codelineno-83-3"></a>    <span class="n">presets</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-83-4"><a id="__codelineno-83-4" name="__codelineno-83-4" href="#__codelineno-83-4"></a>        <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="p">,</span>
+</span><span id="__span-83-5"><a id="__codelineno-83-5" name="__codelineno-83-5" href="#__codelineno-83-5"></a>        <span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">TOGETHER_AI_LLAMA_70B</span><span class="p">,</span>
+</span><span id="__span-83-6"><a id="__codelineno-83-6" name="__codelineno-83-6" href="#__codelineno-83-6"></a>        <span class="c1"># ... all presets</span>
+</span><span id="__span-83-7"><a id="__codelineno-83-7" name="__codelineno-83-7" href="#__codelineno-83-7"></a>    <span class="p">]</span>
+</span><span id="__span-83-8"><a id="__codelineno-83-8" name="__codelineno-83-8" href="#__codelineno-83-8"></a>    <span class="k">for</span> <span class="n">preset</span> <span class="ow">in</span> <span class="n">presets</span><span class="p">:</span>
+</span><span id="__span-83-9"><a id="__codelineno-83-9" name="__codelineno-83-9" href="#__codelineno-83-9"></a>        <span class="k">assert</span> <span class="n">preset</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span>
 </span></code></pre></div></p>
 <h3 id="backward-compatibility">Backward Compatibility<a class="headerlink" href="#backward-compatibility" title="Permanent link">&para;</a></h3>
 <p><strong>100% backward compatible</strong>: Existing <code>with_llm()</code> method unchanged
-<div class="language-python highlight"><pre><span></span><code><span id="__span-69-1"><a id="__codelineno-69-1" name="__codelineno-69-1" href="#__codelineno-69-1"></a><span class="c1"># Old way still works</span>
-</span><span id="__span-69-2"><a id="__codelineno-69-2" name="__codelineno-69-2" href="#__codelineno-69-2"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
-</span><span id="__span-69-3"><a id="__codelineno-69-3" name="__codelineno-69-3" href="#__codelineno-69-3"></a>
-</span><span id="__span-69-4"><a id="__codelineno-69-4" name="__codelineno-69-4" href="#__codelineno-69-4"></a><span class="c1"># New way</span>
-</span><span id="__span-69-5"><a id="__codelineno-69-5" name="__codelineno-69-5" href="#__codelineno-69-5"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="p">)</span>
-</span><span id="__span-69-6"><a id="__codelineno-69-6" name="__codelineno-69-6" href="#__codelineno-69-6"></a>
-</span><span id="__span-69-7"><a id="__codelineno-69-7" name="__codelineno-69-7" href="#__codelineno-69-7"></a><span class="c1"># Both methods can be mixed (last call wins)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-84-1"><a id="__codelineno-84-1" name="__codelineno-84-1" href="#__codelineno-84-1"></a><span class="c1"># Old way still works</span>
+</span><span id="__span-84-2"><a id="__codelineno-84-2" name="__codelineno-84-2" href="#__codelineno-84-2"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
+</span><span id="__span-84-3"><a id="__codelineno-84-3" name="__codelineno-84-3" href="#__codelineno-84-3"></a>
+</span><span id="__span-84-4"><a id="__codelineno-84-4" name="__codelineno-84-4" href="#__codelineno-84-4"></a><span class="c1"># New way</span>
+</span><span id="__span-84-5"><a id="__codelineno-84-5" name="__codelineno-84-5" href="#__codelineno-84-5"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">with_llm_spec</span><span class="p">(</span><span class="n">LLMProviderPresets</span><span class="o">.</span><span class="n">GPT4O_MINI</span><span class="p">)</span>
+</span><span id="__span-84-6"><a id="__codelineno-84-6" name="__codelineno-84-6" href="#__codelineno-84-6"></a>
+</span><span id="__span-84-7"><a id="__codelineno-84-7" name="__codelineno-84-7" href="#__codelineno-84-7"></a><span class="c1"># Both methods can be mixed (last call wins)</span>
 </span></code></pre></div></p>
 <h3 id="testing-coverage">Testing Coverage<a class="headerlink" href="#testing-coverage" title="Permanent link">&para;</a></h3>
 <p><strong>26 unit tests</strong> (100% pass):
@@ -4373,7 +4626,7 @@
 - Shows customization via <code>model_copy()</code>
 - Compares old vs new approach
 - Lists all available presets</p>
-<h3 id="future-improvements_6">Future Improvements<a class="headerlink" href="#future-improvements_6" title="Permanent link">&para;</a></h3>
+<h3 id="future-improvements_7">Future Improvements<a class="headerlink" href="#future-improvements_7" title="Permanent link">&para;</a></h3>
 <ul>
 <li>[ ] Add more provider presets (Cohere, AI21, Mistral)</li>
 <li>[ ] Add model size variants (405B, 8B, etc.)</li>
@@ -4384,7 +4637,7 @@
 <hr />
 <hr />
 <h2 id="56-observability-module">5.6 Observability Module<a class="headerlink" href="#56-observability-module" title="Permanent link">&para;</a></h2>
-<h3 id="purpose_8">Purpose<a class="headerlink" href="#purpose_8" title="Permanent link">&para;</a></h3>
+<h3 id="purpose_9">Purpose<a class="headerlink" href="#purpose_9" title="Permanent link">&para;</a></h3>
 <p>Plugin-based observability system that leverages <strong>LlamaIndex's built-in instrumentation</strong> for automatic tracking of all LLM calls.</p>
 <h3 id="module-ondineobservability">Module: <code>ondine/observability/</code><a class="headerlink" href="#module-ondineobservability" title="Permanent link">&para;</a></h3>
 <p><strong>Location</strong>: <code>ondine/observability/</code> (9 files, ~600 lines)</p>
@@ -4411,14 +4664,14 @@
 <p><strong>Responsibility</strong>: Define observer interface for pipeline events</p>
 <p><strong>Pattern</strong>: Observer Pattern + Plugin Architecture</p>
 <p><strong>Methods</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-70-1"><a id="__codelineno-70-1" name="__codelineno-70-1" href="#__codelineno-70-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_pipeline_start</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Optional</span>
-</span><span id="__span-70-2"><a id="__codelineno-70-2" name="__codelineno-70-2" href="#__codelineno-70-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_stage_start</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>     <span class="c1"># Optional  </span>
-</span><span id="__span-70-3"><a id="__codelineno-70-3" name="__codelineno-70-3" href="#__codelineno-70-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>        <span class="c1"># REQUIRED (abstract)</span>
-</span><span id="__span-70-4"><a id="__codelineno-70-4" name="__codelineno-70-4" href="#__codelineno-70-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_stage_end</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>       <span class="c1"># Optional</span>
-</span><span id="__span-70-5"><a id="__codelineno-70-5" name="__codelineno-70-5" href="#__codelineno-70-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_error</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>           <span class="c1"># Optional</span>
-</span><span id="__span-70-6"><a id="__codelineno-70-6" name="__codelineno-70-6" href="#__codelineno-70-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_pipeline_end</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>    <span class="c1"># Optional</span>
-</span><span id="__span-70-7"><a id="__codelineno-70-7" name="__codelineno-70-7" href="#__codelineno-70-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>                   <span class="c1"># Optional</span>
-</span><span id="__span-70-8"><a id="__codelineno-70-8" name="__codelineno-70-8" href="#__codelineno-70-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>                   <span class="c1"># Optional</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-85-1"><a id="__codelineno-85-1" name="__codelineno-85-1" href="#__codelineno-85-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_pipeline_start</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Optional</span>
+</span><span id="__span-85-2"><a id="__codelineno-85-2" name="__codelineno-85-2" href="#__codelineno-85-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_stage_start</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>     <span class="c1"># Optional</span>
+</span><span id="__span-85-3"><a id="__codelineno-85-3" name="__codelineno-85-3" href="#__codelineno-85-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>        <span class="c1"># REQUIRED (abstract)</span>
+</span><span id="__span-85-4"><a id="__codelineno-85-4" name="__codelineno-85-4" href="#__codelineno-85-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_stage_end</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>       <span class="c1"># Optional</span>
+</span><span id="__span-85-5"><a id="__codelineno-85-5" name="__codelineno-85-5" href="#__codelineno-85-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_error</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>           <span class="c1"># Optional</span>
+</span><span id="__span-85-6"><a id="__codelineno-85-6" name="__codelineno-85-6" href="#__codelineno-85-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_pipeline_end</span><span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>    <span class="c1"># Optional</span>
+</span><span id="__span-85-7"><a id="__codelineno-85-7" name="__codelineno-85-7" href="#__codelineno-85-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>                   <span class="c1"># Optional</span>
+</span><span id="__span-85-8"><a id="__codelineno-85-8" name="__codelineno-85-8" href="#__codelineno-85-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>                   <span class="c1"># Optional</span>
 </span></code></pre></div></p>
 <p><strong>Design Decision</strong>: Only <code>on_llm_call()</code> is abstract
 - LLM calls are the most critical events
@@ -4428,38 +4681,38 @@
 <p><strong>Responsibility</strong>: Plugin registry for observer implementations</p>
 <p><strong>Pattern</strong>: Registry Pattern with decorator-based registration</p>
 <p><strong>Methods</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-71-1"><a id="__codelineno-71-1" name="__codelineno-71-1" href="#__codelineno-71-1"></a><span class="nd">@classmethod</span>
-</span><span id="__span-71-2"><a id="__codelineno-71-2" name="__codelineno-71-2" href="#__codelineno-71-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">observer_class</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-71-3"><a id="__codelineno-71-3" name="__codelineno-71-3" href="#__codelineno-71-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Register an observer implementation.&quot;&quot;&quot;</span>
-</span><span id="__span-71-4"><a id="__codelineno-71-4" name="__codelineno-71-4" href="#__codelineno-71-4"></a>
-</span><span id="__span-71-5"><a id="__codelineno-71-5" name="__codelineno-71-5" href="#__codelineno-71-5"></a><span class="nd">@classmethod</span>
-</span><span id="__span-71-6"><a id="__codelineno-71-6" name="__codelineno-71-6" href="#__codelineno-71-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">PipelineObserver</span><span class="p">]:</span>
-</span><span id="__span-71-7"><a id="__codelineno-71-7" name="__codelineno-71-7" href="#__codelineno-71-7"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get observer class by name.&quot;&quot;&quot;</span>
-</span><span id="__span-71-8"><a id="__codelineno-71-8" name="__codelineno-71-8" href="#__codelineno-71-8"></a>
-</span><span id="__span-71-9"><a id="__codelineno-71-9" name="__codelineno-71-9" href="#__codelineno-71-9"></a><span class="nd">@classmethod</span>
-</span><span id="__span-71-10"><a id="__codelineno-71-10" name="__codelineno-71-10" href="#__codelineno-71-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">list_observers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-</span><span id="__span-71-11"><a id="__codelineno-71-11" name="__codelineno-71-11" href="#__codelineno-71-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;List all registered observers.&quot;&quot;&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-86-1"><a id="__codelineno-86-1" name="__codelineno-86-1" href="#__codelineno-86-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-86-2"><a id="__codelineno-86-2" name="__codelineno-86-2" href="#__codelineno-86-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">observer_class</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-86-3"><a id="__codelineno-86-3" name="__codelineno-86-3" href="#__codelineno-86-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Register an observer implementation.&quot;&quot;&quot;</span>
+</span><span id="__span-86-4"><a id="__codelineno-86-4" name="__codelineno-86-4" href="#__codelineno-86-4"></a>
+</span><span id="__span-86-5"><a id="__codelineno-86-5" name="__codelineno-86-5" href="#__codelineno-86-5"></a><span class="nd">@classmethod</span>
+</span><span id="__span-86-6"><a id="__codelineno-86-6" name="__codelineno-86-6" href="#__codelineno-86-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">PipelineObserver</span><span class="p">]:</span>
+</span><span id="__span-86-7"><a id="__codelineno-86-7" name="__codelineno-86-7" href="#__codelineno-86-7"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get observer class by name.&quot;&quot;&quot;</span>
+</span><span id="__span-86-8"><a id="__codelineno-86-8" name="__codelineno-86-8" href="#__codelineno-86-8"></a>
+</span><span id="__span-86-9"><a id="__codelineno-86-9" name="__codelineno-86-9" href="#__codelineno-86-9"></a><span class="nd">@classmethod</span>
+</span><span id="__span-86-10"><a id="__codelineno-86-10" name="__codelineno-86-10" href="#__codelineno-86-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">list_observers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+</span><span id="__span-86-11"><a id="__codelineno-86-11" name="__codelineno-86-11" href="#__codelineno-86-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;List all registered observers.&quot;&quot;&quot;</span>
 </span></code></pre></div></p>
 <p><strong>Decorator</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-72-1"><a id="__codelineno-72-1" name="__codelineno-72-1" href="#__codelineno-72-1"></a><span class="nd">@observer</span><span class="p">(</span><span class="s2">&quot;my_observer&quot;</span><span class="p">)</span>
-</span><span id="__span-72-2"><a id="__codelineno-72-2" name="__codelineno-72-2" href="#__codelineno-72-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyObserver</span><span class="p">(</span><span class="n">PipelineObserver</span><span class="p">):</span>
-</span><span id="__span-72-3"><a id="__codelineno-72-3" name="__codelineno-72-3" href="#__codelineno-72-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
-</span><span id="__span-72-4"><a id="__codelineno-72-4" name="__codelineno-72-4" href="#__codelineno-72-4"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LLM called: </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-87-1"><a id="__codelineno-87-1" name="__codelineno-87-1" href="#__codelineno-87-1"></a><span class="nd">@observer</span><span class="p">(</span><span class="s2">&quot;my_observer&quot;</span><span class="p">)</span>
+</span><span id="__span-87-2"><a id="__codelineno-87-2" name="__codelineno-87-2" href="#__codelineno-87-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyObserver</span><span class="p">(</span><span class="n">PipelineObserver</span><span class="p">):</span>
+</span><span id="__span-87-3"><a id="__codelineno-87-3" name="__codelineno-87-3" href="#__codelineno-87-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
+</span><span id="__span-87-4"><a id="__codelineno-87-4" name="__codelineno-87-4" href="#__codelineno-87-4"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LLM called: </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Auto-registration</strong>: Observers register on import via <code>@observer</code> decorator</p>
 <h4 id="opentelemetryobserver-class"><code>OpenTelemetryObserver</code> (Class)<a class="headerlink" href="#opentelemetryobserver-class" title="Permanent link">&para;</a></h4>
 <p><strong>Location</strong>: <code>ondine/observability/observers/opentelemetry_observer.py</code></p>
 <p><strong>Responsibility</strong>: Delegate to LlamaIndex's OpenTelemetry handler</p>
 <p><strong>Implementation</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-73-1"><a id="__codelineno-73-1" name="__codelineno-73-1" href="#__codelineno-73-1"></a><span class="nd">@observer</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">)</span>
-</span><span id="__span-73-2"><a id="__codelineno-73-2" name="__codelineno-73-2" href="#__codelineno-73-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">OpenTelemetryObserver</span><span class="p">(</span><span class="n">PipelineObserver</span><span class="p">):</span>
-</span><span id="__span-73-3"><a id="__codelineno-73-3" name="__codelineno-73-3" href="#__codelineno-73-3"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
-</span><span id="__span-73-4"><a id="__codelineno-73-4" name="__codelineno-73-4" href="#__codelineno-73-4"></a>        <span class="c1"># Configure LlamaIndex OpenTelemetry handler</span>
-</span><span id="__span-73-5"><a id="__codelineno-73-5" name="__codelineno-73-5" href="#__codelineno-73-5"></a>        <span class="n">LlamaIndexHandlerManager</span><span class="o">.</span><span class="n">configure_handler</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
-</span><span id="__span-73-6"><a id="__codelineno-73-6" name="__codelineno-73-6" href="#__codelineno-73-6"></a>
-</span><span id="__span-73-7"><a id="__codelineno-73-7" name="__codelineno-73-7" href="#__codelineno-73-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
-</span><span id="__span-73-8"><a id="__codelineno-73-8" name="__codelineno-73-8" href="#__codelineno-73-8"></a>        <span class="c1"># LlamaIndex handles this automatically!</span>
-</span><span id="__span-73-9"><a id="__codelineno-73-9" name="__codelineno-73-9" href="#__codelineno-73-9"></a>        <span class="k">pass</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-88-1"><a id="__codelineno-88-1" name="__codelineno-88-1" href="#__codelineno-88-1"></a><span class="nd">@observer</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">)</span>
+</span><span id="__span-88-2"><a id="__codelineno-88-2" name="__codelineno-88-2" href="#__codelineno-88-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">OpenTelemetryObserver</span><span class="p">(</span><span class="n">PipelineObserver</span><span class="p">):</span>
+</span><span id="__span-88-3"><a id="__codelineno-88-3" name="__codelineno-88-3" href="#__codelineno-88-3"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+</span><span id="__span-88-4"><a id="__codelineno-88-4" name="__codelineno-88-4" href="#__codelineno-88-4"></a>        <span class="c1"># Configure LlamaIndex OpenTelemetry handler</span>
+</span><span id="__span-88-5"><a id="__codelineno-88-5" name="__codelineno-88-5" href="#__codelineno-88-5"></a>        <span class="n">LlamaIndexHandlerManager</span><span class="o">.</span><span class="n">configure_handler</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+</span><span id="__span-88-6"><a id="__codelineno-88-6" name="__codelineno-88-6" href="#__codelineno-88-6"></a>
+</span><span id="__span-88-7"><a id="__codelineno-88-7" name="__codelineno-88-7" href="#__codelineno-88-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_llm_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
+</span><span id="__span-88-8"><a id="__codelineno-88-8" name="__codelineno-88-8" href="#__codelineno-88-8"></a>        <span class="c1"># LlamaIndex handles this automatically!</span>
+</span><span id="__span-88-9"><a id="__codelineno-88-9" name="__codelineno-88-9" href="#__codelineno-88-9"></a>        <span class="k">pass</span>
 </span></code></pre></div></p>
 <p><strong>What LlamaIndex Tracks</strong> (automatic):
 - ✅ LLM call spans with prompts, completions
@@ -4471,11 +4724,11 @@
 <p><strong>Location</strong>: <code>ondine/observability/observers/langfuse_observer.py</code></p>
 <p><strong>Responsibility</strong>: Delegate to LlamaIndex's Langfuse handler</p>
 <p><strong>Configuration</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-74-1"><a id="__codelineno-74-1" name="__codelineno-74-1" href="#__codelineno-74-1"></a><span class="p">{</span>
-</span><span id="__span-74-2"><a id="__codelineno-74-2" name="__codelineno-74-2" href="#__codelineno-74-2"></a>    <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span>
-</span><span id="__span-74-3"><a id="__codelineno-74-3" name="__codelineno-74-3" href="#__codelineno-74-3"></a>    <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="s2">&quot;sk-lf-...&quot;</span><span class="p">,</span>
-</span><span id="__span-74-4"><a id="__codelineno-74-4" name="__codelineno-74-4" href="#__codelineno-74-4"></a>    <span class="s2">&quot;host&quot;</span><span class="p">:</span> <span class="s2">&quot;https://cloud.langfuse.com&quot;</span>  <span class="c1"># optional</span>
-</span><span id="__span-74-5"><a id="__codelineno-74-5" name="__codelineno-74-5" href="#__codelineno-74-5"></a><span class="p">}</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-89-1"><a id="__codelineno-89-1" name="__codelineno-89-1" href="#__codelineno-89-1"></a><span class="p">{</span>
+</span><span id="__span-89-2"><a id="__codelineno-89-2" name="__codelineno-89-2" href="#__codelineno-89-2"></a>    <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span>
+</span><span id="__span-89-3"><a id="__codelineno-89-3" name="__codelineno-89-3" href="#__codelineno-89-3"></a>    <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="s2">&quot;sk-lf-...&quot;</span><span class="p">,</span>  <span class="c1"># pragma: allowlist secret</span>
+</span><span id="__span-89-4"><a id="__codelineno-89-4" name="__codelineno-89-4" href="#__codelineno-89-4"></a>    <span class="s2">&quot;host&quot;</span><span class="p">:</span> <span class="s2">&quot;https://cloud.langfuse.com&quot;</span>  <span class="c1"># optional</span>
+</span><span id="__span-89-5"><a id="__codelineno-89-5" name="__codelineno-89-5" href="#__codelineno-89-5"></a><span class="p">}</span>
 </span></code></pre></div></p>
 <p><strong>What LlamaIndex Tracks</strong> (automatic):
 - ✅ Full prompts and completions
@@ -4498,19 +4751,19 @@
 <p><strong>Location</strong>: <code>ondine/observability/llamaindex_handlers.py</code></p>
 <p><strong>Responsibility</strong>: Configure LlamaIndex global handlers</p>
 <p><strong>Methods</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-75-1"><a id="__codelineno-75-1" name="__codelineno-75-1" href="#__codelineno-75-1"></a><span class="nd">@classmethod</span>
-</span><span id="__span-75-2"><a id="__codelineno-75-2" name="__codelineno-75-2" href="#__codelineno-75-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_handler</span><span class="p">(</span><span class="n">handler_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
-</span><span id="__span-75-3"><a id="__codelineno-75-3" name="__codelineno-75-3" href="#__codelineno-75-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Configure a LlamaIndex global handler.&quot;&quot;&quot;</span>
-</span><span id="__span-75-4"><a id="__codelineno-75-4" name="__codelineno-75-4" href="#__codelineno-75-4"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">llama_index.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_global_handler</span>
-</span><span id="__span-75-5"><a id="__codelineno-75-5" name="__codelineno-75-5" href="#__codelineno-75-5"></a>
-</span><span id="__span-75-6"><a id="__codelineno-75-6" name="__codelineno-75-6" href="#__codelineno-75-6"></a>    <span class="k">if</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;opentelemetry&quot;</span><span class="p">:</span>
-</span><span id="__span-75-7"><a id="__codelineno-75-7" name="__codelineno-75-7" href="#__codelineno-75-7"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">config</span><span class="p">)</span>
-</span><span id="__span-75-8"><a id="__codelineno-75-8" name="__codelineno-75-8" href="#__codelineno-75-8"></a>    <span class="k">elif</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;langfuse&quot;</span><span class="p">:</span>
-</span><span id="__span-75-9"><a id="__codelineno-75-9" name="__codelineno-75-9" href="#__codelineno-75-9"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> 
-</span><span id="__span-75-10"><a id="__codelineno-75-10" name="__codelineno-75-10" href="#__codelineno-75-10"></a>            <span class="n">public_key</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;public_key&quot;</span><span class="p">],</span>
-</span><span id="__span-75-11"><a id="__codelineno-75-11" name="__codelineno-75-11" href="#__codelineno-75-11"></a>            <span class="n">secret_key</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;secret_key&quot;</span><span class="p">])</span>
-</span><span id="__span-75-12"><a id="__codelineno-75-12" name="__codelineno-75-12" href="#__codelineno-75-12"></a>    <span class="k">elif</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
-</span><span id="__span-75-13"><a id="__codelineno-75-13" name="__codelineno-75-13" href="#__codelineno-75-13"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-90-1"><a id="__codelineno-90-1" name="__codelineno-90-1" href="#__codelineno-90-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-90-2"><a id="__codelineno-90-2" name="__codelineno-90-2" href="#__codelineno-90-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_handler</span><span class="p">(</span><span class="n">handler_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+</span><span id="__span-90-3"><a id="__codelineno-90-3" name="__codelineno-90-3" href="#__codelineno-90-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Configure a LlamaIndex global handler.&quot;&quot;&quot;</span>
+</span><span id="__span-90-4"><a id="__codelineno-90-4" name="__codelineno-90-4" href="#__codelineno-90-4"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">llama_index.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_global_handler</span>
+</span><span id="__span-90-5"><a id="__codelineno-90-5" name="__codelineno-90-5" href="#__codelineno-90-5"></a>
+</span><span id="__span-90-6"><a id="__codelineno-90-6" name="__codelineno-90-6" href="#__codelineno-90-6"></a>    <span class="k">if</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;opentelemetry&quot;</span><span class="p">:</span>
+</span><span id="__span-90-7"><a id="__codelineno-90-7" name="__codelineno-90-7" href="#__codelineno-90-7"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">config</span><span class="p">)</span>
+</span><span id="__span-90-8"><a id="__codelineno-90-8" name="__codelineno-90-8" href="#__codelineno-90-8"></a>    <span class="k">elif</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;langfuse&quot;</span><span class="p">:</span>
+</span><span id="__span-90-9"><a id="__codelineno-90-9" name="__codelineno-90-9" href="#__codelineno-90-9"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span>
+</span><span id="__span-90-10"><a id="__codelineno-90-10" name="__codelineno-90-10" href="#__codelineno-90-10"></a>            <span class="n">public_key</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;public_key&quot;</span><span class="p">],</span>
+</span><span id="__span-90-11"><a id="__codelineno-90-11" name="__codelineno-90-11" href="#__codelineno-90-11"></a>            <span class="n">secret_key</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;secret_key&quot;</span><span class="p">])</span>
+</span><span id="__span-90-12"><a id="__codelineno-90-12" name="__codelineno-90-12" href="#__codelineno-90-12"></a>    <span class="k">elif</span> <span class="n">handler_type</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+</span><span id="__span-90-13"><a id="__codelineno-90-13" name="__codelineno-90-13" href="#__codelineno-90-13"></a>        <span class="n">set_global_handler</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Design Decision</strong>: Centralized handler configuration
 - Single place to manage LlamaIndex handlers
@@ -4520,71 +4773,71 @@
 <p><strong>Location</strong>: <code>ondine/observability/sanitizer.py</code></p>
 <p><strong>LlamaIndex doesn't provide this</strong>, so we added it as a custom feature.</p>
 <p><strong>Patterns</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-76-1"><a id="__codelineno-76-1" name="__codelineno-76-1" href="#__codelineno-76-1"></a><span class="n">PII_PATTERNS</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-76-2"><a id="__codelineno-76-2" name="__codelineno-76-2" href="#__codelineno-76-2"></a>    <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b&quot;</span><span class="p">,</span>
-</span><span id="__span-76-3"><a id="__codelineno-76-3" name="__codelineno-76-3" href="#__codelineno-76-3"></a>    <span class="s2">&quot;ssn&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{3}</span><span class="s2">-\d</span><span class="si">{2}</span><span class="s2">-\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
-</span><span id="__span-76-4"><a id="__codelineno-76-4" name="__codelineno-76-4" href="#__codelineno-76-4"></a>    <span class="s2">&quot;credit_card&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
-</span><span id="__span-76-5"><a id="__codelineno-76-5" name="__codelineno-76-5" href="#__codelineno-76-5"></a>    <span class="s2">&quot;phone_us&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{3}</span><span class="s2">[-.]?\d</span><span class="si">{3}</span><span class="s2">[-.]?\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
-</span><span id="__span-76-6"><a id="__codelineno-76-6" name="__codelineno-76-6" href="#__codelineno-76-6"></a>    <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b(?:api[_-]?key|secret|token)[:\s=]+...&quot;</span><span class="p">,</span>
-</span><span id="__span-76-7"><a id="__codelineno-76-7" name="__codelineno-76-7" href="#__codelineno-76-7"></a>    <span class="s2">&quot;ip_address&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b(?:\d{1,3}\.)</span><span class="si">{3}</span><span class="s2">\d{1,3}\b&quot;</span><span class="p">,</span>
-</span><span id="__span-76-8"><a id="__codelineno-76-8" name="__codelineno-76-8" href="#__codelineno-76-8"></a><span class="p">}</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-91-1"><a id="__codelineno-91-1" name="__codelineno-91-1" href="#__codelineno-91-1"></a><span class="n">PII_PATTERNS</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-91-2"><a id="__codelineno-91-2" name="__codelineno-91-2" href="#__codelineno-91-2"></a>    <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b&quot;</span><span class="p">,</span>
+</span><span id="__span-91-3"><a id="__codelineno-91-3" name="__codelineno-91-3" href="#__codelineno-91-3"></a>    <span class="s2">&quot;ssn&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{3}</span><span class="s2">-\d</span><span class="si">{2}</span><span class="s2">-\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
+</span><span id="__span-91-4"><a id="__codelineno-91-4" name="__codelineno-91-4" href="#__codelineno-91-4"></a>    <span class="s2">&quot;credit_card&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">[- ]?\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
+</span><span id="__span-91-5"><a id="__codelineno-91-5" name="__codelineno-91-5" href="#__codelineno-91-5"></a>    <span class="s2">&quot;phone_us&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{3}</span><span class="s2">[-.]?\d</span><span class="si">{3}</span><span class="s2">[-.]?\d</span><span class="si">{4}</span><span class="s2">\b&quot;</span><span class="p">,</span>
+</span><span id="__span-91-6"><a id="__codelineno-91-6" name="__codelineno-91-6" href="#__codelineno-91-6"></a>    <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b(?:api[_-]?key|secret|token)[:\s=]+...&quot;</span><span class="p">,</span>
+</span><span id="__span-91-7"><a id="__codelineno-91-7" name="__codelineno-91-7" href="#__codelineno-91-7"></a>    <span class="s2">&quot;ip_address&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\b(?:\d{1,3}\.)</span><span class="si">{3}</span><span class="s2">\d{1,3}\b&quot;</span><span class="p">,</span>
+</span><span id="__span-91-8"><a id="__codelineno-91-8" name="__codelineno-91-8" href="#__codelineno-91-8"></a><span class="p">}</span>
 </span></code></pre></div></p>
 <p><strong>Functions</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-77-1"><a id="__codelineno-77-1" name="__codelineno-77-1" href="#__codelineno-77-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">sanitize_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">patterns</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;[REDACTED]&quot;</span><span class="p">):</span>
-</span><span id="__span-77-2"><a id="__codelineno-77-2" name="__codelineno-77-2" href="#__codelineno-77-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Replace PII with redaction marker.&quot;&quot;&quot;</span>
-</span><span id="__span-77-3"><a id="__codelineno-77-3" name="__codelineno-77-3" href="#__codelineno-77-3"></a>
-</span><span id="__span-77-4"><a id="__codelineno-77-4" name="__codelineno-77-4" href="#__codelineno-77-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">sanitize_event</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
-</span><span id="__span-77-5"><a id="__codelineno-77-5" name="__codelineno-77-5" href="#__codelineno-77-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Sanitize LLMCallEvent fields.&quot;&quot;&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-92-1"><a id="__codelineno-92-1" name="__codelineno-92-1" href="#__codelineno-92-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">sanitize_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">patterns</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="s2">&quot;[REDACTED]&quot;</span><span class="p">):</span>
+</span><span id="__span-92-2"><a id="__codelineno-92-2" name="__codelineno-92-2" href="#__codelineno-92-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Replace PII with redaction marker.&quot;&quot;&quot;</span>
+</span><span id="__span-92-3"><a id="__codelineno-92-3" name="__codelineno-92-3" href="#__codelineno-92-3"></a>
+</span><span id="__span-92-4"><a id="__codelineno-92-4" name="__codelineno-92-4" href="#__codelineno-92-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">sanitize_event</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+</span><span id="__span-92-5"><a id="__codelineno-92-5" name="__codelineno-92-5" href="#__codelineno-92-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Sanitize LLMCallEvent fields.&quot;&quot;&quot;</span>
 </span></code></pre></div></p>
 <p><strong>Usage</strong> (future):
-<div class="language-python highlight"><pre><span></span><code><span id="__span-78-1"><a id="__codelineno-78-1" name="__codelineno-78-1" href="#__codelineno-78-1"></a><span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span>
-</span><span id="__span-78-2"><a id="__codelineno-78-2" name="__codelineno-78-2" href="#__codelineno-78-2"></a>    <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span>
-</span><span id="__span-78-3"><a id="__codelineno-78-3" name="__codelineno-78-3" href="#__codelineno-78-3"></a>    <span class="s2">&quot;sanitize_prompts&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Enable PII redaction</span>
-</span><span id="__span-78-4"><a id="__codelineno-78-4" name="__codelineno-78-4" href="#__codelineno-78-4"></a>    <span class="s2">&quot;custom_patterns&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;account_id&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;ACC-\d</span><span class="si">{6}</span><span class="s2">&quot;</span><span class="p">}</span>
-</span><span id="__span-78-5"><a id="__codelineno-78-5" name="__codelineno-78-5" href="#__codelineno-78-5"></a><span class="p">})</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-93-1"><a id="__codelineno-93-1" name="__codelineno-93-1" href="#__codelineno-93-1"></a><span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-93-2"><a id="__codelineno-93-2" name="__codelineno-93-2" href="#__codelineno-93-2"></a>    <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span>
+</span><span id="__span-93-3"><a id="__codelineno-93-3" name="__codelineno-93-3" href="#__codelineno-93-3"></a>    <span class="s2">&quot;sanitize_prompts&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Enable PII redaction</span>
+</span><span id="__span-93-4"><a id="__codelineno-93-4" name="__codelineno-93-4" href="#__codelineno-93-4"></a>    <span class="s2">&quot;custom_patterns&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;account_id&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;ACC-\d</span><span class="si">{6}</span><span class="s2">&quot;</span><span class="p">}</span>
+</span><span id="__span-93-5"><a id="__codelineno-93-5" name="__codelineno-93-5" href="#__codelineno-93-5"></a><span class="p">})</span>
 </span></code></pre></div></p>
 <h3 id="integration-with-pipeline">Integration with Pipeline<a class="headerlink" href="#integration-with-pipeline" title="Permanent link">&para;</a></h3>
 <p><strong>PipelineBuilder API</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-79-1"><a id="__codelineno-79-1" name="__codelineno-79-1" href="#__codelineno-79-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_observer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-</span><span id="__span-79-2"><a id="__codelineno-79-2" name="__codelineno-79-2" href="#__codelineno-79-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Add observability observer.&quot;&quot;&quot;</span>
-</span><span id="__span-79-3"><a id="__codelineno-79-3" name="__codelineno-79-3" href="#__codelineno-79-3"></a>    <span class="c1"># Validates observer is registered</span>
-</span><span id="__span-79-4"><a id="__codelineno-79-4" name="__codelineno-79-4" href="#__codelineno-79-4"></a>    <span class="c1"># Stores config for later instantiation</span>
-</span><span id="__span-79-5"><a id="__codelineno-79-5" name="__codelineno-79-5" href="#__codelineno-79-5"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_observers</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">config</span><span class="p">))</span>
-</span><span id="__span-79-6"><a id="__codelineno-79-6" name="__codelineno-79-6" href="#__codelineno-79-6"></a>    <span class="k">return</span> <span class="bp">self</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-94-1"><a id="__codelineno-94-1" name="__codelineno-94-1" href="#__codelineno-94-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_observer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="__span-94-2"><a id="__codelineno-94-2" name="__codelineno-94-2" href="#__codelineno-94-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Add observability observer.&quot;&quot;&quot;</span>
+</span><span id="__span-94-3"><a id="__codelineno-94-3" name="__codelineno-94-3" href="#__codelineno-94-3"></a>    <span class="c1"># Validates observer is registered</span>
+</span><span id="__span-94-4"><a id="__codelineno-94-4" name="__codelineno-94-4" href="#__codelineno-94-4"></a>    <span class="c1"># Stores config for later instantiation</span>
+</span><span id="__span-94-5"><a id="__codelineno-94-5" name="__codelineno-94-5" href="#__codelineno-94-5"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_observers</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">config</span><span class="p">))</span>
+</span><span id="__span-94-6"><a id="__codelineno-94-6" name="__codelineno-94-6" href="#__codelineno-94-6"></a>    <span class="k">return</span> <span class="bp">self</span>
 </span></code></pre></div></p>
 <p><strong>Pipeline Initialization</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-80-1"><a id="__codelineno-80-1" name="__codelineno-80-1" href="#__codelineno-80-1"></a><span class="c1"># In Pipeline.execute():</span>
-</span><span id="__span-80-2"><a id="__codelineno-80-2" name="__codelineno-80-2" href="#__codelineno-80-2"></a><span class="n">observer_configs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;observers&quot;</span><span class="p">,</span> <span class="p">[])</span>
-</span><span id="__span-80-3"><a id="__codelineno-80-3" name="__codelineno-80-3" href="#__codelineno-80-3"></a><span class="k">for</span> <span class="n">observer_name</span><span class="p">,</span> <span class="n">observer_config</span> <span class="ow">in</span> <span class="n">observer_configs</span><span class="p">:</span>
-</span><span id="__span-80-4"><a id="__codelineno-80-4" name="__codelineno-80-4" href="#__codelineno-80-4"></a>    <span class="n">observer_class</span> <span class="o">=</span> <span class="n">ObserverRegistry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observer_name</span><span class="p">)</span>
-</span><span id="__span-80-5"><a id="__codelineno-80-5" name="__codelineno-80-5" href="#__codelineno-80-5"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">observer_class</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">observer_config</span><span class="p">)</span>
-</span><span id="__span-80-6"><a id="__codelineno-80-6" name="__codelineno-80-6" href="#__codelineno-80-6"></a>    <span class="c1"># Observer.__init__() configures LlamaIndex handler</span>
-</span><span id="__span-80-7"><a id="__codelineno-80-7" name="__codelineno-80-7" href="#__codelineno-80-7"></a>    <span class="c1"># LlamaIndex automatically instruments all subsequent LLM calls!</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-95-1"><a id="__codelineno-95-1" name="__codelineno-95-1" href="#__codelineno-95-1"></a><span class="c1"># In Pipeline.execute():</span>
+</span><span id="__span-95-2"><a id="__codelineno-95-2" name="__codelineno-95-2" href="#__codelineno-95-2"></a><span class="n">observer_configs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;observers&quot;</span><span class="p">,</span> <span class="p">[])</span>
+</span><span id="__span-95-3"><a id="__codelineno-95-3" name="__codelineno-95-3" href="#__codelineno-95-3"></a><span class="k">for</span> <span class="n">observer_name</span><span class="p">,</span> <span class="n">observer_config</span> <span class="ow">in</span> <span class="n">observer_configs</span><span class="p">:</span>
+</span><span id="__span-95-4"><a id="__codelineno-95-4" name="__codelineno-95-4" href="#__codelineno-95-4"></a>    <span class="n">observer_class</span> <span class="o">=</span> <span class="n">ObserverRegistry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observer_name</span><span class="p">)</span>
+</span><span id="__span-95-5"><a id="__codelineno-95-5" name="__codelineno-95-5" href="#__codelineno-95-5"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">observer_class</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">observer_config</span><span class="p">)</span>
+</span><span id="__span-95-6"><a id="__codelineno-95-6" name="__codelineno-95-6" href="#__codelineno-95-6"></a>    <span class="c1"># Observer.__init__() configures LlamaIndex handler</span>
+</span><span id="__span-95-7"><a id="__codelineno-95-7" name="__codelineno-95-7" href="#__codelineno-95-7"></a>    <span class="c1"># LlamaIndex automatically instruments all subsequent LLM calls!</span>
 </span></code></pre></div></p>
 <h3 id="how-it-works-complete-flow">How It Works (Complete Flow)<a class="headerlink" href="#how-it-works-complete-flow" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-81-1"><a id="__codelineno-81-1" name="__codelineno-81-1" href="#__codelineno-81-1"></a>1. User calls: .with_observer(&quot;langfuse&quot;, config={...})
-</span><span id="__span-81-2"><a id="__codelineno-81-2" name="__codelineno-81-2" href="#__codelineno-81-2"></a>   └─&gt; Stored in PipelineBuilder._observers
-</span><span id="__span-81-3"><a id="__codelineno-81-3" name="__codelineno-81-3" href="#__codelineno-81-3"></a>
-</span><span id="__span-81-4"><a id="__codelineno-81-4" name="__codelineno-81-4" href="#__codelineno-81-4"></a>2. Pipeline.execute() runs:
-</span><span id="__span-81-5"><a id="__codelineno-81-5" name="__codelineno-81-5" href="#__codelineno-81-5"></a>   └─&gt; Instantiates LangfuseObserver(config)
-</span><span id="__span-81-6"><a id="__codelineno-81-6" name="__codelineno-81-6" href="#__codelineno-81-6"></a>       └─&gt; LangfuseObserver.__init__() calls:
-</span><span id="__span-81-7"><a id="__codelineno-81-7" name="__codelineno-81-7" href="#__codelineno-81-7"></a>           └─&gt; LlamaIndexHandlerManager.configure_handler(&quot;langfuse&quot;, config)
-</span><span id="__span-81-8"><a id="__codelineno-81-8" name="__codelineno-81-8" href="#__codelineno-81-8"></a>               └─&gt; set_global_handler(&quot;langfuse&quot;, public_key=..., secret_key=...)
-</span><span id="__span-81-9"><a id="__codelineno-81-9" name="__codelineno-81-9" href="#__codelineno-81-9"></a>                   └─&gt; LlamaIndex activates Langfuse instrumentation
-</span><span id="__span-81-10"><a id="__codelineno-81-10" name="__codelineno-81-10" href="#__codelineno-81-10"></a>
-</span><span id="__span-81-11"><a id="__codelineno-81-11" name="__codelineno-81-11" href="#__codelineno-81-11"></a>3. LLM calls happen:
-</span><span id="__span-81-12"><a id="__codelineno-81-12" name="__codelineno-81-12" href="#__codelineno-81-12"></a>   └─&gt; llm_client.invoke(prompt)
-</span><span id="__span-81-13"><a id="__codelineno-81-13" name="__codelineno-81-13" href="#__codelineno-81-13"></a>       └─&gt; self.client.chat([message])  # LlamaIndex LLM
-</span><span id="__span-81-14"><a id="__codelineno-81-14" name="__codelineno-81-14" href="#__codelineno-81-14"></a>           └─&gt; LlamaIndex automatically sends to Langfuse!
-</span><span id="__span-81-15"><a id="__codelineno-81-15" name="__codelineno-81-15" href="#__codelineno-81-15"></a>               - Prompt ✅
-</span><span id="__span-81-16"><a id="__codelineno-81-16" name="__codelineno-81-16" href="#__codelineno-81-16"></a>               - Completion ✅
-</span><span id="__span-81-17"><a id="__codelineno-81-17" name="__codelineno-81-17" href="#__codelineno-81-17"></a>               - Tokens ✅
-</span><span id="__span-81-18"><a id="__codelineno-81-18" name="__codelineno-81-18" href="#__codelineno-81-18"></a>               - Cost ✅
-</span><span id="__span-81-19"><a id="__codelineno-81-19" name="__codelineno-81-19" href="#__codelineno-81-19"></a>               - Latency ✅
-</span><span id="__span-81-20"><a id="__codelineno-81-20" name="__codelineno-81-20" href="#__codelineno-81-20"></a>
-</span><span id="__span-81-21"><a id="__codelineno-81-21" name="__codelineno-81-21" href="#__codelineno-81-21"></a>4. Pipeline completes:
-</span><span id="__span-81-22"><a id="__codelineno-81-22" name="__codelineno-81-22" href="#__codelineno-81-22"></a>   └─&gt; Observer.flush() and close() called
-</span><span id="__span-81-23"><a id="__codelineno-81-23" name="__codelineno-81-23" href="#__codelineno-81-23"></a>       └─&gt; LlamaIndex flushes buffered events
+<div class="language-text highlight"><pre><span></span><code><span id="__span-96-1"><a id="__codelineno-96-1" name="__codelineno-96-1" href="#__codelineno-96-1"></a>1. User calls: .with_observer(&quot;langfuse&quot;, config={...})
+</span><span id="__span-96-2"><a id="__codelineno-96-2" name="__codelineno-96-2" href="#__codelineno-96-2"></a>   └─&gt; Stored in PipelineBuilder._observers
+</span><span id="__span-96-3"><a id="__codelineno-96-3" name="__codelineno-96-3" href="#__codelineno-96-3"></a>
+</span><span id="__span-96-4"><a id="__codelineno-96-4" name="__codelineno-96-4" href="#__codelineno-96-4"></a>2. Pipeline.execute() runs:
+</span><span id="__span-96-5"><a id="__codelineno-96-5" name="__codelineno-96-5" href="#__codelineno-96-5"></a>   └─&gt; Instantiates LangfuseObserver(config)
+</span><span id="__span-96-6"><a id="__codelineno-96-6" name="__codelineno-96-6" href="#__codelineno-96-6"></a>       └─&gt; LangfuseObserver.__init__() calls:
+</span><span id="__span-96-7"><a id="__codelineno-96-7" name="__codelineno-96-7" href="#__codelineno-96-7"></a>           └─&gt; LlamaIndexHandlerManager.configure_handler(&quot;langfuse&quot;, config)
+</span><span id="__span-96-8"><a id="__codelineno-96-8" name="__codelineno-96-8" href="#__codelineno-96-8"></a>               └─&gt; set_global_handler(&quot;langfuse&quot;, public_key=..., secret_key=...)
+</span><span id="__span-96-9"><a id="__codelineno-96-9" name="__codelineno-96-9" href="#__codelineno-96-9"></a>                   └─&gt; LlamaIndex activates Langfuse instrumentation
+</span><span id="__span-96-10"><a id="__codelineno-96-10" name="__codelineno-96-10" href="#__codelineno-96-10"></a>
+</span><span id="__span-96-11"><a id="__codelineno-96-11" name="__codelineno-96-11" href="#__codelineno-96-11"></a>3. LLM calls happen:
+</span><span id="__span-96-12"><a id="__codelineno-96-12" name="__codelineno-96-12" href="#__codelineno-96-12"></a>   └─&gt; llm_client.invoke(prompt)
+</span><span id="__span-96-13"><a id="__codelineno-96-13" name="__codelineno-96-13" href="#__codelineno-96-13"></a>       └─&gt; self.client.chat([message])  # LlamaIndex LLM
+</span><span id="__span-96-14"><a id="__codelineno-96-14" name="__codelineno-96-14" href="#__codelineno-96-14"></a>           └─&gt; LlamaIndex automatically sends to Langfuse!
+</span><span id="__span-96-15"><a id="__codelineno-96-15" name="__codelineno-96-15" href="#__codelineno-96-15"></a>               - Prompt ✅
+</span><span id="__span-96-16"><a id="__codelineno-96-16" name="__codelineno-96-16" href="#__codelineno-96-16"></a>               - Completion ✅
+</span><span id="__span-96-17"><a id="__codelineno-96-17" name="__codelineno-96-17" href="#__codelineno-96-17"></a>               - Tokens ✅
+</span><span id="__span-96-18"><a id="__codelineno-96-18" name="__codelineno-96-18" href="#__codelineno-96-18"></a>               - Cost ✅
+</span><span id="__span-96-19"><a id="__codelineno-96-19" name="__codelineno-96-19" href="#__codelineno-96-19"></a>               - Latency ✅
+</span><span id="__span-96-20"><a id="__codelineno-96-20" name="__codelineno-96-20" href="#__codelineno-96-20"></a>
+</span><span id="__span-96-21"><a id="__codelineno-96-21" name="__codelineno-96-21" href="#__codelineno-96-21"></a>4. Pipeline completes:
+</span><span id="__span-96-22"><a id="__codelineno-96-22" name="__codelineno-96-22" href="#__codelineno-96-22"></a>   └─&gt; Observer.flush() and close() called
+</span><span id="__span-96-23"><a id="__codelineno-96-23" name="__codelineno-96-23" href="#__codelineno-96-23"></a>       └─&gt; LlamaIndex flushes buffered events
 </span></code></pre></div>
 <h3 id="benefits-of-delegating-to-llamaindex">Benefits of Delegating to LlamaIndex<a class="headerlink" href="#benefits-of-delegating-to-llamaindex" title="Permanent link">&para;</a></h3>
 <p><strong>Code Reduction</strong>:
@@ -4602,45 +4855,45 @@
 - ✅ Langfuse integration
 - ✅ Multiple handler support
 - ✅ Future: RAG instrumentation when we add it</p>
-<h3 id="dependencies_6">Dependencies<a class="headerlink" href="#dependencies_6" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-82-1"><a id="__codelineno-82-1" name="__codelineno-82-1" href="#__codelineno-82-1"></a><span class="c1"># Core (required in pyproject.toml)</span>
-</span><span id="__span-82-2"><a id="__codelineno-82-2" name="__codelineno-82-2" href="#__codelineno-82-2"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">api</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>
-</span><span id="__span-82-3"><a id="__codelineno-82-3" name="__codelineno-82-3" href="#__codelineno-82-3"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">sdk</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>
-</span><span id="__span-82-4"><a id="__codelineno-82-4" name="__codelineno-82-4" href="#__codelineno-82-4"></a><span class="n">langfuse</span><span class="o">&gt;=</span><span class="mf">2.0.0</span>
-</span><span id="__span-82-5"><a id="__codelineno-82-5" name="__codelineno-82-5" href="#__codelineno-82-5"></a>
-</span><span id="__span-82-6"><a id="__codelineno-82-6" name="__codelineno-82-6" href="#__codelineno-82-6"></a><span class="c1"># Optional exporters</span>
-</span><span id="__span-82-7"><a id="__codelineno-82-7" name="__codelineno-82-7" href="#__codelineno-82-7"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">exporter</span><span class="o">-</span><span class="n">jaeger</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>  <span class="c1"># For Jaeger</span>
-</span><span id="__span-82-8"><a id="__codelineno-82-8" name="__codelineno-82-8" href="#__codelineno-82-8"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">exporter</span><span class="o">-</span><span class="n">otlp</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>    <span class="c1"># For OTLP protocol</span>
+<h3 id="dependencies_7">Dependencies<a class="headerlink" href="#dependencies_7" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-97-1"><a id="__codelineno-97-1" name="__codelineno-97-1" href="#__codelineno-97-1"></a><span class="c1"># Core (required in pyproject.toml)</span>
+</span><span id="__span-97-2"><a id="__codelineno-97-2" name="__codelineno-97-2" href="#__codelineno-97-2"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">api</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>
+</span><span id="__span-97-3"><a id="__codelineno-97-3" name="__codelineno-97-3" href="#__codelineno-97-3"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">sdk</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>
+</span><span id="__span-97-4"><a id="__codelineno-97-4" name="__codelineno-97-4" href="#__codelineno-97-4"></a><span class="n">langfuse</span><span class="o">&gt;=</span><span class="mf">2.0.0</span>
+</span><span id="__span-97-5"><a id="__codelineno-97-5" name="__codelineno-97-5" href="#__codelineno-97-5"></a>
+</span><span id="__span-97-6"><a id="__codelineno-97-6" name="__codelineno-97-6" href="#__codelineno-97-6"></a><span class="c1"># Optional exporters</span>
+</span><span id="__span-97-7"><a id="__codelineno-97-7" name="__codelineno-97-7" href="#__codelineno-97-7"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">exporter</span><span class="o">-</span><span class="n">jaeger</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>  <span class="c1"># For Jaeger</span>
+</span><span id="__span-97-8"><a id="__codelineno-97-8" name="__codelineno-97-8" href="#__codelineno-97-8"></a><span class="n">opentelemetry</span><span class="o">-</span><span class="n">exporter</span><span class="o">-</span><span class="n">otlp</span><span class="o">&gt;=</span><span class="mf">1.20.0</span>    <span class="c1"># For OTLP protocol</span>
 </span></code></pre></div>
 <h3 id="usage-examples">Usage Examples<a class="headerlink" href="#usage-examples" title="Permanent link">&para;</a></h3>
 <p><strong>Simple logging</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-83-1"><a id="__codelineno-83-1" name="__codelineno-83-1" href="#__codelineno-83-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-83-2"><a id="__codelineno-83-2" name="__codelineno-83-2" href="#__codelineno-83-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
-</span><span id="__span-83-3"><a id="__codelineno-83-3" name="__codelineno-83-3" href="#__codelineno-83-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</span><span id="__span-83-4"><a id="__codelineno-83-4" name="__codelineno-83-4" href="#__codelineno-83-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;logging&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{})</span>
-</span><span id="__span-83-5"><a id="__codelineno-83-5" name="__codelineno-83-5" href="#__codelineno-83-5"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-</span><span id="__span-83-6"><a id="__codelineno-83-6" name="__codelineno-83-6" href="#__codelineno-83-6"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-98-1"><a id="__codelineno-98-1" name="__codelineno-98-1" href="#__codelineno-98-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-98-2"><a id="__codelineno-98-2" name="__codelineno-98-2" href="#__codelineno-98-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-98-3"><a id="__codelineno-98-3" name="__codelineno-98-3" href="#__codelineno-98-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-98-4"><a id="__codelineno-98-4" name="__codelineno-98-4" href="#__codelineno-98-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;logging&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{})</span>
+</span><span id="__span-98-5"><a id="__codelineno-98-5" name="__codelineno-98-5" href="#__codelineno-98-5"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-98-6"><a id="__codelineno-98-6" name="__codelineno-98-6" href="#__codelineno-98-6"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Langfuse (LLM observability)</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-84-1"><a id="__codelineno-84-1" name="__codelineno-84-1" href="#__codelineno-84-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-84-2"><a id="__codelineno-84-2" name="__codelineno-84-2" href="#__codelineno-84-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
-</span><span id="__span-84-3"><a id="__codelineno-84-3" name="__codelineno-84-3" href="#__codelineno-84-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</span><span id="__span-84-4"><a id="__codelineno-84-4" name="__codelineno-84-4" href="#__codelineno-84-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span>
-</span><span id="__span-84-5"><a id="__codelineno-84-5" name="__codelineno-84-5" href="#__codelineno-84-5"></a>        <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span>
-</span><span id="__span-84-6"><a id="__codelineno-84-6" name="__codelineno-84-6" href="#__codelineno-84-6"></a>        <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="s2">&quot;sk-lf-...&quot;</span>
-</span><span id="__span-84-7"><a id="__codelineno-84-7" name="__codelineno-84-7" href="#__codelineno-84-7"></a>    <span class="p">})</span>
-</span><span id="__span-84-8"><a id="__codelineno-84-8" name="__codelineno-84-8" href="#__codelineno-84-8"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-</span><span id="__span-84-9"><a id="__codelineno-84-9" name="__codelineno-84-9" href="#__codelineno-84-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-99-1"><a id="__codelineno-99-1" name="__codelineno-99-1" href="#__codelineno-99-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-99-2"><a id="__codelineno-99-2" name="__codelineno-99-2" href="#__codelineno-99-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-99-3"><a id="__codelineno-99-3" name="__codelineno-99-3" href="#__codelineno-99-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-99-4"><a id="__codelineno-99-4" name="__codelineno-99-4" href="#__codelineno-99-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-99-5"><a id="__codelineno-99-5" name="__codelineno-99-5" href="#__codelineno-99-5"></a>        <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span>
+</span><span id="__span-99-6"><a id="__codelineno-99-6" name="__codelineno-99-6" href="#__codelineno-99-6"></a>        <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="s2">&quot;sk-lf-...&quot;</span>
+</span><span id="__span-99-7"><a id="__codelineno-99-7" name="__codelineno-99-7" href="#__codelineno-99-7"></a>    <span class="p">})</span>
+</span><span id="__span-99-8"><a id="__codelineno-99-8" name="__codelineno-99-8" href="#__codelineno-99-8"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-99-9"><a id="__codelineno-99-9" name="__codelineno-99-9" href="#__codelineno-99-9"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Multiple observers</strong>:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-85-1"><a id="__codelineno-85-1" name="__codelineno-85-1" href="#__codelineno-85-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-85-2"><a id="__codelineno-85-2" name="__codelineno-85-2" href="#__codelineno-85-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
-</span><span id="__span-85-3"><a id="__codelineno-85-3" name="__codelineno-85-3" href="#__codelineno-85-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</span><span id="__span-85-4"><a id="__codelineno-85-4" name="__codelineno-85-4" href="#__codelineno-85-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">})</span>
-</span><span id="__span-85-5"><a id="__codelineno-85-5" name="__codelineno-85-5" href="#__codelineno-85-5"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">})</span>
-</span><span id="__span-85-6"><a id="__codelineno-85-6" name="__codelineno-85-6" href="#__codelineno-85-6"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;logging&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{})</span>
-</span><span id="__span-85-7"><a id="__codelineno-85-7" name="__codelineno-85-7" href="#__codelineno-85-7"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-</span><span id="__span-85-8"><a id="__codelineno-85-8" name="__codelineno-85-8" href="#__codelineno-85-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-100-1"><a id="__codelineno-100-1" name="__codelineno-100-1" href="#__codelineno-100-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-100-2"><a id="__codelineno-100-2" name="__codelineno-100-2" href="#__codelineno-100-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+</span><span id="__span-100-3"><a id="__codelineno-100-3" name="__codelineno-100-3" href="#__codelineno-100-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-100-4"><a id="__codelineno-100-4" name="__codelineno-100-4" href="#__codelineno-100-4"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;langfuse&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">})</span>
+</span><span id="__span-100-5"><a id="__codelineno-100-5" name="__codelineno-100-5" href="#__codelineno-100-5"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;opentelemetry&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">})</span>
+</span><span id="__span-100-6"><a id="__codelineno-100-6" name="__codelineno-100-6" href="#__codelineno-100-6"></a>    <span class="o">.</span><span class="n">with_observer</span><span class="p">(</span><span class="s2">&quot;logging&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{})</span>
+</span><span id="__span-100-7"><a id="__codelineno-100-7" name="__codelineno-100-7" href="#__codelineno-100-7"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+</span><span id="__span-100-8"><a id="__codelineno-100-8" name="__codelineno-100-8" href="#__codelineno-100-8"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <h3 id="thread-safety_2">Thread Safety<a class="headerlink" href="#thread-safety_2" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4664,7 +4917,7 @@
 - Multiple observers simultaneously
 - Observer failure isolation
 - LlamaIndex auto-instrumentation</p>
-<h3 id="known-limitations_6">Known Limitations<a class="headerlink" href="#known-limitations_6" title="Permanent link">&para;</a></h3>
+<h3 id="known-limitations_7">Known Limitations<a class="headerlink" href="#known-limitations_7" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>One global handler at a time</strong>: LlamaIndex's <code>set_global_handler()</code> is global</li>
 <li>Workaround: Last observer wins</li>
