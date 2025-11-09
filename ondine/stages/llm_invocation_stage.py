@@ -7,6 +7,11 @@ from typing import Any
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.error_handler import ErrorAction, ErrorHandler
+from ondine.core.exceptions import (
+    InvalidAPIKeyError,
+    ModelNotFoundError,
+    QuotaExceededError,
+)
 from ondine.core.models import (
     CostEstimate,
     LLMResponse,
@@ -195,6 +200,106 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return responses
 
+    def _classify_error(self, error: Exception) -> Exception:
+        """
+        Classify error as retryable or non-retryable using LlamaIndex exceptions.
+
+        Leverages LlamaIndex's native exception types to determine if an error
+        is fatal (non-retryable) or transient (retryable).
+
+        Args:
+            error: The exception to classify
+
+        Returns:
+            Classified exception (NonRetryableError subclass or RetryableError)
+        """
+        error_str = str(error).lower()
+
+        # Check for LlamaIndex/provider-specific exceptions first
+        # Note: OpenAI exceptions cover most providers (Groq, Azure, Together.AI, vLLM, Ollama)
+        # because they use OpenAI-compatible APIs. Anthropic has its own exception types.
+        # Import here to avoid circular dependencies and handle missing providers.
+        try:
+            from openai import AuthenticationError as OpenAIAuthError
+            from openai import BadRequestError as OpenAIBadRequestError
+
+            if isinstance(error, OpenAIAuthError):
+                return InvalidAPIKeyError(f"OpenAI authentication failed: {error}")
+            if isinstance(error, OpenAIBadRequestError):
+                # Check if it's a model error
+                if "model" in error_str or "decommissioned" in error_str:
+                    return ModelNotFoundError(f"OpenAI model error: {error}")
+        except ImportError:
+            pass
+
+        try:
+            from anthropic import AuthenticationError as AnthropicAuthError
+            from anthropic import BadRequestError as AnthropicBadRequestError
+
+            if isinstance(error, AnthropicAuthError):
+                return InvalidAPIKeyError(f"Anthropic authentication failed: {error}")
+            if isinstance(error, AnthropicBadRequestError):
+                if "model" in error_str:
+                    return ModelNotFoundError(f"Anthropic model error: {error}")
+        except ImportError:
+            pass
+
+        # Fallback to pattern matching for other providers or generic errors
+        # Model errors (decommissioned, not found)
+        model_patterns = [
+            "model",
+            "decommissioned",
+            "not found",
+            "does not exist",
+            "invalid model",
+            "unknown model",
+            "model_not_found",
+        ]
+        if any(p in error_str for p in model_patterns):
+            return ModelNotFoundError(f"Model error: {error}")
+
+        # Authentication errors
+        auth_patterns = [
+            "invalid api key",
+            "invalid_api_key",
+            "authentication failed",
+            "401",
+            "403",
+            "unauthorized",
+            "invalid credentials",
+            "api key not found",
+            "permission denied",
+        ]
+        if any(p in error_str for p in auth_patterns):
+            return InvalidAPIKeyError(f"Authentication error: {error}")
+
+        # Quota/billing errors (not rate limit)
+        quota_patterns = [
+            "quota exceeded",
+            "insufficient_quota",
+            "billing",
+            "credits exhausted",
+            "account suspended",
+            "payment required",
+        ]
+        if any(p in error_str for p in quota_patterns):
+            return QuotaExceededError(f"Quota error: {error}")
+
+        # Rate limit (retryable)
+        if "rate" in error_str or "429" in error_str:
+            return RateLimitError(str(error))
+
+        # Network errors (retryable)
+        if (
+            "network" in error_str
+            or "timeout" in error_str
+            or "connection" in error_str
+        ):
+            return NetworkError(str(error))
+
+        # Default: return original error (will be retried conservatively)
+        return error
+
     def _invoke_with_retry_and_ratelimit(
         self, prompt: str, context: Any = None, row_index: int = 0
     ) -> Any:
@@ -206,18 +311,15 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             if self.rate_limiter:
                 self.rate_limiter.acquire()
 
-            # Invoke LLM
+            # Invoke LLM with error classification
             try:
                 return self.llm_client.invoke(prompt)
             except Exception as e:
-                # Classify errors for retry logic
-                if "rate" in str(e).lower():
-                    raise RateLimitError(str(e))
-                if "network" in str(e).lower() or "timeout" in str(e).lower():
-                    raise NetworkError(str(e))
-                raise
+                # Classify error to determine if retryable
+                classified = self._classify_error(e)
+                raise classified
 
-        # Execute with retry handler
+        # Execute with retry handler (respects NonRetryableError)
         return self.retry_handler.execute(_invoke)
 
         # LlamaIndex automatically instruments the LLM call above!

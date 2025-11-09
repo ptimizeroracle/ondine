@@ -1,5 +1,12 @@
 """Core configuration and data models."""
 
+from ondine.core.exceptions import (
+    ConfigurationError,
+    InvalidAPIKeyError,
+    ModelNotFoundError,
+    NonRetryableError,
+    QuotaExceededError,
+)
 from ondine.core.models import (
     CheckpointInfo,
     CostEstimate,
@@ -51,4 +58,10 @@ __all__ = [
     "RowMetadata",
     "PromptBatch",
     "ResponseBatch",
+    # Exceptions
+    "NonRetryableError",
+    "ModelNotFoundError",
+    "InvalidAPIKeyError",
+    "ConfigurationError",
+    "QuotaExceededError",
 ]
