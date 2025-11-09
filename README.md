@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
   # Ondine - LLM Dataset Engine
 </div>
@@ -649,7 +649,7 @@ result = pipeline.execute()
 ```python
 .with_observer("langfuse", config={
     "public_key": "pk-lf-...",
-    "secret_key": "sk-lf-...",
+    "secret_key": "sk-lf-...",  # pragma: allowlist secret
     "host": "https://cloud.langfuse.com"  # optional
 })
 ```
@@ -707,7 +707,7 @@ See complete examples:
 ```python
 .with_observer("langfuse", config={
     "public_key": "pk-lf-...",
-    "secret_key": "sk-lf-..."
+    "secret_key": "sk-lf-..."  # pragma: allowlist secret
 })
 ```
 4. View detailed traces in Langfuse dashboard
