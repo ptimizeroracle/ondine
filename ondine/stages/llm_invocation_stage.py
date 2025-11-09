@@ -82,6 +82,16 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         """Execute LLM calls for all prompt batches."""
         response_batches: list[ResponseBatch] = []
 
+        # Start progress tracking if available
+        progress_tracker = getattr(context, "progress_tracker", None)
+        progress_task = None
+        if progress_tracker:
+            total_prompts = sum(len(b.prompts) for b in batches)
+            progress_task = progress_tracker.start_stage(
+                f"{self.name}: {context.total_rows} rows",
+                total_rows=total_prompts,
+            )
+
         for _batch_idx, batch in enumerate(batches):
             self.logger.info(
                 f"Processing batch {batch.batch_id} ({len(batch.prompts)} prompts)"
@@ -99,6 +109,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             total_cost = sum(r.cost for r in responses)
             latencies = [r.latency_ms for r in responses]
 
+            # Update progress tracker
+            if progress_tracker and progress_task:
+                progress_tracker.update(
+                    progress_task, advance=len(batch.prompts), cost=total_cost
+                )
+
             # Create response batch
             response_batch = ResponseBatch(
                 responses=[r.text for r in responses],
@@ -113,6 +129,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Update context
             context.add_cost(total_cost, total_tokens)
             context.update_row(batch.metadata[-1].row_index if batch.metadata else 0)
+
+        # Finish progress tracking
+        if progress_tracker and progress_task:
+            progress_tracker.finish(progress_task)
 
         return response_batches
 
