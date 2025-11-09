@@ -370,6 +370,12 @@ class ProcessingSpec(BaseModel):
         default=1, ge=1, le=3, description="Max retry attempts for failed rows"
     )
 
+    # Progress tracking
+    progress_mode: str = Field(
+        default="auto",
+        description="Progress tracking mode: auto, rich, tqdm, logging, none",
+    )
+
     @field_validator("checkpoint_dir")
     @classmethod
     def validate_checkpoint_dir(cls, v: str | Path) -> Path:
