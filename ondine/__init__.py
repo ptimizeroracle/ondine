@@ -1,7 +1,7 @@
 """
 LLM Dataset Processing Engine.
 
-A production-grade SDK for processing tabular datasets using Large Language
+An SDK for processing tabular datasets using Large Language
 Models with reliability, observability, and cost control.
 """
 

@@ -107,13 +107,25 @@ class PipelineBuilder:
 
         Args:
             path: Path to CSV file
-            input_columns: Input column names
-            output_columns: Output column names
-            delimiter: CSV delimiter
-            encoding: File encoding
+            input_columns: Input column names to use in prompts
+            output_columns: Output column names to generate
+            delimiter: CSV delimiter (default: comma)
+            encoding: File encoding (default: utf-8)
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            builder = (
+                PipelineBuilder.create()
+                .from_csv(
+                    "products.csv",
+                    input_columns=["description"],
+                    output_columns=["category"]
+                )
+            )
+            ```
         """
         self._dataset_spec = DatasetSpec(
             source_type=DataSourceType.CSV,
@@ -187,13 +199,26 @@ class PipelineBuilder:
         """
         Configure DataFrame source.
 
+        Useful for processing in-memory data or chaining pipelines.
+
         Args:
-            df: Pandas DataFrame
-            input_columns: Input column names
-            output_columns: Output column names
+            df: Pandas DataFrame with input data
+            input_columns: Column names to use in prompts
+            output_columns: Column names to generate
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            import pandas as pd
+
+            df = pd.DataFrame({"text": ["Hello", "World"]})
+            builder = (
+                PipelineBuilder.create()
+                .from_dataframe(df, input_columns=["text"], output_columns=["result"])
+            )
+            ```
         """
         self._dataset_spec = DatasetSpec(
             source_type=DataSourceType.DATAFRAME,
@@ -211,12 +236,23 @@ class PipelineBuilder:
         """
         Configure prompt template.
 
+        Use {variable} syntax to reference input columns. The LLM will process
+        each row using this template.
+
         Args:
-            template: Prompt template with {variable} placeholders
-            system_message: Optional system message
+            template: Prompt template with {variable} placeholders matching input_columns
+            system_message: Optional system message for chat models
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            builder.with_prompt(
+                "Categorize this product: {title}\\n\\nCategory:",
+                system_message="You are a product categorization expert."
+            )
+            ```
         """
         self._prompt_spec = PromptSpec(
             template=template,
@@ -236,16 +272,37 @@ class PipelineBuilder:
         """
         Configure LLM provider.
 
+        Supports OpenAI, Azure OpenAI, Anthropic, Groq, MLX, and custom providers.
+        API keys can be provided explicitly or via environment variables.
+
         Args:
-            provider: Provider name (openai, azure_openai, anthropic) or custom provider ID
-            model: Model identifier
-            api_key: API key (or from env)
-            temperature: Sampling temperature
-            max_tokens: Max output tokens
-            **kwargs: Provider-specific parameters
+            provider: Provider name (openai, azure_openai, anthropic, groq, mlx) or custom provider ID
+            model: Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4")
+            api_key: API key (optional, reads from environment if not provided)
+            temperature: Sampling temperature (0.0-1.0, default: 0.0 for deterministic)
+            max_tokens: Maximum output tokens (optional, uses model default)
+            **kwargs: Provider-specific parameters (e.g., azure_endpoint, azure_deployment)
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # OpenAI
+            builder.with_llm(provider="openai", model="gpt-4o-mini")
+
+            # Groq (fast and affordable)
+            builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
+
+            # Azure OpenAI with Managed Identity
+            builder.with_llm(
+                provider="azure_openai",
+                model="gpt-4",
+                azure_endpoint="https://your-resource.openai.azure.com/",
+                azure_deployment="gpt-4-deployment",
+                use_managed_identity=True
+            )
+            ```
         """
         from ondine.adapters.provider_registry import ProviderRegistry
 
@@ -382,11 +439,29 @@ class PipelineBuilder:
         """
         Configure concurrent requests.
 
+        Higher concurrency = faster processing but more API load. Adjust based on
+        your provider's rate limits.
+
         Args:
-            threads: Number of concurrent threads
+            threads: Number of concurrent threads (1-100, typical: 5-20)
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # Conservative (free tier)
+            builder.with_concurrency(5)
+
+            # Aggressive (paid tier)
+            builder.with_concurrency(20)
+
+            # Maximum (enterprise)
+            builder.with_concurrency(50)
+            ```
+
+        Note:
+            Groq supports high concurrency (~100), while OpenAI free tier is limited to ~5.
         """
         self._processing_spec.concurrency = threads
         return self
@@ -408,11 +483,29 @@ class PipelineBuilder:
         """
         Configure rate limiting.
 
+        Prevents hitting API rate limits by throttling requests using token bucket algorithm.
+        Set this below your provider's actual limit for safety.
+
         Args:
-            rpm: Requests per minute
+            rpm: Requests per minute (typical: 20-60 for free tiers, 100+ for paid)
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # OpenAI free tier (60 RPM limit)
+            builder.with_rate_limit(50)
+
+            # Groq free tier (30 RPM limit)
+            builder.with_rate_limit(25)
+
+            # Paid tier with high limits
+            builder.with_rate_limit(100)
+            ```
+
+        Note:
+            Rate limiting is applied per pipeline execution, not globally.
         """
         self._processing_spec.rate_limit_rpm = rpm
         return self
@@ -434,11 +527,29 @@ class PipelineBuilder:
         """
         Configure maximum budget.
 
+        Pipeline will halt execution if cost exceeds this limit. Warnings are shown
+        at 75% and 90% of budget.
+
         Args:
-            budget: Maximum budget in USD
+            budget: Maximum budget in USD (e.g., 5.0 for $5)
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # Set $5 budget limit
+            builder.with_max_budget(5.0)
+
+            # For testing with small budget
+            builder.with_max_budget(0.50)
+
+            # For production runs
+            builder.with_max_budget(100.0)
+            ```
+
+        Note:
+            Budget enforcement uses Decimal precision to avoid floating-point errors.
         """
         self._processing_spec.max_budget = Decimal(str(budget))
         return self
@@ -736,7 +847,7 @@ class PipelineBuilder:
                 .with_llm(provider="openai", model="gpt-4o-mini")
                 .with_observer("langfuse", config={
                     "public_key": "pk-lf-...",
-                    "secret_key": "sk-lf-..."
+                    "secret_key": "sk-lf-..."  # pragma: allowlist secret
                 })
                 .build()
             )
@@ -772,11 +883,31 @@ class PipelineBuilder:
         """
         Build final Pipeline.
 
+        Validates all configurations and constructs the Pipeline object ready for execution.
+        This is the final step in the builder chain.
+
         Returns:
-            Configured Pipeline
+            Configured Pipeline ready to execute
 
         Raises:
-            ValueError: If required specifications missing
+            ValueError: If required specifications missing (dataset, prompt, or LLM)
+
+        Example:
+            ```python
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
+                .with_prompt("Summarize: {text}")
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .with_concurrency(10)
+                .with_max_budget(5.0)
+                .build()  # Returns Pipeline object
+            )
+
+            # Execute the pipeline
+            result = pipeline.execute()
+            print(f"Processed {result.metrics.total_rows} rows")
+            ```
         """
         # Validate required specs
         if not self._dataset_spec:

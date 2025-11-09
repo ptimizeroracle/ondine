@@ -84,17 +84,20 @@ class QuickPipeline:
         """
         Create a pipeline with smart defaults.
 
+        The simplest way to process data with LLMs. Automatically detects input columns
+        from prompt placeholders and configures optimal settings based on data size.
+
         Args:
             data: CSV/Excel/Parquet file path or DataFrame
-            prompt: Prompt template with {placeholders}
-            model: Model name (default: gpt-4o-mini)
+            prompt: Prompt template with {placeholders} matching column names
+            model: Model name (default: gpt-4o-mini). Provider auto-detected from model name.
             output_columns: Output column name(s). If None, uses ["output"]
-            provider: LLM provider. If None, auto-detected from model name
-            temperature: Sampling temperature (default: 0.0 for deterministic)
-            max_tokens: Max output tokens (default: provider's default)
-            max_budget: Maximum cost budget in USD
-            batch_size: Rows per batch (default: auto-sized based on data)
-            concurrency: Parallel requests (default: auto-sized)
+            provider: LLM provider. If None, auto-detected (gpt-4 → openai, claude → anthropic)
+            temperature: Sampling temperature (0.0-1.0, default: 0.0 for deterministic)
+            max_tokens: Max output tokens (optional, uses provider default)
+            max_budget: Maximum cost budget in USD (optional, no limit if not set)
+            batch_size: Rows per batch (optional, auto-sized: 10-500 based on data size)
+            concurrency: Parallel requests (optional, auto-sized: 5-100 based on provider)
             **kwargs: Additional arguments passed to PipelineBuilder
 
         Returns:
@@ -102,6 +105,45 @@ class QuickPipeline:
 
         Raises:
             ValueError: If input data cannot be loaded or prompt is invalid
+
+        Example:
+            ```python
+            from ondine import QuickPipeline
+
+            # Minimal - auto-detects everything
+            pipeline = QuickPipeline.create(
+                data="products.csv",
+                prompt="Categorize: {description}"
+            )
+            result = pipeline.execute()
+
+            # With budget control
+            pipeline = QuickPipeline.create(
+                data="reviews.csv",
+                prompt="Sentiment: {review_text}",
+                model="gpt-4o-mini",
+                max_budget=5.0
+            )
+
+            # Multi-column output
+            pipeline = QuickPipeline.create(
+                data="products.csv",
+                prompt="Extract from {title}: brand, price, category as JSON",
+                output_columns=["brand", "price", "category"]
+            )
+
+            # Custom provider
+            pipeline = QuickPipeline.create(
+                data=df,
+                prompt="Summarize: {text}",
+                model="llama-3.3-70b-versatile",
+                provider="groq"
+            )
+            ```
+
+        Note:
+            Input columns are automatically detected from {placeholders} in the prompt.
+            Provider is auto-detected from model name (gpt-4 → openai, claude → anthropic, llama → groq).
         """
         # 1. Load data
         df = QuickPipeline._load_data(data)

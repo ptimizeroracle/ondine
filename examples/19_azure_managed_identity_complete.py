@@ -82,10 +82,8 @@ Format as JSON:
             use_managed_identity=True,  # ← Keyless authentication!
             temperature=0.7,
         )
-        .with_processing(
-            batch_size=10,
-            concurrency=3,
-        )
+        .with_batch_size(10)
+        .with_concurrency(3)
         .build()
     )
 
@@ -96,8 +94,8 @@ Format as JSON:
 
     # Uncomment to execute (requires Azure setup):
     # result = _pipeline.execute()
-    # print(f"Processed {result.total_rows} rows")
-    # print(f"Cost: ${result.total_cost:.4f}")
+    # print(f"Processed {result.metrics.total_rows} rows")
+    # print(f"Cost: ${result.costs.total_cost:.4f}")
     # print(result.output_data.head())
 
 
@@ -190,7 +188,7 @@ def example_pre_fetched_token():
         print(f"✅ Token fetched: {azure_ad_token[:20]}...")
     except Exception as e:
         print(f"⚠️  Could not fetch token: {e}")
-        azure_ad_token = "dummy_token_for_demo"  # noqa: S105
+        azure_ad_token = "dummy_token_for_demo"  # nosec B105
 
     data = pd.DataFrame({"text": ["Sample text for processing"]})
 

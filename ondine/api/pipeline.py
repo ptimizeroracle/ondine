@@ -53,12 +53,33 @@ class Pipeline:
     """
     Main pipeline class - Facade for dataset processing.
 
-    Provides high-level interface for building and executing
-    LLM-powered data transformations.
+    Provides high-level interface for building and executing LLM-powered data
+    transformations. Handles orchestration, state management, cost tracking,
+    checkpointing, and error handling.
+
+    This is typically created via PipelineBuilder or QuickPipeline, not directly.
 
     Example:
-        pipeline = Pipeline(specifications)
+        ```python
+        from ondine import PipelineBuilder
+
+        # Create via builder (recommended)
+        pipeline = (
+            PipelineBuilder.create()
+            .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
+            .with_prompt("Summarize: {text}")
+            .with_llm(provider="openai", model="gpt-4o-mini")
+            .build()
+        )
+
+        # Execute
         result = pipeline.execute()
+        print(f"Processed {result.metrics.total_rows} rows")
+        print(f"Cost: ${result.costs.total_cost}")
+        ```
+
+    Note:
+        Use PipelineBuilder for construction, not direct instantiation.
     """
 
     def __init__(
@@ -187,11 +208,41 @@ class Pipeline:
         """
         Execute pipeline end-to-end.
 
+        Runs all stages: data loading, prompt formatting, LLM invocation, response parsing,
+        and result writing. Handles checkpointing, cost tracking, and error recovery.
+
         Args:
-            resume_from: Optional session ID to resume from checkpoint
+            resume_from: Optional session ID to resume from checkpoint (for fault tolerance)
 
         Returns:
-            ExecutionResult with data and metrics
+            ExecutionResult containing:
+                - data: DataFrame with results
+                - metrics: Processing statistics (total_rows, success_count, etc.)
+                - costs: Cost breakdown (total_cost, input_tokens, output_tokens)
+                - duration: Execution time in seconds
+                - errors: List of any errors encountered
+
+        Example:
+            ```python
+            # Execute pipeline
+            result = pipeline.execute()
+
+            # Access results
+            print(f"Processed: {result.metrics.total_rows} rows")
+            print(f"Successful: {result.metrics.success_count} rows")
+            print(f"Cost: ${result.costs.total_cost}")
+            print(f"Time: {result.duration:.2f}s")
+
+            # Access output data
+            result.data.to_csv("output.csv", index=False)
+
+            # Resume from checkpoint (if pipeline was interrupted)
+            result = pipeline.execute(resume_from=previous_session_id)
+            ```
+
+        Note:
+            Progress is automatically saved via checkpoints. If execution fails,
+            use resume_from to continue from the last checkpoint.
         """
         # Validate first
         validation = self.validate()
