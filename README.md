@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
-  # Ondine - LLM Dataset Engine
+  # LLM Dataset Engine
 </div>
 
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
@@ -13,7 +13,7 @@
 [![security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
-Production-grade SDK for batch processing tabular datasets with LLMs. Built on LlamaIndex for provider abstraction, adds batch orchestration, automatic cost tracking, checkpointing, and YAML configuration for dataset transformation at scale.
+SDK for batch processing tabular datasets with LLMs. Built on LlamaIndex for provider abstraction, adds batch orchestration, automatic cost tracking, checkpointing, and YAML configuration for dataset transformation at scale.
 
 ## Features
 
@@ -23,7 +23,7 @@ Production-grade SDK for batch processing tabular datasets with LLMs. Built on L
 - **Cost Control**: Pre-execution estimation, budget limits, real-time tracking
 - **Observability**: Progress bars, structured logging, metrics, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
-- **Production Ready**: Zero data loss on crashes, resume from checkpoint
+- **Fault Tolerant**: Zero data loss on crashes, resume from checkpoint
 - **Multiple Providers**: OpenAI, Azure OpenAI, Anthropic Claude, Groq, MLX (Apple Silicon), and custom APIs
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
 - **Multi-Column Processing**: Generate multiple output columns with composition or JSON parsing
@@ -649,7 +649,7 @@ result = pipeline.execute()
 ```python
 .with_observer("langfuse", config={
     "public_key": "pk-lf-...",
-    "secret_key": "sk-lf-...",
+    "secret_key": "sk-lf-...",  # pragma: allowlist secret
     "host": "https://cloud.langfuse.com"  # optional
 })
 ```
@@ -707,7 +707,7 @@ See complete examples:
 ```python
 .with_observer("langfuse", config={
     "public_key": "pk-lf-...",
-    "secret_key": "sk-lf-..."
+    "secret_key": "sk-lf-..."  # pragma: allowlist secret
 })
 ```
 4. View detailed traces in Langfuse dashboard
