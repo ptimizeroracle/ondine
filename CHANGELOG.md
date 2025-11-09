@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-11-09
+
+### Added
+- **Documentation Quality Tools**
+  - `tools/check_docstring_coverage.py`: Scans and reports docstring coverage (93.62% achieved)
+  - `tools/generate_docstring_report.py`: Analyzes docstring quality with scoring system
+  - `tools/validate_docs_examples.py`: Validates code examples in documentation
+- **CI/CD Enhancements**
+  - `.github/workflows/docstring-quality.yml`: Automated docstring quality checks (80% threshold)
+  - `.github/workflows/validate-docs.yml`: Documentation example validation
+  - Integrated `pydocstyle` and `interrogate` tools
+- **Comprehensive API Documentation**
+  - Google-style docstrings with real-world examples for all core APIs
+  - `PipelineBuilder`: Complete examples for all builder methods
+  - `Pipeline`: Execution examples with error handling
+  - `QuickPipeline`: Simple and advanced usage patterns
+  - `DatasetSpec`, `LLMSpec`, `ProcessingSpec`: Detailed field descriptions
+  - `ExecutionResult`, `CostEstimate`, `ProcessingStats`: Result inspection examples
+  - `PipelineStage`: Template Method pattern explanation with custom stage example
+- **Example Script**
+  - `multi_stage_classification_groq.py`: 491-line multi-stage classification pipeline demonstrating scalability features
+
+### Fixed
+- **Critical API Bug Fixes**
+  - Removed usage of non-existent `with_processing()` method in examples and documentation
+  - Replaced with individual `.with_batch_size()` and `.with_concurrency()` calls
+  - Fixed in: `examples/azure_managed_identity.py`, `examples/19_azure_managed_identity_complete.py`, `docs/guides/azure-managed-identity.md`
+- **Result Access Corrections**
+  - Updated from `result.rows_processed` to `result.metrics.total_rows`
+  - Updated from `result.cost.total_cost` to `result.costs.total_cost`
+- **Documentation Fixes**
+  - Fixed logo paths in documentation (`../assets/images/` → `assets/images/`)
+  - Corrected broken internal links
+
+### Changed
+- **Branding & Messaging**
+  - Removed "Production-grade" marketing language throughout codebase
+  - Replaced with more accurate, modest language ("SDK", "Fault Tolerant", etc.)
+  - Toned down claims (removed "99.9% completion rate in production workloads")
+  - Updated README, docs/index.md, ondine/__init__.py, ondine/cli/main.py
+
+### Technical Details
+- 24 files changed
+- +1,849 lines of documentation and examples
+- -75 lines of outdated/incorrect content
+- 60% code coverage maintained
+- 378 tests passing, 3 skipped
+- Docstring coverage: 93.62% (threshold: 80%)
+
+## [1.1.0] - 2025-10-29
+
+### Added
+- **Azure Managed Identity Authentication**
+  - Native support for Azure Managed Identity (System-assigned and User-assigned)
+  - Automatic token acquisition and refresh for Azure OpenAI
+  - No API keys required when running on Azure infrastructure (VMs, App Service, Functions, AKS)
+  - `AzureManagedIdentityClient` for seamless Azure integration
+- **Examples**
+  - `examples/azure_managed_identity.py`: Basic Azure Managed Identity usage
+  - `examples/19_azure_managed_identity_complete.py`: Complete Azure integration example
+- **Documentation**
+  - `docs/guides/azure-managed-identity.md`: Comprehensive Azure Managed Identity guide
+  - Setup instructions for Azure VMs, App Service, Functions, and AKS
+  - Troubleshooting and best practices
+
+### Changed
+- Enhanced Azure OpenAI provider to support both API key and Managed Identity authentication
+- Updated logo to transparent background version (1.9MB)
+- Moved logo to `assets/images/` directory for better organization
+
+### Technical Details
+- All unit tests pass (378 passed, 3 skipped)
+- Backward compatible with existing Azure OpenAI API key authentication
+- Zero breaking changes
+
+## [1.0.4] - 2025-10-28
+
 ### Added
 - **Plugin-based observability system** leveraging LlamaIndex's built-in instrumentation
   - `with_observer()` method in PipelineBuilder for one-line observability configuration
