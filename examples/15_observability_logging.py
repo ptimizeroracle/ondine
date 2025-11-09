@@ -30,7 +30,7 @@ pipeline = (
         """
         Extract the brand and category from this product name.
         Return JSON: {"brand": "...", "category": "..."}
-        
+
         Product: {product}
         """
     )
@@ -56,4 +56,3 @@ print(result.data)
 
 print(f"\nTotal cost: ${result.costs.total_cost:.4f}")
 print(f"Total tokens: {result.costs.total_tokens}")
-

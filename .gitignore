@@ -19,9 +19,6 @@ tmp/
 # macOS files
 .DS_Store
 
-# CSV files (data files, can be large)
-*.csv
-
 # Test/example YAML files with data
 *bacon*.yaml
 test_similarity_composition.py
@@ -39,6 +36,7 @@ product_similarity_*.xlsx
 # Checkpoints directory
 .checkpoints/
 .env
+test_*.csv
 test_*.yaml
 test_output.*
 

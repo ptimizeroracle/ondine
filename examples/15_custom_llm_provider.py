@@ -12,6 +12,7 @@ import time
 from decimal import Decimal
 
 import pandas as pd
+
 from ondine.adapters import LLMClient, provider
 from ondine.api import PipelineBuilder
 from ondine.core.models import LLMResponse
@@ -43,7 +44,7 @@ class ReplicateClient(LLMClient):
             )
         except ImportError:
             raise ImportError(
-                "Replicate SDK not installed. Install with:\n" "  pip install replicate"
+                "Replicate SDK not installed. Install with:\n  pip install replicate"
             )
 
     def invoke(self, prompt: str, **kwargs) -> LLMResponse:

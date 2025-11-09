@@ -404,7 +404,7 @@ def create_composed_pipeline():
     stage4 = create_target_audience_pipeline()
 
     # Compose them
-    composed = (
+    return (
         PipelineComposer()
         .add_pipeline("primary_category", stage1)
         .add_pipeline("subcategory", stage2)
@@ -412,8 +412,6 @@ def create_composed_pipeline():
         .add_pipeline("target_audience", stage4)
         .build()
     )
-
-    return composed
 
 
 # ============================================================================

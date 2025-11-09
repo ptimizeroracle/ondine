@@ -6,6 +6,7 @@ and the Builder API (full control, explicit configuration).
 """
 
 import pandas as pd
+
 from ondine import PipelineBuilder, QuickPipeline
 
 # Create sample data
