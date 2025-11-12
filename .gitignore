@@ -37,6 +37,8 @@ product_similarity_*.xlsx
 .checkpoints/
 .env
 test_*.csv
+titles_classified*.csv
+*_stage*.csv
 test_*.yaml
 test_output.*
 
