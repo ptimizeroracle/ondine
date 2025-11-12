@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2025-11-12
+
+### Added
+- **Progress Tracking System**
+  - `ProgressTracker`: Pluggable abstraction layer for progress tracking
+  - `RichProgressTracker`: Rich terminal UI with real-time progress bars, cost tracking, and ETA
+  - `LoggingProgressTracker`: Fallback for non-TTY environments
+  - `NoopProgressTracker`: Disable progress tracking entirely
+  - Auto-detection of terminal capabilities with graceful fallback
+  - `.with_progress_mode()` API for configuring progress tracking ("auto", "rich", "logging", "none")
+  - Per-row progress updates with cost and throughput metrics
+
+- **Non-Retryable Error Classification**
+  - `NonRetryableError`: Base class for fatal errors that should fail fast
+  - `ModelNotFoundError`: Decommissioned or invalid models
+  - `InvalidAPIKeyError`: Authentication failures
+  - `ConfigurationError`: File not found, invalid config
+  - `QuotaExceededError`: Credits exhausted (not rate limit)
+  - `_classify_error()`: Leverages LlamaIndex native exceptions for error classification
+  - Automatic cancellation of remaining futures when fatal error occurs
+  - Prevents wasting time and money on retrying non-retryable errors
+
+### Fixed
+- **Cost Tracking**
+  - Fixed double-counting of costs in `LLMInvocationStage` (removed batch-level `context.add_cost()`)
+  - Costs now tracked accurately per-row only
+
+- **Error Handling**
+  - Fixed `AttributeError` when using SKIP policy: changed `self.llm_client.spec.model` to `self.llm_client.model`
+  - Fatal errors now fail after 1 attempt instead of retrying indefinitely
+
+### Changed
+- **Git Ignore**
+  - Added `titles_classified*.csv` and `*_stage*.csv` to `.gitignore` to prevent committing generated output files
+
+### Testing
+- **End-to-End Tests**
+  - Added comprehensive E2E integration tests covering API contract and behavior
+  - 25 new unit tests for non-retryable error classification
+  - 403 total tests passing with 100% backward compatibility
+
 ## [1.2.0] - 2025-11-09
 
 ### Added
