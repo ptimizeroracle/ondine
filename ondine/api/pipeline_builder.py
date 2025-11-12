@@ -716,6 +716,35 @@ class PipelineBuilder:
         self._executor = StreamingExecutor(chunk_size=chunk_size)
         return self
 
+    def with_progress_mode(self, mode: str = "auto") -> "PipelineBuilder":
+        """
+        Configure progress tracking mode.
+
+        Args:
+            mode: Progress tracking mode
+                - "auto": Auto-detect (rich if TTY, else logging) [default]
+                - "rich": Beautiful progress bars with ETA
+                - "logging": Simple log messages
+                - "none": Disable progress tracking
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # Use rich progress (beautiful UI)
+            builder.with_progress_mode("rich")
+
+            # Disable progress (faster, cleaner logs)
+            builder.with_progress_mode("none")
+
+            # Auto-detect (recommended)
+            builder.with_progress_mode("auto")
+            ```
+        """
+        self._processing_spec.progress_mode = mode
+        return self
+
     def with_stage(
         self,
         stage_name: str,

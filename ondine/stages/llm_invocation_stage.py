@@ -82,6 +82,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         """Execute LLM calls for all prompt batches."""
         response_batches: list[ResponseBatch] = []
 
+        # Start progress tracking if available
+        progress_tracker = getattr(context, "progress_tracker", None)
+        progress_task = None
+        if progress_tracker:
+            total_prompts = sum(len(b.prompts) for b in batches)
+            progress_task = progress_tracker.start_stage(
+                f"{self.name}: {context.total_rows} rows",
+                total_rows=total_prompts,
+            )
+            # Store for access in concurrent loop
+            self._current_progress_task = progress_task
+
         for _batch_idx, batch in enumerate(batches):
             self.logger.info(
                 f"Processing batch {batch.batch_id} ({len(batch.prompts)} prompts)"
@@ -99,6 +111,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             total_cost = sum(r.cost for r in responses)
             latencies = [r.latency_ms for r in responses]
 
+            # Progress is updated per-row in the concurrent loop above
+            # No need to update here
+
             # Create response batch
             response_batch = ResponseBatch(
                 responses=[r.text for r in responses],
@@ -110,9 +125,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             )
             response_batches.append(response_batch)
 
-            # Update context
-            context.add_cost(total_cost, total_tokens)
+            # Update context row tracking (costs already added per-row in concurrent loop)
             context.update_row(batch.metadata[-1].row_index if batch.metadata else 0)
+
+        # Finish progress tracking
+        if progress_tracker and progress_task:
+            progress_tracker.finish(progress_task)
 
         return response_batches
 
@@ -140,6 +158,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             # Collect results in submission order
             responses = []
+            progress_tracker = getattr(context, "progress_tracker", None)
+            progress_task = getattr(self, "_current_progress_task", None)
+
             for idx, future in enumerate(futures):
                 # Update progress periodically
                 if (idx + 1) % max(
@@ -153,6 +174,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 try:
                     response = future.result()
                     responses.append(response)
+
+                    # Update progress tracker per row
+                    if progress_tracker and progress_task:
+                        progress_tracker.update(
+                            progress_task, advance=1, cost=response.cost
+                        )
 
                     # Update context with row progress and cost
                     if context:
@@ -184,7 +211,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             text="[SKIPPED]",
                             tokens_in=0,
                             tokens_out=0,
-                            model=self.llm_client.spec.model,
+                            model=self.llm_client.model,
                             cost=Decimal("0.0"),
                             latency_ms=0.0,
                             metadata={"error": str(e), "action": "skipped"},

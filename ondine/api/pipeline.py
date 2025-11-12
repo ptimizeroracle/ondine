@@ -35,6 +35,7 @@ from ondine.orchestration import (
     StateManager,
     StreamingExecutor,
     SyncExecutor,
+    create_progress_tracker,
 )
 from ondine.stages import (
     DataLoaderStage,
@@ -435,6 +436,20 @@ class Pipeline:
         self, context: ExecutionContext, state_manager: StateManager
     ) -> pd.DataFrame:
         """Execute all pipeline stages with checkpointing."""
+        specs = self.specifications
+
+        # Create progress tracker
+        progress_tracker = create_progress_tracker(specs.processing.progress_mode)
+
+        # Execute with progress tracking
+        with progress_tracker:
+            context.progress_tracker = progress_tracker  # Store in context for stages
+            return self._execute_stages_with_tracking(context, state_manager)
+
+    def _execute_stages_with_tracking(
+        self, context: ExecutionContext, state_manager: StateManager
+    ) -> pd.DataFrame:
+        """Execute stages with progress tracking enabled."""
         specs = self.specifications
 
         # Create budget controller if max_budget specified
