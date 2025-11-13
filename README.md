@@ -888,18 +888,40 @@ MIT License - see LICENSE file for details
 
 ### Upcoming Features
 
-**RAG Integration (Next Release)**
-- Retrieval-Augmented Generation for context-aware dataset processing
-- Custom retrieval stage via plugin architecture
-- Vector store integration (Pinecone, Weaviate, ChromaDB)
-- Dynamic context injection per row
+**REST API Optimizations (Next Release)**
+
+These features are designed for users calling LLM REST APIs (OpenAI, Anthropic, Groq, etc.) and provide massive cost/speed improvements without requiring self-hosting:
+
+**Priority 1: Prefix Caching Support** ⭐⭐⭐⭐⭐
+- Automatic system prompt caching for OpenAI and Anthropic
+- Split system/user prompts for optimal cache reuse
+- 50-90% cost reduction for repetitive tasks
+- 80-85% latency reduction
+- **Impact**: $275 → $25 for 5M rows
+- **Effort**: 2-6 hours implementation
+
+**Priority 2: Batch Prompting (Multi-Row Processing)** ⭐⭐⭐⭐
+- Process 50-100 rows in a single API call
+- Structured JSON array output parsing
+- 100× reduction in API calls
+- 100× speedup for large datasets
+- **Impact**: 5M rows in 42 minutes (vs. 69 hours)
+- **Effort**: 40-60 hours (architectural change)
+
+**Priority 3: Smart Model Selection** ⭐⭐⭐
+- Automatic provider cost comparison
+- Suggest cheaper alternatives (Groq, local models)
+- Quality vs. cost trade-off analysis
+- **Impact**: 4-10× additional cost reduction
+- **Effort**: 20-30 hours
 
 **Other Planned Features**
-- Support for true streaming execution (in progress)
+- Enhanced streaming execution with memory efficiency
 - Multi-modal support (images, PDFs)
 - Distributed processing (Spark integration)
 - Web UI for pipeline management
 - Additional LLM providers (Cohere, AI21, Mistral)
+- RAG integration for context-aware processing
 
 ---
 
