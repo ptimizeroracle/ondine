@@ -843,9 +843,30 @@ MIT License - see LICENSE file for details
 
 ## Recent Updates
 
-### Version 1.0.0 (October 2025)
+### Version 1.2.1 (November 12, 2025)
+
+**Latest Release:**
+- Progress tracking enhancements
+- Bug fixes and stability improvements
+- Enhanced error handling
+
+### Version 1.2.0 (November 9, 2025)
 
 **New Features:**
+- Enhanced API documentation with examples
+- Fixed broken documentation references
+- Improved code organization
+
+### Version 1.1.0 (November 9, 2025)
+
+**New Features:**
+- Additional provider improvements
+- Enhanced testing coverage
+- Documentation updates
+
+### Version 1.0.x (October 2025)
+
+**Initial Release Features:**
 - **Provider Presets**: Pre-configured LLMSpec objects for common providers (80% code reduction)
 - **Simplified Configuration**: New `with_llm_spec()` method accepting LLMSpec objects
 - **MLX Integration**: Local inference on Apple Silicon (M1/M2/M3/M4) - 100% free, private, offline
