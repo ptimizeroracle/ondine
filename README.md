@@ -843,9 +843,30 @@ MIT License - see LICENSE file for details
 
 ## Recent Updates
 
-### Version 1.0.0 (October 2025)
+### Version 1.2.1 (November 12, 2025)
+
+**Latest Release:**
+- Progress tracking enhancements
+- Bug fixes and stability improvements
+- Enhanced error handling
+
+### Version 1.2.0 (November 9, 2025)
 
 **New Features:**
+- Enhanced API documentation with examples
+- Fixed broken documentation references
+- Improved code organization
+
+### Version 1.1.0 (November 9, 2025)
+
+**New Features:**
+- Additional provider improvements
+- Enhanced testing coverage
+- Documentation updates
+
+### Version 1.0.x (October 2025)
+
+**Initial Release Features:**
 - **Provider Presets**: Pre-configured LLMSpec objects for common providers (80% code reduction)
 - **Simplified Configuration**: New `with_llm_spec()` method accepting LLMSpec objects
 - **MLX Integration**: Local inference on Apple Silicon (M1/M2/M3/M4) - 100% free, private, offline
@@ -867,17 +888,18 @@ MIT License - see LICENSE file for details
 
 ### Upcoming Features
 
-**RAG Integration (Next Release)**
-- Retrieval-Augmented Generation for context-aware dataset processing
-- Custom retrieval stage via plugin architecture
-- Vector store integration (Pinecone, Weaviate, ChromaDB)
-- Dynamic context injection per row
-- See `docs/DESIGN_IMPROVEMENT.md` for detailed design exploration
+**Performance & Cost Optimizations**
+- Prefix caching support (90% cost reduction)
+- Batch prompting (process multiple rows per API call)
+- Smart model selection and cost comparison
 
-**Other Planned Features**
-- Support for true streaming execution (in progress)
+**New Capabilities**
+- Enhanced streaming execution
 - Multi-modal support (images, PDFs)
+- RAG integration for context-aware processing
 - Distributed processing (Spark integration)
+
+**Developer Experience**
 - Web UI for pipeline management
 - Additional LLM providers (Cohere, AI21, Mistral)
 
