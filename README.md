@@ -888,40 +888,20 @@ MIT License - see LICENSE file for details
 
 ### Upcoming Features
 
-**REST API Optimizations (Next Release)**
+**Performance & Cost Optimizations**
+- Prefix caching support (90% cost reduction)
+- Batch prompting (process multiple rows per API call)
+- Smart model selection and cost comparison
 
-These features are designed for users calling LLM REST APIs (OpenAI, Anthropic, Groq, etc.) and provide massive cost/speed improvements without requiring self-hosting:
-
-**Priority 1: Prefix Caching Support** ⭐⭐⭐⭐⭐
-- Automatic system prompt caching for OpenAI and Anthropic
-- Split system/user prompts for optimal cache reuse
-- 50-90% cost reduction for repetitive tasks
-- 80-85% latency reduction
-- **Impact**: $275 → $25 for 5M rows
-- **Effort**: 2-6 hours implementation
-
-**Priority 2: Batch Prompting (Multi-Row Processing)** ⭐⭐⭐⭐
-- Process 50-100 rows in a single API call
-- Structured JSON array output parsing
-- 100× reduction in API calls
-- 100× speedup for large datasets
-- **Impact**: 5M rows in 42 minutes (vs. 69 hours)
-- **Effort**: 40-60 hours (architectural change)
-
-**Priority 3: Smart Model Selection** ⭐⭐⭐
-- Automatic provider cost comparison
-- Suggest cheaper alternatives (Groq, local models)
-- Quality vs. cost trade-off analysis
-- **Impact**: 4-10× additional cost reduction
-- **Effort**: 20-30 hours
-
-**Other Planned Features**
-- Enhanced streaming execution with memory efficiency
+**New Capabilities**
+- Enhanced streaming execution
 - Multi-modal support (images, PDFs)
+- RAG integration for context-aware processing
 - Distributed processing (Spark integration)
+
+**Developer Experience**
 - Web UI for pipeline management
 - Additional LLM providers (Cohere, AI21, Mistral)
-- RAG integration for context-aware processing
 
 ---
 
