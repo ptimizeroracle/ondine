@@ -872,7 +872,6 @@ MIT License - see LICENSE file for details
 - Custom retrieval stage via plugin architecture
 - Vector store integration (Pinecone, Weaviate, ChromaDB)
 - Dynamic context injection per row
-- See `docs/DESIGN_IMPROVEMENT.md` for detailed design exploration
 
 **Other Planned Features**
 - Support for true streaming execution (in progress)
