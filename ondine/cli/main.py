@@ -78,37 +78,42 @@ assert set(LLMProvider) == set(PROVIDER_METADATA.keys()), (
 
 
 ONDINE_ART = r"""
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌ ▀▀▀▀█░█▀▀▀▀ ▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌▐░▌    ▐░▌▐░▌
-▐░▌       ▐░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌ ▐░▌   ▐░▌▐░█▄▄▄▄▄▄▄▄▄
-▐░▌       ▐░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌  ▐░▌  ▐░▌▐░░░░░░░░░░░▌
-▐░▌       ▐░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌   ▐░▌ ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌    ▐░▌     ▐░▌    ▐░▌▐░▌▐░▌
-▐░█▄▄▄▄▄▄▄█░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌▄▄▄▄█░█▄▄▄▄ ▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░▌      ▐░░▌▐░░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀
+                  ▓▒▒                                                                                                                    
+            ▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓                                           ▓▓▓▓▓                                       ▓▓▓▒▒▓                 
+          ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                                         ▓▓▓▓▓                                         ▒▒▒▒▒▒▒▒▒▒▒          
+        ▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▓▓▒▓▓▒▓                                       ▓▒▓▒▒                                             ▒▒▒▒▒▒▒▒▒▒▒      
+       ▓▓▓▓▓▓▒▒▒▒▓▓▒▓▒▒▒▒▒▓▓▒▓▓▒   ▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓         ▓▓▓▒▓▓▓▓▓  ▓▓▓▓▓  ▓▓▓▒▓   ▓▓▓▓▓  ▓▓▓▓▓▓▒▓          ▓▓▓▓▓▓▓▓▓       ▒▒▒▒▒▒▒▓   
+       ▓▓▓▓▓▒▒▒▒▒▒▒▒▒▓▒▒▒▒▒▓▓▓▒▓▓  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ▓▓▓▒▓▒▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓   ▓▒▓▓▒▓▒▓▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓▓▓▓▓▓▓▓▓▓       ▒▒▒▒▒▒▓▒ 
+      ▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▒  ▓▓▓▓▒▒      ▒▒▒▒▓    ▓▓▓▒▓▓      ▓▓▓▓▓▓▓   ▓▓▓▓   ▓▓▓▓▒▓      ▓▓▓▓▓▓   ▓▓▓▓▓      ▓▓▓▒▓▓     ▒▒▒▒▒▒▒  
+      ▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓  ▓▓▓▓▓        ▓▓▓▓▓  ▓▓▓▓▓         ▓▓▓▓▓▓  ▓▓▓▓▒▓  ▓▓▓▓▓        ▓▓▓▓▒  ▓▓▒▓▓         ▓▓▓▓  ▒▒▒▒▒▒▒▒▒   
+       ▓▓▓▓▓▒▒▓▒▓▒▒▒▒▒▒▓▒▒▒▒▓▓▓▓▓  ▓▓▓▓▓        ▓▓▓▓▓  ▓▓▓▓▓          ▓▓▓▓▓  ▓▓▓▓▓   ▓▓▒▒▓        ▓▓▓▓▓  ▒▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒   
+       ▓▓▓▓▓▒▒▒▒▒▓▓▒▓▓▒▒▒▒▒▓▓▓▓▓   ▓▓▓▓▓        ▓▓▓▓▓  ▓▓▓▓▓          ▓▓▓▓▓  ▓▓▓▓▓   ▓▒▓▒▓        ▓▓▓▓▓  ▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒      
+        ▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓    ▓▓▓▓▓        ▓▓▓▓▓  ▓▓▓▓▒▓        ▓▓▓▓▒▓  ▓▓▓▒▓   ▓▓▓▓▓        ▓▒▓▓▓  ▒▓▓▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓        
+         ▓▓▓▓▓▓▓▓▓▒▒▒▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓        ▓▓▓▒▓   ▓▓▓▓▓▓▓    ▓▒▓▓▓▓▓▓  ▓▓▓▓▓   ▓▓▓▓▓        ▓▒▓▒▓   ▓▓▓▓▓▓▒▒▒▒▒▒▓▓▒▒▒▒▒            
+           ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓       ▓▓▓▓▓        ▓▓▓▓▓     ▓▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓  ▓▓▓▓▓   ▓▓▓▒▓        ▓▓▓▒▒   ▒▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓               
+               ▓▓▓▓▓▓▓▓▓           ▓▓▓▓▓        ▓▓▓▓▓       ▓▓▓▓▓▓▓   ▓▓▓▓▓  ▓▓▓▓▓   ▓▓▓▒▓        ▒▓▓▓▓        ▓▓▓▓▓▓▓▓                  
 """
 
 
 def show_banner():
-    """Display the Ondine banner (centered, creative, robust)."""
-    # Color gradient: cyan to magenta
+    """Display the Ondine banner with nuanced blue gradient (water theme)."""
+    # Nuanced blue gradient: light blue → deep blue → bright blue (ocean depth)
     lines = ONDINE_ART.strip().split("\n")
     colored_lines = []
     colors = [
-        "bright_cyan",
-        "cyan",
-        "bright_blue",
-        "blue",
-        "bright_magenta",
-        "magenta",
-        "bright_magenta",
-        "blue",
-        "bright_blue",
-        "cyan",
-        "bright_cyan",
+        "bright_cyan",      # Surface water (light)
+        "cyan",             # Shallow water
+        "bright_blue",      # Mid-depth
+        "blue",             # Deep water
+        "bright_blue",      # Main logo (bright)
+        "blue",             # Depth
+        "bright_blue",      # Highlight
+        "blue",             # Depth
+        "bright_blue",      # Rising
+        "cyan",             # Shallow
+        "bright_cyan",      # Surface
+        "cyan",             # Ripple
+        "bright_blue",      # Wave
     ]
 
     for i, line in enumerate(lines):
@@ -116,12 +121,12 @@ def show_banner():
         colored_lines.append(Text(line, style=f"bold {color}"))
 
     title = Group(*colored_lines)
-    subtitle_text = Text("The LLM Dataset Engine", style="dim italic bright_white")
+    subtitle_text = Text("The LLM Dataset Engine", style="dim italic bright_blue")
     content = Group(title, "", subtitle_text)
 
     console.print()
     console.print(content)
-    console.print("[bold bright_cyan]" + "─" * 80 + "[/bold bright_cyan]")
+    console.print("[bold bright_blue]" + "─" * 80 + "[/bold bright_blue]")
     console.print()
 
 
