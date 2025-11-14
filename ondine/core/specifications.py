@@ -215,6 +215,10 @@ class LLMSpec(BaseModel):
     )
     max_tokens: int | None = Field(default=None, gt=0, description="Max output tokens")
     top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Nucleus sampling")
+    enable_prefix_caching: bool = Field(
+        default=True,
+        description="Enable prompt caching (OpenAI/Anthropic auto-cache system messages)",
+    )
 
     # Azure-specific
     azure_endpoint: str | None = Field(

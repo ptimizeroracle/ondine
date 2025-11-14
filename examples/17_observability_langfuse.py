@@ -8,14 +8,14 @@ Setup:
     1. Get Langfuse API keys:
        - Sign up at https://cloud.langfuse.com
        - Or self-host: https://langfuse.com/docs/deployment/self-host
-    
+
     2. Install Langfuse SDK:
        pip install langfuse
-    
+
     3. Set environment variables (or pass in config):
        export LANGFUSE_PUBLIC_KEY="pk-lf-..."
        export LANGFUSE_SECRET_KEY="sk-lf-..."
-    
+
     4. Run this example and view traces in Langfuse UI
 """
 
@@ -53,7 +53,7 @@ pipeline = (
     .with_prompt(
         """
         Answer the following question concisely.
-        
+
         Question: {question}
         Answer:"""
     )
@@ -87,4 +87,3 @@ print("- Full prompt and completion tracking")
 print("- Token usage and cost analysis")
 print("- Latency metrics")
 print("- Quality evaluations")
-

@@ -10,7 +10,7 @@ Setup:
          -p 16686:16686 \
          -p 4318:4318 \
          jaegertracing/all-in-one:latest
-    
+
     2. Install OpenTelemetry exporters:
        pip install opentelemetry-exporter-jaeger
 
@@ -60,7 +60,7 @@ pipeline = (
     .with_prompt(
         """
         Classify the sentiment of this review as: positive, negative, or neutral.
-        
+
         Review: {review}
         """
     )
@@ -84,9 +84,8 @@ print("\nResults:")
 print(result.data)
 
 print(f"\nTotal cost: ${result.costs.total_cost:.4f}")
-print(f"\nView traces at: http://localhost:16686")
+print("\nView traces at: http://localhost:16686")
 print('Search for service "ondine-example" in Jaeger UI')
 
 # Flush traces before exit
 tracer_provider.force_flush()
-

@@ -82,6 +82,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         """Execute LLM calls for all prompt batches."""
         response_batches: list[ResponseBatch] = []
 
+        # Initialize token tracking in context.intermediate_data (leverage existing design)
+        if "token_tracking" not in context.intermediate_data:
+            context.intermediate_data["token_tracking"] = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+
         # Start progress tracking if available
         progress_tracker = getattr(context, "progress_tracker", None)
         progress_task = None
@@ -99,8 +106,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 f"Processing batch {batch.batch_id} ({len(batch.prompts)} prompts)"
             )
 
-            # Process batch with concurrency
-            responses = self._process_batch_concurrent(batch.prompts, context)
+            # Process batch with concurrency (pass metadata for system_message extraction)
+            responses = self._process_batch_concurrent(
+                batch.prompts, batch.metadata, context
+            )
 
             # Notify progress after each batch
             if hasattr(context, "notify_progress"):
@@ -134,7 +143,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return response_batches
 
-    def _process_batch_concurrent(self, prompts: list[str], context: Any) -> list[Any]:
+    def _process_batch_concurrent(
+        self, prompts: list[str], metadata: list, context: Any
+    ) -> list[Any]:
         """Process prompts concurrently while maintaining order."""
         self.logger.info(
             f"Processing {len(prompts)} prompts with concurrency={self.concurrency}"
@@ -148,6 +159,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 executor.submit(
                     self._invoke_with_retry_and_ratelimit,
                     prompt,
+                    metadata[idx] if idx < len(metadata) else None,
                     context,
                     context.last_processed_row + idx if context else idx,
                 )
@@ -188,6 +200,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             context.add_cost(
                                 response.cost, response.tokens_in + response.tokens_out
                             )
+                            # Track input/output tokens separately (leverage intermediate_data)
+                            context.intermediate_data["token_tracking"][
+                                "input_tokens"
+                            ] += response.tokens_in
+                            context.intermediate_data["token_tracking"][
+                                "output_tokens"
+                            ] += response.tokens_out
                 except Exception as e:
                     prompt = prompts[idx]
 
@@ -331,10 +350,19 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         return error
 
     def _invoke_with_retry_and_ratelimit(
-        self, prompt: str, context: Any = None, row_index: int = 0
+        self,
+        prompt: str,
+        row_metadata: Any = None,
+        context: Any = None,
+        row_index: int = 0,
     ) -> Any:
         """Invoke LLM with rate limiting and retries."""
         time.time()
+
+        # Extract system message from row metadata
+        system_message = None
+        if row_metadata and hasattr(row_metadata, "custom") and row_metadata.custom:
+            system_message = row_metadata.custom.get("system_message")
 
         def _invoke() -> Any:
             # Acquire rate limit token
@@ -343,7 +371,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             # Invoke LLM with error classification
             try:
-                return self.llm_client.invoke(prompt)
+                # Pass system_message as kwarg for caching optimization
+                return self.llm_client.invoke(prompt, system_message=system_message)
             except Exception as e:
                 # Classify error to determine if retryable
                 classified = self._classify_error(e)
