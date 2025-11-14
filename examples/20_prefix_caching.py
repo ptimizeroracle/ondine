@@ -98,7 +98,7 @@ def example_with_caching():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    pipeline = (
+    pipeline = (  # noqa: F841
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -143,7 +143,7 @@ def example_with_caching_alternative_syntax():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    pipeline = (
+    pipeline = (  # noqa: F841
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -179,7 +179,7 @@ def example_anthropic_caching():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    pipeline = (
+    pipeline = (  # noqa: F841
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -228,7 +228,7 @@ def example_shared_context_multi_stage():
     )
 
     # Shared context (1024+ tokens) - cached once, reused by all stages!
-    SHARED_CONTEXT = """You are an expert e-commerce data analyst with deep knowledge of:
+    shared_context = """You are an expert e-commerce data analyst with deep knowledge of:
 - Product categorization and classification
 - Quality assessment and evaluation
 - Target audience identification
@@ -251,19 +251,19 @@ GENERAL PRINCIPLES:
     print("\n🎯 Key benefit: Stage 2 REUSES Stage 1's cache!")
 
     # Stage 1: Primary category
-    pipeline1 = (
+    pipeline1 = (  # noqa: F841
         PipelineBuilder.create()
         .from_dataframe(products, input_columns=["title"], output_columns=["category"])
         .with_prompt(
             "TASK: Classify into primary category\nINPUT: {title}\nCATEGORIES: Electronics, Home & Kitchen, Clothing & Fashion\nOUTPUT:"
         )
-        .with_system_prompt(SHARED_CONTEXT)  # Creates cache
+        .with_system_prompt(shared_context)  # Creates cache
         .with_llm(provider="openai", model="gpt-4o-mini")
         .build()
     )
 
     # Stage 2: Subcategory (reuses Stage 1's cache!)
-    pipeline2 = (
+    pipeline2 = (  # noqa: F841
         PipelineBuilder.create()
         .from_dataframe(
             products, input_columns=["title"], output_columns=["subcategory"]
@@ -271,7 +271,7 @@ GENERAL PRINCIPLES:
         .with_prompt(
             "TASK: Determine specific subcategory (2-4 words)\nINPUT: {title}\nOUTPUT:"
         )
-        .with_system_prompt(SHARED_CONTEXT)  # Same cache!
+        .with_system_prompt(shared_context)  # Same cache!
         .with_llm(provider="openai", model="gpt-4o-mini")
         .build()
     )
