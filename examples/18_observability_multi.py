@@ -28,7 +28,7 @@ pipeline = (
         """
         Classify this email and detect if it's spam.
         Return JSON: {"category": "personal|work|spam", "spam": true|false}
-        
+
         Email: {email}
         """
     )
@@ -76,4 +76,3 @@ print("\nObservability data available in:")
 print("- Console logs (via LoggingObserver)")
 print("- OpenTelemetry traces (if exporter configured)")
 print("- Langfuse dashboard (if enabled)")
-

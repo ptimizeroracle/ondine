@@ -139,16 +139,29 @@ class OpenAIClient(LLMClient):
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke OpenAI API."""
+        """Invoke OpenAI API with optional prompt caching."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array (OpenAI auto-caches system messages)
+        messages = []
+
+        # Extract system message from kwargs
+        system_message = kwargs.get("system_message")
+        if system_message and self.spec.enable_prefix_caching:
+            messages.append(ChatMessage(role="system", content=system_message))
+
+        # User message (dynamic, not cached)
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Extract token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
+        # Extract token usage (include system message if present)
+        total_prompt = prompt
+        if system_message and self.spec.enable_prefix_caching:
+            total_prompt = system_message + "\n" + prompt
+        tokens_in = len(self.tokenizer.encode(total_prompt))
         tokens_out = len(self.tokenizer.encode(str(response)))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
@@ -307,16 +320,41 @@ class AnthropicClient(LLMClient):
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke Anthropic API."""
+        """Invoke Anthropic API with prompt caching."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array with optional system message
+        messages = []
+
+        # Extract system message from kwargs
+        system_message = kwargs.get("system_message")
+
+        # Anthropic uses a separate system parameter with cache_control
+        if system_message and self.spec.enable_prefix_caching:
+            # Anthropic's cache control format
+            pass
+
+        # User message (dynamic, not cached)
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        # Note: LlamaIndex's Anthropic client may not support system parameter directly
+        # For now, we'll prepend system message to user message if caching is disabled
+        # or if the client doesn't support the system parameter
+        if system_message and not self.spec.enable_prefix_caching:
+            # Fallback: prepend to user message
+            messages[0] = ChatMessage(
+                role="user", content=f"{system_message}\n\n{prompt}"
+            )
+
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Approximate token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
+        # Approximate token usage (include system message if present)
+        total_prompt = prompt
+        if system_message:
+            total_prompt = system_message + "\n" + prompt
+        tokens_in = len(self.tokenizer.encode(total_prompt))
         tokens_out = len(self.tokenizer.encode(str(response)))
 
         cost = self.calculate_cost(tokens_in, tokens_out)

@@ -7,6 +7,7 @@ for simple use cases.
 
 # Create sample CSV (in real use, this would be an existing file)
 import pandas as pd
+
 from ondine import DatasetProcessor
 
 sample_data = pd.DataFrame(

@@ -11,6 +11,7 @@ Use cases span multiple industries:
 """
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 
 # Sample customer feedback data

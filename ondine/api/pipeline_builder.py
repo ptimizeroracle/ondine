@@ -260,6 +260,48 @@ class PipelineBuilder:
         )
         return self
 
+    def with_system_prompt(self, system_prompt: str) -> "PipelineBuilder":
+        """
+        Set system prompt for caching optimization.
+
+        System prompts are cached by providers (OpenAI, Anthropic) and reused
+        across all rows, reducing costs by 50-90% for the cached portion.
+
+        This method should be called after with_prompt() to set or update the
+        system message separately from the user prompt template.
+
+        Args:
+            system_prompt: Static instructions/context (will be cached)
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["text"])
+                .with_prompt("Review: {text}")  # Dynamic per row
+                .with_system_prompt('''
+                    You are a sentiment classifier.
+                    Classify reviews as: positive, negative, or neutral.
+                    Return only the label, nothing else.
+                ''')  # Cached across all rows
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .build()
+            )
+            ```
+
+        Note:
+            Can also be set via with_prompt(template, system_message=...).
+            This method provides a more explicit API for caching optimization.
+        """
+        if not self._prompt_spec:
+            raise ValueError("Call with_prompt() before with_system_prompt()")
+
+        self._prompt_spec.system_message = system_prompt
+        return self
+
     def with_llm(
         self,
         provider: str,
