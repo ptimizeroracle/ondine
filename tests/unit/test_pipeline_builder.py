@@ -67,7 +67,7 @@ class TestPipelineBuilder:
         """Test configuring processing parameters."""
         builder = (
             PipelineBuilder.create()
-            .with_batch_size(50)
+            .with_processing_batch_size(50)  # Internal batching (renamed)
             .with_concurrency(10)
             .with_checkpoint_interval(250)
             .with_rate_limit(30)

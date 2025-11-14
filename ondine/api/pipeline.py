@@ -38,6 +38,8 @@ from ondine.orchestration import (
     create_progress_tracker,
 )
 from ondine.stages import (
+    BatchAggregatorStage,
+    BatchDisaggregatorStage,
     DataLoaderStage,
     LLMInvocationStage,
     PromptFormatterStage,
@@ -497,6 +499,29 @@ class Pipeline:
         batches = self._execute_stage(formatter, (df, specs.prompt), context)
         context.intermediate_data["prompt_batches"] = batches
 
+        # Stage 2.5: Aggregate into batch prompts (if batch_size > 1)
+        if specs.prompt.batch_size > 1:
+            from ondine.strategies.json_batch_strategy import JsonBatchStrategy
+
+            # Select strategy
+            if specs.prompt.batch_strategy == "json":
+                strategy = JsonBatchStrategy()
+            else:
+                # CSV strategy will be implemented in Phase 4
+                strategy = JsonBatchStrategy()  # Fallback to JSON
+
+            aggregator = BatchAggregatorStage(
+                batch_size=specs.prompt.batch_size,
+                strategy=strategy,
+                model=specs.llm.model,
+                validate_context_window=True,
+            )
+            batches = self._execute_stage(aggregator, batches, context)
+            context.intermediate_data["aggregated_batches"] = batches
+            self.logger.info(
+                f"Batch aggregation enabled: {specs.prompt.batch_size} rows per API call"
+            )
+
         # Stage 3: Invoke LLM
         llm_client = create_llm_client(specs.llm)
         rate_limiter = (
@@ -528,6 +553,26 @@ class Pipeline:
         # Save checkpoint after expensive LLM stage
         if state_manager.should_checkpoint(context.last_processed_row):
             state_manager.save_checkpoint(context)
+
+        # Stage 3.5: Disaggregate batch responses (if batch_size > 1)
+        if specs.prompt.batch_size > 1:
+            from ondine.strategies.json_batch_strategy import JsonBatchStrategy
+
+            # Select strategy (same as aggregator)
+            if specs.prompt.batch_strategy == "json":
+                strategy = JsonBatchStrategy()
+            else:
+                strategy = JsonBatchStrategy()  # Fallback to JSON
+
+            disaggregator = BatchDisaggregatorStage(
+                strategy=strategy,
+                retry_failed_individually=True,
+            )
+            response_batches = self._execute_stage(
+                disaggregator, response_batches, context
+            )
+            context.intermediate_data["disaggregated_responses"] = response_batches
+            self.logger.info("Batch disaggregation complete")
 
         # Stage 4: Parse responses (using configured parser)
         # Check if custom parser provided in metadata
