@@ -11,6 +11,7 @@ Use Cases:
 """
 
 import pandas as pd
+
 from ondine.api import PipelineBuilder, PipelineComposer
 
 # Sample data: E-commerce product matching

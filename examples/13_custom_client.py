@@ -17,6 +17,7 @@ from decimal import Decimal
 from typing import Any
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse

@@ -6,6 +6,7 @@ during pipeline execution.
 """
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 
 # Create larger dataset

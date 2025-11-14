@@ -6,6 +6,7 @@ responses using JSON output.
 """
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 
 # Sample product descriptions

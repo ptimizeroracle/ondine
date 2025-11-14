@@ -13,6 +13,9 @@ wheels/
 *.xlsx
 *.xls
 
+# CSV files
+*.csv
+
 # Temporary directory
 tmp/
 

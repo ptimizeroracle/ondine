@@ -78,11 +78,11 @@ class TestOpenAICompatibleClient:
             # No api_key provided
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI") as mock_openai:
+        with patch("ondine.adapters.llm_client.OpenAILike") as mock_openai_like:
             OpenAICompatibleClient(spec)
-            # Should pass api_key to OpenAI (required by library)  # pragma: allowlist secret
-            mock_openai.assert_called_once()
-            call_kwargs = mock_openai.call_args.kwargs
+            # Should pass api_key to OpenAILike (required by library)  # pragma: allowlist secret
+            mock_openai_like.assert_called_once()
+            call_kwargs = mock_openai_like.call_args.kwargs
             assert "api_key" in call_kwargs  # pragma: allowlist secret
             # Should use "dummy" or env var
             assert (
@@ -90,8 +90,8 @@ class TestOpenAICompatibleClient:
                 or len(call_kwargs["api_key"]) > 0  # pragma: allowlist secret
             )
 
-    @patch("ondine.adapters.llm_client.OpenAI")
-    def test_invoke_returns_llm_response(self, mock_openai_class):
+    @patch("ondine.adapters.llm_client.OpenAILike")
+    def test_invoke_returns_llm_response(self, mock_openai_like_class):
         """Should invoke API and return LLMResponse."""
         spec = LLMSpec(
             provider=LLMProvider.OPENAI_COMPATIBLE,
@@ -103,14 +103,20 @@ class TestOpenAICompatibleClient:
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
 
-        # Mock the response
+        # Mock the response with raw.usage for token tracking
         mock_response = MagicMock()
         mock_response.__str__ = MagicMock(
             return_value="The capital of France is Paris."
         )
+        mock_response.raw = MagicMock()
+        mock_response.raw.usage = MagicMock()
+        mock_response.raw.usage.prompt_tokens = 10
+        mock_response.raw.usage.completion_tokens = 8
+        mock_response.raw.usage.prompt_tokens_details = None
+
         mock_client_instance = MagicMock()
         mock_client_instance.chat.return_value = mock_response
-        mock_openai_class.return_value = mock_client_instance
+        mock_openai_like_class.return_value = mock_client_instance
 
         client = OpenAICompatibleClient(spec)
         response = client.invoke("What is the capital of France?")

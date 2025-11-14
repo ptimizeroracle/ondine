@@ -127,7 +127,13 @@ class TestPromptFormatterStage:
 
         batches = stage.process((df, prompt_spec), context)
 
-        assert "You are a helpful assistant" in batches[0].prompts[0]
+        # System message should be in metadata, NOT in prompt
+        assert "You are a helpful assistant" not in batches[0].prompts[0]
+        assert batches[0].metadata[0].custom is not None
+        assert (
+            batches[0].metadata[0].custom["system_message"]
+            == "You are a helpful assistant."
+        )
 
     def test_prompt_formatter_batching(self):
         """Test prompt formatter creates batches correctly."""

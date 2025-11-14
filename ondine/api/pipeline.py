@@ -331,14 +331,19 @@ class Pipeline:
             context.end_time = datetime.now()
 
             # Create execution result
+            # Extract token tracking from intermediate_data (populated by LLMInvocationStage)
+            token_tracking = context.intermediate_data.get("token_tracking", {})
+            input_tokens = token_tracking.get("input_tokens", 0)
+            output_tokens = token_tracking.get("output_tokens", 0)
+
             result = ExecutionResult(
                 data=result_df,
                 metrics=context.get_stats(),
                 costs=CostEstimate(
                     total_cost=context.accumulated_cost,
                     total_tokens=context.accumulated_tokens,
-                    input_tokens=0,
-                    output_tokens=0,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                     rows=context.total_rows,
                     confidence="actual",
                 ),

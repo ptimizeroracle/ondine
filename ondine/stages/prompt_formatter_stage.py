@@ -50,8 +50,9 @@ class PromptFormatterStage(
         prompts: list[str] = []
         metadata_list: list[RowMetadata] = []
 
-        # Extract template variables
+        # Extract template variables and system message
         template_str = prompt_spec.template
+        system_message = prompt_spec.system_message
 
         # Create template renderer
         if self.use_jinja2:
@@ -72,23 +73,25 @@ class PromptFormatterStage(
                 else:
                     prompt = template_str.format(**row_data)
 
-                # Add few-shot examples if specified
+                # Add few-shot examples if specified (but NOT system message)
                 if prompt_spec.few_shot_examples:
                     examples_text = self._format_few_shot_examples(
                         prompt_spec.few_shot_examples
                     )
                     prompt = f"{examples_text}\n\n{prompt}"
 
-                # Add system message if specified
-                if prompt_spec.system_message:
-                    prompt = f"{prompt_spec.system_message}\n\n{prompt}"
+                # NOTE: Do NOT add system message to prompt here
+                # It will be passed separately via metadata for caching optimization
 
                 prompts.append(prompt)
 
-                # Create metadata
+                # Create metadata with system message for LLM stage
                 metadata = RowMetadata(
                     row_index=idx,
                     row_id=row.get("id", None),
+                    custom={"system_message": system_message}
+                    if system_message
+                    else None,
                 )
                 metadata_list.append(metadata)
 

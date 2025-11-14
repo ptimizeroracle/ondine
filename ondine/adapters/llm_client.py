@@ -25,6 +25,7 @@ from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.azure_openai import AzureOpenAI
 from llama_index.llms.groq import Groq
 from llama_index.llms.openai import OpenAI
+from llama_index.llms.openai_like import OpenAILike
 
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMProvider, LLMSpec
@@ -139,17 +140,71 @@ class OpenAIClient(LLMClient):
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke OpenAI API."""
+        """Invoke OpenAI API with optional prompt caching."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array (OpenAI auto-caches system messages)
+        messages = []
+
+        # Extract system message from kwargs
+        system_message = kwargs.get("system_message")
+        if system_message and self.spec.enable_prefix_caching:
+            messages.append(ChatMessage(role="system", content=system_message))
+
+        # User message (dynamic, not cached)
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Extract token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
-        tokens_out = len(self.tokenizer.encode(str(response)))
+        # Extract token usage from API response (OpenAI returns actual counts)
+        tokens_in = 0
+        tokens_out = 0
+        cached_tokens = 0
+
+        if hasattr(response, "raw") and response.raw and hasattr(response.raw, "usage"):
+            usage = response.raw.usage
+            tokens_in = getattr(usage, "prompt_tokens", 0)
+            tokens_out = getattr(usage, "completion_tokens", 0)
+
+            # Extract cached tokens (OpenAI format: nested in prompt_tokens_details)
+            if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
+                cached_tokens = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
+
+            # Debug: Log first response to see what OpenAI returns
+            if not hasattr(self, "_debug_logged"):
+                self._debug_logged = True
+                from ondine.utils import get_logger
+
+                logger = get_logger(f"{__name__}.OpenAIClient")
+                prompt_details = getattr(usage, "prompt_tokens_details", None)
+                logger.info(
+                    f"🔍 DEBUG - First API Response (OpenAI):\n"
+                    f"   prompt_tokens: {tokens_in}\n"
+                    f"   completion_tokens: {tokens_out}\n"
+                    f"   prompt_tokens_details: {prompt_details}\n"
+                    f"   cached_tokens (extracted): {cached_tokens}"
+                )
+
+            # Log if caching is detected
+            if cached_tokens > 0:
+                from ondine.utils import get_logger
+
+                logger = get_logger(f"{__name__}.OpenAIClient")
+                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                logger.debug(
+                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                )
+
+        # Fallback to tiktoken estimation if API doesn't provide counts
+        if tokens_in == 0:
+            total_prompt = prompt
+            if system_message and self.spec.enable_prefix_caching:
+                total_prompt = system_message + "\n" + prompt
+            tokens_in = len(self.tokenizer.encode(total_prompt))
+        if tokens_out == 0:
+            tokens_out = len(self.tokenizer.encode(str(response)))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
 
@@ -307,16 +362,38 @@ class AnthropicClient(LLMClient):
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke Anthropic API."""
+        """Invoke Anthropic API with prompt caching."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array with optional system message
+        messages = []
+
+        # Extract system message from kwargs
+        system_message = kwargs.get("system_message")
+
+        # Anthropic uses a separate system parameter with cache_control
+        # Until explicit cache_control is wired up, send system message to avoid dropping it
+        if system_message:
+            if self.spec.enable_prefix_caching:
+                # TODO: Wire up explicit cache_control system param when LlamaIndex supports it
+                # For now, send as system message (Anthropic caches automatically)
+                messages.append(ChatMessage(role="system", content=system_message))
+            else:
+                # Fallback: prepend to user message if caching disabled
+                prompt = f"{system_message}\n\n{prompt}"
+
+        # User message (dynamic, not cached)
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Approximate token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
+        # Approximate token usage (include system message if present)
+        total_prompt = prompt
+        if system_message:
+            total_prompt = system_message + "\n" + prompt
+        tokens_in = len(self.tokenizer.encode(total_prompt))
         tokens_out = len(self.tokenizer.encode(str(response)))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
@@ -356,16 +433,30 @@ class GroqClient(LLMClient):
         # Use tiktoken for token estimation
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
+        # Initialize logger for debug logging
+        from ondine.utils import get_logger
+
+        self.logger = get_logger(f"{__name__}.GroqClient")
+
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke Groq API."""
+        """Invoke Groq API with optional system message support."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array (support system message for caching)
+        messages = []
+
+        system_message = kwargs.get("system_message")
+        if system_message and self.spec.enable_prefix_caching:
+            messages.append(ChatMessage(role="system", content=system_message))
+
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        # Call Groq API
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Extract text from response - handle both string and object responses
+        # Extract text from response
         if hasattr(response, "message") and hasattr(response.message, "content"):
             response_text = response.message.content or ""
         elif hasattr(response, "content"):
@@ -373,9 +464,48 @@ class GroqClient(LLMClient):
         else:
             response_text = str(response) if response else ""
 
-        # Extract token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
-        tokens_out = len(self.tokenizer.encode(response_text))
+        # Extract token usage from LlamaIndex response.raw (ChatCompletion object)
+        tokens_in = 0
+        tokens_out = 0
+        cached_tokens = 0
+
+        # LlamaIndex provides actual token counts in response.raw.usage
+        if hasattr(response, "raw") and response.raw and hasattr(response.raw, "usage"):
+            usage = response.raw.usage
+            tokens_in = getattr(usage, "prompt_tokens", 0)
+            tokens_out = getattr(usage, "completion_tokens", 0)
+
+            # Extract cached tokens (OpenAI/Groq format: nested in prompt_tokens_details)
+            cached_tokens = 0
+            if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
+                cached_tokens = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
+
+            # Debug: Log first response to see what Groq returns
+            if not hasattr(self, "_debug_logged"):
+                self._debug_logged = True
+                prompt_details = getattr(usage, "prompt_tokens_details", None)
+                self.logger.info(
+                    f"🔍 DEBUG - First API Response:\n"
+                    f"   prompt_tokens: {tokens_in}\n"
+                    f"   completion_tokens: {tokens_out}\n"
+                    f"   prompt_tokens_details: {prompt_details}\n"
+                    f"   cached_tokens (extracted): {cached_tokens}"
+                )
+
+            # Log if caching is detected
+            # Track cache hits (use DEBUG level to avoid spam in production)
+            if cached_tokens > 0:
+                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                self.logger.debug(
+                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                )
+
+        # Fallback to tiktoken estimation if API doesn't provide counts
+        if tokens_in == 0:
+            full_prompt = (system_message or "") + prompt
+            tokens_in = len(self.tokenizer.encode(full_prompt))
+        if tokens_out == 0:
+            tokens_out = len(self.tokenizer.encode(response_text))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
 
@@ -419,13 +549,14 @@ class OpenAICompatibleClient(LLMClient):
         # Get API key (optional for local APIs like Ollama)
         api_key = spec.api_key or os.getenv("OPENAI_COMPATIBLE_API_KEY") or "dummy"
 
-        # Initialize OpenAI client with custom base URL
-        self.client = OpenAI(
+        # Use OpenAILike for custom providers (doesn't validate model names)
+        self.client = OpenAILike(
             model=spec.model,
             api_key=api_key,
             api_base=spec.base_url,
             temperature=spec.temperature,
             max_tokens=spec.max_tokens,
+            is_chat_model=True,  # Assume chat model for OpenAI-compatible APIs
         )
 
         # Use provider_name for logging/metrics, or default
@@ -434,30 +565,81 @@ class OpenAICompatibleClient(LLMClient):
         # Initialize tokenizer (use default encoding for custom providers)
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
+        # Initialize logger for debug logging
+        from ondine.utils import get_logger
+
+        self.logger = get_logger(f"{__name__}.{self.provider_name}")
+
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """
-        Invoke OpenAI-compatible API.
+        Invoke OpenAI-compatible API with optional system message support.
 
         Args:
             prompt: Text prompt
-            **kwargs: Additional model parameters
+            **kwargs: Additional model parameters (including system_message)
 
         Returns:
             LLMResponse with result and metadata
         """
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array (support system message for caching)
+        messages = []
+
+        system_message = kwargs.get("system_message")
+        if system_message and self.spec.enable_prefix_caching:
+            messages.append(ChatMessage(role="system", content=system_message))
+
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        # Call API
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
         # Extract text from response
         response_text = str(response) if response else ""
 
-        # Estimate token usage (approximate for custom providers)
-        tokens_in = len(self.tokenizer.encode(prompt))
-        tokens_out = len(self.tokenizer.encode(response_text))
+        # Extract token usage from API response (if available)
+        tokens_in = 0
+        tokens_out = 0
+        cached_tokens = 0
+
+        if hasattr(response, "raw") and response.raw and hasattr(response.raw, "usage"):
+            usage = response.raw.usage
+            tokens_in = getattr(usage, "prompt_tokens", 0)
+            tokens_out = getattr(usage, "completion_tokens", 0)
+
+            # Extract cached tokens (OpenAI/Moonshot format: nested in prompt_tokens_details)
+            if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
+                cached_tokens = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
+
+            # Debug: Log first response
+            if not hasattr(self, "_debug_logged"):
+                self._debug_logged = True
+                prompt_details = getattr(usage, "prompt_tokens_details", None)
+                self.logger.info(
+                    f"🔍 DEBUG - First API Response ({self.provider_name}):\n"
+                    f"   prompt_tokens: {tokens_in}\n"
+                    f"   completion_tokens: {tokens_out}\n"
+                    f"   prompt_tokens_details: {prompt_details}\n"
+                    f"   cached_tokens (extracted): {cached_tokens}"
+                )
+
+            # Log if caching is detected
+            # Track cache hits (use DEBUG level to avoid spam in production)
+            if cached_tokens > 0:
+                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                self.logger.debug(
+                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                )
+
+        # Fallback to tiktoken estimation if API doesn't provide counts
+        if tokens_in == 0:
+            full_prompt = (system_message or "") + prompt
+            tokens_in = len(self.tokenizer.encode(full_prompt))
+        if tokens_out == 0:
+            tokens_out = len(self.tokenizer.encode(response_text))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
 
