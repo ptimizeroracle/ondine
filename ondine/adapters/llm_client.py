@@ -395,15 +395,24 @@ class GroqClient(LLMClient):
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke Groq API."""
+        """Invoke Groq API with optional system message support."""
         start_time = time.time()
 
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
+        # Build messages array (support system message for caching)
+        messages = []
+
+        system_message = kwargs.get("system_message")
+        if system_message and self.spec.enable_prefix_caching:
+            messages.append(ChatMessage(role="system", content=system_message))
+
+        messages.append(ChatMessage(role="user", content=prompt))
+
+        # Call Groq API
+        response = self.client.chat(messages)
 
         latency_ms = (time.time() - start_time) * 1000
 
-        # Extract text from response - handle both string and object responses
+        # Extract text from response
         if hasattr(response, "message") and hasattr(response.message, "content"):
             response_text = response.message.content or ""
         elif hasattr(response, "content"):
@@ -411,9 +420,28 @@ class GroqClient(LLMClient):
         else:
             response_text = str(response) if response else ""
 
-        # Extract token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
-        tokens_out = len(self.tokenizer.encode(response_text))
+        # Extract token usage from LlamaIndex response.raw (ChatCompletion object)
+        tokens_in = 0
+        tokens_out = 0
+        cached_tokens = 0
+
+        # LlamaIndex provides actual token counts in response.raw.usage
+        if hasattr(response, "raw") and response.raw and hasattr(response.raw, "usage"):
+            usage = response.raw.usage
+            tokens_in = getattr(usage, "prompt_tokens", 0)
+            tokens_out = getattr(usage, "completion_tokens", 0)
+            cached_tokens = getattr(usage, "cached_tokens", 0)  # Groq prompt caching
+
+            # Debug: Log if caching is detected (remove after testing)
+            if cached_tokens > 0:
+                self.logger.info(f"✅ Cache hit! {cached_tokens} tokens cached")
+
+        # Fallback to tiktoken estimation if API doesn't provide counts
+        if tokens_in == 0:
+            full_prompt = (system_message or "") + prompt
+            tokens_in = len(self.tokenizer.encode(full_prompt))
+        if tokens_out == 0:
+            tokens_out = len(self.tokenizer.encode(response_text))
 
         cost = self.calculate_cost(tokens_in, tokens_out)
 

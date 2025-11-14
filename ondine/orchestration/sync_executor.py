@@ -69,12 +69,16 @@ class SyncExecutor(ExecutionStrategy):
                 total_duration_seconds=duration,
             )
 
-            # Get cost estimate
+            # Get cost estimate (leverage LlamaIndex token counts from intermediate_data)
+            token_tracking = context.intermediate_data.get("token_tracking", {})
+            input_tokens = token_tracking.get("input_tokens", 0)
+            output_tokens = token_tracking.get("output_tokens", 0)
+
             cost_estimate = CostEstimate(
                 total_cost=context.accumulated_cost,
                 total_tokens=context.accumulated_tokens,
-                input_tokens=0,  # Would need to track separately
-                output_tokens=0,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 rows=context.total_rows,
                 confidence="actual",
             )

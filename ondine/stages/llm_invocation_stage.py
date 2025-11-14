@@ -82,6 +82,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         """Execute LLM calls for all prompt batches."""
         response_batches: list[ResponseBatch] = []
 
+        # Initialize token tracking in context.intermediate_data (leverage existing design)
+        if "token_tracking" not in context.intermediate_data:
+            context.intermediate_data["token_tracking"] = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+
         # Start progress tracking if available
         progress_tracker = getattr(context, "progress_tracker", None)
         progress_task = None
@@ -193,6 +200,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             context.add_cost(
                                 response.cost, response.tokens_in + response.tokens_out
                             )
+                            # Track input/output tokens separately (leverage intermediate_data)
+                            context.intermediate_data["token_tracking"][
+                                "input_tokens"
+                            ] += response.tokens_in
+                            context.intermediate_data["token_tracking"][
+                                "output_tokens"
+                            ] += response.tokens_out
                 except Exception as e:
                     prompt = prompts[idx]
 
