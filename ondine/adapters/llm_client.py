@@ -193,7 +193,7 @@ class OpenAIClient(LLMClient):
 
                 logger = get_logger(f"{__name__}.OpenAIClient")
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                logger.info(
+                logger.debug(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
@@ -496,19 +496,14 @@ class GroqClient(LLMClient):
                 )
 
             # Log if caching is detected
-            # Track cache hits (log only first 3 to reduce verbosity)
+            # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
-                if not hasattr(self, "_cache_hit_count"):
-                    self._cache_hit_count = 0
-                self._cache_hit_count += 1
-
-                if self._cache_hit_count <= 3:
-                    cache_pct = (
-                        (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                    )
-                    self.logger.info(
-                        f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
-                    )
+                cache_pct = (
+                    (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                )
+                self.logger.debug(
+                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                )
 
         # Fallback to tiktoken estimation if API doesn't provide counts
         if tokens_in == 0:
@@ -637,19 +632,14 @@ class OpenAICompatibleClient(LLMClient):
                 )
 
             # Log if caching is detected
-            # Track cache hits (log only first 3 to reduce verbosity)
+            # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
-                if not hasattr(self, "_cache_hit_count"):
-                    self._cache_hit_count = 0
-                self._cache_hit_count += 1
-
-                if self._cache_hit_count <= 3:
-                    cache_pct = (
-                        (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                    )
-                    self.logger.info(
-                        f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
-                    )
+                cache_pct = (
+                    (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                )
+                self.logger.debug(
+                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                )
 
         # Fallback to tiktoken estimation if API doesn't provide counts
         if tokens_in == 0:
