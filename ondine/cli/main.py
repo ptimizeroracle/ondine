@@ -93,22 +93,22 @@ ONDINE_ART = r"""
 
 
 def show_banner():
-    """Display the Ondine banner with nuanced blue gradient (water theme)."""
-    # Nuanced blue gradient: light → medium → deep → bright (ocean waves)
+    """Display the Ondine banner (centered, creative, robust)."""
+    # Color gradient: cyan to magenta
     lines = ONDINE_ART.strip().split("\n")
     colored_lines = []
     colors = [
-        "bright_cyan",  # Top - lightest (surface)
-        "cyan",  # Light blue
-        "bright_blue",  # Medium bright
-        "blue",  # Deep blue
-        "bright_blue",  # Bright highlight (main)
-        "blue",  # Deep
-        "bright_blue",  # Bright
-        "blue",  # Deep
-        "bright_blue",  # Bright
-        "cyan",  # Light
-        "bright_cyan",  # Lightest (surface)
+        "bright_cyan",
+        "cyan",
+        "bright_blue",
+        "blue",
+        "bright_magenta",
+        "magenta",
+        "bright_magenta",
+        "blue",
+        "bright_blue",
+        "cyan",
+        "bright_cyan",
     ]
 
     for i, line in enumerate(lines):
@@ -116,12 +116,12 @@ def show_banner():
         colored_lines.append(Text(line, style=f"bold {color}"))
 
     title = Group(*colored_lines)
-    subtitle_text = Text("The LLM Dataset Engine", style="dim italic bright_blue")
+    subtitle_text = Text("The LLM Dataset Engine", style="dim italic bright_white")
     content = Group(title, "", subtitle_text)
 
     console.print()
     console.print(content)
-    console.print("[bold bright_blue]" + "─" * 80 + "[/bold bright_blue]")
+    console.print("[bold bright_cyan]" + "─" * 80 + "[/bold bright_cyan]")
     console.print()
 
 
