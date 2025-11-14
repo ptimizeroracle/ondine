@@ -98,17 +98,17 @@ def show_banner():
     lines = ONDINE_ART.strip().split("\n")
     colored_lines = []
     colors = [
-        "bright_cyan",      # Top - lightest (surface)
-        "cyan",             # Light blue
-        "bright_blue",      # Medium bright
-        "blue",             # Deep blue
-        "bright_blue",      # Bright highlight (main)
-        "blue",             # Deep
-        "bright_blue",      # Bright
-        "blue",             # Deep
-        "bright_blue",      # Bright
-        "cyan",             # Light
-        "bright_cyan",      # Lightest (surface)
+        "bright_cyan",  # Top - lightest (surface)
+        "cyan",  # Light blue
+        "bright_blue",  # Medium bright
+        "blue",  # Deep blue
+        "bright_blue",  # Bright highlight (main)
+        "blue",  # Deep
+        "bright_blue",  # Bright
+        "blue",  # Deep
+        "bright_blue",  # Bright
+        "cyan",  # Light
+        "bright_cyan",  # Lightest (surface)
     ]
 
     for i, line in enumerate(lines):

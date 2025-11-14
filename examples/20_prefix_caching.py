@@ -98,7 +98,7 @@ def example_with_caching():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    (
+    pipeline = (
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -143,7 +143,7 @@ def example_with_caching_alternative_syntax():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    (
+    pipeline = (
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -179,7 +179,7 @@ def example_anthropic_caching():
     if not input_file.exists():
         input_file = create_sample_data()
 
-    (
+    pipeline = (
         PipelineBuilder.create()
         .from_csv(
             str(input_file), input_columns=["review"], output_columns=["sentiment"]
@@ -207,7 +207,7 @@ Return only the label, nothing else.""")
 def example_shared_context_multi_stage():
     """
     BEST PRACTICE: Shared context across multiple stages.
-    
+
     When processing data through multiple stages, use a shared system context
     to maximize cache reuse. Stage 2 immediately benefits from Stage 1's cache!
     """
@@ -216,14 +216,17 @@ def example_shared_context_multi_stage():
     print("=" * 70)
 
     # Create sample product data
-    products = pd.DataFrame({
-        "title": [
-            "Samsung Galaxy S21 Ultra 5G Smartphone",
-            "KitchenAid Stand Mixer 5-Quart",
-            "Nike Air Max Running Shoes Men's",
-        ] * 10  # 30 rows
-    })
-    
+    products = pd.DataFrame(
+        {
+            "title": [
+                "Samsung Galaxy S21 Ultra 5G Smartphone",
+                "KitchenAid Stand Mixer 5-Quart",
+                "Nike Air Max Running Shoes Men's",
+            ]
+            * 10  # 30 rows
+        }
+    )
+
     # Shared context (1024+ tokens) - cached once, reused by all stages!
     SHARED_CONTEXT = """You are an expert e-commerce data analyst with deep knowledge of:
 - Product categorization and classification
@@ -246,27 +249,33 @@ GENERAL PRINCIPLES:
     print("   Stage 1: Primary category classification")
     print("   Stage 2: Subcategory classification")
     print("\n🎯 Key benefit: Stage 2 REUSES Stage 1's cache!")
-    
+
     # Stage 1: Primary category
     pipeline1 = (
         PipelineBuilder.create()
         .from_dataframe(products, input_columns=["title"], output_columns=["category"])
-        .with_prompt("TASK: Classify into primary category\nINPUT: {title}\nCATEGORIES: Electronics, Home & Kitchen, Clothing & Fashion\nOUTPUT:")
+        .with_prompt(
+            "TASK: Classify into primary category\nINPUT: {title}\nCATEGORIES: Electronics, Home & Kitchen, Clothing & Fashion\nOUTPUT:"
+        )
         .with_system_prompt(SHARED_CONTEXT)  # Creates cache
         .with_llm(provider="openai", model="gpt-4o-mini")
         .build()
     )
-    
+
     # Stage 2: Subcategory (reuses Stage 1's cache!)
     pipeline2 = (
         PipelineBuilder.create()
-        .from_dataframe(products, input_columns=["title"], output_columns=["subcategory"])
-        .with_prompt("TASK: Determine specific subcategory (2-4 words)\nINPUT: {title}\nOUTPUT:")
+        .from_dataframe(
+            products, input_columns=["title"], output_columns=["subcategory"]
+        )
+        .with_prompt(
+            "TASK: Determine specific subcategory (2-4 words)\nINPUT: {title}\nOUTPUT:"
+        )
         .with_system_prompt(SHARED_CONTEXT)  # Same cache!
         .with_llm(provider="openai", model="gpt-4o-mini")
         .build()
     )
-    
+
     print("\n✅ Shared context pattern (Option A):")
     print("   • System prompt: 1024+ tokens (general context)")
     print("   • User prompt: Task-specific instructions + data")
@@ -276,7 +285,7 @@ GENERAL PRINCIPLES:
     print("   WITHOUT caching: 60 × 1200 tokens = 72K tokens = $0.011")
     print("   WITH shared cache: 1200 + (59 × 150) = 10K tokens = $0.002")
     print("   Savings: 82% reduction!")
-    
+
     # Uncomment to run:
     # result1 = pipeline1.execute()
     # result2 = pipeline2.execute()

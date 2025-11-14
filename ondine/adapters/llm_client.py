@@ -372,21 +372,18 @@ class AnthropicClient(LLMClient):
         system_message = kwargs.get("system_message")
 
         # Anthropic uses a separate system parameter with cache_control
-        if system_message and self.spec.enable_prefix_caching:
-            # Anthropic's cache control format
-            pass
+        # Until explicit cache_control is wired up, send system message to avoid dropping it
+        if system_message:
+            if self.spec.enable_prefix_caching:
+                # TODO: Wire up explicit cache_control system param when LlamaIndex supports it
+                # For now, send as system message (Anthropic caches automatically)
+                messages.append(ChatMessage(role="system", content=system_message))
+            else:
+                # Fallback: prepend to user message if caching disabled
+                prompt = f"{system_message}\n\n{prompt}"
 
         # User message (dynamic, not cached)
         messages.append(ChatMessage(role="user", content=prompt))
-
-        # Note: LlamaIndex's Anthropic client may not support system parameter directly
-        # For now, we'll prepend system message to user message if caching is disabled
-        # or if the client doesn't support the system parameter
-        if system_message and not self.spec.enable_prefix_caching:
-            # Fallback: prepend to user message
-            messages[0] = ChatMessage(
-                role="user", content=f"{system_message}\n\n{prompt}"
-            )
 
         response = self.client.chat(messages)
 
@@ -498,9 +495,7 @@ class GroqClient(LLMClient):
             # Log if caching is detected
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
-                cache_pct = (
-                    (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                )
+                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
                 self.logger.debug(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
@@ -634,9 +629,7 @@ class OpenAICompatibleClient(LLMClient):
             # Log if caching is detected
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
-                cache_pct = (
-                    (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                )
+                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
                 self.logger.debug(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
