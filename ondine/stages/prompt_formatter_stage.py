@@ -62,10 +62,31 @@ class PromptFormatterStage(
             template = Jinja2Template(template_str, autoescape=False)  # noqa: S701
 
         # Format prompt for each row
-        for idx, row in df.iterrows():
+        # Performance optimization: Use itertuples() instead of iterrows() for 10× speedup
+        # itertuples() returns namedtuples which are much faster than Series objects
+        total_rows = len(df)
+        self.logger.info(f"Formatting {total_rows:,} prompts...")
+
+        for row_count, row in enumerate(df.itertuples(index=True), 1):
+            # Log progress every 100K rows
+            if row_count % 100000 == 0:
+                progress_pct = (row_count / total_rows) * 100
+                self.logger.info(
+                    f"Progress: {row_count:,}/{total_rows:,} prompts formatted "
+                    f"({progress_pct:.1f}%)"
+                )
+
             try:
-                # Extract input columns
-                row_data = {col: row[col] for col in df.columns if col in template_str}
+                # Extract index (first element of namedtuple)
+                idx = row[0]
+
+                # Extract input columns from namedtuple
+                # Build row_data dict from column names and namedtuple attributes
+                row_data = {}
+                for col in df.columns:
+                    if col in template_str:
+                        # Get attribute by column name (namedtuples have column names as attributes)
+                        row_data[col] = getattr(row, col)
 
                 # Format prompt (Jinja2 or f-string)
                 if self.use_jinja2:
@@ -86,16 +107,18 @@ class PromptFormatterStage(
                 prompts.append(prompt)
 
                 # Create metadata with system message for LLM stage
+                # Get 'id' column if it exists
+                row_id = getattr(row, "id", None) if hasattr(row, "id") else None
                 metadata = RowMetadata(
                     row_index=idx,
-                    row_id=row.get("id", None),
+                    row_id=row_id,
                     custom={"system_message": system_message}
                     if system_message
                     else None,
                 )
                 metadata_list.append(metadata)
 
-            except KeyError as e:
+            except (KeyError, AttributeError) as e:
                 self.logger.warning(f"Missing template variable at row {idx}: {e}")
                 continue
             except Exception as e:
