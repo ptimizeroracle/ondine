@@ -103,8 +103,22 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # Flatten all prompts from all batches
         all_prompts, batch_map = self._flatten_batches(batches)
 
-        # Log concise summary
-        total_rows = sum(len(b.metadata) for b in batches)
+        # Calculate total rows (handle both aggregated and non-aggregated batches)
+        total_rows = 0
+        for batch in batches:
+            if (
+                batch.metadata
+                and batch.metadata[0].custom
+                and batch.metadata[0].custom.get("is_batch")
+            ):
+                # Aggregated batch: use batch_size from metadata
+                total_rows += batch.metadata[0].custom.get(
+                    "batch_size", len(batch.metadata)
+                )
+            else:
+                # Non-aggregated batch: count metadata entries
+                total_rows += len(batch.metadata)
+
         self.logger.info(
             f"Processing {total_rows:,} rows in {len(batches)} API calls "
             f"({self.concurrency} concurrent)"
