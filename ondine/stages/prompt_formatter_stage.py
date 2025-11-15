@@ -74,11 +74,13 @@ class PromptFormatterStage(
         self.logger.info(f"Formatting {total_rows:,} prompts...")
 
         for row_count, row in enumerate(df.itertuples(index=True), 1):
-            # Hybrid progress: Log every 10% OR every 30 seconds
+            # Hybrid progress: Log every 10% OR every 30 seconds (only for slow operations)
             current_time = time.time()
             current_pct = int((row_count / total_rows) * 100)
+            elapsed = current_time - start_time
 
-            should_log = (
+            # Only log progress if operation is taking >5 seconds
+            should_log = elapsed > 5 and (
                 (current_pct >= last_log_pct + 10 and current_pct <= 90)  # Every 10%
                 or (current_time - last_log_time >= 30)  # OR every 30s
             )

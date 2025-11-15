@@ -153,9 +153,11 @@ class BatchAggregatorStage(PipelineStage):
                 # Update progress
                 processed_prompts += len(chunk_prompts)
 
-                # Hybrid progress: Log every 10% OR every 30 seconds (only for large datasets)
-                if total_prompts > 10000:
-                    current_time = time.time()
+                # Hybrid progress: Log every 10% OR every 30 seconds (only for slow operations)
+                current_time = time.time()
+                elapsed = current_time - start_time
+
+                if total_prompts > 10000 and elapsed > 5:
                     current_pct = int((processed_prompts / total_prompts) * 100)
 
                     should_log = (

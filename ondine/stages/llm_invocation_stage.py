@@ -214,9 +214,22 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             progress_task, advance=1, cost=response.cost
                         )
 
-                    # Update context
+                    # Update context with actual row count
+                    # For aggregated batches, each prompt represents multiple rows
                     if context:
-                        context.update_row(context.last_processed_row + 1)
+                        # Get the prompt metadata to check if it's an aggregated batch
+                        prompt_tuple = all_prompts[idx]
+                        _, metadata, _ = prompt_tuple
+
+                        # Check if this is an aggregated batch
+                        if metadata.custom and metadata.custom.get("is_batch"):
+                            # Aggregated: count all rows in the batch
+                            batch_size = metadata.custom.get("batch_size", 1)
+                            context.update_row(context.last_processed_row + batch_size)
+                        else:
+                            # Non-aggregated: count 1 row
+                            context.update_row(context.last_processed_row + 1)
+
                         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
                             context.add_cost(
                                 response.cost, response.tokens_in + response.tokens_out
