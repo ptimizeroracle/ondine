@@ -64,17 +64,36 @@ class PromptFormatterStage(
         # Format prompt for each row
         # Performance optimization: Use itertuples() instead of iterrows() for 10× speedup
         # itertuples() returns namedtuples which are much faster than Series objects
+        import time
+
         total_rows = len(df)
+        start_time = time.time()
+        last_log_time = start_time
+        last_log_pct = 0
+
         self.logger.info(f"Formatting {total_rows:,} prompts...")
 
         for row_count, row in enumerate(df.itertuples(index=True), 1):
-            # Log progress every 100K rows
-            if row_count % 100000 == 0:
-                progress_pct = (row_count / total_rows) * 100
+            # Hybrid progress: Log every 10% OR every 30 seconds
+            current_time = time.time()
+            current_pct = int((row_count / total_rows) * 100)
+
+            should_log = (
+                (current_pct >= last_log_pct + 10 and current_pct <= 90)  # Every 10%
+                or (current_time - last_log_time >= 30)  # OR every 30s
+            )
+
+            if should_log:
+                elapsed = current_time - start_time
+                throughput = row_count / elapsed if elapsed > 0 else 0
+                eta = (total_rows - row_count) / throughput if throughput > 0 else 0
+
                 self.logger.info(
-                    f"Progress: {row_count:,}/{total_rows:,} prompts formatted "
-                    f"({progress_pct:.1f}%)"
+                    f"Formatting: {current_pct}% ({row_count:,}/{total_rows:,}) | "
+                    f"{throughput:,.0f} rows/s | ETA: {eta:.0f}s"
                 )
+                last_log_time = current_time
+                last_log_pct = current_pct
 
             try:
                 # Extract index (first element of namedtuple)
@@ -138,8 +157,11 @@ class PromptFormatterStage(
             )
             batches.append(batch)
 
+        # Final summary
+        total_time = time.time() - start_time
+        throughput = len(prompts) / total_time if total_time > 0 else 0
         self.logger.info(
-            f"Formatted {len(prompts)} prompts into {len(batches)} batches"
+            f"✓ Formatted {len(prompts):,} prompts in {total_time:.1f}s ({throughput:,.0f} rows/s)"
         )
 
         return batches

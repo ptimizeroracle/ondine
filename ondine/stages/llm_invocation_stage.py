@@ -100,13 +100,15 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Store for access in concurrent loop
             self._current_progress_task = progress_task
 
-        # NEW: Flatten-then-concurrent pattern
-        self.logger.info(
-            f"Processing {len(batches)} batches with flatten-then-concurrent pattern"
-        )
-
-        # Step 1: Flatten all prompts from all batches
+        # Flatten all prompts from all batches
         all_prompts, batch_map = self._flatten_batches(batches)
+
+        # Log concise summary
+        total_rows = sum(len(b.metadata) for b in batches)
+        self.logger.info(
+            f"Processing {total_rows:,} rows in {len(batches)} API calls "
+            f"({self.concurrency} concurrent)"
+        )
 
         # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
         all_responses = self._process_all_prompts_concurrent(all_prompts, context)
@@ -161,10 +163,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         Returns:
             List of LLMResponse objects in same order as all_prompts
         """
-        self.logger.info(
-            f"Processing {len(all_prompts)} prompts with concurrency={self.concurrency}"
-        )
-
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=self.concurrency
         ) as executor:
@@ -179,20 +177,17 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 for idx, (prompt, metadata, _) in enumerate(all_prompts)
             ]
 
-            self.logger.info(f"Submitted {len(futures)} parallel tasks to executor")
-
             # Collect results with progress tracking
             responses = []
             progress_tracker = getattr(context, "progress_tracker", None)
             progress_task = getattr(self, "_current_progress_task", None)
 
             for idx, future in enumerate(futures):
-                # Progress logging every 25%
-                if (idx + 1) % max(1, len(futures) // 4) == 0:
+                # Progress logging every 25% (only for large batches)
+                if len(futures) > 20 and (idx + 1) % max(1, len(futures) // 4) == 0:
                     progress = ((idx + 1) / len(futures)) * 100
                     self.logger.info(
-                        f"Progress: {idx + 1}/{len(futures)} requests completed "
-                        f"({progress:.1f}%)"
+                        f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)})"
                     )
 
                 try:

@@ -63,14 +63,20 @@ class BatchAggregatorStage(PipelineStage):
         Returns:
             List of aggregated prompt batches (1 prompt per batch_size rows)
         """
+        import time
+
         aggregated_batches = []
 
         # Calculate total prompts for progress tracking
         total_prompts = sum(len(b.prompts) for b in batches)
         processed_prompts = 0
+        start_time = time.time()
+        last_log_time = start_time
+        last_log_pct = 0
 
+        expected_batches = (total_prompts + self.batch_size - 1) // self.batch_size
         self.logger.info(
-            f"Aggregating {total_prompts:,} prompts into batches of {self.batch_size}..."
+            f"Creating {expected_batches:,} mega-prompts ({self.batch_size} rows each)"
         )
 
         # Process each batch
@@ -147,18 +153,36 @@ class BatchAggregatorStage(PipelineStage):
                 # Update progress
                 processed_prompts += len(chunk_prompts)
 
-                # Log progress every 100K prompts
-                if processed_prompts % 100000 < self.batch_size:
-                    progress_pct = (processed_prompts / total_prompts) * 100
-                    self.logger.info(
-                        f"Progress: {processed_prompts:,}/{total_prompts:,} prompts "
-                        f"({progress_pct:.1f}%) → {len(aggregated_batches):,} batches created"
-                    )
+                # Hybrid progress: Log every 10% OR every 30 seconds (only for large datasets)
+                if total_prompts > 10000:
+                    current_time = time.time()
+                    current_pct = int((processed_prompts / total_prompts) * 100)
 
+                    should_log = (
+                        current_pct >= last_log_pct + 10 and current_pct <= 90
+                    ) or (current_time - last_log_time >= 30)
+
+                    if should_log:
+                        elapsed = current_time - start_time
+                        throughput = processed_prompts / elapsed if elapsed > 0 else 0
+                        eta = (
+                            (total_prompts - processed_prompts) / throughput
+                            if throughput > 0
+                            else 0
+                        )
+
+                        self.logger.info(
+                            f"Aggregating: {current_pct}% ({processed_prompts:,}/{total_prompts:,}) | "
+                            f"ETA: {eta:.0f}s"
+                        )
+                        last_log_time = current_time
+                        last_log_pct = current_pct
+
+        # Final summary
+        elapsed = time.time() - start_time
         self.logger.info(
-            f"Aggregated {sum(len(b.prompts) for b in batches)} prompts "
-            f"into {len(aggregated_batches)} batch prompts "
-            f"(batch_size={self.batch_size})"
+            f"✓ Created {len(aggregated_batches):,} mega-prompts in {elapsed:.1f}s "
+            f"({len(aggregated_batches) / elapsed:.0f} batches/s)"
         )
 
         return aggregated_batches
