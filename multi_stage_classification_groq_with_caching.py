@@ -69,7 +69,7 @@ INPUT_FILE = "titles_to_categories.csv"
 OUTPUT_FILE = "titles_classified_multi_stage_cached.csv"
 
 # Processing configuration
-SAMPLE_SIZE = None  # None = Full 5.4M dataset, 100 = Quick test
+SAMPLE_SIZE = 1000  # None = Full 5.4M dataset, 1000 = Quick test
 MULTI_ROW_BATCH_SIZE = 100  # Process N rows per API call (higher = fewer calls)
 CHECKPOINT_BATCH_SIZE = 50000  # Checkpoint every N rows (for resume on failure)
 
