@@ -525,7 +525,12 @@ class Pipeline:
         # Stage 3: Invoke LLM
         llm_client = create_llm_client(specs.llm)
         rate_limiter = (
-            RateLimiter(specs.processing.rate_limit_rpm)
+            RateLimiter(
+                specs.processing.rate_limit_rpm,
+                burst_size=min(
+                    20, specs.processing.concurrency
+                ),  # Limit burst to prevent rate limit errors
+            )
             if specs.processing.rate_limit_rpm
             else None
         )
