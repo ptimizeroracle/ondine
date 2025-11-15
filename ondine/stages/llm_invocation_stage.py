@@ -125,7 +125,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         )
 
         # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
-        all_responses = self._process_all_prompts_concurrent(all_prompts, context)
+        all_responses = self._process_all_prompts_concurrent(
+            all_prompts, context, batches
+        )
 
         # Step 3: Reconstruct batches from flat responses
         response_batches = self._reconstruct_batches(all_responses, batches, batch_map)
@@ -166,7 +168,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         return all_prompts, batch_map
 
     def _process_all_prompts_concurrent(
-        self, all_prompts: list[tuple], context: Any
+        self,
+        all_prompts: list[tuple],
+        context: Any,
+        original_batches: list[PromptBatch] = None,
     ) -> list[Any]:
         """Process all prompts concurrently, ignoring batch boundaries.
 
@@ -225,7 +230,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         if metadata.custom and metadata.custom.get("is_batch"):
                             # Aggregated: count all rows in the batch
                             batch_size = metadata.custom.get("batch_size", 1)
-                            context.update_row(context.last_processed_row + batch_size)
+
+                            # For first batch, start from row_index in metadata
+                            # For subsequent batches, increment from last position
+                            if idx == 0:
+                                # First batch: set to last row index in this batch
+                                first_row_idx = metadata.row_index
+                                context.update_row(first_row_idx + batch_size - 1)
+                            else:
+                                # Subsequent batches: increment by batch_size
+                                context.update_row(
+                                    context.last_processed_row + batch_size
+                                )
                         else:
                             # Non-aggregated: count 1 row
                             context.update_row(context.last_processed_row + 1)
