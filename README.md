@@ -205,27 +205,27 @@ Reduce costs by 40-50% on large datasets by caching system prompts:
 from ondine import PipelineBuilder
 
 # Define shared context once (cached across all stages and rows)
-SHARED_CONTEXT = """You are an expert e-commerce analyst.
-[General knowledge and principles - 1024+ tokens for OpenAI caching]
+SHARED_CONTEXT = """You are an expert data analyst.
+[General domain knowledge and principles - 1024+ tokens for OpenAI caching]
 """
 
-# Stage 1: Primary category
+# Stage 1: First transformation
 pipeline1 = (
     PipelineBuilder.create()
-    .from_csv("products.csv", input_columns=["title"], output_columns=["category"])
-    .with_prompt("TASK: Classify into category\nINPUT: {title}\nOUTPUT:")
+    .from_csv("data.csv", input_columns=["text"], output_columns=["result1"])
+    .with_prompt("TASK: Analyze text\nINPUT: {text}\nOUTPUT:")
     .with_system_prompt(SHARED_CONTEXT)  # Cached!
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
 )
 
-# Stage 2: Subcategory (reuses Stage 1's cache!)
+# Stage 2: Second transformation (reuses Stage 1's cache!)
 pipeline2 = (
     PipelineBuilder.create()
-    .from_csv("products_stage1.csv", 
-              input_columns=["title", "category"], 
-              output_columns=["subcategory"])
-    .with_prompt("TASK: Determine subcategory\nINPUT: {title}, {category}\nOUTPUT:")
+    .from_csv("data_stage1.csv", 
+              input_columns=["text", "result1"], 
+              output_columns=["result2"])
+    .with_prompt("TASK: Further analysis\nINPUT: {text}, {result1}\nOUTPUT:")
     .with_system_prompt(SHARED_CONTEXT)  # Same cache!
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
@@ -239,15 +239,20 @@ result2 = pipeline2.execute()
 ```
 
 **How it works:**
-- System prompt (1024+ tokens) cached by OpenAI automatically
-- Stage 2 reuses Stage 1's cache (no warm-up needed!)
-- Only pay full price for unique data (your product titles)
-- 50% discount on all cached tokens
+- System prompt (1024+ tokens) cached automatically by provider
+- Subsequent requests reuse the cache (no warm-up needed)
+- Only pay full price for dynamic data (your row-specific content)
+- 50% discount on cached tokens (OpenAI), up to 90% (Anthropic)
 
 **Requirements:**
-- OpenAI: System prompt >1024 tokens
-- Anthropic: System message separation (automatic)
-- Groq: Model-specific support
+- OpenAI: System prompt >1024 tokens for automatic caching
+- Anthropic: System message separation (automatic caching)
+- Groq: Model-specific support (check provider docs)
+
+**Use cases:**
+- Multi-stage pipelines (classification, enrichment, validation)
+- Large datasets with repeated instructions
+- Any workflow with static context + dynamic data
 
 See `examples/20_prefix_caching.py` for complete example.
 
