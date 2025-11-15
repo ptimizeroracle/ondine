@@ -217,6 +217,49 @@ class TestLLMInvocationStage:
         for i, metadata in enumerate(response_batches[0].metadata):
             assert metadata.row_index == i
 
+    def test_llm_invocation_concurrent_batches(self):
+        """Test that multiple batches are processed concurrently (flatten-then-concurrent)."""
+        import time
+
+        from ondine.core.specifications import LLMProvider, LLMSpec
+
+        # Create mock client with artificial delay
+        class SlowMockClient(MockLLMClient):
+            def generate(self, prompt, **kwargs):
+                time.sleep(0.1)  # 100ms delay per call
+                return super().generate(prompt, **kwargs)
+
+        mock_client = SlowMockClient(
+            spec=LLMSpec(provider=LLMProvider.OPENAI, model="gpt-4o-mini"),
+            mock_response="Test",
+        )
+
+        # Create 10 batches with 1 prompt each (simulates aggregated batches)
+        batches = [
+            PromptBatch(
+                prompts=["test"],
+                metadata=[RowMetadata(row_index=i)],
+                batch_id=i,
+            )
+            for i in range(10)
+        ]
+
+        stage = LLMInvocationStage(llm_client=mock_client, concurrency=10)
+        context = ExecutionContext()
+
+        start = time.time()
+        result = stage.process(batches, context)
+        duration = time.time() - start
+
+        # With concurrency=10, all 10 batches should process in parallel
+        # Expected: ~0.1s (all parallel) + overhead
+        # Without concurrency: ~1.0s (sequential)
+        assert len(result) == 10
+        assert (
+            duration < 0.5
+        ), f"Expected <0.5s (parallel), got {duration:.2f}s (sequential!)"
+        assert mock_client.call_count == 10
+
 
 class TestResponseParserStage:
     """Test suite for ResponseParserStage."""

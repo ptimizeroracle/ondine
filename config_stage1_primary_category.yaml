@@ -8,6 +8,10 @@ dataset:
   output_columns: [primary_category]
 
 prompt:
+  # Multi-row batching: Process 10 rows per API call (10× speedup)
+  batch_size: 10
+  batch_strategy: json
+
   template: |
     TASK: Classify product into ONE primary category
 
@@ -28,7 +32,7 @@ prompt:
     OUTPUT FORMAT: Category name only (e.g., "Electronics")
 
     Category:
-  
+
   # System prompt (cached across all rows!)
   system_message: |
     You are an expert e-commerce data analyst with deep knowledge of product classification, categorization, and quality assessment.
@@ -150,4 +154,3 @@ output:
   destination_type: csv
   destination_path: titles_classified_stage1_cli.csv
   merge_strategy: replace
-

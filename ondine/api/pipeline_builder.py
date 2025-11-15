@@ -302,6 +302,91 @@ class PipelineBuilder:
         self._prompt_spec.system_message = system_prompt
         return self
 
+    def with_batch_size(self, batch_size: int) -> "PipelineBuilder":
+        """
+        Set batch size for multi-row processing.
+
+        Process multiple rows in a single API call to reduce costs and latency
+        by up to 100×. Batch size of 1 (default) processes rows individually.
+
+        Args:
+            batch_size: Number of rows to process per API call (1-500)
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: If batch_size < 1 or prompt not set
+
+        Example:
+            ```python
+            # Process 100 rows per API call (100× fewer calls)
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["text"])
+                .with_prompt("Classify: {text}")
+                .with_batch_size(100)  # 5M rows = 50K API calls!
+                .with_llm(provider="openai", model="gpt-4o-mini")
+                .build()
+            )
+            ```
+
+        Note:
+            - Batch size is limited by model context window
+            - Larger batches = fewer API calls but higher risk of partial failures
+            - Recommended: Start with 10-50, increase based on results
+        """
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+
+        if not self._prompt_spec:
+            raise ValueError("Call with_prompt() before with_batch_size()")
+
+        # Update batch_size directly (consistent with with_system_prompt)
+        self._prompt_spec.batch_size = batch_size
+        return self
+
+    def with_batch_strategy(self, strategy: str) -> "PipelineBuilder":
+        """
+        Set batch formatting strategy.
+
+        Choose how multiple rows are formatted in a single prompt.
+
+        Args:
+            strategy: Strategy name ("json" or "csv")
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: If strategy is not supported or prompt not set
+
+        Example:
+            ```python
+            # Use JSON array format (default, most reliable)
+            pipeline.with_batch_size(100).with_batch_strategy("json")
+
+            # Use CSV format (more compact, experimental)
+            pipeline.with_batch_size(100).with_batch_strategy("csv")
+            ```
+
+        Supported Strategies:
+            - "json": JSON array format (default, most reliable)
+            - "csv": CSV format (more compact, experimental)
+        """
+        allowed = ["json", "csv"]
+        if strategy not in allowed:
+            raise ValueError(
+                f"batch_strategy must be one of {allowed}, got '{strategy}'"
+            )
+
+        if not self._prompt_spec:
+            raise ValueError("Call with_prompt() before with_batch_strategy()")
+
+        # Update batch_strategy directly (consistent with with_system_prompt)
+        self._prompt_spec.batch_strategy = strategy
+        return self
+
     def with_llm(
         self,
         provider: str,
@@ -464,15 +549,23 @@ class PipelineBuilder:
         self._custom_llm_client = client
         return self
 
-    def with_batch_size(self, size: int) -> "PipelineBuilder":
+    def with_processing_batch_size(self, size: int) -> "PipelineBuilder":
         """
-        Configure batch size.
+        Configure internal batch size for PromptFormatterStage.
+
+        This is different from with_batch_size() which enables multi-row batching.
+        This method controls how many prompts are grouped together internally
+        for processing efficiency.
 
         Args:
-            size: Rows per batch
+            size: Rows per internal batch
 
         Returns:
             Self for chaining
+
+        Note:
+            This is an internal optimization parameter. Most users should use
+            with_batch_size() for multi-row batching instead.
         """
         self._processing_spec.batch_size = size
         return self

@@ -1,5 +1,7 @@
 """Processing stages for data transformation."""
 
+from ondine.stages.batch_aggregator_stage import BatchAggregatorStage
+from ondine.stages.batch_disaggregator_stage import BatchDisaggregatorStage
 from ondine.stages.data_loader_stage import DataLoaderStage
 from ondine.stages.llm_invocation_stage import LLMInvocationStage
 from ondine.stages.multi_run_stage import (
@@ -28,6 +30,8 @@ from ondine.stages.stage_registry import StageRegistry, stage
 
 __all__ = [
     "PipelineStage",
+    "BatchAggregatorStage",
+    "BatchDisaggregatorStage",
     "DataLoaderStage",
     "PromptFormatterStage",
     "LLMInvocationStage",
