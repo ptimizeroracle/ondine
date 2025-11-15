@@ -514,7 +514,7 @@ class Pipeline:
                 batch_size=specs.prompt.batch_size,
                 strategy=strategy,
                 model=specs.llm.model,
-                validate_context_window=True,
+                validate_context_window=False,  # Disabled for performance (slow on large datasets)
             )
             batches = self._execute_stage(aggregator, batches, context)
             context.intermediate_data["aggregated_batches"] = batches

@@ -34,7 +34,7 @@ class BatchAggregatorStage(PipelineStage):
         batch_size: int,
         strategy: BatchFormattingStrategy | None = None,
         model: str | None = None,
-        validate_context_window: bool = True,
+        validate_context_window: bool = False,  # Disabled by default (slow for large datasets)
         name: str = "BatchAggregator",
     ):
         """Initialize batch aggregator stage.
@@ -65,8 +65,16 @@ class BatchAggregatorStage(PipelineStage):
         """
         aggregated_batches = []
 
+        # Calculate total prompts for progress tracking
+        total_prompts = sum(len(b.prompts) for b in batches)
+        processed_prompts = 0
+
+        self.logger.info(
+            f"Aggregating {total_prompts:,} prompts into batches of {self.batch_size}..."
+        )
+
         # Process each batch
-        for batch in batches:
+        for batch_idx, batch in enumerate(batches):
             # Group prompts into chunks of batch_size
             for i in range(0, len(batch.prompts), self.batch_size):
                 chunk_prompts = batch.prompts[i : i + self.batch_size]
@@ -82,8 +90,12 @@ class BatchAggregatorStage(PipelineStage):
                     prompt_template=None,  # Not available in current structure
                 )
 
-                # Validate batch size against context window (if model provided)
-                if self.validate_context_window and self.model:
+                # Validate batch size against context window (only once, not for every batch)
+                if (
+                    self.validate_context_window
+                    and self.model
+                    and len(aggregated_batches) == 0  # Only validate first batch
+                ):
                     # Estimate tokens for this batch
                     import tiktoken
 
@@ -100,6 +112,11 @@ class BatchAggregatorStage(PipelineStage):
                         self.logger.warning(
                             f"Batch size validation failed: {error_msg}. "
                             f"Consider reducing batch_size."
+                        )
+                    else:
+                        self.logger.info(
+                            f"Batch size validation passed: {len(chunk_prompts)} rows, "
+                            f"~{avg_tokens} tokens/row"
                         )
 
                 # Use strategy to format batch prompt
@@ -126,6 +143,17 @@ class BatchAggregatorStage(PipelineStage):
                 )
 
                 aggregated_batches.append(aggregated_batch)
+
+                # Update progress
+                processed_prompts += len(chunk_prompts)
+
+                # Log progress every 100K prompts
+                if processed_prompts % 100000 < self.batch_size:
+                    progress_pct = (processed_prompts / total_prompts) * 100
+                    self.logger.info(
+                        f"Progress: {processed_prompts:,}/{total_prompts:,} prompts "
+                        f"({progress_pct:.1f}%) → {len(aggregated_batches):,} batches created"
+                    )
 
         self.logger.info(
             f"Aggregated {sum(len(b.prompts) for b in batches)} prompts "
