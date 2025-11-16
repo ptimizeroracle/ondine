@@ -274,9 +274,11 @@ class TestQuickPipeline:
         pipeline = QuickPipeline.create(
             data=csv_file,
             prompt="Process: {text}",
-            batch_size=25,
+            batch_size=25,  # QuickPipeline uses processing.batch_size
             concurrency=10,
         )
 
+        # QuickPipeline.create() uses processing.batch_size (internal batching)
+        # not prompt.batch_size (multi-row batching)
         assert pipeline.specifications.processing.batch_size == 25
         assert pipeline.specifications.processing.concurrency == 10

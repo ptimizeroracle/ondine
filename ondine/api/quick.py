@@ -204,7 +204,11 @@ class QuickPipeline:
             builder = builder.with_parser(parser)
 
         # Add batch/concurrency settings
-        builder = builder.with_batch_size(batch_size).with_concurrency(concurrency)
+        # Note: QuickPipeline uses processing_batch_size (internal batching)
+        # not with_batch_size (multi-row batching)
+        builder = builder.with_processing_batch_size(batch_size).with_concurrency(
+            concurrency
+        )
 
         # Add budget if specified
         if max_budget is not None:

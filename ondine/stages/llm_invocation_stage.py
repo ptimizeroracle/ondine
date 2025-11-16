@@ -79,8 +79,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         )
 
     def process(self, batches: list[PromptBatch], context: Any) -> list[ResponseBatch]:
-        """Execute LLM calls for all prompt batches."""
-        response_batches: list[ResponseBatch] = []
+        """Execute LLM calls for all prompt batches using flatten-then-concurrent pattern."""
 
         # Initialize token tracking in context.intermediate_data (leverage existing design)
         if "token_tracking" not in context.intermediate_data:
@@ -101,41 +100,43 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Store for access in concurrent loop
             self._current_progress_task = progress_task
 
-        for _batch_idx, batch in enumerate(batches):
-            self.logger.info(
-                f"Processing batch {batch.batch_id} ({len(batch.prompts)} prompts)"
-            )
+        # Flatten all prompts from all batches
+        all_prompts, batch_map = self._flatten_batches(batches)
 
-            # Process batch with concurrency (pass metadata for system_message extraction)
-            responses = self._process_batch_concurrent(
-                batch.prompts, batch.metadata, context
-            )
+        # Calculate total rows (handle both aggregated and non-aggregated batches)
+        total_rows = 0
+        for batch in batches:
+            if not batch.metadata:
+                continue
+            if (
+                batch.metadata
+                and batch.metadata[0].custom
+                and batch.metadata[0].custom.get("is_batch")
+            ):
+                # Aggregated batch: use batch_size from metadata
+                total_rows += batch.metadata[0].custom.get(
+                    "batch_size", len(batch.metadata)
+                )
+            else:
+                # Non-aggregated batch: count metadata entries
+                total_rows += len(batch.metadata)
 
-            # Notify progress after each batch
-            if hasattr(context, "notify_progress"):
-                context.notify_progress()
+        self.logger.info(
+            f"Processing {total_rows:,} rows in {len(batches)} API calls "
+            f"({self.concurrency} concurrent)"
+        )
 
-            # Calculate batch metrics
-            total_tokens = sum(r.tokens_in + r.tokens_out for r in responses)
-            total_cost = sum(r.cost for r in responses)
-            latencies = [r.latency_ms for r in responses]
+        # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
+        all_responses = self._process_all_prompts_concurrent(
+            all_prompts, context, batches
+        )
 
-            # Progress is updated per-row in the concurrent loop above
-            # No need to update here
+        # Step 3: Reconstruct batches from flat responses
+        response_batches = self._reconstruct_batches(all_responses, batches, batch_map)
 
-            # Create response batch
-            response_batch = ResponseBatch(
-                responses=[r.text for r in responses],
-                metadata=batch.metadata,
-                tokens_used=total_tokens,
-                cost=total_cost,
-                batch_id=batch.batch_id,
-                latencies_ms=latencies,
-            )
-            response_batches.append(response_batch)
-
-            # Update context row tracking (costs already added per-row in concurrent loop)
-            context.update_row(batch.metadata[-1].row_index if batch.metadata else 0)
+        # Notify progress after processing
+        if hasattr(context, "notify_progress"):
+            context.notify_progress()
 
         # Finish progress tracking
         if progress_tracker and progress_task:
@@ -143,89 +144,135 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return response_batches
 
-    def _process_batch_concurrent(
-        self, prompts: list[str], metadata: list, context: Any
-    ) -> list[Any]:
-        """Process prompts concurrently while maintaining order."""
-        self.logger.info(
-            f"Processing {len(prompts)} prompts with concurrency={self.concurrency}"
-        )
+    def _flatten_batches(
+        self, batches: list[PromptBatch]
+    ) -> tuple[list[tuple], list[tuple]]:
+        """Flatten all prompts from all batches, tracking batch membership.
 
+        Args:
+            batches: List of PromptBatch objects
+
+        Returns:
+            Tuple of (all_prompts, batch_map) where:
+            - all_prompts: List of (prompt, metadata, batch_id) tuples
+            - batch_map: List of (batch_idx, prompt_idx_in_batch) tuples
+        """
+        all_prompts = []
+        batch_map = []  # Maps flat index to (batch_idx, prompt_idx_in_batch)
+
+        for batch_idx, batch in enumerate(batches):
+            for prompt_idx, (prompt, metadata) in enumerate(
+                zip(batch.prompts, batch.metadata, strict=False)
+            ):
+                all_prompts.append((prompt, metadata, batch.batch_id))
+                batch_map.append((batch_idx, prompt_idx))
+
+        return all_prompts, batch_map
+
+    def _process_all_prompts_concurrent(
+        self,
+        all_prompts: list[tuple],
+        context: Any,
+        original_batches: list[PromptBatch] = None,
+    ) -> list[Any]:
+        """Process all prompts concurrently, ignoring batch boundaries.
+
+        Args:
+            all_prompts: List of (prompt, metadata, batch_id) tuples
+            context: Execution context
+
+        Returns:
+            List of LLMResponse objects in same order as all_prompts
+        """
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=self.concurrency
         ) as executor:
-            # Submit all tasks and keep them in order
             futures = [
                 executor.submit(
                     self._invoke_with_retry_and_ratelimit,
                     prompt,
-                    metadata[idx] if idx < len(metadata) else None,
+                    metadata,
                     context,
-                    context.last_processed_row + idx if context else idx,
+                    idx,
                 )
-                for idx, prompt in enumerate(prompts)
+                for idx, (prompt, metadata, _) in enumerate(all_prompts)
             ]
 
-            self.logger.info(f"Submitted {len(futures)} parallel tasks to executor")
-
-            # Collect results in submission order
+            # Collect results with progress tracking
             responses = []
             progress_tracker = getattr(context, "progress_tracker", None)
             progress_task = getattr(self, "_current_progress_task", None)
 
             for idx, future in enumerate(futures):
-                # Update progress periodically
-                if (idx + 1) % max(
-                    1, len(futures) // 4
-                ) == 0:  # Log at 25%, 50%, 75%, 100%
+                # Progress logging every 25% (only for large batches)
+                if len(futures) > 20 and (idx + 1) % max(1, len(futures) // 4) == 0:
                     progress = ((idx + 1) / len(futures)) * 100
                     self.logger.info(
-                        f"Batch progress: {idx + 1}/{len(futures)} requests completed ({progress:.1f}%)"
+                        f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)})"
                     )
 
                 try:
                     response = future.result()
                     responses.append(response)
 
-                    # Update progress tracker per row
+                    # Update progress tracker
                     if progress_tracker and progress_task:
                         progress_tracker.update(
                             progress_task, advance=1, cost=response.cost
                         )
 
-                    # Update context with row progress and cost
+                    # Update context with actual row count
+                    # For aggregated batches, each prompt represents multiple rows
                     if context:
-                        context.update_row(context.last_processed_row + 1)
+                        # Get the prompt metadata to check if it's an aggregated batch
+                        prompt_tuple = all_prompts[idx]
+                        _, metadata, _ = prompt_tuple
+
+                        # Check if this is an aggregated batch
+                        if metadata.custom and metadata.custom.get("is_batch"):
+                            # Aggregated: count all rows in the batch
+                            batch_size = metadata.custom.get("batch_size", 1)
+
+                            # For first batch, start from row_index in metadata
+                            # For subsequent batches, increment from last position
+                            if idx == 0:
+                                # First batch: set to last row index in this batch
+                                first_row_idx = metadata.row_index
+                                context.update_row(first_row_idx + batch_size - 1)
+                            else:
+                                # Subsequent batches: increment by batch_size
+                                context.update_row(
+                                    context.last_processed_row + batch_size
+                                )
+                        else:
+                            # Non-aggregated: count 1 row
+                            context.update_row(context.last_processed_row + 1)
+
                         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
                             context.add_cost(
                                 response.cost, response.tokens_in + response.tokens_out
                             )
-                            # Track input/output tokens separately (leverage intermediate_data)
+                            # Track input/output tokens separately
                             context.intermediate_data["token_tracking"][
                                 "input_tokens"
                             ] += response.tokens_in
                             context.intermediate_data["token_tracking"][
                                 "output_tokens"
                             ] += response.tokens_out
-                except Exception as e:
-                    prompt = prompts[idx]
 
-                    # Apply error policy
+                except Exception as e:
+                    # Handle errors using existing error policy
                     decision = self.error_handler.handle_error(
                         e,
-                        context={
-                            "row_index": idx,
+                        {
                             "stage": self.name,
-                            "prompt": prompt[:100],
+                            "prompt_index": idx,
+                            "total_prompts": len(all_prompts),
                         },
                     )
 
                     if decision.action == ErrorAction.SKIP:
-                        # Create placeholder response for skipped row
-                        from decimal import Decimal
-
-                        from ondine.core.models import LLMResponse
-
+                        # Create placeholder response
                         placeholder = LLMResponse(
                             text="[SKIPPED]",
                             tokens_in=0,
@@ -237,17 +284,62 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         )
                         responses.append(placeholder)
                     elif decision.action == ErrorAction.USE_DEFAULT:
-                        # Use default response
                         responses.append(decision.default_value)
                     elif decision.action == ErrorAction.FAIL:
-                        # Cancel all remaining futures to stop processing immediately
+                        # Cancel remaining futures
                         for remaining_future in futures[idx + 1 :]:
                             remaining_future.cancel()
-                        # Re-raise to fail pipeline
                         raise
-                    # RETRY is handled by retry_handler already
 
-        return responses
+            return responses
+
+    def _reconstruct_batches(
+        self,
+        all_responses: list[Any],
+        original_batches: list[PromptBatch],
+        batch_map: list[tuple],
+    ) -> list[ResponseBatch]:
+        """Reconstruct batches from flat responses.
+
+        Args:
+            all_responses: Flat list of LLMResponse objects
+            original_batches: Original PromptBatch objects
+            batch_map: List of (batch_idx, prompt_idx_in_batch) tuples
+
+        Returns:
+            List of ResponseBatch objects in original batch order
+        """
+        # Group responses by batch
+        batch_responses = {i: [] for i in range(len(original_batches))}
+
+        for response_idx, (batch_idx, prompt_idx_in_batch) in enumerate(batch_map):
+            batch_responses[batch_idx].append(
+                (prompt_idx_in_batch, all_responses[response_idx])
+            )
+
+        # Create ResponseBatch objects in original order
+        response_batches = []
+        for batch_idx, original_batch in enumerate(original_batches):
+            # Sort by prompt index to maintain order
+            sorted_responses = sorted(batch_responses[batch_idx], key=lambda x: x[0])
+            responses = [r for _, r in sorted_responses]
+
+            # Calculate batch metrics
+            total_tokens = sum(r.tokens_in + r.tokens_out for r in responses)
+            total_cost = sum(r.cost for r in responses)
+            latencies = [r.latency_ms for r in responses]
+
+            response_batch = ResponseBatch(
+                responses=[r.text for r in responses],
+                metadata=original_batch.metadata,
+                tokens_used=total_tokens,
+                cost=total_cost,
+                batch_id=original_batch.batch_id,
+                latencies_ms=latencies,
+            )
+            response_batches.append(response_batch)
+
+        return response_batches
 
     def _classify_error(self, error: Exception) -> Exception:
         """
