@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/ptimizeroracle/ondine/compare/v1.2.1...v1.3.0) (2025-11-16)
+
+
+### Features
+
+* Add automated versioning with Python Semantic Release ([#28](https://github.com/ptimizeroracle/ondine/issues/28)) ([3f2695d](https://github.com/ptimizeroracle/ondine/commit/3f2695dc8083bdf77c5ec50be7f3ef3e55ad1bb7))
+* Add Multi-Row Batching for 100× Speedup ([#27](https://github.com/ptimizeroracle/ondine/issues/27)) ([4df836e](https://github.com/ptimizeroracle/ondine/commit/4df836e1a9a12f03cdc88224e45fc1b1951ac5bb))
+* Add Prefix Caching Support for 40-50% Cost Reduction ([#25](https://github.com/ptimizeroracle/ondine/issues/25)) ([63b46b3](https://github.com/ptimizeroracle/ondine/commit/63b46b3d2defffb02af30da8ad2a78cdb3c43cfe))
+* Switch to Release Please for automated versioning ([#30](https://github.com/ptimizeroracle/ondine/issues/30)) ([e5d2cdb](https://github.com/ptimizeroracle/ondine/commit/e5d2cdb7e91be941e4a3b2649e92a3acbafd88c3))
+
+
+### Bug Fixes
+
+* Update release workflow to use uv run semantic-release ([#29](https://github.com/ptimizeroracle/ondine/issues/29)) ([6dbfb16](https://github.com/ptimizeroracle/ondine/commit/6dbfb1617878db4a97c941bec3150723d2887743))
+
+
+### Documentation
+
+* Make prefix caching example generic instead of product-specific ([#26](https://github.com/ptimizeroracle/ondine/issues/26)) ([e00d510](https://github.com/ptimizeroracle/ondine/commit/e00d510d61d7ca4a15fdce0463561fc36a5756f1))
+* remove outdated reference to non-existent DESIGN_IMPROVEMENT.md ([#23](https://github.com/ptimizeroracle/ondine/issues/23)) ([4bf72e1](https://github.com/ptimizeroracle/ondine/commit/4bf72e127c5ef36b338c980f2de5a13b0abd394e))
+
 ## [Unreleased]
 
 ### Added
