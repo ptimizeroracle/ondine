@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1](https://github.com/ptimizeroracle/ondine/compare/v1.3.0...v1.3.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* Make CLI version test dynamic and restore PyPI workflow ([#35](https://github.com/ptimizeroracle/ondine/issues/35)) ([e9cda06](https://github.com/ptimizeroracle/ondine/commit/e9cda064e6e5a9577ce76c36423e78f8149a5dc9))
+* Make CLI version test dynamic instead of hardcoded ([#33](https://github.com/ptimizeroracle/ondine/issues/33)) ([31f780c](https://github.com/ptimizeroracle/ondine/commit/31f780c5a00a187586caf7ad1573c492def2cc5e))
+
 ## [1.3.0](https://github.com/ptimizeroracle/ondine/compare/v1.2.1...v1.3.0) (2025-11-16)
 
 
