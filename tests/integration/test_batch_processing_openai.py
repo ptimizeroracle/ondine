@@ -133,7 +133,9 @@ class TestBatchProcessingOpenAI:
 
         print(f"\nIndividual: ${cost_per_row_individual:.6f}/row")
         print(f"Batch: ${cost_per_row_batch:.6f}/row")
-        print(f"Savings: {(1 - cost_per_row_batch/cost_per_row_individual)*100:.1f}%")
+        print(
+            f"Savings: {(1 - cost_per_row_batch / cost_per_row_individual) * 100:.1f}%"
+        )
 
     def test_batch_processing_with_partial_failure(self):
         """Test batch processing with intentionally difficult inputs."""

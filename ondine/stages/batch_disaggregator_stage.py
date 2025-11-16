@@ -129,7 +129,7 @@ class BatchDisaggregatorStage(PipelineStage):
                 for i, row_id in enumerate(batch_metadata.row_ids):
                     if i + 1 in e.failed_ids:  # failed_ids are 1-based
                         individual_results.append(
-                            f"[PARSE_ERROR: Row {i+1} not found in batch response]"
+                            f"[PARSE_ERROR: Row {i + 1} not found in batch response]"
                         )
                     else:
                         # Find the corresponding parsed result

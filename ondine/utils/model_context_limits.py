@@ -128,7 +128,7 @@ def validate_batch_size(
     if estimated_tokens > safe_limit:
         error = (
             f"Batch size too large: {batch_size} rows × {avg_prompt_tokens} tokens/row "
-            f"= {estimated_tokens} tokens, exceeds {safety_margin*100:.0f}% of "
+            f"= {estimated_tokens} tokens, exceeds {safety_margin * 100:.0f}% of "
             f"context window ({safe_limit} tokens). "
             f"Reduce batch_size to {safe_limit // avg_prompt_tokens} or less."
         )
