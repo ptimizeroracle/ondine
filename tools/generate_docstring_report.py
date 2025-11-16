@@ -157,9 +157,9 @@ def print_quality_report(results: list[dict]):
     print(f"Overall Quality Score: {avg_score:.1f}/100")
     print(f"Total Items Analyzed: {total_items}")
     print(
-        f"Items Without Examples: {needs_examples} ({needs_examples/total_items*100:.1f}%)"
+        f"Items Without Examples: {needs_examples} ({needs_examples / total_items * 100:.1f}%)"
     )
-    print(f"One-liner Docstrings: {one_liners} ({one_liners/total_items*100:.1f}%)")
+    print(f"One-liner Docstrings: {one_liners} ({one_liners / total_items * 100:.1f}%)")
     print()
 
     # Top files needing improvement

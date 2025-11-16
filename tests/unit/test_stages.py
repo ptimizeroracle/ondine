@@ -255,9 +255,9 @@ class TestLLMInvocationStage:
         # Expected: ~0.1s (all parallel) + overhead
         # Without concurrency: ~1.0s (sequential)
         assert len(result) == 10
-        assert (
-            duration < 0.5
-        ), f"Expected <0.5s (parallel), got {duration:.2f}s (sequential!)"
+        assert duration < 0.5, (
+            f"Expected <0.5s (parallel), got {duration:.2f}s (sequential!)"
+        )
         assert mock_client.call_count == 10
 
 
