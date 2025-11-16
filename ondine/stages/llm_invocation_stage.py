@@ -25,6 +25,7 @@ from ondine.utils import (
     NetworkError,
     RateLimiter,
     RateLimitError,
+    ResponseCache,
     RetryHandler,
 )
 
@@ -48,6 +49,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         retry_handler: RetryHandler | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.SKIP,
         max_retries: int = 3,
+        response_cache: ResponseCache | None = None,
     ):
         """
         Initialize LLM invocation stage.
@@ -59,11 +61,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             retry_handler: Optional retry handler
             error_policy: Policy for handling errors
             max_retries: Maximum retry attempts
+            response_cache: Optional cache for deduplicating responses
         """
         super().__init__("LLMInvocation")
         self.llm_client = llm_client
         self.concurrency = concurrency
         self.rate_limiter = rate_limiter
+        self.response_cache = response_cache
         self.retry_handler = retry_handler or RetryHandler()
         self.error_handler = ErrorHandler(
             policy=error_policy,
@@ -458,6 +462,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             system_message = row_metadata.custom.get("system_message")
 
         def _invoke() -> Any:
+            # Check cache first if enabled
+            if self.response_cache:
+                from ondine.utils.response_cache import ResponseCache
+
+                cache_key = ResponseCache.generate_cache_key(
+                    prompt=prompt,
+                    system_message=system_message,
+                    model=self.llm_client.model,
+                )
+                if cached := self.response_cache.get(cache_key):
+                    return cached
+
             # Acquire rate limit token
             if self.rate_limiter:
                 self.rate_limiter.acquire()
@@ -465,7 +481,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Invoke LLM with error classification
             try:
                 # Pass system_message as kwarg for caching optimization
-                return self.llm_client.invoke(prompt, system_message=system_message)
+                result = self.llm_client.invoke(prompt, system_message=system_message)
+
+                # Store in cache if enabled
+                if self.response_cache:
+                    self.response_cache.set(cache_key, result)
+
+                return result
             except Exception as e:
                 # Classify error to determine if retryable
                 classified = self._classify_error(e)

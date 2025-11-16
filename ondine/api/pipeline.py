@@ -47,7 +47,7 @@ from ondine.stages import (
     ResultWriterStage,
     create_response_parser,
 )
-from ondine.utils import RateLimiter, RetryHandler, get_logger
+from ondine.utils import RateLimiter, ResponseCache, RetryHandler, get_logger
 
 logger = get_logger(__name__)
 
@@ -90,6 +90,7 @@ class Pipeline:
         specifications: PipelineSpecifications,
         dataframe: pd.DataFrame | None = None,
         executor: ExecutionStrategy | None = None,
+        response_cache: ResponseCache | None = None,
     ):
         """
         Initialize pipeline with specifications.
@@ -98,11 +99,13 @@ class Pipeline:
             specifications: Complete pipeline configuration
             dataframe: Optional pre-loaded DataFrame
             executor: Optional execution strategy (default: SyncExecutor)
+            response_cache: Optional cache for deduplicating LLM responses
         """
         self.id = uuid4()
         self.specifications = specifications
         self.dataframe = dataframe
         self.executor = executor or SyncExecutor()
+        self.response_cache = response_cache
         self.observers: list[ExecutionObserver] = []
         self.logger = get_logger(f"{__name__}.{self.id}")
 
@@ -546,6 +549,7 @@ class Pipeline:
             retry_handler=retry_handler,
             error_policy=specs.processing.error_policy,
             max_retries=specs.processing.max_retries,
+            response_cache=self.response_cache,
         )
         # Stage 3: Execute LLM invocation
         response_batches = self._execute_stage(llm_stage, batches, context)

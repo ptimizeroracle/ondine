@@ -645,6 +645,50 @@ class PipelineBuilder:
         self._processing_spec.rate_limit_rpm = rpm
         return self
 
+        self._processing_spec.rate_limit_rpm = rpm
+        return self
+
+    def with_deduplication(self, cache_path: str | None = None) -> "PipelineBuilder":
+        """
+        Enable response deduplication to avoid redundant LLM API calls.
+
+        Caches LLM responses based on prompt content, system message, model,
+        and generation parameters. Identical requests will return cached responses
+        instead of making new API calls.
+
+        Args:
+            cache_path: Path to SQLite database for persistent cache.
+                       Use None for in-memory cache (lost on process exit).
+                       Use ":memory:" for explicit in-memory cache.
+                       Use file path (e.g., "ondine_cache.db") for persistence.
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # In-memory cache (fast, but lost on restart)
+            builder.with_deduplication()
+
+            # Persistent cache (survives restarts, great for development)
+            builder.with_deduplication("ondine_cache.db")
+
+            # Explicit in-memory
+            builder.with_deduplication(":memory:")
+            ```
+
+        Note:
+            Cache key includes: prompt, system_message, model, temperature,
+            and all generation parameters. Changing any of these will result
+            in a cache miss and new API call.
+
+            Cache is thread-safe and can be shared across pipeline instances.
+        """
+        from ondine.utils.response_cache import ResponseCache
+
+        self._response_cache = ResponseCache(cache_path or ":memory:")
+        return self
+
     def with_max_retries(self, retries: int) -> "PipelineBuilder":
         """
         Configure maximum retry attempts.
@@ -1120,4 +1164,5 @@ class PipelineBuilder:
             specifications,
             dataframe=self._dataframe,
             executor=self._executor,
+            response_cache=getattr(self, "_response_cache", None),
         )

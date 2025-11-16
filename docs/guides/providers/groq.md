@@ -49,4 +49,3 @@ Groq is optimized for speed. Recommended concurrency: 30-50
 
 - [OpenAI](openai.md)
 - [Execution Modes](../execution-modes.md)
-

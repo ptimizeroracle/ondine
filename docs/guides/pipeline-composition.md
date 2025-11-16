@@ -47,7 +47,7 @@ composer = (
     PipelineComposer(input_data=df)
     .add_column("category", category_pipeline)  # No dependencies
     .add_column("sentiment", sentiment_pipeline)  # No dependencies
-    .add_column("recommendation", recommendation_pipeline, 
+    .add_column("recommendation", recommendation_pipeline,
                 depends_on=["category", "sentiment"])  # Depends on both
 )
 ```
@@ -63,4 +63,3 @@ Pipelines execute in dependency order:
 
 - [Multi-Column Processing](multi-column.md)
 - [Core Concepts](../getting-started/core-concepts.md)
-

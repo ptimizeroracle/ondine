@@ -57,4 +57,3 @@ Recommended concurrency:
 
 - [Azure OpenAI](azure.md)
 - [Cost Control](../cost-control.md)
-

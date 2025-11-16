@@ -74,18 +74,18 @@ pipeline = (
     PipelineBuilder.create()
     # Data source
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
-    
+
     # Prompt configuration
     .with_prompt("Process: {text}")
-    
+
     # LLM configuration
     .with_llm(provider="openai", model="gpt-4o-mini")
-    
+
     # Processing configuration
     .with_batch_size(100)
     .with_concurrency(5)
     .with_retry_policy(max_retries=3)
-    
+
     # Build immutable pipeline
     .build()
 )
@@ -128,7 +128,7 @@ class MyCustomStage(PipelineStage):
     def process(self, input_data, context):
         # Your processing logic
         return processed_data
-    
+
     def validate_input(self, input_data):
         # Validation logic
         return ValidationResult(valid=True)
@@ -414,4 +414,3 @@ exporter.start()
 - [Structured Output](../guides/structured-output.md) - Type-safe response parsing
 - [Cost Control](../guides/cost-control.md) - Optimize costs and set budgets
 - [API Reference](../api/index.md) - Detailed API documentation
-

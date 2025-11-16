@@ -102,7 +102,7 @@ class Review(BaseModel):
     rating: int = Field(..., ge=1, le=5, description="Rating from 1-5")
     sentiment: str = Field(..., pattern="^(positive|negative|neutral)$")
     summary: str = Field(..., min_length=10, max_length=200)
-    
+
     @validator('rating')
     def rating_must_match_sentiment(cls, v, values):
         sentiment = values.get('sentiment')
@@ -386,11 +386,11 @@ from pydantic import BaseModel, validator
 class Price(BaseModel):
     amount: float
     currency: str = "USD"
-    
+
     @validator('amount')
     def round_price(cls, v):
         return round(v, 2)
-    
+
     @property
     def formatted(self) -> str:
         return f"${self.amount:.2f}"
@@ -497,4 +497,3 @@ logging.basicConfig(level=logging.DEBUG)
 - [Example: 03_structured_output.py](../../examples/03_structured_output.py)
 - [Cost Control](cost-control.md) - Optimize costs
 - [Multi-Column Processing](multi-column.md) - Multiple outputs
-

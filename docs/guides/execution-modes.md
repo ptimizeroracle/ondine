@@ -119,7 +119,7 @@ async def process_data():
         .with_rate_limit(100)  # Respect API limits
         .build()
     )
-    
+
     result = await pipeline.execute_async()
     print(f"Processed {result.metrics.processed_rows} rows")
     print(f"Time: {result.metrics.elapsed_time:.2f}s")
@@ -208,12 +208,12 @@ all_results = []
 for i, chunk_result in enumerate(pipeline.execute_stream()):
     print(f"Chunk {i+1}: {len(chunk_result.data)} rows, "
           f"Cost: ${chunk_result.costs.total_cost:.4f}")
-    
+
     # Write incrementally
     mode = "w" if i == 0 else "a"
     header = i == 0
     chunk_result.data.to_csv("output.csv", mode=mode, header=header, index=False)
-    
+
     all_results.append(chunk_result)
 
 # Aggregate metrics
@@ -347,4 +347,3 @@ Example: 1K chunk × 10KB/row = ~10MB (constant)
 - [`examples/08_streaming_large_files.py`](../../examples/08_streaming_large_files.py) - Streaming
 - [Cost Control Guide](cost-control.md) - Budget management
 - [API Reference](../api/pipeline.md) - Complete API docs
-

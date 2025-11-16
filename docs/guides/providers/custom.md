@@ -127,4 +127,3 @@ Ensure the model name matches what the API expects.
 
 - [OpenAI](openai.md)
 - [API Reference: LLMSpec](../../api/specifications.md)
-

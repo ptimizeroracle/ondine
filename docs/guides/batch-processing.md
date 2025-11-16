@@ -324,4 +324,3 @@ Set batch formatting strategy.
 - Batch size limited by model context window
 - Requires LLM to follow JSON format instructions
 - Larger batches = higher risk of partial failures
-

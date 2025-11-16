@@ -17,6 +17,7 @@ from ondine.utils.logging_utils import (
     sanitize_for_logging,
 )
 from ondine.utils.rate_limiter import RateLimiter
+from ondine.utils.response_cache import ResponseCache, get_memory_cache
 from ondine.utils.retry_handler import (
     NetworkError,
     RateLimitError,
@@ -30,6 +31,8 @@ __all__ = [
     "RateLimitError",
     "NetworkError",
     "RateLimiter",
+    "ResponseCache",
+    "get_memory_cache",
     "CostCalculator",
     "CostTracker",
     "BudgetController",

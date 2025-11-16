@@ -2721,7 +2721,7 @@ class BatchFormattingStrategy(ABC):
     def format_batch(self, prompts: list[str], metadata: dict) -> str:
         """Format N prompts into 1 batch prompt."""
         pass
-    
+
     @abstractmethod
     def parse_batch_response(self, response: str, expected_count: int) -> list[str]:
         """Parse 1 batch response into N individual results."""
