@@ -189,7 +189,7 @@ class OpenAIClient(LLMClient):
 
                 logger = get_logger(f"{__name__}.OpenAIClient")
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                logger.debug(
+                logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
@@ -488,7 +488,7 @@ class GroqClient(LLMClient):
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                self.logger.debug(
+                self.logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
@@ -618,7 +618,7 @@ class OpenAICompatibleClient(LLMClient):
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                self.logger.debug(
+                self.logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 

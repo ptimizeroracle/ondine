@@ -131,12 +131,15 @@ class BatchAggregatorStage(PipelineStage):
                 )
 
                 # Create new PromptBatch with single mega-prompt
-                # Use existing PromptBatch structure (list of strings)
+                # Preserve ALL custom fields from original metadata (especially system_message for caching!)
+                original_custom = chunk_metadata[0].custom or {}
+
                 mega_metadata = RowMetadata(
                     row_index=chunk_metadata[0].row_index,
                     row_id=chunk_metadata[0].row_id,
                     custom={
-                        "batch_metadata": metadata.model_dump(),
+                        **original_custom,  # Preserve all custom fields (system_message, etc.)
+                        "batch_metadata": metadata.model_dump(),  # Batch-specific fields override
                         "is_batch": True,
                         "batch_size": len(chunk_prompts),
                     },

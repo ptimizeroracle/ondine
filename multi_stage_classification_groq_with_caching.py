@@ -4,12 +4,12 @@ Multi-Stage Classification Pipeline with Ondine + Groq + PREFIX CACHING + MULTI-
 
 This example demonstrates:
 1. Multi-stage classification (4 stages, 4 new columns)
-2. **PREFIX CACHING for 50-90% cost reduction**
-3. **MULTI-ROW BATCHING for 50× speedup** (NEW!)
+2. **PREFIX CACHING for 50% cost reduction** (Groq supports caching!)
+3. **MULTI-ROW BATCHING for 10× speedup** (adjusted for Groq free tier limits)
 4. Scalability features (async execution, streaming, rate limiting)
 5. Cost control and budget enforcement
 6. Checkpoint/resume for large datasets (5.4M rows)
-7. Groq provider for fast, cost-effective inference
+7. **Groq provider: 10× cheaper than OpenAI, fast inference**
 
 Dataset: titles_to_categories.csv (5.4M product titles)
 
@@ -21,21 +21,26 @@ Classification Stages:
 
 **PERFORMANCE OPTIMIZATIONS:**
 - Each stage uses with_system_prompt() for automatic caching (50% cost reduction)
-- Each stage uses with_batch_size(100) for 100× fewer API calls
-- Parallel execution with concurrency=50 (50 simultaneous requests)
-- Smart rate limiting (450 RPM) to maximize throughput without hitting limits
+- Each stage uses with_batch_size(10) for 10× fewer API calls (adjusted for Groq TPM limits)
+- Parallel execution with concurrency=30 (Groq free tier: 30 RPM, 6K TPM)
+- Groq provider: 10× cheaper than OpenAI ($0.05/1M vs $0.15/1M)
+
+**GROQ FREE TIER LIMITS:**
+- 30 RPM (requests per minute)
+- 6,000 TPM (tokens per minute)
+- With batch_size=10: ~1,500 tokens/request
+- Max throughput: 4 requests/minute (6000 / 1500)
 
 **EXPECTED PERFORMANCE (5.4M rows, 4 stages):**
 ┌──────────────────┬────────────┬──────────┬──────────┬─────────┐
 │ Configuration    │ API Calls  │ Time     │ Cost     │ Speedup │
 ├──────────────────┼────────────┼──────────┼──────────┼─────────┤
-│ No optimization  │ 5.4M       │ ~69 hrs  │ $810     │ 1×      │
-│ + Caching only   │ 5.4M       │ ~69 hrs  │ $405     │ 1×      │
-│ + Batching (100) │ 54K        │ ~42 min  │ $405     │ 100×    │
-│ + Both (CURRENT) │ 54K        │ ~42 min  │ $150     │ 100×    │
+│ No optimization  │ 5.4M       │ ~69 hrs  │ $270     │ 1×      │
+│ + Batching (10)  │ 540K       │ ~150 hrs │ $270     │ 10×     │
+│ + Groq (CURRENT) │ 540K       │ ~150 hrs │ $27      │ 10×     │
 └──────────────────┴────────────┴──────────┴──────────┴─────────┘
 
-**TOTAL FOR 4 STAGES:** ~2.8 hours, ~$150 (vs 276 hours, $810 without optimization)
+**TOTAL FOR 4 STAGES:** ~150 hours (~6 days), ~$27 (Groq free tier)
 
 Author: Multi-Agent Framework
 Date: 2025-11-14
@@ -69,8 +74,10 @@ INPUT_FILE = "titles_to_categories.csv"
 OUTPUT_FILE = "titles_classified_multi_stage_cached.csv"
 
 # Processing configuration
-SAMPLE_SIZE = None  # None = Full 5.4M dataset, 200 = Quick test
-MULTI_ROW_BATCH_SIZE = 100  # Process N rows per API call (higher = fewer calls)
+SAMPLE_SIZE = 500  # None = Full 5.4M dataset, 200 = Quick test to verify caching
+MULTI_ROW_BATCH_SIZE = (
+    50  # Balance: Not too small (API overhead), not too large (timeout risk)
+)
 CHECKPOINT_BATCH_SIZE = 50000  # Checkpoint every N rows (for resume on failure)
 
 # ============================================================================
@@ -136,9 +143,12 @@ CHECKPOINT_BATCH_SIZE = 50000  # Checkpoint every N rows (for resume on failure)
 #
 # ============================================================================
 
-# Current settings (Tier 1 Balanced)
-CONCURRENCY = 50  # Parallel requests
-REQUESTS_PER_MINUTE = 450  # Rate limit (90% of 500 RPM)
+# Current settings (OpenAI Tier 1 - gpt-4.1-nano)
+# gpt-4.1-nano limits: 500K TPM, 500 RPM
+# With batch_size=50: ~7,000 tokens/request
+# Max concurrent: 500K / 7K = 71 requests, use 50 for safety
+CONCURRENCY = 10  # Conservative for 200K TPM limit (10 × 7K = 70K < 200K)
+REQUESTS_PER_MINUTE = 450  # Conservative (90% of 500 RPM)
 
 # Budget control (adjust based on sample size)
 # For 1K rows with caching + batching: ~$0.005 per stage = $0.02 total
@@ -313,11 +323,10 @@ Category:""")
         # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
         .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI with prompt caching
-            model="gpt-4o-mini",  # Fast, cheap, supports caching
+            provider="openai",  # OpenAI Tier 1
+            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
             temperature=0.3,
-            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
-            # Cached: 50% discount = $0.075/1M
+            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
@@ -381,11 +390,10 @@ Subcategory:""")
         # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
         .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI with prompt caching
-            model="gpt-4o-mini",  # Fast, cheap, supports caching
+            provider="openai",  # OpenAI Tier 1
+            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
             temperature=0.3,
-            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
-            # Cached: 50% discount = $0.075/1M
+            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
@@ -446,11 +454,10 @@ Output ONLY the number.""")
         # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
         .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI with prompt caching
-            model="gpt-4o-mini",  # Fast, cheap, supports caching
+            provider="openai",  # OpenAI Tier 1
+            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
             temperature=0.3,
-            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
-            # Cached: 50% discount = $0.075/1M
+            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
