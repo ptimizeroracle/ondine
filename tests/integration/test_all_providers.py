@@ -17,7 +17,7 @@ def get_provider_configs():
     configs = []
 
     if os.getenv("GROQ_API_KEY"):
-        configs.append(("groq", "llama-3.1-70b-versatile", "GROQ_API_KEY"))
+        configs.append(("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"))
 
     if os.getenv("OPENAI_API_KEY"):
         configs.append(("openai", "gpt-4o-mini", "OPENAI_API_KEY"))
