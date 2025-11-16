@@ -1,6 +1,6 @@
-"""Integration tests for batch processing with real OpenAI API.
+"""Integration tests for batch processing with real Groq API.
 
-These tests require OPENAI_API_KEY environment variable and will make real API calls.
+These tests require GROQ_API_KEY environment variable and will make real API calls.
 Run with: pytest tests/integration/test_batch_processing_openai.py -v
 """
 
@@ -12,9 +12,9 @@ import pytest
 from ondine.api.pipeline_builder import PipelineBuilder
 
 
-@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
-class TestBatchProcessingOpenAI:
-    """Integration tests with real OpenAI API."""
+@pytest.mark.skipif(not os.getenv("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
+class TestBatchProcessingGroq:
+    """Integration tests with real Groq API."""
 
     def test_batch_processing_with_10_rows(self):
         """Test batch processing with 10 rows (batch_size=5)."""
@@ -47,11 +47,11 @@ class TestBatchProcessingOpenAI:
             .with_prompt("Classify sentiment: {review}\n\nSentiment:")
             .with_batch_size(5)  # Process 5 rows per API call
             .with_llm(
-                provider="openai",
-                model="gpt-4o-mini",
+                provider="groq",
+                model="llama-3.3-70b-versatile",
                 temperature=0.0,
-                input_cost_per_1k_tokens=Decimal("0.00015"),
-                output_cost_per_1k_tokens=Decimal("0.0006"),
+                input_cost_per_1k_tokens=Decimal("0.00059"),
+                output_cost_per_1k_tokens=Decimal("0.00079"),
             )
             .build()
         )
@@ -97,7 +97,7 @@ class TestBatchProcessingOpenAI:
             PipelineBuilder.create()
             .from_dataframe(data, input_columns=["text"], output_columns=["category"])
             .with_prompt("Categorize: {text}\n\nCategory:")
-            .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
+            .with_llm(provider="groq", model="llama-3.3-70b-versatile", temperature=0.0)
             .build()
         )
 
@@ -109,7 +109,7 @@ class TestBatchProcessingOpenAI:
             .from_dataframe(data, input_columns=["text"], output_columns=["category"])
             .with_prompt("Categorize: {text}\n\nCategory:")
             .with_batch_size(5)
-            .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
+            .with_llm(provider="groq", model="llama-3.3-70b-versatile", temperature=0.0)
             .build()
         )
 
@@ -133,9 +133,12 @@ class TestBatchProcessingOpenAI:
 
         print(f"\nIndividual: ${cost_per_row_individual:.6f}/row")
         print(f"Batch: ${cost_per_row_batch:.6f}/row")
-        print(
-            f"Savings: {(1 - cost_per_row_batch / cost_per_row_individual) * 100:.1f}%"
-        )
+
+        # Only calculate savings if costs are non-zero
+        if cost_per_row_individual > 0:
+            print(
+                f"Savings: {(1 - cost_per_row_batch / cost_per_row_individual) * 100:.1f}%"
+            )
 
     def test_batch_processing_with_partial_failure(self):
         """Test batch processing with intentionally difficult inputs."""
@@ -156,7 +159,7 @@ class TestBatchProcessingOpenAI:
             .from_dataframe(data, input_columns=["text"], output_columns=["result"])
             .with_prompt("Echo: {text}")
             .with_batch_size(3)
-            .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
+            .with_llm(provider="groq", model="llama-3.3-70b-versatile", temperature=0.0)
             .build()
         )
 
@@ -179,7 +182,7 @@ class TestBatchProcessingOpenAI:
             .from_dataframe(data, input_columns=["text"], output_columns=["result"])
             .with_prompt("Process: {text}")
             .with_batch_size(10)
-            .with_llm(provider="openai", model="gpt-4o-mini")
+            .with_llm(provider="groq", model="llama-3.3-70b-versatile")
             .build()
         )
 
@@ -195,7 +198,7 @@ class TestBatchProcessingOpenAI:
             PipelineBuilder.create()
             .from_dataframe(data, input_columns=["text"], output_columns=["result"])
             .with_prompt("Echo: {text}")
-            .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
+            .with_llm(provider="groq", model="llama-3.3-70b-versatile", temperature=0.0)
             .build()
         )
 
