@@ -1,0 +1,66 @@
+name: Release to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: Ondine  # Use the Ondine environment with PYPI_API_TOKEN
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Verify version matches tag
+      if: github.event_name == 'release'
+      run: |
+        TAG_VERSION=${GITHUB_REF#refs/tags/v}
+        PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
+        if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+          echo "Error: Tag version ($TAG_VERSION) does not match package version ($PACKAGE_VERSION)"
+          exit 1
+        fi
+        echo "✅ Version check passed: $TAG_VERSION"
+
+    - name: Build package
+      run: |
+        uv build
+        echo "📦 Built package:"
+        ls -lh dist/
+
+    - name: Verify package contents
+      run: |
+        echo "📋 Checking package contents..."
+        tar -tzf dist/*.tar.gz | grep -E "(LICENSE|CHANGELOG|README)" || echo "Warning: Some docs missing"
+        echo "✅ Package verification complete"
+
+    - name: Publish to PyPI
+      env:
+        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        echo "Publishing to PyPI..."
+        uv publish
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-packages
+        path: dist/
+        retention-days: 30
