@@ -1,66 +1,58 @@
-name: Release to PyPI
+name: Release
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:  # Allow manual trigger
+  push:
+    branches:
+      - main
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
-  build-and-publish:
-    name: Build and publish to PyPI
+  release:
     runs-on: ubuntu-latest
-    environment: Ondine  # Use the Ondine environment with PYPI_API_TOKEN
+    concurrency: release
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
-    - name: Verify version matches tag
-      if: github.event_name == 'release'
-      run: |
-        TAG_VERSION=${GITHUB_REF#refs/tags/v}
-        PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
-        if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
-          echo "Error: Tag version ($TAG_VERSION) does not match package version ($PACKAGE_VERSION)"
-          exit 1
-        fi
-        echo "✅ Version check passed: $TAG_VERSION"
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras --dev
 
-    - name: Build package
-      run: |
-        uv build
-        echo "📦 Built package:"
-        ls -lh dist/
+      - name: Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v9.14.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: "github-actions[bot]"
+          git_committer_email: "github-actions[bot]@users.noreply.github.com"
 
-    - name: Verify package contents
-      run: |
-        echo "📋 Checking package contents..."
-        tar -tzf dist/*.tar.gz | grep -E "(LICENSE|CHANGELOG|README)" || echo "Warning: Some docs missing"
-        echo "✅ Package verification complete"
+      - name: Publish to PyPI (if enabled)
+        if: steps.release.outputs.released == 'true' && false  # Disabled by default
+        run: |
+          uv build
+          uv publish --token ${{ secrets.PYPI_TOKEN }}
 
-    - name: Publish to PyPI
-      env:
-        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        echo "Publishing to PyPI..."
-        uv publish
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
-        retention-days: 30
+      - name: Publish release notes
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/upload-to-gh-release@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
