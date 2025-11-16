@@ -84,12 +84,14 @@ class TestAutoRetryActualExecution:
         mock_get.return_value = mock_client_class
 
         # Build pipeline with auto-retry
+        # Note: Using processing_batch_size for internal batching, NOT multi-row batching
+        # Retry tests need row-by-row API calls to verify retry logic
         pipeline = (
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["cleaned"])
             .with_prompt(template="Clean: {text}")
             .with_llm(provider="groq", model="test", temperature=0.0)
-            .with_batch_size(10)
+            .with_processing_batch_size(10)  # Internal batching only
             .with_concurrency(1)
             .build()
         )
@@ -158,7 +160,7 @@ class TestAutoRetryActualExecution:
             .from_dataframe(df, input_columns=["text"], output_columns=["cleaned"])
             .with_prompt(template="Clean: {text}")
             .with_llm(provider="groq", model="test", temperature=0.0)
-            .with_batch_size(3)
+            .with_processing_batch_size(3)  # Internal batching only, not multi-row
             .build()
         )
 

@@ -245,8 +245,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                                     context.last_processed_row + batch_size
                                 )
                         else:
-                            # Non-aggregated: count 1 row
-                            context.update_row(context.last_processed_row + 1)
+                            # Non-aggregated: set to current row index (not increment)
+                            # last_processed_row is an INDEX (0-based), not a count
+                            context.update_row(metadata.row_index)
 
                         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
                             context.add_cost(
