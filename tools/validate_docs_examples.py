@@ -84,7 +84,7 @@ def validate_code_block(code: str, line_num: int, file_path: Path) -> list[str]:
         for match in matches:
             code_line = code[: match.start()].count("\n") + 1
             errors.append(
-                f"{file_path}:{line_num + code_line}: " f"BANNED API: {match.group(0)}"
+                f"{file_path}:{line_num + code_line}: BANNED API: {match.group(0)}"
             )
 
     # Try to parse as Python (syntax check)

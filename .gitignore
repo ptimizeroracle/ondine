@@ -35,6 +35,9 @@ process_all_*.py
 # Test/example scripts (not part of the framework)
 product_similarity_*.py
 product_similarity_*.xlsx
+multi_stage_classification_groq_with_caching.py
+config_stage1_primary_category.yaml
+config_stage2_subcategory.yaml
 
 # Checkpoints directory
 .checkpoints/

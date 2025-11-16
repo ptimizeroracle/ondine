@@ -44,7 +44,7 @@ class ReplicateClient(LLMClient):
             )
         except ImportError:
             raise ImportError(
-                "Replicate SDK not installed. Install with:\n" "  pip install replicate"
+                "Replicate SDK not installed. Install with:\n  pip install replicate"
             )
 
     def invoke(self, prompt: str, **kwargs) -> LLMResponse:

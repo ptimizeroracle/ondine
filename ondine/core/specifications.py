@@ -141,6 +141,15 @@ class PromptSpec(BaseModel):
         default=None,
         description="Regex patterns for field extraction (for response_format='regex')",
     )
+    batch_size: int = Field(
+        default=1,
+        description="Number of rows to process in a single API call (1 = no batching)",
+        ge=1,
+    )
+    batch_strategy: str = Field(
+        default="json",
+        description="Batch formatting strategy: 'json' or 'csv'",
+    )
 
     @field_validator("template")
     @classmethod
@@ -159,6 +168,15 @@ class PromptSpec(BaseModel):
         allowed = ["raw", "json", "regex"]
         if v not in allowed:
             raise ValueError(f"response_format must be one of {allowed}, got '{v}'")
+        return v
+
+    @field_validator("batch_strategy")
+    @classmethod
+    def validate_batch_strategy(cls, v: str) -> str:
+        """Validate batch strategy is supported."""
+        allowed = ["json", "csv"]
+        if v not in allowed:
+            raise ValueError(f"batch_strategy must be one of {allowed}, got '{v}'")
         return v
 
 

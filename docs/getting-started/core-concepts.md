@@ -45,7 +45,25 @@ result = await pipeline.execute_async()
 - Handles checkpointing and recovery
 - Tracks costs and metrics
 
-### 2. Pipeline Builder
+### 2. Pipeline Stages
+
+Ondine processes data through a series of composable stages:
+
+1. **DataLoaderStage** - Load data from CSV, Excel, Parquet, or DataFrame
+2. **PromptFormatterStage** - Format prompts with row data
+3. **BatchAggregatorStage** - (Optional) Aggregate N prompts into 1 for multi-row batching
+4. **LLMInvocationStage** - Call LLM API with retry and rate limiting
+5. **BatchDisaggregatorStage** - (Optional) Split batch response into N results
+6. **ResponseParserStage** - Parse LLM responses (text, JSON, regex)
+7. **ResultWriterStage** - Write results to output
+
+**Multi-Row Batching** (NEW):
+- Stages 3 and 5 are only inserted when `batch_size > 1`
+- Enables 100× speedup by processing N rows per API call
+- Automatic context window validation
+- Partial failure handling
+
+### 3. Pipeline Builder
 
 The `PipelineBuilder` provides a fluent API for constructing pipelines:
 

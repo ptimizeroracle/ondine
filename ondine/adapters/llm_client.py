@@ -178,13 +178,9 @@ class OpenAIClient(LLMClient):
                 from ondine.utils import get_logger
 
                 logger = get_logger(f"{__name__}.OpenAIClient")
-                prompt_details = getattr(usage, "prompt_tokens_details", None)
-                logger.info(
-                    f"🔍 DEBUG - First API Response (OpenAI):\n"
-                    f"   prompt_tokens: {tokens_in}\n"
-                    f"   completion_tokens: {tokens_out}\n"
-                    f"   prompt_tokens_details: {prompt_details}\n"
-                    f"   cached_tokens (extracted): {cached_tokens}"
+                logger.debug(
+                    f"First API response: {tokens_in} input + {tokens_out} output tokens "
+                    f"({cached_tokens} cached)"
                 )
 
             # Log if caching is detected
@@ -193,7 +189,7 @@ class OpenAIClient(LLMClient):
 
                 logger = get_logger(f"{__name__}.OpenAIClient")
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                logger.debug(
+                logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
@@ -483,20 +479,16 @@ class GroqClient(LLMClient):
             # Debug: Log first response to see what Groq returns
             if not hasattr(self, "_debug_logged"):
                 self._debug_logged = True
-                prompt_details = getattr(usage, "prompt_tokens_details", None)
-                self.logger.info(
-                    f"🔍 DEBUG - First API Response:\n"
-                    f"   prompt_tokens: {tokens_in}\n"
-                    f"   completion_tokens: {tokens_out}\n"
-                    f"   prompt_tokens_details: {prompt_details}\n"
-                    f"   cached_tokens (extracted): {cached_tokens}"
+                self.logger.debug(
+                    f"First API response: {tokens_in} input + {tokens_out} output tokens "
+                    f"({cached_tokens} cached)"
                 )
 
             # Log if caching is detected
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                self.logger.debug(
+                self.logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
@@ -617,20 +609,16 @@ class OpenAICompatibleClient(LLMClient):
             # Debug: Log first response
             if not hasattr(self, "_debug_logged"):
                 self._debug_logged = True
-                prompt_details = getattr(usage, "prompt_tokens_details", None)
-                self.logger.info(
-                    f"🔍 DEBUG - First API Response ({self.provider_name}):\n"
-                    f"   prompt_tokens: {tokens_in}\n"
-                    f"   completion_tokens: {tokens_out}\n"
-                    f"   prompt_tokens_details: {prompt_details}\n"
-                    f"   cached_tokens (extracted): {cached_tokens}"
+                self.logger.debug(
+                    f"First API response: {tokens_in} input + {tokens_out} output tokens "
+                    f"({cached_tokens} cached)"
                 )
 
             # Log if caching is detected
             # Track cache hits (use DEBUG level to avoid spam in production)
             if cached_tokens > 0:
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                self.logger.debug(
+                self.logger.info(
                     f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
 
