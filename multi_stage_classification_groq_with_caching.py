@@ -1,15 +1,14 @@
 """
-Multi-Stage Classification Pipeline with Ondine + Groq + PREFIX CACHING + MULTI-ROW BATCHING
-==============================================================================================
+Multi-Stage Classification Pipeline with Ondine + Groq + PREFIX CACHING
+========================================================================
 
 This example demonstrates:
 1. Multi-stage classification (4 stages, 4 new columns)
-2. **PREFIX CACHING for 50% cost reduction** (Groq supports caching!)
-3. **MULTI-ROW BATCHING for 10× speedup** (adjusted for Groq free tier limits)
-4. Scalability features (async execution, streaming, rate limiting)
-5. Cost control and budget enforcement
-6. Checkpoint/resume for large datasets (5.4M rows)
-7. **Groq provider: 10× cheaper than OpenAI, fast inference**
+2. **PREFIX CACHING for 50-90% cost reduction**
+3. Scalability features (async execution, streaming, rate limiting)
+4. Cost control and budget enforcement
+5. Checkpoint/resume for large datasets (5.4M rows)
+6. Groq provider for fast, cost-effective inference
 
 Dataset: titles_to_categories.csv (5.4M product titles)
 
@@ -19,28 +18,7 @@ Classification Stages:
 3. Quality Score (product title quality: 1-5)
 4. Target Audience (who is this product for?)
 
-**PERFORMANCE OPTIMIZATIONS:**
-- Each stage uses with_system_prompt() for automatic caching (50% cost reduction)
-- Each stage uses with_batch_size(10) for 10× fewer API calls (adjusted for Groq TPM limits)
-- Parallel execution with concurrency=30 (Groq free tier: 30 RPM, 6K TPM)
-- Groq provider: 10× cheaper than OpenAI ($0.05/1M vs $0.15/1M)
-
-**GROQ FREE TIER LIMITS:**
-- 30 RPM (requests per minute)
-- 6,000 TPM (tokens per minute)
-- With batch_size=10: ~1,500 tokens/request
-- Max throughput: 4 requests/minute (6000 / 1500)
-
-**EXPECTED PERFORMANCE (5.4M rows, 4 stages):**
-┌──────────────────┬────────────┬──────────┬──────────┬─────────┐
-│ Configuration    │ API Calls  │ Time     │ Cost     │ Speedup │
-├──────────────────┼────────────┼──────────┼──────────┼─────────┤
-│ No optimization  │ 5.4M       │ ~69 hrs  │ $270     │ 1×      │
-│ + Batching (10)  │ 540K       │ ~150 hrs │ $270     │ 10×     │
-│ + Groq (CURRENT) │ 540K       │ ~150 hrs │ $27      │ 10×     │
-└──────────────────┴────────────┴──────────┴──────────┴─────────┘
-
-**TOTAL FOR 4 STAGES:** ~150 hours (~6 days), ~$27 (Groq free tier)
+**NEW: Each stage uses with_system_prompt() for automatic caching**
 
 Author: Multi-Agent Framework
 Date: 2025-11-14
@@ -66,7 +44,7 @@ from ondine.utils import get_logger
 logger = get_logger(__name__)
 
 # ============================================================================
-# CONFIGURATION - TUNE THESE FOR OPTIMAL PERFORMANCE
+# CONFIGURATION
 # ============================================================================
 
 # File paths
@@ -74,86 +52,18 @@ INPUT_FILE = "titles_to_categories.csv"
 OUTPUT_FILE = "titles_classified_multi_stage_cached.csv"
 
 # Processing configuration
-SAMPLE_SIZE = 500  # None = Full 5.4M dataset, 200 = Quick test to verify caching
-MULTI_ROW_BATCH_SIZE = (
-    50  # Balance: Not too small (API overhead), not too large (timeout risk)
-)
-CHECKPOINT_BATCH_SIZE = 50000  # Checkpoint every N rows (for resume on failure)
-
-# ============================================================================
-# OPTIMIZATION GUIDE: Finding the Best Settings
-# ============================================================================
-#
-# 1. BATCH SIZE (MULTI_ROW_BATCH_SIZE)
-#    - Controls how many rows are processed in a single API call
-#    - Higher = fewer API calls, but longer per request
-#    - Limited by model context window (gpt-4o-mini: 128K tokens)
-#
-#    Recommendations:
-#    - Simple prompts (<50 tokens/row): 100-500
-#    - Medium prompts (50-200 tokens/row): 50-100  ✅ Current
-#    - Complex prompts (>200 tokens/row): 10-50
-#
-#    Your prompt: ~130 tokens/row → batch_size=100 is optimal
-#
-# 2. CONCURRENCY
-#    - Controls how many API requests run in parallel
-#    - Higher = faster, but more likely to hit rate limits
-#    - Limited by OpenAI tier and system resources
-#
-#    Recommendations by OpenAI Tier:
-#    - Tier 1 (500 RPM):  10-50 concurrent requests  ✅ Current: 50
-#    - Tier 2 (5K RPM):   50-200 concurrent requests
-#    - Tier 3 (10K RPM):  100-500 concurrent requests
-#
-# 3. RATE LIMIT (REQUESTS_PER_MINUTE)
-#    - Prevents hitting OpenAI's rate limits
-#    - Should be ~90% of your tier's RPM limit
-#
-#    Your tier limits (check at https://platform.openai.com/settings/organization/limits):
-#    - Tier 1: 500 RPM  → set to 450
-#    - Tier 2: 5000 RPM → set to 4500
-#    - Tier 3: 10000 RPM → set to 9000
-#
-# 4. OPTIMAL COMBINATIONS (for 5.4M rows):
-#
-#    Conservative (Tier 1, 500 RPM):
-#      MULTI_ROW_BATCH_SIZE = 100
-#      CONCURRENCY = 10
-#      REQUESTS_PER_MINUTE = 450
-#      → Time: ~2 hours/stage, ~8 hours total
-#
-#    Balanced (Tier 1, 500 RPM):  ✅ CURRENT
-#      MULTI_ROW_BATCH_SIZE = 100
-#      CONCURRENCY = 50
-#      REQUESTS_PER_MINUTE = 450
-#      → Time: ~42 min/stage, ~2.8 hours total
-#
-#    Aggressive (Tier 2, 5000 RPM):
-#      MULTI_ROW_BATCH_SIZE = 200
-#      CONCURRENCY = 100
-#      REQUESTS_PER_MINUTE = 4500
-#      → Time: ~10 min/stage, ~40 minutes total
-#
-#    Maximum (Tier 3, 10000 RPM):
-#      MULTI_ROW_BATCH_SIZE = 500
-#      CONCURRENCY = 200
-#      REQUESTS_PER_MINUTE = 9000
-#      → Time: ~5 min/stage, ~20 minutes total
-#
-# ============================================================================
-
-# Current settings (OpenAI Tier 1 - gpt-4.1-nano)
-# gpt-4.1-nano limits: 500K TPM, 500 RPM
-# With batch_size=50: ~7,000 tokens/request
-# Max concurrent: 500K / 7K = 71 requests, use 50 for safety
-CONCURRENCY = 10  # Conservative for 200K TPM limit (10 × 7K = 70K < 200K)
-REQUESTS_PER_MINUTE = 450  # Conservative (90% of 500 RPM)
+SAMPLE_SIZE = 100  # Quick test with 100 rows (set to 1000 or None for full dataset)
+CONCURRENCY = 2  # REDUCED: OpenAI free tier has 200K TPM limit (2850 tokens/req × 2 = 5700 tokens/burst)
+BATCH_SIZE = 10000  # Checkpoint every 10K rows (for large dataset)
 
 # Budget control (adjust based on sample size)
-# For 1K rows with caching + batching: ~$0.005 per stage = $0.02 total
-# For full 5.4M dataset with caching + batching: ~$25-50 per stage = $150 total
-MAX_BUDGET = Decimal("10.00") if SAMPLE_SIZE else Decimal("200.00")
+# For 1K rows with caching: ~$0.02-0.05 per stage = $0.20 total
+# For full 5.4M dataset with caching: ~$100-200 per stage = $800 total
+MAX_BUDGET = Decimal("10.00") if SAMPLE_SIZE else Decimal("1000.00")
+
+# Rate limiting - OpenAI TPM limits (free tier: 200K TPM)
+# With 2850 tokens/request, max safe rate = 200K / 2850 = 70 requests/min
+REQUESTS_PER_MINUTE = 60  # Conservative: Stay well under TPM limit
 
 # ============================================================================
 # SHARED SYSTEM CONTEXT (CACHED ACROSS ALL STAGES)
@@ -320,19 +230,18 @@ OUTPUT FORMAT: Category name only (e.g., "Electronics")
 Category:""")
         # ✅ SYSTEM PROMPT (SHARED general context, CACHED across ALL stages!)
         .with_system_prompt(SHARED_SYSTEM_CONTEXT)
-        # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
-        .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI Tier 1
-            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
+            provider="openai",  # OpenAI with prompt caching
+            model="gpt-4o-mini",  # Fast, cheap, supports caching
             temperature=0.3,
-            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
+            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
+            # Cached: 50% discount = $0.075/1M
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
         .with_concurrency(CONCURRENCY)
         .with_rate_limit(REQUESTS_PER_MINUTE)
-        .with_checkpoint_interval(CHECKPOINT_BATCH_SIZE)
+        .with_checkpoint_interval(BATCH_SIZE)
         .with_max_budget(float(MAX_BUDGET))
         .with_streaming(chunk_size=100000)
         .with_progress_mode("rich")
@@ -387,19 +296,18 @@ OUTPUT FORMAT: Subcategory name only (e.g., "Power Tools")
 Subcategory:""")
         # ✅ SYSTEM PROMPT (SHARED general context, CACHED across ALL stages!)
         .with_system_prompt(SHARED_SYSTEM_CONTEXT)
-        # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
-        .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI Tier 1
-            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
+            provider="openai",  # OpenAI with prompt caching
+            model="gpt-4o-mini",  # Fast, cheap, supports caching
             temperature=0.3,
-            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
+            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
+            # Cached: 50% discount = $0.075/1M
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
         .with_concurrency(CONCURRENCY)
         .with_rate_limit(REQUESTS_PER_MINUTE)
-        .with_checkpoint_interval(CHECKPOINT_BATCH_SIZE)
+        .with_checkpoint_interval(BATCH_SIZE)
         .with_max_budget(float(MAX_BUDGET))
         .with_streaming(chunk_size=100000)
         .with_progress_mode("rich")
@@ -451,19 +359,18 @@ WRONG: "The quality score is 4"
 CORRECT: "4"
 
 Output ONLY the number.""")
-        # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
-        .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
-            provider="openai",  # OpenAI Tier 1
-            model="gpt-4o-mini",  # gpt-4o-mini: Proven caching support
+            provider="openai",  # OpenAI with prompt caching
+            model="gpt-4o-mini",  # Fast, cheap, supports caching
             temperature=0.3,
-            # gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
+            # OpenAI pricing: Input $0.15/1M, Output $0.60/1M
+            # Cached: 50% discount = $0.075/1M
             input_cost_per_1k_tokens=Decimal("0.00015"),
             output_cost_per_1k_tokens=Decimal("0.0006"),
         )
         .with_concurrency(CONCURRENCY)
         .with_rate_limit(REQUESTS_PER_MINUTE)
-        .with_checkpoint_interval(CHECKPOINT_BATCH_SIZE)
+        .with_checkpoint_interval(BATCH_SIZE)
         .with_max_budget(float(MAX_BUDGET))
         .with_streaming(chunk_size=100000)
         .with_progress_mode("rich")
@@ -525,8 +432,6 @@ CORRECT: "Professionals"
 CORRECT: "Home Users"
 
 Output ONLY the audience name. No explanations. No reasoning. No additional text.""")
-        # 🚀 MULTI-ROW BATCHING: Process N rows per API call (N× speedup!)
-        .with_batch_size(MULTI_ROW_BATCH_SIZE)
         .with_llm(
             provider="groq",
             model="openai/gpt-oss-20b",
@@ -537,7 +442,7 @@ Output ONLY the audience name. No explanations. No reasoning. No additional text
         )
         .with_concurrency(CONCURRENCY)
         .with_rate_limit(REQUESTS_PER_MINUTE)
-        .with_checkpoint_interval(CHECKPOINT_BATCH_SIZE)
+        .with_checkpoint_interval(BATCH_SIZE)
         .with_max_budget(float(MAX_BUDGET))
         .with_streaming(chunk_size=100000)
         .with_progress_mode("rich")
