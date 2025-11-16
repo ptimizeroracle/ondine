@@ -27,9 +27,11 @@ class TestCLI:
 
     def test_cli_version(self):
         """Test CLI version command."""
+        from ondine import __version__
+
         result = self.runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "1.0.3" in result.output
+        assert __version__ in result.output
 
     def test_process_help(self):
         """Test process command help."""
