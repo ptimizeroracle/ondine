@@ -38,21 +38,22 @@ jobs:
 
       - name: Python Semantic Release
         id: release
-        uses: python-semantic-release/python-semantic-release@v9.14.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          git_committer_name: "github-actions[bot]"
-          git_committer_email: "github-actions[bot]@users.noreply.github.com"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Run semantic-release with uv (ensures uv is in PATH for build command)
+          uv run semantic-release version
+
+          # Check if a release was created
+          if [ -f .semantic-release-version ]; then
+            echo "released=true" >> $GITHUB_OUTPUT
+            echo "tag=$(cat .semantic-release-version)" >> $GITHUB_OUTPUT
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Publish to PyPI (if enabled)
         if: steps.release.outputs.released == 'true' && false  # Disabled by default
         run: |
           uv build
           uv publish --token ${{ secrets.PYPI_TOKEN }}
-
-      - name: Publish release notes
-        if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/upload-to-gh-release@main
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
