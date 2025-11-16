@@ -69,6 +69,10 @@ class BatchAggregatorStage(PipelineStage):
 
         # Calculate total prompts for progress tracking
         total_prompts = sum(len(b.prompts) for b in batches)
+        if total_prompts == 0:
+            self.logger.info("No prompts to aggregate")
+            return aggregated_batches
+
         processed_prompts = 0
         start_time = time.time()
         last_log_time = start_time
@@ -102,6 +106,13 @@ class BatchAggregatorStage(PipelineStage):
                     and self.model
                     and len(aggregated_batches) == 0  # Only validate first batch
                 ):
+                    # Skip validation if chunk is empty
+                    if not chunk_prompts:
+                        self.logger.warning(
+                            "Empty chunk encountered, skipping validation"
+                        )
+                        continue
+
                     # Estimate tokens for this batch
                     import tiktoken
 

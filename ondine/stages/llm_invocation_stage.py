@@ -106,6 +106,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # Calculate total rows (handle both aggregated and non-aggregated batches)
         total_rows = 0
         for batch in batches:
+            if not batch.metadata:
+                continue
             if (
                 batch.metadata
                 and batch.metadata[0].custom
@@ -271,8 +273,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
                     if decision.action == ErrorAction.SKIP:
                         # Create placeholder response
-                        from decimal import Decimal
-
                         placeholder = LLMResponse(
                             text="[SKIPPED]",
                             tokens_in=0,
