@@ -196,9 +196,14 @@ class BatchAggregatorStage(PipelineStage):
 
         # Final summary
         elapsed = time.time() - start_time
+        throughput = (
+            len(aggregated_batches) / elapsed
+            if elapsed > 0
+            else len(aggregated_batches)
+        )
         self.logger.info(
             f"✓ Created {len(aggregated_batches):,} mega-prompts in {elapsed:.1f}s "
-            f"({len(aggregated_batches) / elapsed:.0f} batches/s)"
+            f"({throughput:.0f} batches/s)"
         )
 
         return aggregated_batches
