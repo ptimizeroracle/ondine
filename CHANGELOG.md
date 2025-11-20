@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4](https://github.com/ptimizeroracle/ondine/compare/v1.3.3...v1.3.4) (2025-11-20)
+
+
+### Bug Fixes
+
+* Critical bugs in auto_retry and quality metrics (v1.3.4) ([#42](https://github.com/ptimizeroracle/ondine/issues/42)) ([80e9319](https://github.com/ptimizeroracle/ondine/commit/80e93195a0358c46bdc3ed9b648137bf6b270ed5))
+
 ## [1.3.3](https://github.com/ptimizeroracle/ondine/compare/v1.3.2...v1.3.3) (2025-11-16)
 
 
