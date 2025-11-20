@@ -1,7 +1,6 @@
 """Tests for Jinja2 template support in Ondine."""
 
 import pandas as pd
-import pytest
 
 from ondine.core.specifications import PromptSpec
 from ondine.orchestration.execution_context import ExecutionContext
