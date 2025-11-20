@@ -4615,6 +4615,72 @@ rate limiting, and budget constraints.</p>
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.enable_preprocessing">enable_preprocessing</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Enable input text preprocessing (default: False)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.preprocessing_max_length">preprocessing_max_length</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max characters after preprocessing (default: 500)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.auto_retry_failed">auto_retry_failed</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-retry rows with null/empty outputs (default: False)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.max_retry_attempts">max_retry_attempts</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max retry attempts for failed rows (1-3, default: 1)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.use_jinja2">use_jinja2</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Use Jinja2 for template rendering, enables loops/conditionals (default: False)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="ondine.core.specifications.ProcessingSpec.progress_mode">progress_mode</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Progress tracking mode (auto, rich, tqdm, logging, none)</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -4688,15 +4754,15 @@ rate limiting, and budget constraints.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-407">407</a></span>
-<span class="normal"><a href="#__codelineno-0-408">408</a></span>
-<span class="normal"><a href="#__codelineno-0-409">409</a></span>
-<span class="normal"><a href="#__codelineno-0-410">410</a></span>
-<span class="normal"><a href="#__codelineno-0-411">411</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-407"><a id="__codelineno-0-407" name="__codelineno-0-407"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;checkpoint_dir&quot;</span><span class="p">)</span>
-</span><span id="__span-0-408"><a id="__codelineno-0-408" name="__codelineno-0-408"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-409"><a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_checkpoint_dir</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-</span><span id="__span-0-410"><a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
-</span><span id="__span-0-411"><a id="__codelineno-0-411" name="__codelineno-0-411"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-413"><a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;checkpoint_dir&quot;</span><span class="p">)</span>
+</span><span id="__span-0-414"><a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-415"><a id="__codelineno-0-415" name="__codelineno-0-415"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_checkpoint_dir</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+</span><span id="__span-0-416"><a id="__codelineno-0-416" name="__codelineno-0-416"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
+</span><span id="__span-0-417"><a id="__codelineno-0-417" name="__codelineno-0-417"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4773,19 +4839,19 @@ rate limiting, and budget constraints.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-424">424</a></span>
-<span class="normal"><a href="#__codelineno-0-425">425</a></span>
-<span class="normal"><a href="#__codelineno-0-426">426</a></span>
-<span class="normal"><a href="#__codelineno-0-427">427</a></span>
-<span class="normal"><a href="#__codelineno-0-428">428</a></span>
-<span class="normal"><a href="#__codelineno-0-429">429</a></span>
-<span class="normal"><a href="#__codelineno-0-430">430</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-424"><a id="__codelineno-0-424" name="__codelineno-0-424"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;destination_path&quot;</span><span class="p">)</span>
-</span><span id="__span-0-425"><a id="__codelineno-0-425" name="__codelineno-0-425"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-426"><a id="__codelineno-0-426" name="__codelineno-0-426"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_destination_path</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-427"><a id="__codelineno-0-427" name="__codelineno-0-427"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
-</span><span id="__span-0-428"><a id="__codelineno-0-428" name="__codelineno-0-428"></a>    <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-429"><a id="__codelineno-0-429" name="__codelineno-0-429"></a>        <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;destination_path&quot;</span><span class="p">)</span>
+</span><span id="__span-0-431"><a id="__codelineno-0-431" name="__codelineno-0-431"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a><span class="k">def</span><span class="w"> </span><span class="nf">validate_destination_path</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert string paths to Path objects.&quot;&quot;&quot;</span>
+</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a>    <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">v</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -5080,13 +5146,7 @@ OpenAI-compatible API endpoint.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/core/specifications.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-560">560</a></span>
-<span class="normal"><a href="#__codelineno-0-561">561</a></span>
-<span class="normal"><a href="#__codelineno-0-562">562</a></span>
-<span class="normal"><a href="#__codelineno-0-563">563</a></span>
-<span class="normal"><a href="#__codelineno-0-564">564</a></span>
-<span class="normal"><a href="#__codelineno-0-565">565</a></span>
-<span class="normal"><a href="#__codelineno-0-566">566</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-566">566</a></span>
 <span class="normal"><a href="#__codelineno-0-567">567</a></span>
 <span class="normal"><a href="#__codelineno-0-568">568</a></span>
 <span class="normal"><a href="#__codelineno-0-569">569</a></span>
@@ -5123,50 +5183,56 @@ OpenAI-compatible API endpoint.</p>
 <span class="normal"><a href="#__codelineno-0-600">600</a></span>
 <span class="normal"><a href="#__codelineno-0-601">601</a></span>
 <span class="normal"><a href="#__codelineno-0-602">602</a></span>
-<span class="normal"><a href="#__codelineno-0-603">603</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-560"><a id="__codelineno-0-560" name="__codelineno-0-560"></a><span class="nd">@classmethod</span>
-</span><span id="__span-0-561"><a id="__codelineno-0-561" name="__codelineno-0-561"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_custom_openai_compatible</span><span class="p">(</span>
-</span><span id="__span-0-562"><a id="__codelineno-0-562" name="__codelineno-0-562"></a>    <span class="bp">cls</span><span class="p">,</span>
-</span><span id="__span-0-563"><a id="__codelineno-0-563" name="__codelineno-0-563"></a>    <span class="n">provider_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-0-564"><a id="__codelineno-0-564" name="__codelineno-0-564"></a>    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-0-565"><a id="__codelineno-0-565" name="__codelineno-0-565"></a>    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-0-566"><a id="__codelineno-0-566" name="__codelineno-0-566"></a>    <span class="n">input_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-0-567"><a id="__codelineno-0-567" name="__codelineno-0-567"></a>    <span class="n">output_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-0-568"><a id="__codelineno-0-568" name="__codelineno-0-568"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-</span><span id="__span-0-569"><a id="__codelineno-0-569" name="__codelineno-0-569"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMSpec</span><span class="p">:</span>
-</span><span id="__span-0-570"><a id="__codelineno-0-570" name="__codelineno-0-570"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-571"><a id="__codelineno-0-571" name="__codelineno-0-571"></a><span class="sd">    Factory method for custom OpenAI-compatible providers.</span>
-</span><span id="__span-0-572"><a id="__codelineno-0-572" name="__codelineno-0-572"></a>
-</span><span id="__span-0-573"><a id="__codelineno-0-573" name="__codelineno-0-573"></a><span class="sd">    Use this for providers like vLLM, LocalAI, Anyscale, or any custom</span>
-</span><span id="__span-0-574"><a id="__codelineno-0-574" name="__codelineno-0-574"></a><span class="sd">    OpenAI-compatible API endpoint.</span>
-</span><span id="__span-0-575"><a id="__codelineno-0-575" name="__codelineno-0-575"></a>
-</span><span id="__span-0-576"><a id="__codelineno-0-576" name="__codelineno-0-576"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-577"><a id="__codelineno-0-577" name="__codelineno-0-577"></a><span class="sd">        provider_name: Display name for the provider (for logging/metrics)</span>
-</span><span id="__span-0-578"><a id="__codelineno-0-578" name="__codelineno-0-578"></a><span class="sd">        model: Model identifier</span>
-</span><span id="__span-0-579"><a id="__codelineno-0-579" name="__codelineno-0-579"></a><span class="sd">        base_url: API endpoint URL (e.g., http://localhost:8000/v1)</span>
-</span><span id="__span-0-580"><a id="__codelineno-0-580" name="__codelineno-0-580"></a><span class="sd">        input_cost_per_1k: Input token cost per 1K tokens (default: 0.0)</span>
-</span><span id="__span-0-581"><a id="__codelineno-0-581" name="__codelineno-0-581"></a><span class="sd">        output_cost_per_1k: Output token cost per 1K tokens (default: 0.0)</span>
-</span><span id="__span-0-582"><a id="__codelineno-0-582" name="__codelineno-0-582"></a><span class="sd">        **kwargs: Additional LLMSpec parameters (temperature, max_tokens, etc.)</span>
-</span><span id="__span-0-583"><a id="__codelineno-0-583" name="__codelineno-0-583"></a>
-</span><span id="__span-0-584"><a id="__codelineno-0-584" name="__codelineno-0-584"></a><span class="sd">    Returns:</span>
-</span><span id="__span-0-585"><a id="__codelineno-0-585" name="__codelineno-0-585"></a><span class="sd">        Configured LLMSpec for the custom provider</span>
-</span><span id="__span-0-586"><a id="__codelineno-0-586" name="__codelineno-0-586"></a>
-</span><span id="__span-0-587"><a id="__codelineno-0-587" name="__codelineno-0-587"></a><span class="sd">    Example:</span>
-</span><span id="__span-0-588"><a id="__codelineno-0-588" name="__codelineno-0-588"></a><span class="sd">        spec = LLMProviderPresets.create_custom_openai_compatible(</span>
-</span><span id="__span-0-589"><a id="__codelineno-0-589" name="__codelineno-0-589"></a><span class="sd">            provider_name=&quot;My vLLM Server&quot;,</span>
-</span><span id="__span-0-590"><a id="__codelineno-0-590" name="__codelineno-0-590"></a><span class="sd">            model=&quot;mistral-7b-instruct&quot;,</span>
-</span><span id="__span-0-591"><a id="__codelineno-0-591" name="__codelineno-0-591"></a><span class="sd">            base_url=&quot;http://my-server:8000/v1&quot;,</span>
-</span><span id="__span-0-592"><a id="__codelineno-0-592" name="__codelineno-0-592"></a><span class="sd">            temperature=0.7</span>
-</span><span id="__span-0-593"><a id="__codelineno-0-593" name="__codelineno-0-593"></a><span class="sd">        )</span>
-</span><span id="__span-0-594"><a id="__codelineno-0-594" name="__codelineno-0-594"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-595"><a id="__codelineno-0-595" name="__codelineno-0-595"></a>    <span class="k">return</span> <span class="n">LLMSpec</span><span class="p">(</span>
-</span><span id="__span-0-596"><a id="__codelineno-0-596" name="__codelineno-0-596"></a>        <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
-</span><span id="__span-0-597"><a id="__codelineno-0-597" name="__codelineno-0-597"></a>        <span class="n">provider_name</span><span class="o">=</span><span class="n">provider_name</span><span class="p">,</span>
-</span><span id="__span-0-598"><a id="__codelineno-0-598" name="__codelineno-0-598"></a>        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-</span><span id="__span-0-599"><a id="__codelineno-0-599" name="__codelineno-0-599"></a>        <span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span>
-</span><span id="__span-0-600"><a id="__codelineno-0-600" name="__codelineno-0-600"></a>        <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_cost_per_1k</span><span class="p">)),</span>
-</span><span id="__span-0-601"><a id="__codelineno-0-601" name="__codelineno-0-601"></a>        <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_cost_per_1k</span><span class="p">)),</span>
-</span><span id="__span-0-602"><a id="__codelineno-0-602" name="__codelineno-0-602"></a>        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-</span><span id="__span-0-603"><a id="__codelineno-0-603" name="__codelineno-0-603"></a>    <span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-603">603</a></span>
+<span class="normal"><a href="#__codelineno-0-604">604</a></span>
+<span class="normal"><a href="#__codelineno-0-605">605</a></span>
+<span class="normal"><a href="#__codelineno-0-606">606</a></span>
+<span class="normal"><a href="#__codelineno-0-607">607</a></span>
+<span class="normal"><a href="#__codelineno-0-608">608</a></span>
+<span class="normal"><a href="#__codelineno-0-609">609</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-566"><a id="__codelineno-0-566" name="__codelineno-0-566"></a><span class="nd">@classmethod</span>
+</span><span id="__span-0-567"><a id="__codelineno-0-567" name="__codelineno-0-567"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_custom_openai_compatible</span><span class="p">(</span>
+</span><span id="__span-0-568"><a id="__codelineno-0-568" name="__codelineno-0-568"></a>    <span class="bp">cls</span><span class="p">,</span>
+</span><span id="__span-0-569"><a id="__codelineno-0-569" name="__codelineno-0-569"></a>    <span class="n">provider_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-0-570"><a id="__codelineno-0-570" name="__codelineno-0-570"></a>    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-0-571"><a id="__codelineno-0-571" name="__codelineno-0-571"></a>    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-0-572"><a id="__codelineno-0-572" name="__codelineno-0-572"></a>    <span class="n">input_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-0-573"><a id="__codelineno-0-573" name="__codelineno-0-573"></a>    <span class="n">output_cost_per_1k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-0-574"><a id="__codelineno-0-574" name="__codelineno-0-574"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-575"><a id="__codelineno-0-575" name="__codelineno-0-575"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMSpec</span><span class="p">:</span>
+</span><span id="__span-0-576"><a id="__codelineno-0-576" name="__codelineno-0-576"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="__span-0-577"><a id="__codelineno-0-577" name="__codelineno-0-577"></a><span class="sd">    Factory method for custom OpenAI-compatible providers.</span>
+</span><span id="__span-0-578"><a id="__codelineno-0-578" name="__codelineno-0-578"></a>
+</span><span id="__span-0-579"><a id="__codelineno-0-579" name="__codelineno-0-579"></a><span class="sd">    Use this for providers like vLLM, LocalAI, Anyscale, or any custom</span>
+</span><span id="__span-0-580"><a id="__codelineno-0-580" name="__codelineno-0-580"></a><span class="sd">    OpenAI-compatible API endpoint.</span>
+</span><span id="__span-0-581"><a id="__codelineno-0-581" name="__codelineno-0-581"></a>
+</span><span id="__span-0-582"><a id="__codelineno-0-582" name="__codelineno-0-582"></a><span class="sd">    Args:</span>
+</span><span id="__span-0-583"><a id="__codelineno-0-583" name="__codelineno-0-583"></a><span class="sd">        provider_name: Display name for the provider (for logging/metrics)</span>
+</span><span id="__span-0-584"><a id="__codelineno-0-584" name="__codelineno-0-584"></a><span class="sd">        model: Model identifier</span>
+</span><span id="__span-0-585"><a id="__codelineno-0-585" name="__codelineno-0-585"></a><span class="sd">        base_url: API endpoint URL (e.g., http://localhost:8000/v1)</span>
+</span><span id="__span-0-586"><a id="__codelineno-0-586" name="__codelineno-0-586"></a><span class="sd">        input_cost_per_1k: Input token cost per 1K tokens (default: 0.0)</span>
+</span><span id="__span-0-587"><a id="__codelineno-0-587" name="__codelineno-0-587"></a><span class="sd">        output_cost_per_1k: Output token cost per 1K tokens (default: 0.0)</span>
+</span><span id="__span-0-588"><a id="__codelineno-0-588" name="__codelineno-0-588"></a><span class="sd">        **kwargs: Additional LLMSpec parameters (temperature, max_tokens, etc.)</span>
+</span><span id="__span-0-589"><a id="__codelineno-0-589" name="__codelineno-0-589"></a>
+</span><span id="__span-0-590"><a id="__codelineno-0-590" name="__codelineno-0-590"></a><span class="sd">    Returns:</span>
+</span><span id="__span-0-591"><a id="__codelineno-0-591" name="__codelineno-0-591"></a><span class="sd">        Configured LLMSpec for the custom provider</span>
+</span><span id="__span-0-592"><a id="__codelineno-0-592" name="__codelineno-0-592"></a>
+</span><span id="__span-0-593"><a id="__codelineno-0-593" name="__codelineno-0-593"></a><span class="sd">    Example:</span>
+</span><span id="__span-0-594"><a id="__codelineno-0-594" name="__codelineno-0-594"></a><span class="sd">        spec = LLMProviderPresets.create_custom_openai_compatible(</span>
+</span><span id="__span-0-595"><a id="__codelineno-0-595" name="__codelineno-0-595"></a><span class="sd">            provider_name=&quot;My vLLM Server&quot;,</span>
+</span><span id="__span-0-596"><a id="__codelineno-0-596" name="__codelineno-0-596"></a><span class="sd">            model=&quot;mistral-7b-instruct&quot;,</span>
+</span><span id="__span-0-597"><a id="__codelineno-0-597" name="__codelineno-0-597"></a><span class="sd">            base_url=&quot;http://my-server:8000/v1&quot;,</span>
+</span><span id="__span-0-598"><a id="__codelineno-0-598" name="__codelineno-0-598"></a><span class="sd">            temperature=0.7</span>
+</span><span id="__span-0-599"><a id="__codelineno-0-599" name="__codelineno-0-599"></a><span class="sd">        )</span>
+</span><span id="__span-0-600"><a id="__codelineno-0-600" name="__codelineno-0-600"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-601"><a id="__codelineno-0-601" name="__codelineno-0-601"></a>    <span class="k">return</span> <span class="n">LLMSpec</span><span class="p">(</span>
+</span><span id="__span-0-602"><a id="__codelineno-0-602" name="__codelineno-0-602"></a>        <span class="n">provider</span><span class="o">=</span><span class="n">LLMProvider</span><span class="o">.</span><span class="n">OPENAI_COMPATIBLE</span><span class="p">,</span>
+</span><span id="__span-0-603"><a id="__codelineno-0-603" name="__codelineno-0-603"></a>        <span class="n">provider_name</span><span class="o">=</span><span class="n">provider_name</span><span class="p">,</span>
+</span><span id="__span-0-604"><a id="__codelineno-0-604" name="__codelineno-0-604"></a>        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+</span><span id="__span-0-605"><a id="__codelineno-0-605" name="__codelineno-0-605"></a>        <span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span>
+</span><span id="__span-0-606"><a id="__codelineno-0-606" name="__codelineno-0-606"></a>        <span class="n">input_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_cost_per_1k</span><span class="p">)),</span>
+</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a>        <span class="n">output_cost_per_1k_tokens</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_cost_per_1k</span><span class="p">)),</span>
+</span><span id="__span-0-608"><a id="__codelineno-0-608" name="__codelineno-0-608"></a>        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a>    <span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
