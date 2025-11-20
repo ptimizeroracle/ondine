@@ -202,7 +202,7 @@ class ExecutionResult:
                 if self.data[col].dtype == "object":
                     empty_count += (self.data[col].astype(str).str.strip() == "").sum()
 
-        # Count rows where ALL columns have valid data
+        # Count rows with at least one valid output column
         # A row is "valid" if at least one output column has non-null, non-empty data
         valid_row_mask = False
         for col in output_columns:
