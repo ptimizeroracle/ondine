@@ -84,6 +84,28 @@ class TestBatchAggregatorStage:
         with pytest.raises(ValueError, match="batch_size must be >= 1"):
             stage.validate(None)
 
+    def test_validation_fails_for_empty_input(self):
+        """Should fail validation when input list is empty."""
+        context = ExecutionContext()
+
+        # Pass empty list
+        with pytest.raises(
+            ValueError, match="Input validation failed.*No input batches"
+        ):
+            self.stage.execute([], context)
+
+    def test_validate_input_returns_correct_error_format(self):
+        """Should return ValidationResult with errors list (not error string)."""
+        result = self.stage.validate_input([])
+
+        # Check it's invalid
+        assert result.is_valid is False
+
+        # Check errors is a list (not a string)
+        assert isinstance(result.errors, list)
+        assert len(result.errors) == 1
+        assert "No input batches" in result.errors[0]
+
 
 class TestBatchDisaggregatorStage:
     """Tests for BatchDisaggregatorStage."""
@@ -249,3 +271,25 @@ class TestBatchDisaggregatorStage:
         assert len(result[0].responses) == 2
         assert "[BATCH_PARSE_ERROR" in result[0].responses[0]
         assert "[BATCH_PARSE_ERROR" in result[0].responses[1]
+
+    def test_validation_fails_for_empty_input(self):
+        """Should fail validation when input list is empty."""
+        context = ExecutionContext()
+
+        # Pass empty list
+        with pytest.raises(
+            ValueError, match="Input validation failed.*No input batches"
+        ):
+            self.stage.execute([], context)
+
+    def test_validate_input_returns_correct_error_format(self):
+        """Should return ValidationResult with errors list (not error string)."""
+        result = self.stage.validate_input([])
+
+        # Check it's invalid
+        assert result.is_valid is False
+
+        # Check errors is a list (not a string)
+        assert isinstance(result.errors, list)
+        assert len(result.errors) == 1
+        assert "No input batches" in result.errors[0]

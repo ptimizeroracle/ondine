@@ -220,7 +220,7 @@ class BatchAggregatorStage(PipelineStage):
         from ondine.core.models import ValidationResult
 
         if not input_data:
-            return ValidationResult(is_valid=False, error="No input batches")
+            return ValidationResult(is_valid=False, errors=["No input batches"])
 
         return ValidationResult(is_valid=True)
 
