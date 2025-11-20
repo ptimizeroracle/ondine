@@ -89,7 +89,9 @@ class TestBatchAggregatorStage:
         context = ExecutionContext()
 
         # Pass empty list
-        with pytest.raises(ValueError, match="Input validation failed.*No input batches"):
+        with pytest.raises(
+            ValueError, match="Input validation failed.*No input batches"
+        ):
             self.stage.execute([], context)
 
     def test_validate_input_returns_correct_error_format(self):
@@ -275,7 +277,9 @@ class TestBatchDisaggregatorStage:
         context = ExecutionContext()
 
         # Pass empty list
-        with pytest.raises(ValueError, match="Input validation failed.*No input batches"):
+        with pytest.raises(
+            ValueError, match="Input validation failed.*No input batches"
+        ):
             self.stage.execute([], context)
 
     def test_validate_input_returns_correct_error_format(self):

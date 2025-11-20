@@ -110,4 +110,3 @@ LOW
         # Should have name but missing_column will be empty
         assert "Alice" in prompt
         assert "Hello  and Alice" in prompt  # missing_column renders as empty
-

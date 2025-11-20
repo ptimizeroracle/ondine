@@ -394,7 +394,8 @@ class ProcessingSpec(BaseModel):
 
     # Template rendering
     use_jinja2: bool = Field(
-        default=False, description="Use Jinja2 for template rendering (enables loops, conditionals)"
+        default=False,
+        description="Use Jinja2 for template rendering (enables loops, conditionals)",
     )
 
     # Progress tracking
