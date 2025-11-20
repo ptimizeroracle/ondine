@@ -2,382 +2,382 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/contributing/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/SUMMARY/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/adapters/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/adapters/checkpoint_storage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/adapters/data_io/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/adapters/llm_client/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/adapters/provider_registry/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/dataset_processor/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/health_check/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/pipeline/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/pipeline_builder/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/pipeline_composer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/api/quick/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/cli/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/cli/main/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/config/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/config/config_loader/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/core/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/core/error_handler/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/core/exceptions/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/core/models/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/core/specifications/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/integrations/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/integrations/airflow/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/integrations/prefect/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/base/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/dispatcher/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/events/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/llamaindex_handlers/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/observer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/registry/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/sanitizer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/tracer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/observers/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/observers/langfuse_observer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/observers/logging_observer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/observability/observers/opentelemetry_observer/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/async_executor/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/execution_context/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/execution_strategy/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/observers/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/pipeline_executor/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/progress_tracker/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/state_manager/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/streaming_executor/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/orchestration/sync_executor/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/batch_aggregator_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/batch_disaggregator_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/data_loader_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/llm_invocation_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/multi_run_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/parser_factory/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/pipeline_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/prompt_formatter_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/response_parser_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/result_writer_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/stage_registry/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/stages/streaming_loader_stage/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/strategies/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/strategies/batch_formatting/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/strategies/json_batch_strategy/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/strategies/models/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/budget_controller/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/cost_calculator/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/cost_tracker/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/input_preprocessing/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/logging_utils/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/metrics_exporter/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/model_context_limits/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/rate_limiter/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/api/utils/retry_handler/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/architecture/technical-reference/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/getting-started/core-concepts/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/getting-started/installation/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/getting-started/quickstart/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/azure-managed-identity/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/batch-processing/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/cost-control/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/execution-modes/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/multi-column/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/pipeline-composition/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/structured-output/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/anthropic/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/azure/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/custom/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/groq/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/local-mlx/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
     <url>
          <loc>https://ptimizeroracle.github.io/ondine/guides/providers/openai/</loc>
-         <lastmod>2025-11-16</lastmod>
+         <lastmod>2025-11-20</lastmod>
     </url>
 </urlset>
