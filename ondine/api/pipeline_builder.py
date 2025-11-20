@@ -387,6 +387,52 @@ class PipelineBuilder:
         self._prompt_spec.batch_strategy = strategy
         return self
 
+    def with_jinja2(self, enabled: bool = True) -> "PipelineBuilder":
+        """
+        Enable Jinja2 template rendering for advanced prompt control.
+
+        Jinja2 provides powerful features for dynamic prompts:
+        - Conditionals: {% if condition %}...{% endif %}
+        - Loops: {% for item in items %}...{% endfor %}
+        - Filters: {{ text | upper | truncate(100) }}
+        - Complex logic within templates
+
+        By default, Ondine uses Python's .format() for simple {variable}
+        substitution. Enable Jinja2 when you need programmatic control flow.
+
+        Args:
+            enabled: Enable (True) or disable (False) Jinja2 rendering
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # Conditional prompt based on data
+            template = '''Extract from: {{ description }}
+            {% if category == "beverage" %}
+            Focus on volume units (oz, ml, L)
+            {% elif category == "food" %}
+            Focus on weight units (lb, oz, g)
+            {% endif %}'''
+
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("products.csv", input_columns=["description", "category"])
+                .with_prompt(template)
+                .with_jinja2(True)  # Enable Jinja2
+                .with_llm("openai", "gpt-4o-mini")
+                .build()
+            )
+            ```
+
+        Note:
+            Simple {variable} syntax works with both modes. Only enable
+            Jinja2 if you need conditionals, loops, or filters.
+        """
+        self._processing_spec.use_jinja2 = enabled
+        return self
+
     def with_llm(
         self,
         provider: str,
