@@ -848,11 +848,13 @@ class Pipeline:
             retry_result = retry_pipeline.execute()
 
             # Merge retry results back (map reset indices to original indices)
+            # IMPORTANT: Use iloc (position-based) for retry_result because it's reset_index
+            # Use loc (label-based) for result.data to preserve original indices
             for col in output_cols:
                 for new_idx, original_idx in enumerate(original_indices):
-                    result.data.loc[original_idx, col] = retry_result.data.loc[
-                        new_idx, col
-                    ]
+                    result.data.loc[original_idx, col] = retry_result.data.iloc[
+                        new_idx
+                    ][col]
 
             # Update costs
             result.costs.total_cost += retry_result.costs.total_cost
