@@ -85,10 +85,10 @@ class BatchResult(BaseModel):
         """Convert to list of result strings, sorted by ID.
 
         Returns:
-            List of result strings in ID order
-
-        Raises:
-            ValueError: If any result is missing
+            List of result strings in ID order.
+            - None results are converted to empty string ""
+            - Dict/list results are JSON-serialized
+            - Other types are converted to string
         """
         # Sort by ID
         sorted_results = sorted(self.results, key=lambda x: x.id)

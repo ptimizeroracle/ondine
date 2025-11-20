@@ -326,6 +326,12 @@ class ProcessingSpec(BaseModel):
         error_policy: How to handle errors (retry, skip, fail, use_default)
         rate_limit_rpm: Requests per minute limit (optional, no limit if None)
         max_budget: Maximum cost in USD (optional, no limit if None)
+        enable_preprocessing: Enable input text preprocessing (default: False)
+        preprocessing_max_length: Max characters after preprocessing (default: 500)
+        auto_retry_failed: Auto-retry rows with null/empty outputs (default: False)
+        max_retry_attempts: Max retry attempts for failed rows (1-3, default: 1)
+        use_jinja2: Use Jinja2 for template rendering, enables loops/conditionals (default: False)
+        progress_mode: Progress tracking mode (auto, rich, tqdm, logging, none)
 
     Example:
         ```python
