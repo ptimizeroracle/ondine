@@ -83,14 +83,14 @@ INPUT:
 
 CRITICAL OUTPUT REQUIREMENTS:
 1. Return a JSON array with {len(prompts)} objects
-2. Each object must have "id" (number) and "result" (string) fields
+2. Each object must have "id" (number) and "result" (string, object, or number) fields
 3. IDs must match the input IDs (1 to {len(prompts)})
 4. Return ONLY the JSON array, no explanations or markdown
 
 OUTPUT FORMAT:
 [
   {{"id": 1, "result": "your result here"}},
-  {{"id": 2, "result": "your result here"}},
+  {{"id": 2, "result": {{"nested": "json object"}}}},
   ...
   {{"id": {len(prompts)}, "result": "your result here"}}
 ]

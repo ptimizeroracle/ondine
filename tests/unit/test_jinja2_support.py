@@ -76,7 +76,7 @@ LOW
         assert "Name: Alice, Age: 30" in prompt
 
     def test_simple_variables_work_in_both_modes(self):
-        """Simple {variable} syntax should work with both .format() and Jinja2."""
+        """Simple variable substitution works in both modes (different syntax)."""
         df = pd.DataFrame({"product": ["Apple"]})
         template = "Product: {product}"
 

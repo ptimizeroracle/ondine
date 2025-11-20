@@ -186,9 +186,11 @@ class ExecutionResult:
         Returns:
             QualityReport with quality metrics and warnings
         """
-        total = len(self.data)
+        total_rows = len(self.data)
+        total_columns = len(output_columns)
+        total_cells = total_rows * total_columns
 
-        # Count null and empty values across output columns
+        # Count null and empty values across ALL output columns
         null_count = 0
         empty_count = 0
 
@@ -200,9 +202,22 @@ class ExecutionResult:
                 if self.data[col].dtype == "object":
                     empty_count += (self.data[col].astype(str).str.strip() == "").sum()
 
-        # Calculate per-column metrics (exclude both nulls and empties)
-        valid_outputs = total - null_count - empty_count
-        success_rate = (valid_outputs / total * 100) if total > 0 else 0.0
+        # Count rows with at least one valid output column
+        # A row is "valid" if at least one output column has non-null, non-empty data
+        valid_row_mask = False
+        for col in output_columns:
+            if col in self.data.columns:
+                non_null = ~self.data[col].isna()
+                if self.data[col].dtype == "object":
+                    non_empty = self.data[col].astype(str).str.strip() != ""
+                    valid_row_mask |= non_null & non_empty
+                else:
+                    valid_row_mask |= non_null
+
+        valid_outputs = (
+            valid_row_mask.sum() if isinstance(valid_row_mask, pd.Series) else 0
+        )
+        success_rate = (valid_outputs / total_rows * 100) if total_rows > 0 else 0.0
 
         # Determine quality score
         if success_rate >= 95.0:
@@ -220,31 +235,31 @@ class ExecutionResult:
 
         if success_rate < 70.0:
             issues.append(
-                f"⚠️  LOW SUCCESS RATE: Only {success_rate:.1f}% of outputs are valid "
-                f"({valid_outputs}/{total} rows)"
+                f"⚠️  LOW SUCCESS RATE: Only {success_rate:.1f}% of rows have valid data "
+                f"({valid_outputs}/{total_rows} rows with at least one valid column)"
             )
 
-        if null_count > total * 0.3:  # > 30% nulls
+        if null_count > total_cells * 0.3:  # > 30% of all cells are null
             issues.append(
-                f"⚠️  HIGH NULL RATE: {null_count} null values found "
-                f"({null_count / total * 100:.1f}% of rows)"
+                f"⚠️  HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
+                f"({null_count / total_cells * 100:.1f}% of all output cells)"
             )
 
-        if empty_count > total * 0.1:  # > 10% empty
+        if empty_count > total_cells * 0.1:  # > 10% of all cells are empty
             warnings.append(
-                f"Empty outputs detected: {empty_count} rows "
-                f"({empty_count / total * 100:.1f}%)"
+                f"Empty outputs detected: {empty_count} empty cells out of {total_cells} total "
+                f"({empty_count / total_cells * 100:.1f}% of all output cells)"
             )
 
         # Check if reported metrics match actual data quality
         if self.metrics.failed_rows == 0 and null_count > 0:
             issues.append(
                 f"⚠️  METRICS MISMATCH: Pipeline reported 0 failures but "
-                f"{null_count} rows have null outputs. This may indicate silent errors."
+                f"{null_count} cells have null outputs. This may indicate silent errors."
             )
 
         return QualityReport(
-            total_rows=total,
+            total_rows=total_rows,
             valid_outputs=valid_outputs,
             null_outputs=null_count,
             empty_outputs=empty_count,
