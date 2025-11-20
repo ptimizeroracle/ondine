@@ -193,4 +193,3 @@ Browse the full API documentation using the navigation sidebar, or jump directly
 - [Execution Strategies](api/ondine/orchestration/execution_strategy.md)
 - [LLM Adapters](api/ondine/adapters/llm_client.md)
 - [Response Parsing](api/ondine/stages/response_parser_stage.md)
-

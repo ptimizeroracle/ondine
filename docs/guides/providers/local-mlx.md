@@ -78,4 +78,3 @@ Any MLX-compatible model from Hugging Face:
 
 - [Cost Control](../cost-control.md)
 - [Custom Providers](custom.md)
-

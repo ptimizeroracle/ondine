@@ -55,4 +55,3 @@ Recommended concurrency: 10-20
 
 - [OpenAI](openai.md)
 - [Cost Control](../cost-control.md)
-

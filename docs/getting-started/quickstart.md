@@ -116,7 +116,7 @@ pipeline = QuickPipeline.create(
     prompt="""
     Clean and standardize this text:
     {text}
-    
+
     Remove special characters, fix capitalization, trim whitespace.
     """,
     model="gpt-4o-mini"
@@ -139,7 +139,7 @@ pipeline = (
     )
     .with_prompt("""
     Classify the sentiment of this review as: positive, negative, or neutral
-    
+
     Review: {review_text}
     """)
     .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
@@ -169,7 +169,7 @@ pipeline = (
       "model": "...",
       "price": "..."
     }}
-    
+
     Description: {description}
     """)
     .with_llm(provider="openai", model="gpt-4o-mini")
@@ -274,4 +274,3 @@ Now that you have a working pipeline, explore:
 - [Structured Output](../guides/structured-output.md) - Type-safe Pydantic models
 - [Cost Control](../guides/cost-control.md) - Budget limits and optimization
 - [API Reference](../api/index.md) - Full API documentation
-

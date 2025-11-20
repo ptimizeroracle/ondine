@@ -24,7 +24,7 @@ pipeline = (
           "category": "...",
           "price": "..."
         }}
-        
+
         Description: {description}
     """)
     .with_llm(provider="openai", model="gpt-4o-mini")
@@ -78,7 +78,7 @@ pipeline = (
           "model": "...",
           "price": 0.0
         }}
-        
+
         Title: {title}
         Description: {description}
         Category: {category}
@@ -93,4 +93,3 @@ pipeline = (
 
 - [Structured Output](structured-output.md) - Pydantic models
 - [Pipeline Composition](pipeline-composition.md) - Complex workflows
-
