@@ -4,6 +4,9 @@ These models define the structure for batch requests and responses,
 enabling type-safe batch processing with validation.
 """
 
+import json
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -18,7 +21,7 @@ class BatchItem(BaseModel):
 
     id: int = Field(..., description="Unique item ID (1-based)", ge=1)
     input: str | None = Field(None, description="Input text (request)")
-    result: str | None = Field(None, description="Output result (response)")
+    result: Any | None = Field(None, description="Output result (response)")
 
     @field_validator("id")
     @classmethod
@@ -91,7 +94,15 @@ class BatchResult(BaseModel):
         sorted_results = sorted(self.results, key=lambda x: x.id)
 
         # Extract result strings
-        return [item.result or "" for item in sorted_results]
+        output = []
+        for item in sorted_results:
+            if item.result is None:
+                output.append("")
+            elif isinstance(item.result, (dict, list)):
+                output.append(json.dumps(item.result))
+            else:
+                output.append(str(item.result))
+        return output
 
     def get_missing_ids(self, expected_count: int) -> list[int]:
         """Get IDs that are missing from results.
