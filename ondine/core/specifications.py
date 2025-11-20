@@ -392,6 +392,11 @@ class ProcessingSpec(BaseModel):
         default=1, ge=1, le=3, description="Max retry attempts for failed rows"
     )
 
+    # Template rendering
+    use_jinja2: bool = Field(
+        default=False, description="Use Jinja2 for template rendering (enables loops, conditionals)"
+    )
+
     # Progress tracking
     progress_mode: str = Field(
         default="auto",

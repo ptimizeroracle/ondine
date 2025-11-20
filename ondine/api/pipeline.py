@@ -184,7 +184,10 @@ class Pipeline:
         sample_df = df.head(sample_size)
 
         # Create formatter and get prompts
-        formatter = PromptFormatterStage(self.specifications.processing.batch_size)
+        formatter = PromptFormatterStage(
+            self.specifications.processing.batch_size,
+            use_jinja2=self.specifications.processing.use_jinja2,
+        )
         batches = formatter.process(
             (sample_df, self.specifications.prompt), ExecutionContext()
         )
@@ -495,7 +498,9 @@ class Pipeline:
             context.intermediate_data["preprocessed_data"] = df
 
         # Stage 2: Format prompts
-        formatter = PromptFormatterStage(specs.processing.batch_size)
+        formatter = PromptFormatterStage(
+            specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2
+        )
         batches = self._execute_stage(formatter, (df, specs.prompt), context)
         context.intermediate_data["prompt_batches"] = batches
 
