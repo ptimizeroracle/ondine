@@ -87,7 +87,7 @@ class TestBatchAggregatorStage:
     def test_validation_fails_for_empty_input(self):
         """Should fail validation when input list is empty."""
         context = ExecutionContext()
-        
+
         # Pass empty list
         with pytest.raises(ValueError, match="Input validation failed.*No input batches"):
             self.stage.execute([], context)
@@ -95,10 +95,10 @@ class TestBatchAggregatorStage:
     def test_validate_input_returns_correct_error_format(self):
         """Should return ValidationResult with errors list (not error string)."""
         result = self.stage.validate_input([])
-        
+
         # Check it's invalid
         assert result.is_valid is False
-        
+
         # Check errors is a list (not a string)
         assert isinstance(result.errors, list)
         assert len(result.errors) == 1
@@ -273,7 +273,7 @@ class TestBatchDisaggregatorStage:
     def test_validation_fails_for_empty_input(self):
         """Should fail validation when input list is empty."""
         context = ExecutionContext()
-        
+
         # Pass empty list
         with pytest.raises(ValueError, match="Input validation failed.*No input batches"):
             self.stage.execute([], context)
@@ -281,10 +281,10 @@ class TestBatchDisaggregatorStage:
     def test_validate_input_returns_correct_error_format(self):
         """Should return ValidationResult with errors list (not error string)."""
         result = self.stage.validate_input([])
-        
+
         # Check it's invalid
         assert result.is_valid is False
-        
+
         # Check errors is a list (not a string)
         assert isinstance(result.errors, list)
         assert len(result.errors) == 1
