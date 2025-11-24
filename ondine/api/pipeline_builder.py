@@ -1114,6 +1114,7 @@ class PipelineBuilder:
         # Structured output always returns JSON, so we need a JSON parser
         if self._custom_parser is None:
             from ondine.stages.response_parser_stage import JSONParser
+
             self._custom_parser = JSONParser()
 
         return self

@@ -46,17 +46,17 @@ def test_checkpoint_and_resume_after_budget_stop(provider, model, api_key_env):
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Echo: {{text}}")
-                .with_llm(
-                    provider=provider,
-                    model=model,
-                    api_key=api_key,
-                    temperature=0.0,
-                    input_cost_per_1k_tokens=Decimal("0.00015"),
-                    output_cost_per_1k_tokens=Decimal("0.0006"),
-                )
-                .with_batch_size(30)
-                .with_processing_batch_size(5)  # 6 API calls total
-                .with_max_budget(0.0003)  # Very low budget (will stop after ~2 calls)
+            .with_llm(
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                temperature=0.0,
+                input_cost_per_1k_tokens=Decimal("0.00015"),
+                output_cost_per_1k_tokens=Decimal("0.0006"),
+            )
+            .with_batch_size(30)
+            .with_processing_batch_size(5)  # 6 API calls total
+            .with_max_budget(0.0003)  # Very low budget (will stop after ~2 calls)
             .with_checkpoint_dir(str(checkpoint_dir))
             .build()
         )
@@ -75,7 +75,9 @@ def test_checkpoint_and_resume_after_budget_stop(provider, model, api_key_env):
 
             # Get checkpoint ID from error message or find checkpoint file
             checkpoint_files = list(checkpoint_dir.glob("*.json"))
-            assert len(checkpoint_files) > 0, "No checkpoint file created after budget exceeded"
+            assert len(checkpoint_files) > 0, (
+                "No checkpoint file created after budget exceeded"
+            )
 
             checkpoint_file = checkpoint_files[0]
             # Extract UUID from filename (strip "checkpoint_" prefix)
@@ -87,14 +89,14 @@ def test_checkpoint_and_resume_after_budget_stop(provider, model, api_key_env):
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Echo: {{text}}")
-                .with_llm(
-                    provider=provider,
-                    model=model,
-                    api_key=api_key,
-                    temperature=0.0,
-                    input_cost_per_1k_tokens=Decimal("0.00015"),
-                    output_cost_per_1k_tokens=Decimal("0.0006"),
-                )
+            .with_llm(
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                temperature=0.0,
+                input_cost_per_1k_tokens=Decimal("0.00015"),
+                output_cost_per_1k_tokens=Decimal("0.0006"),
+            )
             .with_batch_size(30)
             .with_processing_batch_size(5)
             .with_max_budget(0.50)  # Higher budget to complete
@@ -140,17 +142,17 @@ def test_checkpoint_prevents_duplicate_work():
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Return exactly: {{text}}")
-                .with_llm(
-                    provider="groq",
-                    model="llama-3.3-70b-versatile",
-                    api_key=api_key,
-                    temperature=0.0,
-                    input_cost_per_1k_tokens=Decimal("0.00059"),
-                    output_cost_per_1k_tokens=Decimal("0.00079"),
-                )
-                .with_batch_size(10)
-                .with_processing_batch_size(1)  # 10 API calls
-                .with_max_budget(0.0005)  # Stop after ~3-4 rows
+            .with_llm(
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                api_key=api_key,
+                temperature=0.0,
+                input_cost_per_1k_tokens=Decimal("0.00059"),
+                output_cost_per_1k_tokens=Decimal("0.00079"),
+            )
+            .with_batch_size(10)
+            .with_processing_batch_size(1)  # 10 API calls
+            .with_max_budget(0.0005)  # Stop after ~3-4 rows
             .with_checkpoint_dir(str(checkpoint_dir))
             .build()
         )
@@ -175,14 +177,14 @@ def test_checkpoint_prevents_duplicate_work():
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Return exactly: {{text}}")
-                .with_llm(
-                    provider="groq",
-                    model="llama-3.3-70b-versatile",
-                    api_key=api_key,
-                    temperature=0.0,
-                    input_cost_per_1k_tokens=Decimal("0.00059"),
-                    output_cost_per_1k_tokens=Decimal("0.00079"),
-                )
+            .with_llm(
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                api_key=api_key,
+                temperature=0.0,
+                input_cost_per_1k_tokens=Decimal("0.00059"),
+                output_cost_per_1k_tokens=Decimal("0.00079"),
+            )
             .with_batch_size(10)
             .with_processing_batch_size(1)
             .with_max_budget(0.50)
@@ -196,10 +198,11 @@ def test_checkpoint_prevents_duplicate_work():
 
         # Verify completion
         assert result2.success, "Phase 2 should complete"
-        assert len(result2.data) == 10, f"Should have all 10 rows. Got {len(result2.data)}"
+        assert len(result2.data) == 10, (
+            f"Should have all 10 rows. Got {len(result2.data)}"
+        )
 
         print("\nDuplicate Work Prevention Test:")
         print(f"  Phase 2 completed: {len(result2.data)} rows")
         print(f"  Total cost: ${result2.costs.total_cost:.4f}")
         print("  ✅ Resume from checkpoint working")
-

@@ -173,4 +173,3 @@ output:
         print(f"  Processed: {len(result.data)} rows")
         print(f"  Output columns: {list(result.data.columns)}")
         print("  ✅ Multi-column YAML config working")
-

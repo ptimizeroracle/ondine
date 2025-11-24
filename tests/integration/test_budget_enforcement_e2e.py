@@ -87,9 +87,7 @@ def test_budget_warning_threshold():
         PipelineBuilder.create()
         .from_dataframe(df, input_columns=["text"], output_columns=["result"])
         .with_prompt("Echo: {{text}}")
-        .with_llm(
-            provider="groq", model="llama-3.3-70b-versatile", api_key=api_key
-        )
+        .with_llm(provider="groq", model="llama-3.3-70b-versatile", api_key=api_key)
         .with_batch_size(20)
         .with_processing_batch_size(5)  # 4 API calls
         .with_max_budget(0.10)  # Should complete within budget
@@ -108,4 +106,3 @@ def test_budget_warning_threshold():
     print("  Budget: $0.10")
     print(f"  Actual cost: ${result.costs.total_cost:.4f}")
     print("  ✅ Completed within budget")
-

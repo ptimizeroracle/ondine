@@ -129,4 +129,3 @@ def test_rate_limiting_with_burst_control():
     print("  ✅ Burst allows initial requests (as designed)")
 
     assert result.success
-

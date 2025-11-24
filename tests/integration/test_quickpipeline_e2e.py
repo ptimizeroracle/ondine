@@ -94,4 +94,3 @@ def test_quickpipeline_with_dataframe():
     print("\nQuickPipeline DataFrame Test:")
     print("  Input: DataFrame (3 rows)")
     print("  ✅ DataFrame input working")
-
