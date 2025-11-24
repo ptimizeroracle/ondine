@@ -6,6 +6,7 @@ Implements Builder pattern for intuitive pipeline creation.
 
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -57,6 +58,7 @@ class PipelineBuilder:
         self._custom_llm_client: any | None = None
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
+        self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
 
     @staticmethod
     def create() -> "PipelineBuilder":
@@ -1089,6 +1091,35 @@ class PipelineBuilder:
 
         return self
 
+    def with_structured_output(self, schema: Any) -> "PipelineBuilder":
+        """
+        Configure structured output using a Pydantic model.
+
+        This enables native schema enforcement, parsing, and auto-retry logic
+        using LlamaIndex's structured_predict capabilities.
+
+        Automatically configures JSONParser to handle the structured JSON output,
+        unless a custom parser was already configured.
+
+        Args:
+            schema: Pydantic model class defining the expected output structure
+
+        Returns:
+            Self for chaining
+        """
+        if not hasattr(self, "_custom_metadata"):
+            self._custom_metadata = {}
+        self._custom_metadata["structured_output_model"] = schema
+
+        # Auto-inject JSONParser if no parser configured
+        # Structured output always returns JSON, so we need a JSON parser
+        if self._custom_parser is None:
+            from ondine.stages.response_parser_stage import JSONParser
+
+            self._custom_parser = JSONParser()
+
+        return self
+
     def build(self) -> Pipeline:
         """
         Build final Pipeline.
@@ -1131,6 +1162,8 @@ class PipelineBuilder:
 
         # Prepare metadata with custom parser, custom client, custom stages, and observers
         metadata = {}
+        if self._custom_metadata:
+            metadata.update(self._custom_metadata)
         if self._custom_parser is not None:
             metadata["custom_parser"] = self._custom_parser
         if self._custom_llm_client is not None:
