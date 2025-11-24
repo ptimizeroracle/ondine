@@ -255,17 +255,22 @@ class TestMLXClientFactory:
             assert isinstance(client, MLXClient)
 
     def test_factory_creates_client_for_groq(self):
-        """Factory should create appropriate client for Groq provider."""
+        """Factory should create UnifiedLiteLLMClient for Groq provider."""
         spec = LLMSpec(
             provider=LLMProvider.GROQ,
             model="llama-3.3-70b-versatile",
             api_key="test",  # pragma: allowlist secret
         )
 
-        with patch("llama_index.llms.litellm.LiteLLM"):
+        # Groq now uses UnifiedLiteLLMClient
+        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
             client = create_llm_client(spec)
             assert client is not None
             assert hasattr(client, "invoke")
+            # Verify it's the unified client
+            from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+
+            assert isinstance(client, UnifiedLiteLLMClient)
 
 
 class TestMLXClientErrorHandling:
