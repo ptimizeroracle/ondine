@@ -38,7 +38,10 @@ class TestStructuredInvokeInstructor:
         mock_response = MagicMock()
         mock_response.text = '{"field1": "test", "field2": 123}'
 
-        with patch("asyncio.run", return_value=mock_response):
+        with patch(
+            "ondine.adapters.unified_litellm_client.asyncio.run",
+            return_value=mock_response,
+        ):
             response = client.structured_invoke("prompt", TestModel)
 
         assert response == mock_response

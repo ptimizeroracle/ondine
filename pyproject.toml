@@ -24,6 +24,7 @@ dependencies = [
     # Core LLM integration (using LiteLLM native + Instructor)
     "litellm>=1.80.0",
     "instructor>=1.0.0",
+    "redis>=5.0.0",  # For LiteLLM Redis caching (litellm.cache)
     # LlamaIndex (kept ONLY for future RAG features - not used in data pipelines)
     "llama-index>=0.12.0",
     # Data processing
