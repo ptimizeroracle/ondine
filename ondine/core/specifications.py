@@ -406,9 +406,9 @@ class ProcessingSpec(BaseModel):
     )
 
     # Template rendering
-    use_jinja2: bool = Field(
-        default=False,
-        description="Use Jinja2 for template rendering (enables loops, conditionals)",
+    use_jinja2: bool | None = Field(
+        default=None,
+        description="Template rendering mode: None (auto-detect), True (force Jinja2), False (force .format())",
     )
 
     # Progress tracking

@@ -445,6 +445,8 @@ class PipelineBuilder:
         api_key: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        input_cost_per_1k_tokens: Decimal | None = None,
+        output_cost_per_1k_tokens: Decimal | None = None,
         **kwargs: any,
     ) -> "PipelineBuilder":
         """
@@ -459,26 +461,33 @@ class PipelineBuilder:
             api_key: API key (optional, reads from environment if not provided)
             temperature: Sampling temperature (0.0-1.0, default: 0.0 for deterministic)
             max_tokens: Maximum output tokens (optional, uses model default)
+            input_cost_per_1k_tokens: Input cost per 1K tokens (optional, auto-detected from LiteLLM)
+            output_cost_per_1k_tokens: Output cost per 1K tokens (optional, auto-detected from LiteLLM)
             **kwargs: Provider-specific parameters (e.g., azure_endpoint, azure_deployment)
 
         Returns:
             Self for chaining
 
+        Note:
+            **Automatic Cost Tracking**: If you don't provide cost parameters, Ondine automatically
+            detects pricing from LiteLLM's database (1800+ models). Only specify costs manually
+            for custom/unknown models.
+
         Example:
             ```python
-            # OpenAI
+            # Auto cost detection (recommended - works for 1800+ models)
             builder.with_llm(provider="openai", model="gpt-4o-mini")
 
-            # Groq (fast and affordable)
+            # Groq (fast and affordable - costs auto-detected)
             builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
 
-            # Azure OpenAI with Managed Identity
+            # Manual cost override (custom models)
             builder.with_llm(
-                provider="azure_openai",
-                model="gpt-4",
-                azure_endpoint="https://your-resource.openai.azure.com/",
-                azure_deployment="gpt-4-deployment",
-                use_managed_identity=True
+                provider="openai_compatible",
+                model="my-custom-model",
+                base_url="https://my-api.com/v1",
+                input_cost_per_1k_tokens=Decimal("0.001"),
+                output_cost_per_1k_tokens=Decimal("0.002")
             )
             ```
         """
@@ -505,6 +514,8 @@ class PipelineBuilder:
             api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
+            input_cost_per_1k_tokens=input_cost_per_1k_tokens,
+            output_cost_per_1k_tokens=output_cost_per_1k_tokens,
             **kwargs,
         )
         return self
