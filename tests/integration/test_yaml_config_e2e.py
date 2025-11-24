@@ -17,7 +17,7 @@ from ondine.api.pipeline_composer import PipelineComposer
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env",
+    ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
@@ -98,8 +98,8 @@ output:
         print(f"\n{provider.upper()} YAML Config Test Results:")
         print(f"  Loaded from: {yaml_file.name}")
         print(f"  Processed: {len(result.data)} rows")
-        print(f"  Settings applied: batch_size=10, concurrency=2, rate_limit=30")
-        print(f"  ✅ YAML configuration working correctly")
+        print("  Settings applied: batch_size=10, concurrency=2, rate_limit=30")
+        print("  ✅ YAML configuration working correctly")
 
 
 @pytest.mark.integration
@@ -169,8 +169,8 @@ output:
         assert "category" in result.data.columns
         assert "color" in result.data.columns
 
-        print(f"\nMulti-Column YAML Test Results:")
+        print("\nMulti-Column YAML Test Results:")
         print(f"  Processed: {len(result.data)} rows")
         print(f"  Output columns: {list(result.data.columns)}")
-        print(f"  ✅ Multi-column YAML config working")
+        print("  ✅ Multi-column YAML config working")
 

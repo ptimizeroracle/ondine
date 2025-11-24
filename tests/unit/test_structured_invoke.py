@@ -22,7 +22,7 @@ def mock_openai_client():
         temperature=0.0,
     )
     # Patch OpenAI constructor to avoid actual API connection
-    with patch("ondine.adapters.llm_client.OpenAI") as MockOpenAI:
+    with patch("ondine.adapters.llm_client.OpenAI"):
         client = OpenAIClient(spec)
         # Set up the mock LlamaIndex client
         client.client = MagicMock()

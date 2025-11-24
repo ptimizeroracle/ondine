@@ -18,7 +18,7 @@ from ondine import PipelineBuilder
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env",
+    ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
@@ -63,20 +63,20 @@ def test_checkpoint_and_resume_after_budget_stop(provider, model, api_key_env):
 
         # Execute Phase 1 (should raise BudgetExceededError)
         from ondine.utils.budget_controller import BudgetExceededError
-        
+
         session_id = None
         try:
-            result_phase1 = pipeline_phase1.execute()
+            pipeline_phase1.execute()
             pytest.fail("Phase 1 should have raised BudgetExceededError")
         except BudgetExceededError as e:
             # Budget exceeded - this is expected!
             print(f"\n{provider.upper()} Checkpoint Test - Phase 1:")
             print(f"  Budget exceeded: {e}")
-            
+
             # Get checkpoint ID from error message or find checkpoint file
             checkpoint_files = list(checkpoint_dir.glob("*.json"))
             assert len(checkpoint_files) > 0, "No checkpoint file created after budget exceeded"
-            
+
             checkpoint_file = checkpoint_files[0]
             # Extract UUID from filename (strip "checkpoint_" prefix)
             session_id = checkpoint_file.stem.replace("checkpoint_", "")
@@ -116,7 +116,7 @@ def test_checkpoint_and_resume_after_budget_stop(provider, model, api_key_env):
         print(f"\n{provider.upper()} Checkpoint Test - Phase 2:")
         print(f"  Completed: {len(result_phase2.data)}/30 rows")
         print(f"  Total cost: ${result_phase2.costs.total_cost:.4f}")
-        print(f"  ✅ Checkpoint & resume working correctly")
+        print("  ✅ Checkpoint & resume working correctly")
 
 
 @pytest.mark.integration
@@ -157,9 +157,9 @@ def test_checkpoint_prevents_duplicate_work():
 
         # Execute Phase 1 (should raise BudgetExceededError)
         from ondine.utils.budget_controller import BudgetExceededError
-        
+
         try:
-            result1 = pipeline1.execute()
+            pipeline1.execute()
             pytest.fail("Should have raised BudgetExceededError")
         except BudgetExceededError:
             # Expected - budget exceeded
@@ -198,8 +198,8 @@ def test_checkpoint_prevents_duplicate_work():
         assert result2.success, "Phase 2 should complete"
         assert len(result2.data) == 10, f"Should have all 10 rows. Got {len(result2.data)}"
 
-        print(f"\nDuplicate Work Prevention Test:")
+        print("\nDuplicate Work Prevention Test:")
         print(f"  Phase 2 completed: {len(result2.data)} rows")
         print(f"  Total cost: ${result2.costs.total_cost:.4f}")
-        print(f"  ✅ Resume from checkpoint working")
+        print("  ✅ Resume from checkpoint working")
 

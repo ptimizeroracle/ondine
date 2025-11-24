@@ -16,7 +16,7 @@ from ondine import PipelineBuilder
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env",
+    ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
     ],
@@ -55,18 +55,18 @@ def test_budget_enforcement_stops_execution(provider, model, api_key_env):
 
     # Execute (should raise BudgetExceededError)
     from ondine.utils.budget_controller import BudgetExceededError
-    
+
     with pytest.raises(BudgetExceededError) as exc_info:
-        result = pipeline.execute()
+        pipeline.execute()
 
     # Verify budget was exceeded
     assert "Budget exceeded" in str(exc_info.value)
     assert "$0.001" in str(exc_info.value) or "$0.00" in str(exc_info.value)
 
     print(f"\n{provider.upper()} Budget Enforcement Results:")
-    print(f"  Budget: $0.001")
+    print("  Budget: $0.001")
     print(f"  Error: {exc_info.value}")
-    print(f"  ✅ Budget enforcement working correctly (raised exception)")
+    print("  ✅ Budget enforcement working correctly (raised exception)")
 
 
 @pytest.mark.integration
@@ -104,8 +104,8 @@ def test_budget_warning_threshold():
         f"Cost ${result.costs.total_cost:.4f} exceeded budget"
     )
 
-    print(f"\nBudget Warning Test Results:")
-    print(f"  Budget: $0.10")
+    print("\nBudget Warning Test Results:")
+    print("  Budget: $0.10")
     print(f"  Actual cost: ${result.costs.total_cost:.4f}")
-    print(f"  ✅ Completed within budget")
+    print("  ✅ Completed within budget")
 

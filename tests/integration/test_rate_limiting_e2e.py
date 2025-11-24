@@ -16,7 +16,7 @@ from ondine import PipelineBuilder
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env",
+    ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
@@ -77,11 +77,11 @@ def test_rate_limiting_enforces_rpm(provider, model, api_key_env):
     )
 
     print(f"\n{provider.upper()} Rate Limiting Results:")
-    print(f"  Configured: 60 RPM (1 req/sec)")
+    print("  Configured: 60 RPM (1 req/sec)")
     print(f"  Actual: {actual_rpm:.1f} RPM")
     print(f"  Duration: {elapsed_time:.1f}s for 6 requests")
-    print(f"  Burst size: 3 (first 3 fire instantly, then throttled)")
-    print(f"  ✅ Rate limiting working correctly")
+    print("  Burst size: 3 (first 3 fire instantly, then throttled)")
+    print("  ✅ Rate limiting working correctly")
 
 
 @pytest.mark.integration
@@ -124,9 +124,9 @@ def test_rate_limiting_with_burst_control():
         f"All should fit in burst window."
     )
 
-    print(f"\nBurst Control Results:")
+    print("\nBurst Control Results:")
     print(f"  5 requests at 30 RPM with burst_size=5 took {elapsed_time:.1f}s")
-    print(f"  ✅ Burst allows initial requests (as designed)")
+    print("  ✅ Burst allows initial requests (as designed)")
 
     assert result.success
 

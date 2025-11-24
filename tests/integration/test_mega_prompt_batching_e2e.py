@@ -11,18 +11,16 @@ from decimal import Decimal
 import pandas as pd
 import pytest
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 from ondine import PipelineBuilder
-from ondine.stages.response_parser_stage import JSONParser
 
 
 class ProductResult(BaseModel):
     """Extracted product attributes."""
     product_name: str = Field(description="Cleaned product name")
-    category: Optional[str] = Field(default=None, description="Product category")
-    price_range: Optional[str] = Field(default=None, description="Price range (e.g., '$10-20')")
-    keywords: List[str] = Field(default_factory=list, description="Key product features")
+    category: str | None = Field(default=None, description="Product category")
+    price_range: str | None = Field(default=None, description="Price range (e.g., '$10-20')")
+    keywords: list[str] = Field(default_factory=list, description="Key product features")
 
 
 class BatchItem(BaseModel):
@@ -33,12 +31,12 @@ class BatchItem(BaseModel):
 
 class ProductBatch(BaseModel):
     """Batch of product results."""
-    items: List[BatchItem]
+    items: list[BatchItem]
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env",
+    ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
@@ -145,10 +143,10 @@ Extract:
 
     print(f"\n{provider.upper()} Mega-Prompt Batching Test Results:")
     print(f"  Rows processed: {len(result.data)}/10")
-    print(f"  API calls: 2 (5 rows per batch)")
+    print("  API calls: 2 (5 rows per batch)")
     print(f"  Cost: ${result.costs.total_cost:.4f}")
-    print(f"  ✅ Batching working correctly")
-    print(f"\nSample extractions:")
+    print("  ✅ Batching working correctly")
+    print("\nSample extractions:")
     for i in range(3):
         print(f"  {i+1}. {result.data.iloc[i]['product_name'][:50]}")
 
@@ -204,9 +202,9 @@ def test_mega_prompt_preserves_order():
                 f"but extracted '{extracted}'"
             )
 
-    print(f"\nOrder Preservation Test Results:")
-    print(f"  ✅ All 20 rows in correct order")
-    print(f"  Batch size: 20 rows → 2 API calls (10 each)")
+    print("\nOrder Preservation Test Results:")
+    print("  ✅ All 20 rows in correct order")
+    print("  Batch size: 20 rows → 2 API calls (10 each)")
 
 
 @pytest.mark.integration
@@ -257,7 +255,7 @@ def test_mega_prompt_handles_null_values():
     for idx, row in result.data.iterrows():
         assert row["summary"] is not None, f"Row {idx} with null input should still have output"
 
-    print(f"\nNull Value Handling Test Results:")
-    print(f"  ✅ All 5 rows processed (including nulls)")
+    print("\nNull Value Handling Test Results:")
+    print("  ✅ All 5 rows processed (including nulls)")
     print(f"  Cost: ${result.costs.total_cost:.4f}")
 

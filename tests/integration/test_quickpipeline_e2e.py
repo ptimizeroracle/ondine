@@ -16,7 +16,7 @@ from ondine import QuickPipeline
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "model,api_key_env",
+    ("model", "api_key_env"),
     [
         ("gpt-4o-mini", "OPENAI_API_KEY"),
         ("llama-3.3-70b-versatile", "GROQ_API_KEY"),
@@ -60,9 +60,9 @@ def test_quickpipeline_auto_detection(model, api_key_env):
 
         print(f"\n{model} QuickPipeline Test Results:")
         print(f"  Auto-detected provider: {provider}")
-        print(f"  Auto-detected input: description")
+        print("  Auto-detected input: description")
         print(f"  Processed: {len(result.data)} rows")
-        print(f"  ✅ QuickPipeline auto-detection working")
+        print("  ✅ QuickPipeline auto-detection working")
 
 
 @pytest.mark.integration
@@ -91,7 +91,7 @@ def test_quickpipeline_with_dataframe():
     assert result.success
     assert len(result.data) == 3
 
-    print(f"\nQuickPipeline DataFrame Test:")
-    print(f"  Input: DataFrame (3 rows)")
-    print(f"  ✅ DataFrame input working")
+    print("\nQuickPipeline DataFrame Test:")
+    print("  Input: DataFrame (3 rows)")
+    print("  ✅ DataFrame input working")
 

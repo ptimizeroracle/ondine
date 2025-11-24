@@ -26,7 +26,7 @@ class BaconBatch(BaseModel):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "provider,model,api_key_env,base_url",
+    ("provider", "model", "api_key_env", "base_url"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY", None),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY", None),
