@@ -147,6 +147,7 @@ class ProviderRegistry:
             return
 
         # Import here to avoid circular dependencies
+        from ondine.adapters.litellm_client import LiteLLMClient
         from ondine.adapters.llm_client import (
             AnthropicClient,
             AzureOpenAIClient,
@@ -163,6 +164,13 @@ class ProviderRegistry:
         cls._providers["groq"] = GroqClient
         cls._providers["openai_compatible"] = OpenAICompatibleClient
         cls._providers["mlx"] = MLXClient
+
+        # Register LiteLLM providers (new unified client)
+        # These coexist with legacy providers for gradual migration
+        cls._providers["litellm_openai"] = LiteLLMClient
+        cls._providers["litellm_groq"] = LiteLLMClient
+        cls._providers["litellm_anthropic"] = LiteLLMClient
+        cls._providers["litellm"] = LiteLLMClient  # Generic fallback
 
         cls._builtin_registered = True
 

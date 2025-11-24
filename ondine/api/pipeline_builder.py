@@ -489,7 +489,7 @@ class PipelineBuilder:
             if ProviderRegistry.is_registered(provider):
                 # Use a dummy enum value for validation, but store the actual provider string
                 provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
-                kwargs["_custom_provider_id"] = provider
+                kwargs["custom_provider_id"] = provider
             else:
                 raise ValueError(
                     f"Unknown provider: {provider}. "

@@ -967,7 +967,7 @@ def create_llm_client(spec: LLMSpec) -> LLMClient:
     from ondine.adapters.provider_registry import ProviderRegistry
 
     # Check if custom provider ID is specified (from PipelineBuilder.with_llm)
-    custom_provider_id = getattr(spec, "_custom_provider_id", None)
+    custom_provider_id = spec.custom_provider_id
     if custom_provider_id:
         provider_id = custom_provider_id
     else:

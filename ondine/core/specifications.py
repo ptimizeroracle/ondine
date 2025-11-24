@@ -275,6 +275,13 @@ class LLMSpec(BaseModel):
         default=None, description="Output token cost"
     )
 
+    # Internal: Custom provider routing (set by PipelineBuilder for registry-based providers)
+    custom_provider_id: str | None = Field(
+        default=None,
+        description="Custom provider ID for ProviderRegistry lookup (internal use)",
+        exclude=True,  # Don't include in serialization
+    )
+
     @field_validator("base_url")
     @classmethod
     def validate_base_url_format(cls, v: str | None) -> str | None:
