@@ -55,6 +55,9 @@ class LiteLLMClient(LLMClient):
 
         from llama_index.llms.litellm import LiteLLM
 
+        # Call parent __init__ for consistent initialization
+        super().__init__(spec)
+
         # Suppress verbose LiteLLM logs (keep only warnings/errors)
         # LiteLLM logs every completion() call at INFO level which is too noisy
         # Also suppress print statements from litellm library
@@ -71,11 +74,6 @@ class LiteLLMClient(LLMClient):
             litellm.drop_params = True
         except (ImportError, AttributeError):
             pass  # Older version of litellm
-
-        self.spec = spec
-        self.model = spec.model
-        self.temperature = spec.temperature
-        self.max_tokens = spec.max_tokens
 
         # Build LiteLLM model identifier (format: "provider/model")
         # Use custom_provider_id if available (e.g., "litellm_groq")
@@ -215,11 +213,16 @@ class LiteLLMClient(LLMClient):
                     prompt_template_str="{prompt}",
                 )
 
+                # Include system message in prompt for Groq
+                effective_prompt = prompt
+                if system_message:
+                    effective_prompt = f"{system_message}\n\n{prompt}"
+
                 # Wrap prompt
-                if isinstance(prompt, str):
-                    prompt_tmpl = PromptTemplate(prompt)
+                if isinstance(effective_prompt, str):
+                    prompt_tmpl = PromptTemplate(effective_prompt)
                 else:
-                    prompt_tmpl = prompt
+                    prompt_tmpl = effective_prompt
 
                 # Call with JSON mode
                 result_obj = program(
@@ -337,9 +340,9 @@ class LiteLLMClient(LLMClient):
         LiteLLM uses provider-specific logic, more accurate than generic tiktoken.
         """
         try:
-            from litellm import token_counter
+            from litellm import encode
 
-            return token_counter(model=self.model_identifier, text=text)
+            return len(encode(model=self.model_identifier, text=text))
         except Exception:
             # Fallback to word-based estimation
             return int(len(text.split()) * 1.3)
