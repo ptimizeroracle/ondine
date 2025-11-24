@@ -16,6 +16,7 @@ import hashlib
 import logging
 import os
 import time
+import warnings
 from decimal import Decimal
 from typing import Any
 
@@ -26,6 +27,43 @@ from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
 
 logger = logging.getLogger(__name__)
+
+# Suppress LiteLLM async cleanup warnings
+# These occur because asyncio.run() closes the event loop before
+# LiteLLM's aiohttp clients finish cleanup. This is a known issue.
+# See: https://github.com/BerriAI/litellm/issues/
+warnings.filterwarnings("ignore", message=".*coroutine.*was never awaited.*")
+warnings.filterwarnings("ignore", category=ResourceWarning, message=".*unclosed.*")
+
+# Also configure asyncio to suppress these specific warnings
+
+
+# Set a custom exception handler to suppress cleanup errors
+def _suppress_litellm_cleanup_errors(loop, context):
+    """Suppress LiteLLM async cleanup errors."""
+    exception = context.get("exception")
+    message = context.get("message", "")
+
+    # Ignore these specific cleanup errors
+    if "Event loop is closed" in message:
+        return
+    if "Fatal error on SSL transport" in message:
+        return
+    if "coroutine" in message and "was never awaited" in message:
+        return
+
+    # Log other errors normally
+    if exception:
+        logger.debug(f"Async warning: {message}", exc_info=exception)
+
+
+# This will be used when we create event loops
+try:
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(_suppress_litellm_cleanup_errors)
+except RuntimeError:
+    # No event loop yet, will be set when created
+    pass
 
 
 class UnifiedLiteLLMClient(LLMClient):
@@ -88,8 +126,15 @@ class UnifiedLiteLLMClient(LLMClient):
         # Router support (optional - for load balancing)
         self.router = None
         self.use_router = False
+        self.router_model_name = None
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
+            # When using Router, extract the model_name to use
+            if self.router and spec.router_config.get("model_list"):
+                # Use the first model's model_name as default
+                first_model = spec.router_config["model_list"][0]
+                self.router_model_name = first_model.get("model_name")
+                logger.debug(f"Router will use model_name: {self.router_model_name}")
 
         # Cache support (optional - for response caching)
         self.cache = None
@@ -277,8 +322,10 @@ class UnifiedLiteLLMClient(LLMClient):
         # Router provides: load balancing, failover, retries, cooldowns
         # Cache provides: automatic response caching (if configured)
         if self.use_router:
+            # When using Router, pass the model_name (not full identifier)
+            model_to_use = self.router_model_name or self.model_identifier
             response = await self.router.acompletion(
-                model=self.model_identifier,
+                model=model_to_use,  # Use model_name from router config
                 messages=messages,
                 temperature=self.spec.temperature,
                 max_tokens=self.spec.max_tokens,
