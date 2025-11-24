@@ -25,6 +25,13 @@ class SimpleResult(BaseModel):
     sentiment: str = Field(description="Positive, Negative, or Neutral")
 
 
+class PriceResult(BaseModel):
+    """Price extraction for batch testing."""
+
+    extracted_price: int = Field(description="Exact numeric price")
+    price_category: str = Field(description="Price category")
+
+
 class BatchItem(BaseModel):
     """Single item in batch."""
 
@@ -32,10 +39,23 @@ class BatchItem(BaseModel):
     result: SimpleResult
 
 
+class PriceBatchItem(BaseModel):
+    """Single item in price batch."""
+
+    id: int
+    result: PriceResult
+
+
 class SimpleBatch(BaseModel):
     """Batch of results."""
 
     items: list[BatchItem]
+
+
+class PriceBatch(BaseModel):
+    """Batch of price results."""
+
+    items: list[PriceBatchItem]
 
 
 @pytest.mark.integration
@@ -138,36 +158,52 @@ Review: {{ text }}"""
 )
 def test_providers_multi_row_batching(provider, model, api_key_env):
     """
-    Test standard providers with mega-prompt batching.
+    CRITICAL REGRESSION TEST: Verifies each row gets unique extracted values.
 
-    Validates that batching works correctly when multiple rows
-    are processed in a single API call.
+    This test caught a critical bug where LiteLLM's Groq workaround
+    (LLMTextCompletionProgram) was returning the same extraction for all rows
+    in a batch, instead of processing each row individually.
+
+    Test Strategy:
+    - Use 6 products with DISTINCT prices (1, 5, 10, 50, 100, 500)
+    - Batch them (3 per API call = 2 API calls)
+    - Assert each extracted price EXACTLY matches its input
     """
     api_key = os.getenv(api_key_env)
     if not api_key:
         pytest.skip(f"{api_key_env} not set")
 
-    # Create test data (10 rows)
-    df = pd.DataFrame(
-        {
-            "text": [
-                f"Review {i}: {'Great' if i % 2 == 0 else 'Bad'} product"
-                for i in range(10)
-            ]
-        }
-    )
+    # Create test data with DISTINCT, VERIFIABLE prices
+    test_data = [
+        {"product": "Pencil", "price": 1},
+        {"product": "Notebook", "price": 5},
+        {"product": "Backpack", "price": 10},
+        {"product": "Jacket", "price": 50},
+        {"product": "Laptop", "price": 100},
+        {"product": "Bicycle", "price": 500},
+    ]
 
-    # Build pipeline with BATCHING (5 rows per API call = 2 API calls total)
+    df = pd.DataFrame(test_data)
+
+    # Build pipeline with BATCHING (3 rows per API call = 2 API calls)
     pipeline = (
         PipelineBuilder.create()
         .from_dataframe(
-            df, input_columns=["text"], output_columns=["summary", "sentiment"]
+            df,
+            input_columns=["product", "price"],
+            output_columns=["extracted_price", "price_category"],
         )
-        .with_prompt("Analyze: {{ text }}")
+        .with_prompt("""Extract the price and categorize it:
+Product: {{ product }}
+Price: ${{ price }}
+
+Return:
+- extracted_price: The exact numeric price (integer only)
+- price_category: "cheap" if under $20, "medium" if $20-$99, "expensive" if $100+""")
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
-        .with_batch_size(10)  # Aggregate up to 10 rows
-        .with_processing_batch_size(5)  # Process 5 at a time = 2 API calls
-        .with_structured_output(SimpleBatch)
+        .with_batch_size(6)  # Aggregate all 6 rows
+        .with_processing_batch_size(3)  # Process 3 at a time = 2 API calls
+        .with_structured_output(PriceBatch)
         .build()
     )
 
@@ -176,25 +212,70 @@ def test_providers_multi_row_batching(provider, model, api_key_env):
 
     # Verify success
     assert result.success, f"{provider} batched pipeline failed"
-    assert len(result.data) == 10, f"{provider} returned wrong number of rows"
-
-    # Verify all rows processed
-    assert result.data["summary"].notnull().all(), (
-        f"{provider} returned null summaries in batch"
-    )
-    assert result.data["sentiment"].notnull().all(), (
-        f"{provider} returned null sentiments in batch"
+    assert len(result.data) == 6, (
+        f"{provider} returned {len(result.data)} rows, expected 6"
     )
 
-    # Verify order preservation (critical for batching)
+    # CRITICAL ASSERTION: Each row must have its EXACT input price extracted
     for i, row in result.data.iterrows():
-        assert f"Review {i}" in row["text"], f"{provider} lost row order in batching"
+        input_price = test_data[i]["price"]
+        extracted_price = row["extracted_price"]
 
-    print(f"\n✅ {provider.upper()} Batching Results:")
-    print("  Rows: 10 (5 per API call = 2 calls)")
-    print("  All summaries populated: ✅")
-    print("  Order preserved: ✅")
-    print("  Mega-prompt batching: Working ✅")
+        # Convert to int for comparison (LLM might return string)
+        try:
+            extracted_price_int = int(str(extracted_price).strip())
+        except (ValueError, AttributeError):
+            pytest.fail(
+                f"{provider} Row {i} ({test_data[i]['product']}): "
+                f"Invalid extracted_price '{extracted_price}' (type: {type(extracted_price)})"
+            )
+
+        assert extracted_price_int == input_price, (
+            f"{provider} REGRESSION DETECTED! Row {i} ({test_data[i]['product']}): "
+            f"Expected price={input_price}, got extracted_price={extracted_price_int}. "
+            f"This means batching is broken - all rows likely getting same value!"
+        )
+
+    # Verify price categories are correct
+    expected_categories = {
+        0: "cheap",  # $1
+        1: "cheap",  # $5
+        2: "cheap",  # $10
+        3: "medium",  # $50
+        4: "expensive",  # $100
+        5: "expensive",  # $500
+    }
+
+    for i, row in result.data.iterrows():
+        category = str(row["price_category"]).lower().strip()
+        expected = expected_categories[i]
+        # Allow some flexibility in naming but verify the logic
+        if expected == "cheap":
+            assert category in ["cheap", "low", "budget", "affordable"], (
+                f"{provider} Row {i}: Wrong category '{category}' for ${test_data[i]['price']}"
+            )
+        elif expected == "medium":
+            assert category in ["medium", "moderate", "mid", "average"], (
+                f"{provider} Row {i}: Wrong category '{category}' for ${test_data[i]['price']}"
+            )
+        elif expected == "expensive":
+            assert category in ["expensive", "high", "premium", "costly"], (
+                f"{provider} Row {i}: Wrong category '{category}' for ${test_data[i]['price']}"
+            )
+
+    # Verify uniqueness (sanity check)
+    unique_prices = result.data["extracted_price"].nunique()
+    assert unique_prices == 6, (
+        f"{provider} CRITICAL BUG: Only {unique_prices} unique prices extracted from 6 rows! "
+        f"Extracted values: {result.data['extracted_price'].tolist()}"
+    )
+
+    print(f"\n✅ {provider.upper()} Multi-Row Batching PASSED:")
+    print("  Input prices:     [1, 5, 10, 50, 100, 500]")
+    print(f"  Extracted prices: {result.data['extracted_price'].tolist()}")
+    print(f"  Categories:       {result.data['price_category'].tolist()}")
+    print("  ✅ Each row correctly extracted (no duplication)")
+    print("  ✅ Mega-prompt batching working correctly")
 
 
 @pytest.mark.integration

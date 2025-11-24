@@ -51,7 +51,26 @@ class LiteLLMClient(LLMClient):
         Args:
             spec: LLM specification with provider, model, and credentials
         """
+        import logging
+
         from llama_index.llms.litellm import LiteLLM
+
+        # Suppress verbose LiteLLM logs (keep only warnings/errors)
+        # LiteLLM logs every completion() call at INFO level which is too noisy
+        # Also suppress print statements from litellm library
+
+        os.environ["LITELLM_LOG"] = "WARNING"  # Set log level via env var
+        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+        logging.getLogger("litellm").setLevel(logging.WARNING)
+
+        # Suppress litellm's success_callback logging
+        try:
+            import litellm
+
+            litellm.suppress_debug_info = True
+            litellm.drop_params = True
+        except (ImportError, AttributeError):
+            pass  # Older version of litellm
 
         self.spec = spec
         self.model = spec.model
