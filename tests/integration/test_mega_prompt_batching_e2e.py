@@ -17,20 +17,27 @@ from ondine import PipelineBuilder
 
 class ProductResult(BaseModel):
     """Extracted product attributes."""
+
     product_name: str = Field(description="Cleaned product name")
     category: str | None = Field(default=None, description="Product category")
-    price_range: str | None = Field(default=None, description="Price range (e.g., '$10-20')")
-    keywords: list[str] = Field(default_factory=list, description="Key product features")
+    price_range: str | None = Field(
+        default=None, description="Price range (e.g., '$10-20')"
+    )
+    keywords: list[str] = Field(
+        default_factory=list, description="Key product features"
+    )
 
 
 class BatchItem(BaseModel):
     """Single item in batch response."""
+
     id: int
     result: ProductResult
 
 
 class ProductBatch(BaseModel):
     """Batch of product results."""
+
     items: list[BatchItem]
 
 
@@ -57,22 +64,35 @@ def test_mega_prompt_batching_complex_data(provider, model, api_key_env):
         pytest.skip(f"{api_key_env} not set")
 
     # Create complex test DataFrame with varied data
-    df = pd.DataFrame({
-        "product_description": [
-            "Premium Wireless Bluetooth Headphones - Over-Ear, Noise Cancelling, 30hr Battery, $199.99",
-            "Organic Fair Trade Coffee Beans - Dark Roast, 2lb Bag, Single Origin Ethiopia, $24.99",
-            "Stainless Steel Water Bottle - 32oz, Insulated, BPA-Free, Keeps Cold 24hrs, $29.95",
-            "Yoga Mat - Extra Thick 6mm, Non-Slip, Eco-Friendly TPE Material, Carrying Strap, $39.99",
-            "LED Desk Lamp - Touch Control, 3 Color Modes, USB Charging Port, Adjustable Arm, $45.00",
-            "Cotton Throw Blanket - 50x60in, Soft Knit, Machine Washable, Grey Color, $34.99",
-            "Running Shoes - Men's Size 10, Lightweight Mesh, Cushioned Sole, Black/White, $89.99",
-            "Ceramic Plant Pot Set - 3 Pieces, Drainage Holes, Modern White Design, 4-6-8 inch, $28.50",
-            "Laptop Stand - Aluminum, Ergonomic, Adjustable Height, Fits 10-17 inch, Portable, $49.99",
-            "Essential Oil Diffuser - 300ml, Ultrasonic, Auto Shutoff, 7 LED Colors, Wood Grain, $32.99",
-        ],
-        "source": ["Amazon", "Etsy", "Target", "Walmart", "Amazon", "Target", "Nike", "HomeDepot", "Amazon", "Etsy"],
-        "rating": [4.5, 4.8, 4.3, 4.6, 4.4, 4.7, 4.2, 4.5, 4.6, 4.9],
-    })
+    df = pd.DataFrame(
+        {
+            "product_description": [
+                "Premium Wireless Bluetooth Headphones - Over-Ear, Noise Cancelling, 30hr Battery, $199.99",
+                "Organic Fair Trade Coffee Beans - Dark Roast, 2lb Bag, Single Origin Ethiopia, $24.99",
+                "Stainless Steel Water Bottle - 32oz, Insulated, BPA-Free, Keeps Cold 24hrs, $29.95",
+                "Yoga Mat - Extra Thick 6mm, Non-Slip, Eco-Friendly TPE Material, Carrying Strap, $39.99",
+                "LED Desk Lamp - Touch Control, 3 Color Modes, USB Charging Port, Adjustable Arm, $45.00",
+                "Cotton Throw Blanket - 50x60in, Soft Knit, Machine Washable, Grey Color, $34.99",
+                "Running Shoes - Men's Size 10, Lightweight Mesh, Cushioned Sole, Black/White, $89.99",
+                "Ceramic Plant Pot Set - 3 Pieces, Drainage Holes, Modern White Design, 4-6-8 inch, $28.50",
+                "Laptop Stand - Aluminum, Ergonomic, Adjustable Height, Fits 10-17 inch, Portable, $49.99",
+                "Essential Oil Diffuser - 300ml, Ultrasonic, Auto Shutoff, 7 LED Colors, Wood Grain, $32.99",
+            ],
+            "source": [
+                "Amazon",
+                "Etsy",
+                "Target",
+                "Walmart",
+                "Amazon",
+                "Target",
+                "Nike",
+                "HomeDepot",
+                "Amazon",
+                "Etsy",
+            ],
+            "rating": [4.5, 4.8, 4.3, 4.6, 4.4, 4.7, 4.2, 4.5, 4.6, 4.9],
+        }
+    )
 
     # Prompt for structured extraction
     extraction_prompt = """Extract key product information from the description.
@@ -94,16 +114,20 @@ Extract:
         .from_dataframe(
             df,
             input_columns=["product_description", "source", "rating"],
-            output_columns=["product_name", "category", "price_range", "keywords"]
+            output_columns=["product_name", "category", "price_range", "keywords"],
         )
-            .with_prompt(extraction_prompt)
+        .with_prompt(extraction_prompt)
         .with_llm(
             provider=provider,
             model=model,
             api_key=api_key,
             temperature=0.0,
-            input_cost_per_1k_tokens=Decimal("0.00015") if provider == "openai" else Decimal("0.00059"),
-            output_cost_per_1k_tokens=Decimal("0.0006") if provider == "openai" else Decimal("0.00079"),
+            input_cost_per_1k_tokens=Decimal("0.00015")
+            if provider == "openai"
+            else Decimal("0.00059"),
+            output_cost_per_1k_tokens=Decimal("0.0006")
+            if provider == "openai"
+            else Decimal("0.00079"),
         )
         .with_jinja2(True)
         .with_batch_size(10)  # All 10 rows in 1 mega-prompt
@@ -123,23 +147,37 @@ Extract:
     # Verify all rows have results
     for idx, row in result.data.iterrows():
         assert row["product_name"] is not None, f"Row {idx}: product_name is None"
-        assert isinstance(row["product_name"], str), f"Row {idx}: product_name not a string"
+        assert isinstance(row["product_name"], str), (
+            f"Row {idx}: product_name not a string"
+        )
         assert len(row["product_name"]) > 0, f"Row {idx}: product_name is empty"
 
     # Verify specific extractions (spot checks)
-    headphones_row = result.data[result.data["product_description"].str.contains("Headphones")].iloc[0]
-    assert "headphone" in headphones_row["product_name"].lower(), "Headphones not extracted correctly"
-    assert headphones_row["price_range"] is not None, "Price not extracted from headphones"
+    headphones_row = result.data[
+        result.data["product_description"].str.contains("Headphones")
+    ].iloc[0]
+    assert "headphone" in headphones_row["product_name"].lower(), (
+        "Headphones not extracted correctly"
+    )
+    assert headphones_row["price_range"] is not None, (
+        "Price not extracted from headphones"
+    )
 
-    coffee_row = result.data[result.data["product_description"].str.contains("Coffee")].iloc[0]
-    assert "coffee" in coffee_row["product_name"].lower(), "Coffee not extracted correctly"
+    coffee_row = result.data[
+        result.data["product_description"].str.contains("Coffee")
+    ].iloc[0]
+    assert "coffee" in coffee_row["product_name"].lower(), (
+        "Coffee not extracted correctly"
+    )
     assert coffee_row["category"] is not None, "Category not extracted from coffee"
 
     # Verify keywords are lists (if extracted)
     for idx, row in result.data.iterrows():
         if row["keywords"] is not None:
             # Keywords might be string representation of list or actual list
-            assert isinstance(row["keywords"], (list, str)), f"Row {idx}: keywords type is {type(row['keywords'])}"
+            assert isinstance(row["keywords"], (list, str)), (
+                f"Row {idx}: keywords type is {type(row['keywords'])}"
+            )
 
     print(f"\n{provider.upper()} Mega-Prompt Batching Test Results:")
     print(f"  Rows processed: {len(result.data)}/10")
@@ -148,7 +186,7 @@ Extract:
     print("  ✅ Batching working correctly")
     print("\nSample extractions:")
     for i in range(3):
-        print(f"  {i+1}. {result.data.iloc[i]['product_name'][:50]}")
+        print(f"  {i + 1}. {result.data.iloc[i]['product_name'][:50]}")
 
 
 @pytest.mark.integration
@@ -163,15 +201,21 @@ def test_mega_prompt_preserves_order():
         pytest.skip("GROQ_API_KEY not set")
 
     # Create DataFrame with sequential IDs
-    df = pd.DataFrame({
-        "id": list(range(1, 21)),
-        "text": [f"Item number {i}" for i in range(1, 21)],
-    })
+    df = pd.DataFrame(
+        {
+            "id": list(range(1, 21)),
+            "text": [f"Item number {i}" for i in range(1, 21)],
+        }
+    )
 
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["id", "text"], output_columns=["extracted_id"])
-        .with_prompt("Extract the number from the text: {{ text }}. Return only the integer.")
+        .from_dataframe(
+            df, input_columns=["id", "text"], output_columns=["extracted_id"]
+        )
+        .with_prompt(
+            "Extract the number from the text: {{ text }}. Return only the integer."
+        )
         .with_llm(
             provider="groq",
             model="llama-3.3-70b-versatile",
@@ -217,21 +261,27 @@ def test_mega_prompt_handles_null_values():
         pytest.skip("OPENAI_API_KEY not set")
 
     # DataFrame with some null values
-    df = pd.DataFrame({
-        "name": ["Product A", None, "Product C", "", "Product E"],
-        "description": [
-            "Good quality item",
-            "Another item",
-            None,
-            "Empty name item",
-            "Final item"
-        ],
-    })
+    df = pd.DataFrame(
+        {
+            "name": ["Product A", None, "Product C", "", "Product E"],
+            "description": [
+                "Good quality item",
+                "Another item",
+                None,
+                "Empty name item",
+                "Final item",
+            ],
+        }
+    )
 
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["name", "description"], output_columns=["summary"])
-        .with_prompt("Summarize: Name={{ name or 'Unknown' }}, Desc={{ description or 'No description' }}")
+        .from_dataframe(
+            df, input_columns=["name", "description"], output_columns=["summary"]
+        )
+        .with_prompt(
+            "Summarize: Name={{ name or 'Unknown' }}, Desc={{ description or 'No description' }}"
+        )
         .with_llm(
             provider="openai",
             model="gpt-4o-mini",
@@ -253,9 +303,10 @@ def test_mega_prompt_handles_null_values():
 
     # Verify all rows have some result (even if input was null)
     for idx, row in result.data.iterrows():
-        assert row["summary"] is not None, f"Row {idx} with null input should still have output"
+        assert row["summary"] is not None, (
+            f"Row {idx} with null input should still have output"
+        )
 
     print("\nNull Value Handling Test Results:")
     print("  ✅ All 5 rows processed (including nulls)")
     print(f"  Cost: ${result.costs.total_cost:.4f}")
-
