@@ -237,13 +237,19 @@ class LiteLLMClient(LLMClient):
 
                 response_text = result_obj.model_dump_json()
 
-                # Estimate tokens
-                tokens_in = self.estimate_tokens(prompt)
+                # Build full prompt for cost calculation
+                full_prompt = prompt
                 if system_message:
-                    tokens_in += self.estimate_tokens(system_message)
-                tokens_out = self.estimate_tokens(response_text)
+                    full_prompt = f"{system_message}\n\n{prompt}"
 
-                cost = self._calculate_cost_from_litellm(tokens_in, tokens_out)
+                # Calculate cost using LiteLLM (pass prompt/completion for accurate pricing)
+                cost = self._calculate_cost_from_litellm_text(
+                    full_prompt, response_text
+                )
+
+                # Estimate tokens for tracking (LiteLLM counts internally)
+                tokens_in = self.estimate_tokens(full_prompt)
+                tokens_out = self.estimate_tokens(response_text)
 
                 return LLMResponse(
                     text=response_text,
@@ -348,17 +354,21 @@ class LiteLLMClient(LLMClient):
         return self._calculate_cost_from_litellm(tokens_in, tokens_out)
 
     def _calculate_cost_from_litellm(self, tokens_in: int, tokens_out: int) -> Decimal:
-        """Calculate cost using LiteLLM's pricing database."""
+        """Calculate cost using LiteLLM's pricing database (token-based fallback)."""
+        # This method is kept for backward compatibility but may return $0
+        # if LiteLLM can't determine cost from token counts alone
         try:
-            from litellm import completion_cost
+            from litellm import cost_per_token
 
-            # LiteLLM has built-in pricing for 1818+ models
-            cost = completion_cost(
-                model=self.model_identifier,
-                prompt_tokens=tokens_in,
-                completion_tokens=tokens_out,
+            # Get cost per token for this model
+            cost_dict = cost_per_token(model=self.model_identifier)
+            input_cost_per_token = cost_dict.get("input_cost_per_token", 0)
+            output_cost_per_token = cost_dict.get("output_cost_per_token", 0)
+
+            total_cost = (tokens_in * input_cost_per_token) + (
+                tokens_out * output_cost_per_token
             )
-            return Decimal(str(cost)) if cost else Decimal("0.0")
+            return Decimal(str(total_cost)) if total_cost else Decimal("0.0")
         except Exception:
             # Fallback to manual calculation if model not in database
             input_cost = Decimal(str(tokens_in / 1000)) * (
@@ -368,6 +378,27 @@ class LiteLLMClient(LLMClient):
                 self.spec.output_cost_per_1k_tokens or Decimal("0.0")
             )
             return input_cost + output_cost
+
+    def _calculate_cost_from_litellm_text(
+        self, prompt: str, completion: str
+    ) -> Decimal:
+        """Calculate cost using LiteLLM's pricing database (text-based, most accurate)."""
+        try:
+            from litellm import completion_cost
+
+            # LiteLLM has built-in pricing for 1818+ models
+            # Pass prompt/completion text for automatic token counting + pricing
+            cost = completion_cost(
+                model=self.model_identifier,
+                prompt=prompt,
+                completion=completion,
+            )
+            return Decimal(str(cost)) if cost else Decimal("0.0")
+        except Exception:
+            # Fallback to token-based estimation
+            tokens_in = self.estimate_tokens(prompt)
+            tokens_out = self.estimate_tokens(completion)
+            return self._calculate_cost_from_litellm(tokens_in, tokens_out)
 
     def _get_api_key_env_var(self, provider_name: str) -> str:
         """Get environment variable name for provider API key."""
