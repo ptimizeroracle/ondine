@@ -389,48 +389,51 @@ class PipelineBuilder:
         self._prompt_spec.batch_strategy = strategy
         return self
 
-    def with_jinja2(self, enabled: bool = True) -> "PipelineBuilder":
+    def with_jinja2(self, enabled: bool | None = True) -> "PipelineBuilder":
         """
-        Enable Jinja2 template rendering for advanced prompt control.
+        Control Jinja2 template rendering mode.
 
         Jinja2 provides powerful features for dynamic prompts:
         - Conditionals: {% if condition %}...{% endif %}
         - Loops: {% for item in items %}...{% endfor %}
         - Filters: {{ text | upper | truncate(100) }}
-        - Complex logic within templates
-
-        By default, Ondine uses Python's .format() for simple {variable}
-        substitution. Enable Jinja2 when you need programmatic control flow.
 
         Args:
-            enabled: Enable (True) or disable (False) Jinja2 rendering
+            enabled: Template rendering mode
+                - True: Force Jinja2 rendering (for advanced features)
+                - False: Force Python .format() (for compatibility)
+                - None: Auto-detect based on syntax (default behavior)
 
         Returns:
             Self for chaining
 
+        Note:
+            By default (if not called), Ondine auto-detects the template syntax:
+            - {{ variable }} → Jinja2 (auto-enabled)
+            - {variable} → Python .format() (auto-enabled)
+
+            Only call this method if you need to override auto-detection.
+
         Example:
             ```python
-            # Conditional prompt based on data
+            # Auto-detection (recommended - no .with_jinja2() call needed)
+            template = 'Product: {{ name }}'  # Jinja2 auto-detected
+
+            # Explicit control (advanced use cases)
             template = '''Extract from: {{ description }}
             {% if category == "beverage" %}
             Focus on volume units (oz, ml, L)
-            {% elif category == "food" %}
-            Focus on weight units (lb, oz, g)
             {% endif %}'''
 
             pipeline = (
                 PipelineBuilder.create()
                 .from_csv("products.csv", input_columns=["description", "category"])
                 .with_prompt(template)
-                .with_jinja2(True)  # Enable Jinja2
+                .with_jinja2(True)  # Force Jinja2 (optional, auto-detected anyway)
                 .with_llm("openai", "gpt-4o-mini")
                 .build()
             )
             ```
-
-        Note:
-            Simple {variable} syntax works with both modes. Only enable
-            Jinja2 if you need conditionals, loops, or filters.
         """
         self._processing_spec.use_jinja2 = enabled
         return self
@@ -442,6 +445,8 @@ class PipelineBuilder:
         api_key: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        input_cost_per_1k_tokens: Decimal | None = None,
+        output_cost_per_1k_tokens: Decimal | None = None,
         **kwargs: any,
     ) -> "PipelineBuilder":
         """
@@ -456,26 +461,33 @@ class PipelineBuilder:
             api_key: API key (optional, reads from environment if not provided)
             temperature: Sampling temperature (0.0-1.0, default: 0.0 for deterministic)
             max_tokens: Maximum output tokens (optional, uses model default)
+            input_cost_per_1k_tokens: Input cost per 1K tokens (optional, auto-detected from LiteLLM)
+            output_cost_per_1k_tokens: Output cost per 1K tokens (optional, auto-detected from LiteLLM)
             **kwargs: Provider-specific parameters (e.g., azure_endpoint, azure_deployment)
 
         Returns:
             Self for chaining
 
+        Note:
+            **Automatic Cost Tracking**: If you don't provide cost parameters, Ondine automatically
+            detects pricing from LiteLLM's database (1800+ models). Only specify costs manually
+            for custom/unknown models.
+
         Example:
             ```python
-            # OpenAI
+            # Auto cost detection (recommended - works for 1800+ models)
             builder.with_llm(provider="openai", model="gpt-4o-mini")
 
-            # Groq (fast and affordable)
+            # Groq (fast and affordable - costs auto-detected)
             builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
 
-            # Azure OpenAI with Managed Identity
+            # Manual cost override (custom models)
             builder.with_llm(
-                provider="azure_openai",
-                model="gpt-4",
-                azure_endpoint="https://your-resource.openai.azure.com/",
-                azure_deployment="gpt-4-deployment",
-                use_managed_identity=True
+                provider="openai_compatible",
+                model="my-custom-model",
+                base_url="https://my-api.com/v1",
+                input_cost_per_1k_tokens=Decimal("0.001"),
+                output_cost_per_1k_tokens=Decimal("0.002")
             )
             ```
         """
@@ -489,7 +501,7 @@ class PipelineBuilder:
             if ProviderRegistry.is_registered(provider):
                 # Use a dummy enum value for validation, but store the actual provider string
                 provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
-                kwargs["_custom_provider_id"] = provider
+                kwargs["custom_provider_id"] = provider
             else:
                 raise ValueError(
                     f"Unknown provider: {provider}. "
@@ -502,6 +514,8 @@ class PipelineBuilder:
             api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
+            input_cost_per_1k_tokens=input_cost_per_1k_tokens,
+            output_cost_per_1k_tokens=output_cost_per_1k_tokens,
             **kwargs,
         )
         return self

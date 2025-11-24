@@ -275,6 +275,13 @@ class LLMSpec(BaseModel):
         default=None, description="Output token cost"
     )
 
+    # Internal: Custom provider routing (set by PipelineBuilder for registry-based providers)
+    custom_provider_id: str | None = Field(
+        default=None,
+        description="Custom provider ID for ProviderRegistry lookup (internal use)",
+        exclude=True,  # Don't include in serialization
+    )
+
     @field_validator("base_url")
     @classmethod
     def validate_base_url_format(cls, v: str | None) -> str | None:
@@ -399,9 +406,9 @@ class ProcessingSpec(BaseModel):
     )
 
     # Template rendering
-    use_jinja2: bool = Field(
-        default=False,
-        description="Use Jinja2 for template rendering (enables loops, conditionals)",
+    use_jinja2: bool | None = Field(
+        default=None,
+        description="Template rendering mode: None (auto-detect), True (force Jinja2), False (force .format())",
     )
 
     # Progress tracking

@@ -147,22 +147,29 @@ class ProviderRegistry:
             return
 
         # Import here to avoid circular dependencies
+        from ondine.adapters.litellm_client import LiteLLMClient
         from ondine.adapters.llm_client import (
-            AnthropicClient,
             AzureOpenAIClient,
-            GroqClient,
             MLXClient,
-            OpenAIClient,
             OpenAICompatibleClient,
         )
 
-        # Register built-in providers
-        cls._providers["openai"] = OpenAIClient
-        cls._providers["azure_openai"] = AzureOpenAIClient
-        cls._providers["anthropic"] = AnthropicClient
-        cls._providers["groq"] = GroqClient
-        cls._providers["openai_compatible"] = OpenAICompatibleClient
-        cls._providers["mlx"] = MLXClient
+        # Register providers following KISS + SOLID principles:
+        # - Simple providers (OpenAI, Groq, Anthropic) → LiteLLMClient (unified, 100+ models)
+        # - Complex providers (Azure MI, MLX, Custom) → Dedicated clients (special features)
+
+        # Standard cloud providers (use LiteLLM for simplicity)
+        cls._providers["openai"] = LiteLLMClient
+        cls._providers["anthropic"] = LiteLLMClient
+        cls._providers["groq"] = LiteLLMClient
+
+        # Enterprise/special providers (keep dedicated implementations)
+        cls._providers["azure_openai"] = AzureOpenAIClient  # Managed Identity
+        cls._providers["openai_compatible"] = OpenAICompatibleClient  # Custom endpoints
+        cls._providers["mlx"] = MLXClient  # Local inference
+
+        # Generic fallback
+        cls._providers["litellm"] = LiteLLMClient
 
         cls._builtin_registered = True
 

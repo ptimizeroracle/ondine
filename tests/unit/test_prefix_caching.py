@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ondine.adapters.llm_client import AnthropicClient, OpenAIClient
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.core.models import RowMetadata
 from ondine.core.specifications import LLMProvider, LLMSpec, PromptSpec
@@ -13,7 +12,7 @@ from ondine.stages.llm_invocation_stage import LLMInvocationStage
 from ondine.stages.prompt_formatter_stage import PromptFormatterStage
 
 
-class TestOpenAIClientPrefixCaching:
+class TestLiteLLMClientPrefixCaching:
     """Test OpenAI client prefix caching implementation."""
 
     @pytest.mark.skip(reason="Mocking LlamaIndex client is complex, tested manually")
@@ -26,9 +25,12 @@ class TestOpenAIClientPrefixCaching:
         )
 
         with patch.dict(
-            "os.environ", {"OPENAI_API_KEY": "test-key"}
-        ):  # pragma: allowlist secret
-            client = OpenAIClient(spec)
+            "os.environ",
+            {"OPENAI_API_KEY": "test-key"},  # pragma: allowlist secret
+        ):
+            from ondine.adapters.llm_client import create_llm_client
+
+            client = create_llm_client(spec)
 
             # Mock the LlamaIndex client
             mock_response = MagicMock()
@@ -59,9 +61,12 @@ class TestOpenAIClientPrefixCaching:
         )
 
         with patch.dict(
-            "os.environ", {"OPENAI_API_KEY": "test-key"}
-        ):  # pragma: allowlist secret
-            client = OpenAIClient(spec)
+            "os.environ",
+            {"OPENAI_API_KEY": "test-key"},  # pragma: allowlist secret
+        ):
+            from ondine.adapters.llm_client import create_llm_client
+
+            client = create_llm_client(spec)
 
             # Mock the LlamaIndex client
             mock_response = MagicMock()
@@ -79,7 +84,7 @@ class TestOpenAIClientPrefixCaching:
             assert messages[0].content == "What is 2+2?"
 
 
-class TestAnthropicClientPrefixCaching:
+class TestLiteLLMAnthropicPrefixCaching:
     """Test Anthropic client prefix caching implementation."""
 
     @pytest.mark.skip(reason="Mocking LlamaIndex client is complex, tested manually")
@@ -92,9 +97,12 @@ class TestAnthropicClientPrefixCaching:
         )
 
         with patch.dict(
-            "os.environ", {"ANTHROPIC_API_KEY": "test-key"}
-        ):  # pragma: allowlist secret
-            client = AnthropicClient(spec)
+            "os.environ",
+            {"ANTHROPIC_API_KEY": "test-key"},  # pragma: allowlist secret
+        ):
+            from ondine.adapters.llm_client import create_llm_client
+
+            client = create_llm_client(spec)
 
             # Mock the LlamaIndex client
             mock_response = MagicMock()

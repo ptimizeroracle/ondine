@@ -29,13 +29,16 @@ class PromptFormatterStage(
     - Attach metadata for tracking
     """
 
-    def __init__(self, batch_size: int = 100, use_jinja2: bool = False):
+    def __init__(self, batch_size: int = 100, use_jinja2: bool | None = None):
         """
         Initialize prompt formatter stage.
 
         Args:
             batch_size: Number of prompts per batch
-            use_jinja2: Use Jinja2 for template rendering
+            use_jinja2: Template rendering mode
+                - None (default): Auto-detect based on {{ }} syntax
+                - True: Force Jinja2 rendering
+                - False: Force Python .format() rendering
         """
         super().__init__("PromptFormatter")
         self.batch_size = batch_size
@@ -54,8 +57,20 @@ class PromptFormatterStage(
         template_str = prompt_spec.template
         system_message = prompt_spec.system_message
 
+        # Determine template rendering mode
+        if self.use_jinja2 is None:
+            # Auto-detect: Use Jinja2 if template contains {{ }}
+            use_jinja2 = "{{" in template_str
+            if use_jinja2:
+                self.logger.info(
+                    "Auto-detected Jinja2 syntax ({{variable}}), enabling Jinja2 renderer"
+                )
+        else:
+            # Respect explicit user choice (True or False)
+            use_jinja2 = self.use_jinja2
+
         # Create template renderer
-        if self.use_jinja2:
+        if use_jinja2:
             # Note: autoescape=False is intentional for LLM prompts (not HTML)
             # We're generating text prompts, not web content, so HTML escaping
             # would corrupt the prompt data sent to the LLM
@@ -110,7 +125,7 @@ class PromptFormatterStage(
                         row_data[col] = getattr(row, col)
 
                 # Format prompt (Jinja2 or f-string)
-                if self.use_jinja2:
+                if use_jinja2:
                     prompt = template.render(**row_data)
                 else:
                     prompt = template_str.format(**row_data)
