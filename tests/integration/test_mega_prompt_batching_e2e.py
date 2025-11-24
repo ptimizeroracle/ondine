@@ -130,8 +130,8 @@ Extract:
             else Decimal("0.00079"),
         )
         .with_jinja2(True)
-        .with_batch_size(10)  # All 10 rows in 1 mega-prompt
-        .with_processing_batch_size(5)  # 2 API calls (5 rows each)
+        .with_batch_size(10)  # Aggregate up to 10 rows per mega-prompt
+        .with_processing_batch_size(5)  # Process in batches of 5 = 2 API calls
         .with_structured_output(ProductBatch)  # Auto-adds JSONParser
         .with_concurrency(2)
         .build()
@@ -171,12 +171,12 @@ Extract:
     )
     assert coffee_row["category"] is not None, "Category not extracted from coffee"
 
-    # Verify keywords are lists (if extracted)
+    # Verify keywords are lists (structured output should enforce schema)
     for idx, row in result.data.iterrows():
         if row["keywords"] is not None:
-            # Keywords might be string representation of list or actual list
-            assert isinstance(row["keywords"], (list, str)), (
-                f"Row {idx}: keywords type is {type(row['keywords'])}"
+            assert isinstance(row["keywords"], list), (
+                f"Row {idx}: expected keywords to be list from structured output, "
+                f"got {type(row['keywords'])}"
             )
 
     print(f"\n{provider.upper()} Mega-Prompt Batching Test Results:")
@@ -225,8 +225,8 @@ def test_mega_prompt_preserves_order():
             output_cost_per_1k_tokens=Decimal("0.00079"),
         )
         .with_jinja2(True)
-        .with_batch_size(20)  # All in one batch
-        .with_processing_batch_size(10)  # 2 API calls
+        .with_batch_size(20)  # Aggregate up to 20 rows per mega-prompt
+        .with_processing_batch_size(10)  # Process in batches of 10 = 2 API calls
         .build()
     )
 

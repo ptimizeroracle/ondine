@@ -6,6 +6,7 @@ Implements Builder pattern for intuitive pipeline creation.
 
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -57,7 +58,7 @@ class PipelineBuilder:
         self._custom_llm_client: any | None = None
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
-        self._custom_metadata: dict[str, any] = {}  # For arbitrary metadata
+        self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
 
     @staticmethod
     def create() -> "PipelineBuilder":
@@ -1090,7 +1091,7 @@ class PipelineBuilder:
 
         return self
 
-    def with_structured_output(self, schema: any) -> "PipelineBuilder":
+    def with_structured_output(self, schema: Any) -> "PipelineBuilder":
         """
         Configure structured output using a Pydantic model.
 

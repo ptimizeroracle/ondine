@@ -109,6 +109,14 @@ CRITICAL: Parse the package size number from DISTRB_PACK_SZ field.""")
         f"{provider} returned null pack_size values"
     )
 
+    # Verify extraction correctness
+    assert result.data["pack_size"].iloc[0] == 15.0, (
+        f"{provider} failed to extract pack_size correctly from '15 LB'"
+    )
+    assert "BACON" in result.data["cleaned_description"].iloc[0].upper(), (
+        f"{provider} failed to extract description correctly"
+    )
+
     # Print results for manual inspection
     print(f"\n{provider.upper()} E2E Results:")
     print(result.data[["cleaned_description", "pack_size"]])

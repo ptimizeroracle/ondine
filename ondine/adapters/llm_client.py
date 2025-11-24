@@ -94,6 +94,9 @@ class LLMClient(ABC):
         """
         start_time = time.time()
 
+        # Extract system_message from kwargs for chat-based models
+        system_message = kwargs.pop("system_message", None)
+
         # Use LlamaIndex's native structured prediction
         try:
             if hasattr(self.client, "structured_predict"):
@@ -104,10 +107,21 @@ class LLMClient(ABC):
                 else:
                     prompt_tmpl = prompt
 
-                result_obj = self.client.structured_predict(
-                    output_cls,
-                    prompt=prompt_tmpl,
-                )
+                # Build messages array if system_message is provided
+                if system_message:
+                    messages = [
+                        ChatMessage(role="system", content=system_message),
+                        ChatMessage(role="user", content=prompt),
+                    ]
+                    result_obj = self.client.structured_predict(
+                        output_cls,
+                        messages=messages,
+                    )
+                else:
+                    result_obj = self.client.structured_predict(
+                        output_cls,
+                        prompt=prompt_tmpl,
+                    )
             else:
                 # Fallback: Use LLMTextCompletionProgram for older versions
                 from llama_index.core.program import LLMTextCompletionProgram

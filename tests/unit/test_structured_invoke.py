@@ -18,7 +18,7 @@ def mock_openai_client():
     spec = LLMSpec(
         provider=LLMProvider.OPENAI,
         model="gpt-4o-mini",
-        api_key="dummy",
+        api_key="dummy",  # pragma: allowlist secret
         temperature=0.0,
     )
     # Patch OpenAI constructor to avoid actual API connection
@@ -97,3 +97,21 @@ def test_structured_invoke_error_handling(mock_openai_client):
         mock_openai_client.structured_invoke("prompt", TestModel)
 
     assert "Structured prediction failed: API Error" in str(exc.value)
+
+
+def test_structured_invoke_anthropic_validation_bug(mock_openai_client):
+    """Test handling of Anthropic validation bug (returns string instead of object)."""
+    # Mock structured_predict to return string (validation error from Anthropic)
+    # This is a known LlamaIndex bug: https://github.com/run-llama/llama_index/issues/16604
+    mock_openai_client.client.structured_predict.return_value = (
+        "2 validation errors for TestModel\nfield1\n  Field required [type=missing..."
+    )
+
+    # Execute and expect ValueError
+    with pytest.raises(ValueError) as exc:
+        mock_openai_client.structured_invoke("prompt", TestModel)
+
+    assert "Model returned validation error instead of structured object" in str(
+        exc.value
+    )
+    assert "2 validation errors" in str(exc.value)
