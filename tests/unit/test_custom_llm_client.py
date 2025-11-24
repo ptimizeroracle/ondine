@@ -37,7 +37,7 @@ class TestOpenAICompatibleClient:
             api_key="test-key",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             assert client.spec.base_url == "https://api.together.xyz/v1"
 
@@ -51,7 +51,7 @@ class TestOpenAICompatibleClient:
             api_key="test-key",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             assert client.provider_name == "Together.AI"
 
@@ -64,7 +64,7 @@ class TestOpenAICompatibleClient:
             api_key="test-key",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             assert client.provider_name == "OpenAI-Compatible"
 
@@ -78,6 +78,7 @@ class TestOpenAICompatibleClient:
             # No api_key provided
         )
 
+        # Patch where OpenAILike is used (in llm_client module)
         with patch("ondine.adapters.llm_client.OpenAILike") as mock_openai_like:
             OpenAICompatibleClient(spec)
             # Should pass api_key to OpenAILike (required by library)  # pragma: allowlist secret
@@ -139,7 +140,7 @@ class TestOpenAICompatibleClient:
             api_key="test",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             tokens = client.estimate_tokens("Hello, world!")
             assert tokens > 0
@@ -156,7 +157,7 @@ class TestOpenAICompatibleClient:
             output_cost_per_1k_tokens=Decimal("0.0008"),
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             cost = client.calculate_cost(tokens_in=1000, tokens_out=500)
             expected = Decimal("0.0008") + (Decimal("0.0008") * Decimal("0.5"))
@@ -173,7 +174,7 @@ class TestOpenAICompatibleClient:
             output_cost_per_1k_tokens=Decimal("0.0"),
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = OpenAICompatibleClient(spec)
             cost = client.calculate_cost(tokens_in=1000, tokens_out=500)
             assert cost == Decimal("0.0")
@@ -191,33 +192,35 @@ class TestCustomLLMClientFactory:
             api_key="test",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.openai_like.OpenAILike"):
             client = create_llm_client(spec)
             assert isinstance(client, OpenAICompatibleClient)
 
-    def test_factory_still_creates_existing_providers(self):
-        """Factory should still work with existing providers."""
-        from ondine.adapters.llm_client import GroqClient, OpenAIClient
-
-        # OpenAI
+    def test_factory_creates_clients_for_standard_providers(self):
+        """Factory should create appropriate clients for standard providers."""
+        # OpenAI (uses LiteLLM internally)
         spec_openai = LLMSpec(
             provider=LLMProvider.OPENAI,
             model="gpt-4",
-            api_key="test",  # pragma: allowlist secret  # pragma: allowlist secret
+            api_key="test",  # pragma: allowlist secret
         )
-        with patch("ondine.adapters.llm_client.OpenAI"):
+        with patch("llama_index.llms.litellm.LiteLLM"):
             client = create_llm_client(spec_openai)
-            assert isinstance(client, OpenAIClient)
+            assert client is not None
+            assert hasattr(client, "invoke")
+            assert hasattr(client, "structured_invoke")
 
-        # Groq
+        # Groq (uses LiteLLM internally)
         spec_groq = LLMSpec(
             provider=LLMProvider.GROQ,
             model="llama-3.3-70b-versatile",
             api_key="test",  # pragma: allowlist secret
         )
-        with patch("ondine.adapters.llm_client.Groq"):
+        with patch("llama_index.llms.litellm.LiteLLM"):
             client = create_llm_client(spec_groq)
-            assert isinstance(client, GroqClient)
+            assert client is not None
+            assert hasattr(client, "invoke")
+            assert hasattr(client, "structured_invoke")
 
 
 class TestLLMSpecValidation:

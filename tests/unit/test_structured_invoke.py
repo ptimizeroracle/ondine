@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from ondine.adapters.llm_client import OpenAIClient
+from ondine.adapters.llm_client import create_llm_client
 from ondine.core.specifications import LLMProvider, LLMSpec
 
 
@@ -21,11 +21,15 @@ def mock_openai_client():
         api_key="dummy",  # pragma: allowlist secret
         temperature=0.0,
     )
-    # Patch OpenAI constructor to avoid actual API connection
-    with patch("ondine.adapters.llm_client.OpenAI"):
-        client = OpenAIClient(spec)
-        # Set up the mock LlamaIndex client
-        client.client = MagicMock()
+    # Patch LiteLLM constructor to avoid actual API connection
+    # Mock where it's imported (llama_index.llms.litellm), not where it's used
+    with patch("llama_index.llms.litellm.LiteLLM") as mock_litellm:
+        mock_instance = MagicMock()
+        mock_litellm.return_value = mock_instance
+
+        client = create_llm_client(spec)
+        # Set up the mock LlamaIndex LiteLLM client
+        client.client = mock_instance
         yield client
 
 

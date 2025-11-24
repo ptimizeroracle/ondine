@@ -73,11 +73,14 @@ class LiteLLMClient(LLMClient):
         # Remove "litellm_" prefix to get actual provider (e.g., "litellm_groq" → "groq")
         provider_name = provider_name.replace("litellm_", "")
 
-        if "/" in spec.model:
-            # Already has provider prefix
+        # Build LiteLLM model identifier (format: "provider/model")
+        if spec.model.startswith(f"{provider_name}/"):
+            # Already has CORRECT provider prefix
             model_identifier = spec.model
         else:
-            # Add provider prefix for LiteLLM routing
+            # Add provider prefix to ensure correct LiteLLM routing
+            # Even if model has other slashes (e.g. "openai/gpt-oss"), we must prefix with provider
+            # Example: provider="groq", model="openai/gpt-oss" -> "groq/openai/gpt-oss"
             model_identifier = f"{provider_name}/{spec.model}"
 
         # Set API key environment variable if provided
@@ -161,8 +164,8 @@ class LiteLLMClient(LLMClient):
         """
         Invoke LLM with structured output using LlamaIndex's structured_predict.
 
-        This uses the SAME implementation as our base LLMClient class,
-        but benefits from LiteLLM's automatic cost tracking underneath.
+        For Groq: Uses LLMTextCompletionProgram workaround to avoid XML tool-use bug.
+        For others: Uses native structured_predict with function calling.
 
         Args:
             prompt: Text prompt
@@ -180,7 +183,62 @@ class LiteLLMClient(LLMClient):
         # Extract system_message from kwargs
         system_message = kwargs.pop("system_message", None)
 
-        # Use LlamaIndex's native structured prediction
+        # GROQ WORKAROUND: Avoid XML tool-use bug
+        # Groq's LlamaIndex integration produces XML-wrapped tool calls that fail validation
+        # Use LLMTextCompletionProgram with JSON mode instead
+        if "groq/" in self.model_identifier.lower():
+            try:
+                from llama_index.core.program import LLMTextCompletionProgram
+
+                program = LLMTextCompletionProgram.from_defaults(
+                    output_cls=output_cls,
+                    llm=self.client,
+                    prompt_template_str="{prompt}",
+                )
+
+                # Wrap prompt
+                if isinstance(prompt, str):
+                    prompt_tmpl = PromptTemplate(prompt)
+                else:
+                    prompt_tmpl = prompt
+
+                # Call with JSON mode
+                result_obj = program(
+                    prompt=prompt_tmpl,
+                    llm_kwargs={"response_format": {"type": "json_object"}},
+                )
+
+                latency_ms = (time.time() - start_time) * 1000
+
+                # Handle validation bug
+                if isinstance(result_obj, str):
+                    raise ValueError(
+                        f"Model returned validation error: {result_obj[:200]}"
+                    )
+
+                response_text = result_obj.model_dump_json()
+
+                # Estimate tokens
+                tokens_in = self.estimate_tokens(prompt)
+                if system_message:
+                    tokens_in += self.estimate_tokens(system_message)
+                tokens_out = self.estimate_tokens(response_text)
+
+                cost = self._calculate_cost_from_litellm(tokens_in, tokens_out)
+
+                return LLMResponse(
+                    text=response_text,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    model=self.model,
+                    cost=cost,
+                    latency_ms=latency_ms,
+                )
+
+            except Exception as e:
+                raise ValueError(f"Structured prediction failed: {e}") from e
+
+        # Use LlamaIndex's native structured prediction for non-Groq providers
         try:
             if hasattr(self.client, "structured_predict"):
                 # Wrap prompt in PromptTemplate

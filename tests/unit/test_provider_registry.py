@@ -241,22 +241,24 @@ class TestProviderRegistry:
 
     def test_builtin_providers_are_functional(self):
         """Should have all built-in providers registered and instantiable."""
+        from ondine.adapters.litellm_client import LiteLLMClient
         from ondine.adapters.llm_client import (
-            AnthropicClient,
             AzureOpenAIClient,
-            GroqClient,
             MLXClient,
-            OpenAIClient,
             OpenAICompatibleClient,
         )
 
         # Trigger lazy init
         providers = ProviderRegistry.list_providers()
 
-        # Verify all built-ins
-        assert providers["openai"] is OpenAIClient
-        assert providers["azure_openai"] is AzureOpenAIClient
-        assert providers["anthropic"] is AnthropicClient
-        assert providers["groq"] is GroqClient
-        assert providers["openai_compatible"] is OpenAICompatibleClient
-        assert providers["mlx"] is MLXClient
+        # Verify LiteLLM providers (simple cloud APIs)
+        assert providers["openai"] is LiteLLMClient
+        assert providers["anthropic"] is LiteLLMClient
+        assert providers["groq"] is LiteLLMClient
+
+        # Verify dedicated providers (special features)
+        assert providers["azure_openai"] is AzureOpenAIClient  # Managed Identity
+        assert (
+            providers["openai_compatible"] is OpenAICompatibleClient
+        )  # Custom endpoints
+        assert providers["mlx"] is MLXClient  # Local inference

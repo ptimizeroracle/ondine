@@ -1,12 +1,12 @@
 """
-E2E tests for LiteLLM unified client across multiple providers.
+E2E tests for unified provider API (powered by LiteLLM internally).
 
-Validates that LlamaIndex's LiteLLM wrapper works correctly with:
-- OpenAI (baseline test)
-- Groq (tests XML bug is fixed)
-- Anthropic (tests validation bug is fixed)
+Validates that standard provider names work correctly:
+- provider="openai" → Works seamlessly
+- provider="groq" → Works (XML bug handled internally)
+- provider="anthropic" → Works (validation bug handled internally)
 
-Also validates automatic cost tracking from LiteLLM's pricing database.
+Users never see "LiteLLM" - it's an internal implementation detail.
 """
 
 import os
@@ -42,20 +42,19 @@ class SimpleBatch(BaseModel):
 @pytest.mark.parametrize(
     ("provider", "model", "api_key_env"),
     [
-        ("litellm_openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("litellm_groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
-        ("litellm_anthropic", "claude-3-5-haiku-20241022", "ANTHROPIC_API_KEY"),
+        ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
+        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        ("anthropic", "claude-3-5-haiku-20241022", "ANTHROPIC_API_KEY"),
     ],
 )
-def test_litellm_single_row_per_api(provider, model, api_key_env):
+def test_providers_single_row_per_api(provider, model, api_key_env):
     """
-    Test LiteLLM with 1 row = 1 API call (no batching).
+    Test standard providers with 1 row processing per API call.
 
-    Validates:
-    - Single-row processing works correctly
-    - Structured output with Pydantic validation
-    - No provider-specific bugs (XML, validation strings, etc.)
-    - Token counting accuracy
+    Validates that provider="openai", "groq", "anthropic" work correctly
+    with structured output and proper data extraction.
+
+    Implementation note: Uses LiteLLM internally, but users don't need to know.
     """
     api_key = os.getenv(api_key_env)
     if not api_key:
@@ -133,19 +132,16 @@ Review: {{ text }}"""
 @pytest.mark.parametrize(
     ("provider", "model", "api_key_env"),
     [
-        ("litellm_openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("litellm_groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
+        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
     ],
 )
-def test_litellm_multi_row_batching(provider, model, api_key_env):
+def test_providers_multi_row_batching(provider, model, api_key_env):
     """
-    Test LiteLLM with mega-prompt batching (multiple rows per API call).
+    Test standard providers with mega-prompt batching.
 
-    Validates:
-    - Batch aggregation works correctly with LiteLLM
-    - Multiple rows processed in single API call
-    - Order preservation across batches
-    - Structured output parsing for batched responses
+    Validates that batching works correctly when multiple rows
+    are processed in a single API call.
     """
     api_key = os.getenv(api_key_env)
     if not api_key:
@@ -202,11 +198,11 @@ def test_litellm_multi_row_batching(provider, model, api_key_env):
 
 
 @pytest.mark.integration
-def test_litellm_auto_cost_tracking():
+def test_providers_work_without_manual_cost_config():
     """
-    Test that LiteLLM integration works without manual cost configuration.
+    Test that providers work without manual cost configuration.
 
-    Validates that token counting works even when costs are not manually set.
+    Validates that token counting works even when costs are not set.
     """
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -221,7 +217,7 @@ def test_litellm_auto_cost_tracking():
         .from_dataframe(df, input_columns=["text"], output_columns=["response"])
         .with_prompt("Echo: {{ text }}")
         .with_llm(
-            provider="litellm_openai",
+            provider="openai",
             model="gpt-4o-mini",
             api_key=api_key,
             # NO COST CONFIGURATION
@@ -236,8 +232,8 @@ def test_litellm_auto_cost_tracking():
 
     # NOTE: Cost tracking via completion_cost() requires response metadata
     # In structured mode with estimation, cost may be $0 (acceptable)
-    print("\n✅ LiteLLM Integration Test:")
+    print("\n✅ Provider Integration Test:")
     print("  Model: gpt-4o-mini")
     print(f"  Tokens: {result.costs.input_tokens} in, {result.costs.output_tokens} out")
     print(f"  Cost: ${result.costs.total_cost:.6f}")
-    print("  ✨ LiteLLM integration working!")
+    print("  ✨ Provider working without manual cost config!")
