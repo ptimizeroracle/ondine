@@ -225,9 +225,11 @@ class UnifiedLiteLLMClient(LLMClient):
             router_kwargs = {
                 "model_list": model_list,
                 "routing_strategy": routing_strategy,
-                "num_retries": router_config.get("num_retries", 3),
-                "timeout": router_config.get("timeout", 30),
+                "num_retries": router_config.get("num_retries", 2),  # Reduced: fail faster
+                "timeout": router_config.get("timeout", 120),  # 2min default for structured output
                 "set_verbose": router_config.get("debug", False),
+                "allowed_fails": router_config.get("allowed_fails", 3),  # Allow 3 fails before cooldown
+                "cooldown_time": router_config.get("cooldown_time", 30),  # 30s cooldown (not forever!)
             }
 
             # Add Redis if configured (LiteLLM native feature!)

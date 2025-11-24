@@ -37,6 +37,7 @@ from ondine.core.models import (
 )
 
 # Core configuration models
+from ondine.core.router_strategies import RouterStrategy
 from ondine.core.specifications import (
     DatasetSpec,
     LLMSpec,
@@ -56,6 +57,7 @@ __all__ = [
     "LLMSpec",
     "ProcessingSpec",
     "PipelineSpecifications",
+    "RouterStrategy",
     "ExecutionResult",
     "QualityReport",
     "ProcessingStats",

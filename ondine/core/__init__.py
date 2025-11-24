@@ -20,6 +20,7 @@ from ondine.core.models import (
     ValidationResult,
     WriteConfirmation,
 )
+from ondine.core.router_strategies import RouterStrategy
 from ondine.core.specifications import (
     DatasetSpec,
     DataSourceType,
@@ -46,6 +47,7 @@ __all__ = [
     "LLMProvider",
     "ErrorPolicy",
     "MergeStrategy",
+    "RouterStrategy",
     # Models
     "LLMResponse",
     "CostEstimate",

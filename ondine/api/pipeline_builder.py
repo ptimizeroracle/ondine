@@ -1109,23 +1109,47 @@ class PipelineBuilder:
         self,
         model_list: list[dict],
         routing_strategy: str = "simple-shuffle",
+        timeout: int = 120,
+        num_retries: int = 2,
         redis_url: str | None = None,
-        num_retries: int = 3,
+        **router_kwargs,
     ) -> "PipelineBuilder":
         """
         Enable LiteLLM Router for load balancing and failover.
 
         Router provides:
         - Load balancing across multiple deployments
-        - Automatic failover
-        - Built-in retries
+        - Automatic failover with health tracking
+        - Built-in retries with exponential backoff
         - Redis for distributed state (optional)
+        - Cooldowns for failing deployments
+
+        Common parameters are explicit for IDE autocomplete.
+        Advanced parameters can be passed via **router_kwargs.
 
         Args:
-            model_list: List of deployment configs
-            routing_strategy: "simple-shuffle" (default), "latency-based-routing", etc.
+            model_list: List of deployment configs (required)
+            routing_strategy: Routing strategy (default: "simple-shuffle")
+                Available strategies:
+                - "simple-shuffle": Random selection (no Redis needed) ⭐ DEFAULT
+                - "latency-based-routing": Lowest latency (needs Redis)
+                - "usage-based-routing": Least loaded (needs Redis)
+                - "cost-based-routing": Cheapest deployment
+                - "least-busy": Fewest active requests (needs Redis)
+                - "weighted-pick": Custom traffic split (set weight in model_list)
+                See: ondine.core.router_strategies.RouterStrategy for enum
+            timeout: Request timeout in seconds (default: 120 for large batches)
+            num_retries: Retry attempts per deployment (default: 2)
             redis_url: Redis URL for caching + state (optional)
-            num_retries: Retries per deployment (default: 3)
+            **router_kwargs: Additional Router parameters (pass any LiteLLM Router param!):
+                - allowed_fails: Failures before cooldown (default: 3)
+                - cooldown_time: Cooldown duration in seconds (default: 30)
+                - set_verbose: Enable debug logging (default: False)
+                - retry_after: Seconds to wait before retry (default: 0)
+                - context_window_fallbacks: Enable context window fallbacks
+                - fallbacks: List of fallback models
+                - ... (pass ANY LiteLLM Router parameter!)
+                Full docs: https://docs.litellm.ai/docs/routing
 
         Returns:
             Self for chaining
@@ -1145,13 +1169,20 @@ class PipelineBuilder:
         if not self._llm_spec:
             self._llm_spec = LLMSpec(provider=LLMProvider.OPENAI, model="router")
 
-        self._llm_spec.router_config = {
+        # Build router config with explicit params + flexible kwargs
+        router_config = {
             "model_list": model_list,
             "routing_strategy": routing_strategy,
-            "redis_url": redis_url,
+            "timeout": timeout,
             "num_retries": num_retries,
-            "timeout": 30,
+            **router_kwargs,  # Merge user's additional Router params
         }
+        
+        # Add Redis if provided
+        if redis_url:
+            router_config["redis_url"] = redis_url
+        
+        self._llm_spec.router_config = router_config
         return self
 
     def with_redis_cache(
