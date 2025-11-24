@@ -37,33 +37,21 @@ class CustomGroqProvider(LLMClient):
     """
 
     def invoke(self, prompt: str, **kwargs) -> LLMResponse:
-        """Delegate to standard Groq client."""
-        from llama_index.llms.groq import Groq
+        """
+        Delegate to UnifiedLiteLLMClient (native LiteLLM).
 
-        llm = Groq(
-            model=self.spec.model,
-            api_key=self.spec.api_key,
-            temperature=self.spec.temperature,
-        )
+        This shows how to wrap existing clients for custom logic.
+        In v1.4.0, we use UnifiedLiteLLMClient which already handles:
+        - All providers via litellm.acompletion()
+        - Automatic cost tracking
+        - Native async support
+        """
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
-        response = llm.complete(prompt)
-
-        # Custom cost calculation (example)
-        input_tokens = len(prompt.split()) * 1.3
-        output_tokens = len(str(response)) * 1.3
-        cost = (
-            input_tokens / 1000 * self.spec.input_cost_per_1k_tokens
-            + output_tokens / 1000 * self.spec.output_cost_per_1k_tokens
-        )
-
-        return LLMResponse(
-            text=str(response),
-            tokens_in=int(input_tokens),
-            tokens_out=int(output_tokens),
-            model=self.spec.model,
-            cost=Decimal(str(cost)),
-            latency_ms=0.0,
-        )
+        # Simply delegate to UnifiedLiteLLMClient
+        # (which handles Groq via LiteLLM natively)
+        client = UnifiedLiteLLMClient(self.spec)
+        return client.invoke(prompt, **kwargs)
 
 
 # ============================================================================
