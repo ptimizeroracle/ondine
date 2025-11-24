@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
 
+from pydantic import BaseModel
+
 # Suppress dependency warnings before importing llama_index
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", message=".*PyTorch.*TensorFlow.*Flax.*")
@@ -20,10 +22,10 @@ warnings.filterwarnings("ignore", message=".*PyTorch.*TensorFlow.*Flax.*")
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
 import tiktoken
+from llama_index.core import PromptTemplate
 from llama_index.core.llms import ChatMessage
 from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.azure_openai import AzureOpenAI
-from llama_index.llms.groq import Groq
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.openai_like import OpenAILike
 
@@ -64,6 +66,88 @@ class LLMClient(ABC):
             LLMResponse with result and metadata
         """
         pass
+
+    def structured_invoke(
+        self,
+        prompt: str,
+        output_cls: type[BaseModel],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """
+        Invoke LLM with structured output enforcement (LlamaIndex native).
+
+        Leverages LlamaIndex's structured_predict to guarantee schema compliance
+        via JSON mode or function calling. Handles prompt formatting, parsing,
+        validation, and retries automatically.
+
+        Args:
+            prompt: Text prompt
+            output_cls: Pydantic model class for output validation
+            **kwargs: Additional model parameters (e.g., system_message)
+
+        Returns:
+            LLMResponse with validated structured result (serialized JSON)
+
+        Raises:
+            ValueError: If structured prediction fails after retries
+        """
+        start_time = time.time()
+
+        # Use LlamaIndex's native structured prediction
+        try:
+            if hasattr(self.client, "structured_predict"):
+                # Modern LlamaIndex (v0.10+) - direct method
+                # Ensure prompt is wrapped in PromptTemplate for validation
+                if isinstance(prompt, str):
+                    prompt_tmpl = PromptTemplate(prompt)
+                else:
+                    prompt_tmpl = prompt
+
+                result_obj = self.client.structured_predict(
+                    output_cls,
+                    prompt=prompt_tmpl,
+                )
+            else:
+                # Fallback: Use LLMTextCompletionProgram for older versions
+                from llama_index.core.program import LLMTextCompletionProgram
+
+                program = LLMTextCompletionProgram.from_defaults(
+                    output_cls=output_cls,
+                    llm=self.client,
+                    prompt_template_str="{prompt}",
+                )
+                result_obj = program(prompt=prompt)
+
+            latency_ms = (time.time() - start_time) * 1000
+
+            # FIX: LlamaIndex bug - Anthropic returns validation error as string
+            # See: https://github.com/run-llama/llama_index/issues/16604
+            if isinstance(result_obj, str):
+                # Validation failed, LlamaIndex returned error message as string
+                raise ValueError(
+                    f"Model returned validation error instead of structured object: {result_obj[:200]}"
+                )
+
+            # Serialize result to JSON for pipeline consistency
+            response_text = result_obj.model_dump_json()
+
+            # Estimate tokens (structured_predict doesn't expose usage directly)
+            tokens_in = self.estimate_tokens(prompt)
+            tokens_out = self.estimate_tokens(response_text)
+            cost = self.calculate_cost(tokens_in, tokens_out)
+
+            return LLMResponse(
+                text=response_text,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                model=self.model,
+                cost=cost,
+                latency_ms=latency_ms,
+            )
+
+        except Exception as e:
+            # Re-raise for RetryHandler to manage
+            raise ValueError(f"Structured prediction failed: {e}") from e
 
     @abstractmethod
     def estimate_tokens(self, text: str) -> int:
@@ -347,12 +431,18 @@ class AnthropicClient(LLMClient):
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not found in spec or environment")
 
-        self.client = Anthropic(
-            model=spec.model,
-            api_key=api_key,
-            temperature=spec.temperature,
-            max_tokens=spec.max_tokens or 1024,
-        )
+        # Support custom base_url for Anthropic-compatible endpoints (e.g., Z.AI)
+        client_kwargs = {
+            "model": spec.model,
+            "api_key": api_key,
+            "temperature": spec.temperature,
+            "max_tokens": spec.max_tokens or 1024,
+        }
+
+        if spec.base_url:
+            client_kwargs["base_url"] = spec.base_url
+
+        self.client = Anthropic(**client_kwargs)
 
         # Anthropic uses approximate token counting
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -409,21 +499,32 @@ class AnthropicClient(LLMClient):
 
 
 class GroqClient(LLMClient):
-    """Groq LLM client implementation."""
+    """Groq LLM client implementation.
+
+    Uses OpenAILike wrapper for Groq's OpenAI-compatible endpoint to avoid
+    XML-wrapping issues in LlamaIndex's native Groq structured_predict.
+    """
 
     def __init__(self, spec: LLMSpec):
-        """Initialize Groq client."""
+        """Initialize Groq client via OpenAILike wrapper."""
         super().__init__(spec)
 
         api_key = spec.api_key or os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY not found in spec or environment")
 
-        self.client = Groq(
+        # Use OpenAILike class pointing to Groq's OpenAI-compatible endpoint
+        # This avoids the XML-wrapping bug in LlamaIndex's Groq class
+        # OpenAILike doesn't validate model names, allowing Groq-specific models
+        # See: https://github.com/run-llama/llama_index/issues/17082
+        self.client = OpenAILike(
             model=spec.model,
             api_key=api_key,
+            api_base="https://api.groq.com/openai/v1",
             temperature=spec.temperature,
             max_tokens=spec.max_tokens,
+            is_chat_model=True,
+            is_function_calling_model=True,  # Enable structured output support
         )
 
         # Use tiktoken for token estimation
@@ -433,6 +534,66 @@ class GroqClient(LLMClient):
         from ondine.utils import get_logger
 
         self.logger = get_logger(f"{__name__}.GroqClient")
+
+    def structured_invoke(
+        self,
+        prompt: str,
+        output_cls: type[BaseModel],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """
+        Groq-specific override: Use LLMTextCompletionProgram instead of tool calling.
+
+        REASON: After extensive testing, LlamaIndex's structured_predict with Groq
+        produces XML-wrapped tool calls (<function=...>) that Groq's API rejects
+        with 400 tool_use_failed, regardless of client configuration.
+
+        SOLUTION: Use prompt-based extraction with JSON mode enforcement.
+        This is reliable and produces valid structured output.
+
+        See: https://github.com/run-llama/llama_index/issues/17082
+        """
+        start_time = time.time()
+
+        try:
+            from llama_index.core.program import LLMTextCompletionProgram
+
+            if isinstance(prompt, str):
+                prompt_tmpl = PromptTemplate(prompt)
+            else:
+                prompt_tmpl = prompt
+
+            # Use text completion with JSON mode (bypasses tool calling XML bug)
+            program = LLMTextCompletionProgram.from_defaults(
+                output_cls=output_cls,
+                llm=self.client,
+                prompt_template_str="{prompt}",
+            )
+
+            # Enforce JSON mode to prevent trailing text/malformed output
+            result_obj = program(
+                prompt=prompt_tmpl,
+                llm_kwargs={"response_format": {"type": "json_object"}},
+            )
+
+            latency_ms = (time.time() - start_time) * 1000
+            response_text = result_obj.model_dump_json()
+
+            tokens_in = self.estimate_tokens(prompt)
+            tokens_out = self.estimate_tokens(response_text)
+            cost = self.calculate_cost(tokens_in, tokens_out)
+
+            return LLMResponse(
+                text=response_text,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                model=self.model,
+                cost=cost,
+                latency_ms=latency_ms,
+            )
+
+        except Exception as e:
+            raise ValueError(f"Groq structured prediction failed: {e}") from e
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """Invoke Groq API with optional system message support."""
