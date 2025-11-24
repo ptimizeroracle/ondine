@@ -363,6 +363,7 @@ class UnifiedLiteLLMClient(LLMClient):
         Structured output invocation using Instructor (sync wrapper).
 
         Wraps async structured_invoke_async for compatibility with sync pipeline.
+        Uses asyncio.run() which may show cleanup warnings - this is expected.
 
         Args:
             prompt: Text prompt
@@ -372,7 +373,16 @@ class UnifiedLiteLLMClient(LLMClient):
         Returns:
             LLMResponse with structured output
         """
-        return asyncio.run(self.structured_invoke_async(prompt, output_cls, **kwargs))
+        # Use asyncio.run() to wrap async call
+        # Note: This may show "event loop closed" warnings during cleanup
+        # This is a known LiteLLM issue and doesn't affect functionality
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            return asyncio.run(
+                self.structured_invoke_async(prompt, output_cls, **kwargs)
+            )
 
     async def structured_invoke_async(
         self,
