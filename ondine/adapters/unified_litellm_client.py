@@ -102,16 +102,20 @@ class UnifiedLiteLLMClient(LLMClient):
         """
         super().__init__(spec)
 
-        # Suppress verbose LiteLLM logs
-        os.environ["LITELLM_LOG"] = "WARNING"
-        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-        logging.getLogger("litellm").setLevel(logging.WARNING)
+        # Suppress verbose LiteLLM logs and success messages
+        os.environ["LITELLM_LOG"] = "ERROR"  # Only show errors, not INFO/DEBUG
+        logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+        logging.getLogger("litellm").setLevel(logging.ERROR)
+        logging.getLogger("LiteLLM Router").setLevel(logging.ERROR)
+        logging.getLogger("httpx").setLevel(logging.ERROR)  # Suppress HTTP logs
 
         try:
             import litellm
 
             litellm.suppress_debug_info = True
             litellm.drop_params = True
+            litellm.set_verbose = False  # Disable verbose logging
+            os.environ["LITELLM_LOG"] = "ERROR"
         except (ImportError, AttributeError):
             pass
 
@@ -346,6 +350,13 @@ class UnifiedLiteLLMClient(LLMClient):
         response_text = response.choices[0].message.content
         tokens_in = response.usage.prompt_tokens if response.usage else 0
         tokens_out = response.usage.completion_tokens if response.usage else 0
+        
+        # Log successful API call with professional format
+        provider = self.model_identifier.split("/")[0] if "/" in self.model_identifier else "llm"
+        logger.debug(
+            f"LLM API call completed: provider={provider}, "
+            f"tokens={tokens_in}→{tokens_out}, latency={latency_ms:.0f}ms"
+        )
 
         # Extract cached tokens (OpenAI/Anthropic prompt caching)
         # See: https://docs.litellm.ai/docs/completion/prompt_caching
