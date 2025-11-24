@@ -275,6 +275,16 @@ class LLMSpec(BaseModel):
         default=None, description="Output token cost"
     )
 
+    # Structured output configuration (Phase 2)
+    structured_output_mode: str | None = Field(
+        default="auto",
+        description=(
+            "Structured output mode: 'auto' (default, auto-detect), "
+            "'instructor_json' (JSON mode), 'instructor_tools' (function calling), "
+            "'native' (LiteLLM native function calling)"
+        ),
+    )
+
     # Internal: Custom provider routing (set by PipelineBuilder for registry-based providers)
     custom_provider_id: str | None = Field(
         default=None,

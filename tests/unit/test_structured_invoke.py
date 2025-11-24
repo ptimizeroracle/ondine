@@ -1,14 +1,11 @@
 """
-Unit tests for structured output invocation.
+Unit tests for structured output invocation with Instructor.
 
-NOTE: Structured output tests moved to Phase 2 (Instructor integration).
-This file kept as placeholder to avoid breaking test discovery.
-
-Phase 2 will add:
-- Instructor integration tests
-- Dual-path tests (native function calling vs Instructor)
-- Auto-detection tests
+Tests the UnifiedLiteLLMClient's structured_invoke method which uses
+Instructor for Pydantic model validation and schema enforcement.
 """
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -23,26 +20,60 @@ class TestModel(BaseModel):
     field2: int
 
 
-class TestStructuredInvokePlaceholder:
-    """Placeholder tests for Phase 1 - structured output in Phase 2."""
+class TestStructuredInvokeInstructor:
+    """Test structured_invoke with Instructor integration."""
 
-    def test_structured_invoke_not_implemented_in_phase1(self):
-        """Test that structured_invoke raises NotImplementedError in Phase 1."""
+    def test_structured_invoke_sync_wrapper(self):
+        """Test that sync structured_invoke wraps async version."""
         spec = LLMSpec(
             provider=LLMProvider.OPENAI,
             model="gpt-4o-mini",
             api_key="dummy",  # pragma: allowlist secret
         )
 
-        from unittest.mock import patch
+        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
+            client = UnifiedLiteLLMClient(spec)
+
+        # Mock asyncio.run
+        mock_response = MagicMock()
+        mock_response.text = '{"field1": "test", "field2": 123}'
+
+        with patch("asyncio.run", return_value=mock_response):
+            response = client.structured_invoke("prompt", TestModel)
+
+        assert response == mock_response
+
+    @pytest.mark.asyncio
+    async def test_structured_invoke_async_uses_instructor(self):
+        """Test that structured_invoke_async uses Instructor."""
+        from unittest.mock import AsyncMock
+
+        import instructor
+
+        spec = LLMSpec(
+            provider=LLMProvider.GROQ,
+            model="llama-3.3-70b-versatile",
+            api_key="dummy",  # pragma: allowlist secret
+        )
 
         with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
             client = UnifiedLiteLLMClient(spec)
 
-        with pytest.raises(NotImplementedError, match="Phase 2"):
-            client.structured_invoke("prompt", TestModel)
+        mock_result = TestModel(field1="groq", field2=789)
 
+        with (
+            patch("instructor.from_litellm") as mock_instructor,
+            patch.object(client, "_calculate_cost_litellm", return_value=0.0005),
+        ):
+            mock_client = MagicMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_result)
+            mock_instructor.return_value = mock_client
 
-# NOTE: Original structured_predict tests removed
-# Rationale: Those tested LlamaIndex's structured_predict() which is removed.
-# Phase 2 will add comprehensive Instructor tests with real API calls.
+            response = await client.structured_invoke_async("prompt", TestModel)
+
+            # Verify JSON mode was used for Groq
+            call_args = mock_instructor.call_args
+            assert call_args.kwargs["mode"] == instructor.Mode.JSON
+
+            # Verify response
+            assert response.text == mock_result.model_dump_json()

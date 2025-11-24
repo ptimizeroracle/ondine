@@ -360,12 +360,35 @@ class UnifiedLiteLLMClient(LLMClient):
         **kwargs: Any,
     ) -> LLMResponse:
         """
-        Structured output invocation (will be implemented in Phase 2).
+        Structured output invocation using Instructor (sync wrapper).
 
-        For now, raise NotImplementedError. Phase 2 will add:
-        - Instructor integration
-        - Native function calling support
-        - Auto-detection between modes
+        Wraps async structured_invoke_async for compatibility with sync pipeline.
+
+        Args:
+            prompt: Text prompt
+            output_cls: Pydantic model class
+            **kwargs: Additional parameters
+
+        Returns:
+            LLMResponse with structured output
+        """
+        return asyncio.run(self.structured_invoke_async(prompt, output_cls, **kwargs))
+
+    async def structured_invoke_async(
+        self,
+        prompt: str,
+        output_cls: type[BaseModel],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """
+        Async structured output invocation using Instructor.
+
+        Supports dual-path strategy:
+        1. Instructor with Mode.JSON (Groq and safe default)
+        2. Instructor with Mode.TOOLS (OpenAI/Anthropic function calling)
+        3. Native LiteLLM function calling (future)
+
+        Auto-detects best mode based on provider.
 
         Args:
             prompt: Text prompt
@@ -376,9 +399,102 @@ class UnifiedLiteLLMClient(LLMClient):
             LLMResponse with structured output
 
         Raises:
-            NotImplementedError: Phase 2 feature
+            ValueError: If structured prediction fails
         """
-        raise NotImplementedError(
-            "Structured output will be implemented in Phase 2. "
-            "Use the old LiteLLMClient for now if you need structured output."
+        import instructor
+        from litellm import acompletion
+
+        start_time = time.time()
+
+        # Determine mode (auto-detect if not specified)
+        mode = self._get_structured_output_mode()
+
+        # Initialize Instructor client with appropriate mode
+        instructor_client = instructor.from_litellm(acompletion, mode=mode)
+
+        # Build messages
+        messages = self._build_messages(prompt, kwargs)
+
+        # Call Instructor (async)
+        try:
+            result = await instructor_client.chat.completions.create(
+                model=self.model_identifier,
+                messages=messages,
+                response_model=output_cls,
+                temperature=self.spec.temperature,
+                max_tokens=self.spec.max_tokens,
+                max_retries=3,  # Built-in validation retry!
+            )
+
+            latency_ms = (time.time() - start_time) * 1000
+
+            # Serialize result to JSON
+            response_text = result.model_dump_json()
+
+            # Estimate tokens (Instructor doesn't expose usage)
+            full_prompt = prompt
+            if kwargs.get("system_message"):
+                full_prompt = f"{kwargs['system_message']}\n\n{prompt}"
+
+            tokens_in = self.estimate_tokens(full_prompt)
+            tokens_out = self.estimate_tokens(response_text)
+
+            # Calculate cost
+            cost = self._calculate_cost_litellm(full_prompt, response_text)
+
+            return LLMResponse(
+                text=response_text,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                model=self.model,
+                cost=cost,
+                latency_ms=latency_ms,
+            )
+
+        except Exception as e:
+            raise ValueError(f"Structured prediction failed: {e}") from e
+
+    def _get_structured_output_mode(self):
+        """
+        Determine which Instructor mode to use for structured output.
+
+        Auto-detection logic:
+        - Groq: Mode.JSON (no native function calling)
+        - OpenAI/Anthropic: Mode.TOOLS (native function calling)
+        - Others: Mode.JSON (safe default)
+
+        Can be overridden via spec.structured_output_mode if implemented.
+
+        Returns:
+            instructor.Mode enum value
+        """
+        import instructor
+
+        # Check if mode is explicitly configured
+        if hasattr(self.spec, "structured_output_mode"):
+            mode_str = self.spec.structured_output_mode
+            if mode_str == "instructor_json":
+                return instructor.Mode.JSON
+            if mode_str == "instructor_tools":
+                return instructor.Mode.TOOLS
+            if mode_str == "native":
+                logger.warning(
+                    "Native function calling not yet implemented, using Instructor Mode.TOOLS"
+                )
+                return instructor.Mode.TOOLS
+
+        # Auto-detect based on provider
+        provider_str = (
+            self.spec.provider.value
+            if hasattr(self.spec.provider, "value")
+            else str(self.spec.provider)
         )
+
+        if provider_str in ["groq"]:
+            # Groq doesn't have reliable function calling, use JSON mode
+            return instructor.Mode.JSON
+        if provider_str in ["openai", "azure_openai", "anthropic"]:
+            # These providers have good function calling support
+            return instructor.Mode.TOOLS
+        # Safe default for unknown providers
+        return instructor.Mode.JSON

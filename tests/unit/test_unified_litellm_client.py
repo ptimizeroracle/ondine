@@ -422,10 +422,10 @@ class TestAPIKeyEnvVars:
 
 
 class TestStructuredInvoke:
-    """Test structured output (Phase 2 placeholder)."""
+    """Test structured output with Instructor (Phase 2)."""
 
-    def test_structured_invoke_not_implemented_yet(self, openai_spec):
-        """Test that structured_invoke raises NotImplementedError in Phase 1."""
+    def test_structured_invoke_implemented(self, openai_spec):
+        """Test that structured_invoke is now implemented."""
         from pydantic import BaseModel
 
         class TestModel(BaseModel):
@@ -434,5 +434,9 @@ class TestStructuredInvoke:
         with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
             client = UnifiedLiteLLMClient(openai_spec)
 
-        with pytest.raises(NotImplementedError, match="Phase 2"):
+        # Should NOT raise NotImplementedError anymore
+        # Mock asyncio.run since structured_invoke wraps async
+        with patch("asyncio.run") as mock_run:
+            mock_run.return_value = MagicMock()
             client.structured_invoke("prompt", TestModel)
+            mock_run.assert_called_once()
