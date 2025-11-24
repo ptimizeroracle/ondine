@@ -551,6 +551,9 @@ class Pipeline:
             retry_handler=retry_handler,
             error_policy=specs.processing.error_policy,
             max_retries=specs.processing.max_retries,
+            output_cls=specs.metadata.get("structured_output_model")
+            if specs.metadata
+            else None,
         )
         # Stage 3: Execute LLM invocation
         response_batches = self._execute_stage(llm_stage, batches, context)

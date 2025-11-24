@@ -5,6 +5,8 @@ import time
 from decimal import Decimal
 from typing import Any
 
+from pydantic import BaseModel
+
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.error_handler import ErrorAction, ErrorHandler
 from ondine.core.exceptions import (
@@ -48,6 +50,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         retry_handler: RetryHandler | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.SKIP,
         max_retries: int = 3,
+        output_cls: type[BaseModel] | None = None,
     ):
         """
         Initialize LLM invocation stage.
@@ -59,12 +62,14 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             retry_handler: Optional retry handler
             error_policy: Policy for handling errors
             max_retries: Maximum retry attempts
+            output_cls: Optional Pydantic model for structured output
         """
         super().__init__("LLMInvocation")
         self.llm_client = llm_client
         self.concurrency = concurrency
         self.rate_limiter = rate_limiter
         self.retry_handler = retry_handler or RetryHandler()
+        self.output_cls = output_cls
         self.error_handler = ErrorHandler(
             policy=error_policy,
             max_retries=max_retries,
@@ -464,6 +469,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             # Invoke LLM with error classification
             try:
+                # Use structured invoke if output_cls is configured
+                if self.output_cls:
+                    return self.llm_client.structured_invoke(
+                        prompt, self.output_cls, system_message=system_message
+                    )
+
                 # Pass system_message as kwarg for caching optimization
                 return self.llm_client.invoke(prompt, system_message=system_message)
             except Exception as e:
