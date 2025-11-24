@@ -556,7 +556,7 @@ class UnifiedLiteLLMClient(LLMClient):
         Supports dual-path strategy:
         1. Instructor with Mode.JSON (Groq and safe default)
         2. Instructor with Mode.TOOLS (OpenAI/Anthropic function calling)
-        3. Native LiteLLM function calling (future)
+        3. Router integration (patches router.acompletion when Router is active)
 
         Auto-detects best mode based on provider.
 
@@ -572,23 +572,42 @@ class UnifiedLiteLLMClient(LLMClient):
             ValueError: If structured prediction fails
         """
         import instructor
-        from litellm import acompletion
 
         start_time = time.time()
 
         # Determine mode (auto-detect if not specified)
         mode = self._get_structured_output_mode()
 
-        # Initialize Instructor client with appropriate mode
-        instructor_client = instructor.from_litellm(acompletion, mode=mode)
+        # CRITICAL: Choose correct completion function to patch
+        # If Router is active, patch router.acompletion (preserves load balancing/failover)
+        # Otherwise, patch litellm.acompletion directly
+        if self.use_router:
+            # Router flow: Patch the Router's acompletion method
+            completion_func = self.router.acompletion
+            model_to_use = self.router_model_name  # Router expects its internal model_name
+            logger.debug(
+                f"Structured output using Router with model_name={model_to_use}"
+            )
+        else:
+            # Direct flow: Patch litellm's acompletion
+            from litellm import acompletion
+
+            completion_func = acompletion
+            model_to_use = self.model_identifier  # LiteLLM expects full provider/model
+            logger.debug(
+                f"Structured output using direct LiteLLM with model={model_to_use}"
+            )
+
+        # Patch the selected completion function with Instructor
+        instructor_client = instructor.from_litellm(completion_func, mode=mode)
 
         # Build messages
         messages = self._build_messages(prompt, kwargs)
 
-        # Call Instructor (async)
+        # Call Instructor (will use Router or direct based on above logic)
         try:
             result = await instructor_client.chat.completions.create(
-                model=self.model_identifier,
+                model=model_to_use,
                 messages=messages,
                 response_model=output_cls,
                 temperature=self.spec.temperature,
