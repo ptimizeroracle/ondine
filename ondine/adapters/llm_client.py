@@ -21,11 +21,6 @@ warnings.filterwarnings("ignore", message=".*PyTorch.*TensorFlow.*Flax.*")
 # Suppress transformers warnings about missing deep learning frameworks
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
-import tiktoken
-from llama_index.core import PromptTemplate
-from llama_index.core.llms import ChatMessage
-from llama_index.llms.azure_openai import AzureOpenAI
-from llama_index.llms.openai_like import OpenAILike
 
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMProvider, LLMSpec
@@ -65,6 +60,7 @@ class LLMClient(ABC):
         """
         pass
 
+    @abstractmethod
     def structured_invoke(
         self,
         prompt: str,
@@ -72,11 +68,11 @@ class LLMClient(ABC):
         **kwargs: Any,
     ) -> LLMResponse:
         """
-        Invoke LLM with structured output enforcement (LlamaIndex native).
+        Invoke LLM with structured output enforcement.
 
-        Leverages LlamaIndex's structured_predict to guarantee schema compliance
-        via JSON mode or function calling. Handles prompt formatting, parsing,
-        validation, and retries automatically.
+        Each implementation provides its own structured output strategy:
+        - UnifiedLiteLLMClient: Uses Instructor (Phase 2)
+        - MLXClient: Not supported (raises NotImplementedError)
 
         Args:
             prompt: Text prompt
@@ -87,79 +83,10 @@ class LLMClient(ABC):
             LLMResponse with validated structured result (serialized JSON)
 
         Raises:
-            ValueError: If structured prediction fails after retries
+            ValueError: If structured prediction fails
+            NotImplementedError: If provider doesn't support structured output
         """
-        start_time = time.time()
-
-        # Extract system_message from kwargs for chat-based models
-        system_message = kwargs.pop("system_message", None)
-
-        # Use LlamaIndex's native structured prediction
-        try:
-            if hasattr(self.client, "structured_predict"):
-                # Modern LlamaIndex (v0.10+) - direct method
-                # Ensure prompt is wrapped in PromptTemplate for validation
-                if isinstance(prompt, str):
-                    prompt_tmpl = PromptTemplate(prompt)
-                else:
-                    prompt_tmpl = prompt
-
-                # Build messages array if system_message is provided
-                if system_message:
-                    messages = [
-                        ChatMessage(role="system", content=system_message),
-                        ChatMessage(role="user", content=prompt),
-                    ]
-                    result_obj = self.client.structured_predict(
-                        output_cls,
-                        messages=messages,
-                    )
-                else:
-                    result_obj = self.client.structured_predict(
-                        output_cls,
-                        prompt=prompt_tmpl,
-                    )
-            else:
-                # Fallback: Use LLMTextCompletionProgram for older versions
-                from llama_index.core.program import LLMTextCompletionProgram
-
-                program = LLMTextCompletionProgram.from_defaults(
-                    output_cls=output_cls,
-                    llm=self.client,
-                    prompt_template_str="{prompt}",
-                )
-                result_obj = program(prompt=prompt)
-
-            latency_ms = (time.time() - start_time) * 1000
-
-            # FIX: LlamaIndex bug - Anthropic returns validation error as string
-            # See: https://github.com/run-llama/llama_index/issues/16604
-            if isinstance(result_obj, str):
-                # Validation failed, LlamaIndex returned error message as string
-                raise ValueError(
-                    f"Model returned validation error instead of structured object: {result_obj[:200]}"
-                )
-
-            # Serialize result to JSON for pipeline consistency
-            response_text = result_obj.model_dump_json()
-
-            # Estimate tokens (structured_predict doesn't expose usage directly)
-            tokens_in = self.estimate_tokens(prompt)
-            tokens_out = self.estimate_tokens(response_text)
-            cost = self.calculate_cost(tokens_in, tokens_out)
-
-            return LLMResponse(
-                text=response_text,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                model=self.model,
-                cost=cost,
-                latency_ms=latency_ms,
-            )
-
-        except Exception as e:
-            # Re-raise for RetryHandler to manage
-            raise ValueError(f"Structured prediction failed: {e}") from e
+        pass
 
     @abstractmethod
     def estimate_tokens(self, text: str) -> int:
@@ -212,270 +139,19 @@ class LLMClient(ABC):
 
 
 # =================================================================
-# Simple providers (OpenAI, Groq, Anthropic) now use LiteLLMClient
-# Complex/enterprise providers kept for special features:
-# - AzureOpenAIClient: Managed Identity support
-# - OpenAICompatibleClient: Custom endpoints (Ollama, vLLM)
-# - MLXClient: Local Apple Silicon inference
+# Built-in Provider Implementations
 # =================================================================
-
-
-class AzureOpenAIClient(LLMClient):
-    """Azure OpenAI LLM client implementation."""
-
-    def __init__(self, spec: LLMSpec):
-        """Initialize Azure OpenAI client with API key or Managed Identity."""
-        super().__init__(spec)
-
-        if not spec.azure_endpoint:
-            raise ValueError("azure_endpoint required for Azure OpenAI")
-
-        if not spec.azure_deployment:
-            raise ValueError("azure_deployment required for Azure OpenAI")
-
-        # Authentication: Three options in priority order
-        # 1. Managed Identity (preferred for Azure deployments)
-        # 2. Pre-fetched Azure AD token
-        # 3. API key (backward compatible)
-
-        if spec.use_managed_identity:
-            # Use Azure Managed Identity
-            try:
-                from azure.identity import DefaultAzureCredential
-            except ImportError:
-                raise ImportError(
-                    "Azure Managed Identity requires azure-identity. "
-                    "Install with: pip install ondine[azure]"
-                )
-
-            try:
-                credential = DefaultAzureCredential()
-                token = credential.get_token(
-                    "https://cognitiveservices.azure.com/.default"
-                )
-
-                self.client = AzureOpenAI(
-                    model=spec.model,
-                    deployment_name=spec.azure_deployment,
-                    azure_ad_token=token.token,
-                    azure_endpoint=spec.azure_endpoint,
-                    api_version=spec.api_version or "2024-02-15-preview",
-                    temperature=spec.temperature,
-                    max_tokens=spec.max_tokens,
-                )
-            except Exception as e:
-                raise ValueError(
-                    f"Failed to authenticate with Azure Managed Identity: {e}. "
-                    "Ensure the resource has a Managed Identity assigned with "
-                    "'Cognitive Services OpenAI User' role."
-                ) from e
-
-        elif spec.azure_ad_token:
-            # Use pre-fetched token
-            self.client = AzureOpenAI(
-                model=spec.model,
-                deployment_name=spec.azure_deployment,
-                azure_ad_token=spec.azure_ad_token,
-                azure_endpoint=spec.azure_endpoint,
-                api_version=spec.api_version or "2024-02-15-preview",
-                temperature=spec.temperature,
-                max_tokens=spec.max_tokens,
-            )
-
-        else:
-            # Use API key (existing behavior - backward compatible)
-            api_key = spec.api_key or os.getenv("AZURE_OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "Azure OpenAI requires either:\n"
-                    "  1. use_managed_identity=True (for keyless auth), or\n"
-                    "  2. api_key parameter, or\n"
-                    "  3. AZURE_OPENAI_API_KEY environment variable"
-                )
-
-            self.client = AzureOpenAI(
-                model=spec.model,
-                deployment_name=spec.azure_deployment,
-                api_key=api_key,
-                azure_endpoint=spec.azure_endpoint,
-                api_version=spec.api_version or "2024-02-15-preview",
-                temperature=spec.temperature,
-                max_tokens=spec.max_tokens,
-            )
-
-        # Initialize tokenizer
-        try:
-            self.tokenizer = tiktoken.encoding_for_model(spec.model)
-        except KeyError:
-            self.tokenizer = tiktoken.get_encoding("cl100k_base")
-
-    def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """Invoke Azure OpenAI API."""
-        start_time = time.time()
-
-        message = ChatMessage(role="user", content=prompt)
-        response = self.client.chat([message])
-
-        latency_ms = (time.time() - start_time) * 1000
-
-        # Extract token usage
-        tokens_in = len(self.tokenizer.encode(prompt))
-        tokens_out = len(self.tokenizer.encode(str(response)))
-
-        cost = self.calculate_cost(tokens_in, tokens_out)
-
-        return LLMResponse(
-            text=str(response),
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            model=self.model,
-            cost=cost,
-            latency_ms=latency_ms,
-        )
-
-    def estimate_tokens(self, text: str) -> int:
-        """Estimate tokens using tiktoken."""
-        return len(self.tokenizer.encode(text))
-
-
-class OpenAICompatibleClient(LLMClient):
-    """
-    Client for OpenAI-compatible API endpoints.
-
-    Supports custom providers like Ollama, vLLM, Together.ai, Anyscale,
-    and any other API that implements the OpenAI chat completions format.
-    """
-
-    def __init__(self, spec: LLMSpec):
-        """
-        Initialize OpenAI-compatible client.
-
-        Args:
-            spec: LLM specification with base_url required
-
-        Raises:
-            ValueError: If base_url not provided
-        """
-        super().__init__(spec)
-
-        if not spec.base_url:
-            raise ValueError("base_url required for openai_compatible provider")
-
-        # Get API key (optional for local APIs like Ollama)
-        api_key = spec.api_key or os.getenv("OPENAI_COMPATIBLE_API_KEY") or "dummy"
-
-        # Use OpenAILike for custom providers (doesn't validate model names)
-        self.client = OpenAILike(
-            model=spec.model,
-            api_key=api_key,
-            api_base=spec.base_url,
-            temperature=spec.temperature,
-            max_tokens=spec.max_tokens,
-            is_chat_model=True,  # Assume chat model for OpenAI-compatible APIs
-        )
-
-        # Use provider_name for logging/metrics, or default
-        self.provider_name = spec.provider_name or "OpenAI-Compatible"
-
-        # Initialize tokenizer (use default encoding for custom providers)
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
-
-        # Initialize logger for debug logging
-        from ondine.utils import get_logger
-
-        self.logger = get_logger(f"{__name__}.{self.provider_name}")
-
-    def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """
-        Invoke OpenAI-compatible API with optional system message support.
-
-        Args:
-            prompt: Text prompt
-            **kwargs: Additional model parameters (including system_message)
-
-        Returns:
-            LLMResponse with result and metadata
-        """
-        start_time = time.time()
-
-        # Build messages array (support system message for caching)
-        messages = []
-
-        system_message = kwargs.get("system_message")
-        if system_message and self.spec.enable_prefix_caching:
-            messages.append(ChatMessage(role="system", content=system_message))
-
-        messages.append(ChatMessage(role="user", content=prompt))
-
-        # Call API
-        response = self.client.chat(messages)
-
-        latency_ms = (time.time() - start_time) * 1000
-
-        # Extract text from response
-        response_text = str(response) if response else ""
-
-        # Extract token usage from API response (if available)
-        tokens_in = 0
-        tokens_out = 0
-        cached_tokens = 0
-
-        if hasattr(response, "raw") and response.raw and hasattr(response.raw, "usage"):
-            usage = response.raw.usage
-            tokens_in = getattr(usage, "prompt_tokens", 0)
-            tokens_out = getattr(usage, "completion_tokens", 0)
-
-            # Extract cached tokens (OpenAI/Moonshot format: nested in prompt_tokens_details)
-            if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
-                cached_tokens = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
-
-            # Debug: Log first response
-            if not hasattr(self, "_debug_logged"):
-                self._debug_logged = True
-                self.logger.debug(
-                    f"First API response: {tokens_in} input + {tokens_out} output tokens "
-                    f"({cached_tokens} cached)"
-                )
-
-            # Log if caching is detected
-            # Track cache hits (use DEBUG level to avoid spam in production)
-            if cached_tokens > 0:
-                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                self.logger.info(
-                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
-                )
-
-        # Fallback to tiktoken estimation if API doesn't provide counts
-        if tokens_in == 0:
-            full_prompt = (system_message or "") + prompt
-            tokens_in = len(self.tokenizer.encode(full_prompt))
-        if tokens_out == 0:
-            tokens_out = len(self.tokenizer.encode(response_text))
-
-        cost = self.calculate_cost(tokens_in, tokens_out)
-
-        return LLMResponse(
-            text=response_text,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            model=f"{self.provider_name}/{self.model}",  # Show provider in metrics
-            cost=cost,
-            latency_ms=latency_ms,
-        )
-
-    def estimate_tokens(self, text: str) -> int:
-        """
-        Estimate tokens using tiktoken.
-
-        Note: This is approximate for custom providers.
-
-        Args:
-            text: Input text
-
-        Returns:
-            Estimated token count
-        """
-        return len(self.tokenizer.encode(text))
+# AGGRESSIVE REFACTOR (Phase 1):
+# - All cloud providers (OpenAI, Groq, Anthropic, Azure, custom) → UnifiedLiteLLMClient
+# - Apple Silicon local inference → MLXClient (special case)
+# - LlamaIndex kept ONLY for future RAG features (separate concern)
+#
+# DELETED in Phase 1 (replaced by UnifiedLiteLLMClient):
+# - AzureOpenAIClient: ~118 lines (Azure now via LiteLLM: model="azure/deployment")
+# - OpenAICompatibleClient: ~140 lines (Custom endpoints via LiteLLM base_url)
+#
+# This eliminates 258 lines of LlamaIndex wrapper code!
+# =================================================================
 
 
 class MLXClient(LLMClient):
@@ -595,6 +271,28 @@ class MLXClient(LLMClient):
         except Exception:
             # Fallback to simple word count
             return len(text.split())
+
+    def structured_invoke(
+        self,
+        prompt: str,
+        output_cls: type[BaseModel],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """
+        Structured output not supported for MLX (local models).
+
+        Args:
+            prompt: Text prompt
+            output_cls: Pydantic model class
+            **kwargs: Additional parameters
+
+        Raises:
+            NotImplementedError: MLX doesn't support structured output
+        """
+        raise NotImplementedError(
+            "Structured output not supported for MLX local models. "
+            "Use cloud providers (OpenAI, Groq, Anthropic) for structured output."
+        )
 
 
 def create_llm_client(spec: LLMSpec) -> LLMClient:

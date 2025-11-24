@@ -35,6 +35,18 @@ class MockCustomClient(LLMClient):
             latency_ms=100.0,
         )
 
+    def structured_invoke(self, prompt: str, output_cls, **kwargs: Any) -> LLMResponse:
+        """Mock structured invoke (required by abstract base)."""
+        result = output_cls.model_validate({"field1": "test", "field2": 123})
+        return LLMResponse(
+            text=result.model_dump_json(),
+            tokens_in=10,
+            tokens_out=5,
+            model=self.model,
+            cost=Decimal("0.001"),
+            latency_ms=100.0,
+        )
+
     def estimate_tokens(self, text: str) -> int:
         """Mock token estimation."""
         return len(text.split())

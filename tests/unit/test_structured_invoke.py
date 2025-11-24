@@ -1,9 +1,16 @@
+"""
+Unit tests for structured output invocation with Instructor.
+
+Tests the UnifiedLiteLLMClient's structured_invoke method which uses
+Instructor for Pydantic model validation and schema enforcement.
+"""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
-from ondine.adapters.llm_client import create_llm_client
+from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 from ondine.core.specifications import LLMProvider, LLMSpec
 
 
@@ -13,109 +20,63 @@ class TestModel(BaseModel):
     field2: int
 
 
-@pytest.fixture
-def mock_openai_client():
-    spec = LLMSpec(
-        provider=LLMProvider.OPENAI,
-        model="gpt-4o-mini",
-        api_key="dummy",  # pragma: allowlist secret
-        temperature=0.0,
-    )
-    # Patch LiteLLM constructor to avoid actual API connection
-    # Mock where it's imported (llama_index.llms.litellm), not where it's used
-    with patch("llama_index.llms.litellm.LiteLLM") as mock_litellm:
-        mock_instance = MagicMock()
-        mock_litellm.return_value = mock_instance
+class TestStructuredInvokeInstructor:
+    """Test structured_invoke with Instructor integration."""
 
-        client = create_llm_client(spec)
-        # Set up the mock LlamaIndex LiteLLM client
-        client.client = mock_instance
-        yield client
-
-
-def test_structured_invoke_with_structured_predict(mock_openai_client):
-    """Test structured_invoke when underlying client supports structured_predict."""
-    # Setup mock
-    mock_result = TestModel(field1="test", field2=123)
-
-    # Mock structured_predict method on the LlamaIndex client wrapper
-    mock_openai_client.client.structured_predict.return_value = mock_result
-
-    # Mock estimate_tokens
-    mock_openai_client.estimate_tokens = MagicMock(return_value=10)
-
-    # Execute
-    response = mock_openai_client.structured_invoke("prompt", TestModel)
-
-    # Assertions - prompt is now wrapped in PromptTemplate
-    assert mock_openai_client.client.structured_predict.called
-    call_args = mock_openai_client.client.structured_predict.call_args
-    assert call_args[0][0] == TestModel  # First positional arg is output_cls
-    # Prompt is wrapped in PromptTemplate, so check the template string
-    assert call_args[1]["prompt"].template == "prompt"
-
-    assert response.text == mock_result.model_dump_json()
-    assert response.model == "gpt-4o-mini"
-    assert response.tokens_in == 10
-    assert response.tokens_out == 10
-
-
-def test_structured_invoke_fallback(mock_openai_client):
-    """Test structured_invoke fallback to LLMTextCompletionProgram."""
-    # Remove structured_predict attribute to simulate older version/unsupported LLM
-    del mock_openai_client.client.structured_predict
-
-    mock_result = TestModel(field1="fallback", field2=456)
-
-    # Mock LLMTextCompletionProgram
-    with patch(
-        "llama_index.core.program.LLMTextCompletionProgram.from_defaults"
-    ) as mock_program:
-        program_instance = MagicMock()
-        program_instance.return_value = mock_result
-        mock_program.return_value = program_instance
-
-        # Mock estimate_tokens
-        mock_openai_client.estimate_tokens = MagicMock(return_value=10)
-
-        # Execute
-        response = mock_openai_client.structured_invoke("prompt", TestModel)
-
-        # Assertions
-        mock_program.assert_called_once_with(
-            output_cls=TestModel,
-            llm=mock_openai_client.client,
-            prompt_template_str="{prompt}",
+    def test_structured_invoke_sync_wrapper(self):
+        """Test that sync structured_invoke wraps async version."""
+        spec = LLMSpec(
+            provider=LLMProvider.OPENAI,
+            model="gpt-4o-mini",
+            api_key="dummy",  # pragma: allowlist secret
         )
-        program_instance.assert_called_once_with(prompt="prompt")
-        assert response.text == mock_result.model_dump_json()
 
+        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
+            client = UnifiedLiteLLMClient(spec)
 
-def test_structured_invoke_error_handling(mock_openai_client):
-    """Test error handling in structured_invoke."""
-    # Setup mock to raise exception
-    mock_openai_client.client.structured_predict.side_effect = Exception("API Error")
+        # Mock asyncio.run
+        mock_response = MagicMock()
+        mock_response.text = '{"field1": "test", "field2": 123}'
 
-    # Execute and assert
-    with pytest.raises(ValueError) as exc:
-        mock_openai_client.structured_invoke("prompt", TestModel)
+        with patch(
+            "ondine.adapters.unified_litellm_client.asyncio.run",
+            return_value=mock_response,
+        ):
+            response = client.structured_invoke("prompt", TestModel)
 
-    assert "Structured prediction failed: API Error" in str(exc.value)
+        assert response == mock_response
 
+    @pytest.mark.asyncio
+    async def test_structured_invoke_async_uses_instructor(self):
+        """Test that structured_invoke_async uses Instructor."""
+        from unittest.mock import AsyncMock
 
-def test_structured_invoke_anthropic_validation_bug(mock_openai_client):
-    """Test handling of Anthropic validation bug (returns string instead of object)."""
-    # Mock structured_predict to return string (validation error from Anthropic)
-    # This is a known LlamaIndex bug: https://github.com/run-llama/llama_index/issues/16604
-    mock_openai_client.client.structured_predict.return_value = (
-        "2 validation errors for TestModel\nfield1\n  Field required [type=missing..."
-    )
+        import instructor
 
-    # Execute and expect ValueError
-    with pytest.raises(ValueError) as exc:
-        mock_openai_client.structured_invoke("prompt", TestModel)
+        spec = LLMSpec(
+            provider=LLMProvider.GROQ,
+            model="llama-3.3-70b-versatile",
+            api_key="dummy",  # pragma: allowlist secret
+        )
 
-    assert "Model returned validation error instead of structured object" in str(
-        exc.value
-    )
-    assert "2 validation errors" in str(exc.value)
+        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
+            client = UnifiedLiteLLMClient(spec)
+
+        mock_result = TestModel(field1="groq", field2=789)
+
+        with (
+            patch("instructor.from_litellm") as mock_instructor,
+            patch.object(client, "_calculate_cost_litellm", return_value=0.0005),
+        ):
+            mock_client = MagicMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_result)
+            mock_instructor.return_value = mock_client
+
+            response = await client.structured_invoke_async("prompt", TestModel)
+
+            # Verify JSON mode was used for Groq
+            call_args = mock_instructor.call_args
+            assert call_args.kwargs["mode"] == instructor.Mode.JSON
+
+            # Verify response
+            assert response.text == mock_result.model_dump_json()
