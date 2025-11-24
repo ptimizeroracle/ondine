@@ -138,7 +138,9 @@ class TestUnifiedLiteLLMClientInvoke:
         assert response.tokens_out == 20
         assert response.cost == Decimal("0.0001")
         assert response.model == "gpt-4o-mini"
-        assert response.latency_ms > 0
+        assert (
+            response.latency_ms >= 0
+        )  # Latency tracked (can be 0 in fast mocked calls)
 
     @pytest.mark.asyncio
     async def test_ainvoke_with_system_message(self, openai_spec):

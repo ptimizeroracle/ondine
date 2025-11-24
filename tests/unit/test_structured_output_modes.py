@@ -181,7 +181,9 @@ class TestStructuredInvokeMocked:
 
         assert response.text == mock_result.model_dump_json()
         assert response.model == "gpt-4o-mini"
-        assert response.latency_ms > 0
+        assert (
+            response.latency_ms >= 0
+        )  # Latency tracked (can be 0 in fast mocked calls)
 
     @pytest.mark.asyncio
     async def test_structured_invoke_async_with_system_message(self):
