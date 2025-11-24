@@ -300,6 +300,34 @@ class UnifiedLiteLLMClient(LLMClient):
         tokens_in = response.usage.prompt_tokens if response.usage else 0
         tokens_out = response.usage.completion_tokens if response.usage else 0
 
+        # Extract cached tokens (OpenAI/Anthropic prompt caching)
+        # See: https://docs.litellm.ai/docs/completion/prompt_caching
+        try:
+            if (
+                response.usage
+                and hasattr(response.usage, "prompt_tokens_details")
+                and response.usage.prompt_tokens_details
+            ):
+                cached_tokens = getattr(
+                    response.usage.prompt_tokens_details, "cached_tokens", 0
+                )
+
+                # Log cache hits
+                if (
+                    cached_tokens
+                    and isinstance(cached_tokens, int)
+                    and cached_tokens > 0
+                ):
+                    cache_pct = (
+                        (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+                    )
+                    logger.info(
+                        f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                    )
+        except (AttributeError, TypeError):
+            # If response structure is unexpected, skip cache detection
+            pass
+
         # Calculate cost using LiteLLM
         cost = self._calculate_cost_litellm(prompt, response_text)
 
@@ -436,7 +464,6 @@ class UnifiedLiteLLMClient(LLMClient):
         Structured output invocation using Instructor (sync wrapper).
 
         Wraps async structured_invoke_async for compatibility with sync pipeline.
-        Uses asyncio.run() which may show cleanup warnings - this is expected.
 
         Args:
             prompt: Text prompt
@@ -446,16 +473,29 @@ class UnifiedLiteLLMClient(LLMClient):
         Returns:
             LLMResponse with structured output
         """
-        # Use asyncio.run() to wrap async call
-        # Note: This may show "event loop closed" warnings during cleanup
-        # This is a known LiteLLM issue and doesn't affect functionality
+        # Use asyncio.run() with proper cleanup
+        # Suppress event loop warnings from LiteLLM async cleanup
         import warnings
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning)
-            return asyncio.run(
-                self.structured_invoke_async(prompt, output_cls, **kwargs)
+            warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+            warnings.filterwarnings(
+                "ignore", message=".*coroutine.*was never awaited.*"
             )
+
+            try:
+                return asyncio.run(
+                    self.structured_invoke_async(prompt, output_cls, **kwargs)
+                )
+            finally:
+                # Clean up any pending tasks to avoid cleanup errors
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.close()
+                except Exception:  # nosec B110
+                    pass  # Ignore asyncio cleanup errors (expected)
 
     async def structured_invoke_async(
         self,
