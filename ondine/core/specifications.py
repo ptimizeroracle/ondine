@@ -285,6 +285,18 @@ class LLMSpec(BaseModel):
         ),
     )
 
+    # Router configuration (Phase 3) - for load balancing and failover
+    router_config: dict[str, Any] | None = Field(
+        default=None,
+        description="LiteLLM Router configuration for load balancing (optional)",
+    )
+
+    # Cache configuration (Phase 3) - for response caching
+    cache_config: dict[str, Any] | None = Field(
+        default=None,
+        description="LiteLLM caching configuration (Redis or in-memory)",
+    )
+
     # Internal: Custom provider routing (set by PipelineBuilder for registry-based providers)
     custom_provider_id: str | None = Field(
         default=None,

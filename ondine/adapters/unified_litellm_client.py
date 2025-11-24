@@ -147,41 +147,114 @@ class UnifiedLiteLLMClient(LLMClient):
         return env_var_map.get(provider_str, f"{provider_str.upper()}_API_KEY")
 
     def _init_router(self, router_config):
-        """Initialize LiteLLM Router for load balancing."""
+        """
+        Initialize LiteLLM Router with load balancing and optional Redis.
+
+        Router features from LiteLLM:
+        - Load balancing (simple-shuffle, latency-based, usage-based)
+        - Automatic failover
+        - Built-in retries with exponential backoff
+        - Redis support for distributed state
+        - Cooldowns for failing deployments
+        - RPM/TPM limits per deployment
+
+        See: https://docs.litellm.ai/docs/routing
+        """
         try:
             from litellm import Router
 
-            self.router = Router(
-                model_list=router_config.get("model_list", []),
-                routing_strategy=router_config.get(
-                    "routing_strategy", "latency-based-routing"
-                ),
-                num_retries=router_config.get("num_retries", 3),
-                timeout=router_config.get("timeout", 30),
-            )
+            # Extract config
+            model_list = router_config.get("model_list", [])
+            routing_strategy = router_config.get(
+                "routing_strategy", "simple-shuffle"
+            )  # simple-shuffle is recommended
+            redis_url = router_config.get(
+                "redis_url"
+            )  # Optional: for distributed state
+
+            # Build router kwargs
+            router_kwargs = {
+                "model_list": model_list,
+                "routing_strategy": routing_strategy,
+                "num_retries": router_config.get("num_retries", 3),
+                "timeout": router_config.get("timeout", 30),
+                "set_verbose": router_config.get("debug", False),
+            }
+
+            # Add Redis if configured (LiteLLM native feature!)
+            if redis_url:
+                router_kwargs["redis_host"] = redis_url
+                router_kwargs["cache_responses"] = True  # Enable Redis response caching
+                logger.info(f"Router using Redis at {redis_url} for caching + state")
+
+            self.router = Router(**router_kwargs)
             self.use_router = True
+
             logger.info(
-                f"Initialized LiteLLM Router with {len(router_config.get('model_list', []))} models"
+                f"Initialized LiteLLM Router: {len(model_list)} models, "
+                f"strategy={routing_strategy}, redis={'enabled' if redis_url else 'disabled'}"
             )
+
         except ImportError:
             logger.warning("LiteLLM Router requested but litellm not installed")
+        except Exception as e:
+            logger.error(f"Failed to initialize Router: {e}")
+            self.router = None
+            self.use_router = False
 
     def _init_cache(self, cache_config):
-        """Initialize Redis cache for response caching."""
-        try:
-            from ondine.adapters.cache_client import RedisResponseCache
+        """
+        Initialize LiteLLM native caching.
 
-            self.cache = RedisResponseCache(
-                redis_url=cache_config.get("redis_url"),
-                ttl=cache_config.get("ttl", 3600),
-            )
-            logger.info("Initialized Redis response cache")
+        LiteLLM supports multiple caching backends:
+        - Redis (recommended for production)
+        - In-memory (default, single-process only)
+        - DiskCache (for local development)
+
+        See: https://docs.litellm.ai/docs/caching
+
+        Note: Cache is configured globally via litellm.cache, not per-client.
+        This method just sets up the configuration.
+        """
+        try:
+            import litellm
+
+            cache_type = cache_config.get("cache_type", "redis")
+
+            if cache_type == "redis":
+                redis_url = cache_config.get("redis_url", "redis://localhost:6379")
+                # Configure LiteLLM to use Redis caching
+                litellm.cache = litellm.Cache(
+                    type="redis",
+                    host=redis_url,
+                    ttl=cache_config.get("ttl", 3600),
+                )
+                logger.info(f"LiteLLM Redis caching enabled: {redis_url}")
+                self.cache = litellm.cache
+
+            elif cache_type == "memory":
+                # In-memory cache (single process)
+                litellm.cache = litellm.Cache(type="local")
+                logger.info("LiteLLM in-memory caching enabled")
+                self.cache = litellm.cache
+
+            else:
+                logger.warning(f"Unknown cache type: {cache_type}")
+                self.cache = None
+
         except ImportError:
-            logger.warning("Redis cache requested but redis not installed")
+            logger.warning("LiteLLM caching requested but dependencies not installed")
+            self.cache = None
+        except Exception as e:
+            logger.error(f"Failed to initialize LiteLLM cache: {e}")
+            self.cache = None
 
     async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """
         Async invoke LLM (native async, not wrapped).
+
+        If cache is enabled, LiteLLM handles caching automatically.
+        If Router is enabled, LiteLLM handles load balancing + failover automatically.
 
         Args:
             prompt: Text prompt
@@ -194,24 +267,22 @@ class UnifiedLiteLLMClient(LLMClient):
 
         start_time = time.time()
 
-        # Check cache first
-        if self.cache:
-            cache_key = self._generate_cache_key(prompt, kwargs)
-            cached = self.cache.get(cache_key)
-            if cached:
-                logger.debug("Cache hit for prompt")
-                return self._parse_cached_response(cached)
-
         # Build messages
         messages = self._build_messages(prompt, kwargs)
 
+        # LiteLLM handles caching automatically if litellm.cache is configured!
+        # No need for manual cache checks - LiteLLM does it for us.
+
         # Call LiteLLM (Router or direct)
+        # Router provides: load balancing, failover, retries, cooldowns
+        # Cache provides: automatic response caching (if configured)
         if self.use_router:
             response = await self.router.acompletion(
                 model=self.model_identifier,
                 messages=messages,
                 temperature=self.spec.temperature,
                 max_tokens=self.spec.max_tokens,
+                caching=True,  # Enable caching for this call
             )
         else:
             response = await litellm.acompletion(
@@ -219,6 +290,7 @@ class UnifiedLiteLLMClient(LLMClient):
                 messages=messages,
                 temperature=self.spec.temperature,
                 max_tokens=self.spec.max_tokens,
+                caching=True,  # Enable caching for this call
             )
 
         latency_ms = (time.time() - start_time) * 1000
@@ -231,7 +303,7 @@ class UnifiedLiteLLMClient(LLMClient):
         # Calculate cost using LiteLLM
         cost = self._calculate_cost_litellm(prompt, response_text)
 
-        llm_response = LLMResponse(
+        return LLMResponse(
             text=response_text,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
@@ -239,12 +311,6 @@ class UnifiedLiteLLMClient(LLMClient):
             cost=cost,
             latency_ms=latency_ms,
         )
-
-        # Cache response
-        if self.cache:
-            self.cache.set(cache_key, llm_response.model_dump())
-
-        return llm_response
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """
@@ -274,8 +340,11 @@ class UnifiedLiteLLMClient(LLMClient):
         return messages
 
     def _generate_cache_key(self, prompt: str, kwargs: dict) -> str:
-        """Generate cache key from prompt and parameters."""
-        # Include model, prompt, temperature in cache key
+        """
+        Generate cache key (DEPRECATED - LiteLLM handles caching natively).
+
+        Kept for backward compatibility with tests.
+        """
         key_parts = [
             self.model_identifier,
             prompt,
@@ -286,7 +355,11 @@ class UnifiedLiteLLMClient(LLMClient):
         return hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()
 
     def _parse_cached_response(self, cached: dict) -> LLMResponse:
-        """Parse cached response into LLMResponse."""
+        """
+        Parse cached response (DEPRECATED - LiteLLM handles caching natively).
+
+        Kept for backward compatibility with tests.
+        """
         return LLMResponse(**cached)
 
     def _calculate_cost_litellm(self, prompt: str, completion: str) -> Decimal:
