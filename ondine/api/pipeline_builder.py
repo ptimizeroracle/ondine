@@ -1097,6 +1097,9 @@ class PipelineBuilder:
         This enables native schema enforcement, parsing, and auto-retry logic
         using LlamaIndex's structured_predict capabilities.
 
+        Automatically configures JSONParser to handle the structured JSON output,
+        unless a custom parser was already configured.
+
         Args:
             schema: Pydantic model class defining the expected output structure
 
@@ -1106,6 +1109,13 @@ class PipelineBuilder:
         if not hasattr(self, "_custom_metadata"):
             self._custom_metadata = {}
         self._custom_metadata["structured_output_model"] = schema
+        
+        # Auto-inject JSONParser if no parser configured
+        # Structured output always returns JSON, so we need a JSON parser
+        if self._custom_parser is None:
+            from ondine.stages.response_parser_stage import JSONParser
+            self._custom_parser = JSONParser()
+        
         return self
 
     def build(self) -> Pipeline:
