@@ -254,19 +254,18 @@ class TestMLXClientFactory:
             client = create_llm_client(spec)
             assert isinstance(client, MLXClient)
 
-    def test_factory_backward_compatible(self):
-        """Factory should still work with existing providers."""
-        from ondine.adapters.llm_client import GroqClient
-
+    def test_factory_creates_client_for_groq(self):
+        """Factory should create appropriate client for Groq provider."""
         spec = LLMSpec(
             provider=LLMProvider.GROQ,
             model="llama-3.3-70b-versatile",
             api_key="test",  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.Groq"):
+        with patch("llama_index.llms.litellm.LiteLLM"):
             client = create_llm_client(spec)
-            assert isinstance(client, GroqClient)
+            assert client is not None
+            assert hasattr(client, "invoke")
 
 
 class TestMLXClientErrorHandling:

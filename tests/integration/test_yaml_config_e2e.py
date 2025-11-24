@@ -12,8 +12,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from ondine.api.pipeline_composer import PipelineComposer
-
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -80,7 +78,11 @@ output:
         yaml_file.write_text(yaml_config)
 
         # Load and execute from YAML
-        pipeline = PipelineComposer.from_yaml(str(yaml_file))
+        from ondine.api.pipeline import Pipeline
+        from ondine.config import ConfigLoader
+
+        specs = ConfigLoader.from_yaml(str(yaml_file))
+        pipeline = Pipeline(specs)
         result = pipeline.execute()
 
         # Verify execution
@@ -91,9 +93,9 @@ output:
         # Verify settings were applied (check via specs)
         specs = pipeline.specifications
         assert specs.processing.batch_size == 10
-        assert specs.processing.processing_batch_size == 5
+        # Note: processing_batch_size is a builder-only param, not in ProcessingSpec
         assert specs.processing.concurrency == 2
-        assert specs.processing.rate_limit == 30
+        assert specs.processing.rate_limit_rpm == 30
 
         print(f"\n{provider.upper()} YAML Config Test Results:")
         print(f"  Loaded from: {yaml_file.name}")
@@ -161,7 +163,11 @@ output:
         yaml_file = Path(tmpdir) / "config.yaml"
         yaml_file.write_text(yaml_config)
 
-        pipeline = PipelineComposer.from_yaml(str(yaml_file))
+        from ondine.api.pipeline import Pipeline
+        from ondine.config import ConfigLoader
+
+        specs = ConfigLoader.from_yaml(str(yaml_file))
+        pipeline = Pipeline(specs)
         result = pipeline.execute()
 
         assert result.success

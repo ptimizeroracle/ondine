@@ -75,12 +75,46 @@ class ConfigLoader:
         """
         Convert configuration dictionary to PipelineSpecifications.
 
+        Maps user-friendly YAML field names to internal Pydantic field names.
+
         Args:
             config: Configuration dictionary
 
         Returns:
             PipelineSpecifications
         """
+        # Map YAML field names to Pydantic field names
+        # YAML uses 'data' but Pydantic expects 'dataset'
+        if "data" in config:
+            data_config = config.pop("data")
+
+            # Map data.source.type to dataset.source_type
+            if "source" in data_config and isinstance(data_config["source"], dict):
+                source = data_config.pop("source")
+                if "type" in source:
+                    data_config["source_type"] = source["type"]
+                if "path" in source:
+                    data_config["source_path"] = source["path"]
+
+            config["dataset"] = data_config
+
+        # Map output.format to output.destination_type
+        if "output" in config and isinstance(config["output"], dict):
+            if "format" in config["output"]:
+                format_value = config["output"].pop("format")
+                # Map string to enum (YAML 'format' → Pydantic 'destination_type')
+                config["output"]["destination_type"] = format_value
+
+        # Map processing field names
+        if "processing" in config and isinstance(config["processing"], dict):
+            # processing_batch_size is a builder-only concept, not in ProcessingSpec
+            config["processing"].pop("processing_batch_size", None)
+            # Map rate_limit to rate_limit_rpm
+            if "rate_limit" in config["processing"]:
+                config["processing"]["rate_limit_rpm"] = config["processing"].pop(
+                    "rate_limit"
+                )
+
         return PipelineSpecifications(**config)
 
     @staticmethod
