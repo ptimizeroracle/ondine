@@ -147,29 +147,31 @@ class ProviderRegistry:
             return
 
         # Import here to avoid circular dependencies
-        from ondine.adapters.litellm_client import LiteLLMClient
-        from ondine.adapters.llm_client import (
-            AzureOpenAIClient,
-            MLXClient,
-            OpenAICompatibleClient,
+        from ondine.adapters.llm_client import MLXClient
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+
+        # AGGRESSIVE REFACTOR: Use UnifiedLiteLLMClient for ALL providers
+        # - Direct LiteLLM integration (no LlamaIndex wrapper)
+        # - Supports 100+ providers natively
+        # - Async-first design
+        # - Built-in Router and caching support
+
+        # Register UnifiedLiteLLMClient for ALL standard providers
+        cls._providers["openai"] = UnifiedLiteLLMClient
+        cls._providers["anthropic"] = UnifiedLiteLLMClient
+        cls._providers["groq"] = UnifiedLiteLLMClient
+        cls._providers["azure_openai"] = (
+            UnifiedLiteLLMClient  # LiteLLM supports Azure natively
+        )
+        cls._providers["openai_compatible"] = (
+            UnifiedLiteLLMClient  # LiteLLM supports custom endpoints
         )
 
-        # Register providers following KISS + SOLID principles:
-        # - Simple providers (OpenAI, Groq, Anthropic) → LiteLLMClient (unified, 100+ models)
-        # - Complex providers (Azure MI, MLX, Custom) → Dedicated clients (special features)
-
-        # Standard cloud providers (use LiteLLM for simplicity)
-        cls._providers["openai"] = LiteLLMClient
-        cls._providers["anthropic"] = LiteLLMClient
-        cls._providers["groq"] = LiteLLMClient
-
-        # Enterprise/special providers (keep dedicated implementations)
-        cls._providers["azure_openai"] = AzureOpenAIClient  # Managed Identity
-        cls._providers["openai_compatible"] = OpenAICompatibleClient  # Custom endpoints
-        cls._providers["mlx"] = MLXClient  # Local inference
+        # Special case: Apple Silicon local inference (different paradigm)
+        cls._providers["mlx"] = MLXClient
 
         # Generic fallback
-        cls._providers["litellm"] = LiteLLMClient
+        cls._providers["litellm"] = UnifiedLiteLLMClient
 
         cls._builtin_registered = True
 

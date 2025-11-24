@@ -35,12 +35,12 @@ class BaconBatch(BaseModel):
 )
 def test_structured_output_e2e(provider, model, api_key_env, base_url):
     """
-    E2E test for structured output across multiple providers.
+    E2E test for structured output across multiple providers using Instructor.
 
-    Tests that LlamaIndex's structured_predict works correctly with:
-    - OpenAI: Native tool calling via structured_predict (baseline)
-    - Groq: LLMTextCompletionProgram workaround (due to XML bug)
-    - Anthropic: Native tool calling via structured_predict (Claude 3 Haiku)
+    Tests UnifiedLiteLLMClient with Instructor auto-detection:
+    - OpenAI: Instructor with Mode.TOOLS (function calling)
+    - Groq: Instructor with Mode.JSON (JSON mode, no XML issues!)
+    - Anthropic: Instructor with Mode.TOOLS (Claude function calling)
 
     Requires respective API keys in environment.
     """

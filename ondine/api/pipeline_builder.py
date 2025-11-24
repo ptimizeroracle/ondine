@@ -1105,6 +1105,82 @@ class PipelineBuilder:
 
         return self
 
+    def with_router(
+        self,
+        model_list: list[dict],
+        routing_strategy: str = "simple-shuffle",
+        redis_url: str | None = None,
+        num_retries: int = 3,
+    ) -> "PipelineBuilder":
+        """
+        Enable LiteLLM Router for load balancing and failover.
+
+        Router provides:
+        - Load balancing across multiple deployments
+        - Automatic failover
+        - Built-in retries
+        - Redis for distributed state (optional)
+
+        Args:
+            model_list: List of deployment configs
+            routing_strategy: "simple-shuffle" (default), "latency-based-routing", etc.
+            redis_url: Redis URL for caching + state (optional)
+            num_retries: Retries per deployment (default: 3)
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            .with_router(
+                model_list=[
+                    {"model_name": "fast", "litellm_params": {"model": "groq/llama-3.3-70b", "rpm": 30}},
+                    {"model_name": "fast", "litellm_params": {"model": "openai/gpt-4o-mini", "rpm": 500}}
+                ]
+            )
+            ```
+
+        See: https://docs.litellm.ai/docs/routing
+        """
+        if not self._llm_spec:
+            self._llm_spec = LLMSpec(provider=LLMProvider.OPENAI, model="router")
+
+        self._llm_spec.router_config = {
+            "model_list": model_list,
+            "routing_strategy": routing_strategy,
+            "redis_url": redis_url,
+            "num_retries": num_retries,
+            "timeout": 30,
+        }
+        return self
+
+    def with_redis_cache(
+        self, redis_url: str = "redis://localhost:6379", ttl: int = 3600
+    ) -> "PipelineBuilder":
+        """
+        Enable LiteLLM Redis caching.
+
+        Caches responses automatically (identical requests = $0 cost!).
+
+        Args:
+            redis_url: Redis URL (default: localhost)
+            ttl: Cache TTL in seconds (default: 1h)
+
+        Returns:
+            Self for chaining
+
+        See: https://docs.litellm.ai/docs/caching
+        """
+        if not self._llm_spec:
+            self._llm_spec = LLMSpec(provider=LLMProvider.OPENAI, model="cached")
+
+        self._llm_spec.cache_config = {
+            "cache_type": "redis",
+            "redis_url": redis_url,
+            "ttl": ttl,
+        }
+        return self
+
     def with_structured_output(self, schema: Any) -> "PipelineBuilder":
         """
         Configure structured output using a Pydantic model.

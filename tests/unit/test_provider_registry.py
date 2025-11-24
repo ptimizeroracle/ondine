@@ -178,6 +178,28 @@ class TestProviderRegistry:
                     latency_ms=100,
                 )
 
+            def structured_invoke(
+                self, prompt: str, output_cls, **kwargs
+            ) -> LLMResponse:
+                """Mock structured invoke."""
+                from pydantic import BaseModel
+
+                result = (
+                    output_cls.model_validate({})
+                    if hasattr(output_cls, "__fields__")
+                    else output_cls()
+                )
+                return LLMResponse(
+                    text=result.model_dump_json()
+                    if isinstance(result, BaseModel)
+                    else "{}",
+                    tokens_in=10,
+                    tokens_out=10,
+                    model=self.model,
+                    cost=0.001,
+                    latency_ms=100,
+                )
+
             def estimate_tokens(self, text: str) -> int:
                 return len(text.split())
 
@@ -241,24 +263,23 @@ class TestProviderRegistry:
 
     def test_builtin_providers_are_functional(self):
         """Should have all built-in providers registered and instantiable."""
-        from ondine.adapters.litellm_client import LiteLLMClient
-        from ondine.adapters.llm_client import (
-            AzureOpenAIClient,
-            MLXClient,
-            OpenAICompatibleClient,
-        )
+        from ondine.adapters.llm_client import MLXClient
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
         # Trigger lazy init
         providers = ProviderRegistry.list_providers()
 
-        # Verify LiteLLM providers (simple cloud APIs)
-        assert providers["openai"] is LiteLLMClient
-        assert providers["anthropic"] is LiteLLMClient
-        assert providers["groq"] is LiteLLMClient
-
-        # Verify dedicated providers (special features)
-        assert providers["azure_openai"] is AzureOpenAIClient  # Managed Identity
+        # AGGRESSIVE REFACTOR: All cloud providers use UnifiedLiteLLMClient
+        assert providers["openai"] is UnifiedLiteLLMClient
+        assert providers["anthropic"] is UnifiedLiteLLMClient
+        assert providers["groq"] is UnifiedLiteLLMClient
+        assert providers["azure_openai"] is UnifiedLiteLLMClient  # Azure via LiteLLM
         assert (
-            providers["openai_compatible"] is OpenAICompatibleClient
-        )  # Custom endpoints
+            providers["openai_compatible"] is UnifiedLiteLLMClient
+        )  # Custom endpoints via LiteLLM
+
+        # Verify MLX is special case (Apple Silicon)
         assert providers["mlx"] is MLXClient  # Local inference
+
+        # Verify generic fallback
+        assert providers["litellm"] is UnifiedLiteLLMClient

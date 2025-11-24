@@ -1,210 +1,73 @@
-"""Tests for Azure Managed Identity authentication."""
+"""
+Tests for Azure OpenAI via UnifiedLiteLLMClient.
 
-from unittest.mock import Mock, patch
+NOTE: Azure Managed Identity is now handled by LiteLLM natively.
+LiteLLM supports Azure via environment variables:
+- AZURE_API_KEY for API key auth
+- AZURE_AD_TOKEN for token-based auth
 
-import pytest
+The complex Managed Identity logic (DefaultAzureCredential) is delegated to LiteLLM.
+We just need to test that our client correctly formats the model identifier.
+"""
 
-from ondine.adapters.llm_client import AzureOpenAIClient
+from unittest.mock import patch
+
+from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 from ondine.core.specifications import LLMProvider, LLMSpec
 
 
-class TestAzureManagedIdentity:
-    """Test Azure Managed Identity authentication."""
+class TestAzureViaUnifiedClient:
+    """Test Azure OpenAI support in UnifiedLiteLLMClient."""
 
-    def test_managed_identity_enabled(self):
-        """Test that use_managed_identity flag is accepted."""
+    def test_azure_model_identifier_format(self):
+        """Test that Azure uses correct model identifier format."""
+        spec = LLMSpec(
+            provider=LLMProvider.AZURE_OPENAI,
+            model="gpt-4",
+            azure_endpoint="https://test.openai.azure.com/",
+            azure_deployment="gpt-4-deployment",
+            api_key="test-key",  # pragma: allowlist secret  # pragma: allowlist secret
+        )
+
+        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
+            client = UnifiedLiteLLMClient(spec)
+
+            # LiteLLM expects: azure/deployment-name
+            assert client.model_identifier == "azure/gpt-4-deployment"
+
+    def test_azure_sets_api_key_env_var(self):
+        """Test that Azure API key is set in environment."""
         spec = LLMSpec(
             provider=LLMProvider.AZURE_OPENAI,
             model="gpt-4",
             azure_endpoint="https://test.openai.azure.com/",
             azure_deployment="gpt-4",
-            use_managed_identity=True,
+            api_key="azure-test-key",  # pragma: allowlist secret
         )
-        assert spec.use_managed_identity is True
 
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    @patch("azure.identity.DefaultAzureCredential")
-    def test_managed_identity_authentication(self, mock_credential, mock_azure_client):
-        """Test authentication with Managed Identity."""
-        # Mock Azure credential and token
-        mock_token = Mock()
-        mock_token.token = "mock_azure_ad_token"  # noqa: S105
-        mock_credential.return_value.get_token.return_value = mock_token
+        env_dict = {}
+        with patch("ondine.adapters.unified_litellm_client.os.environ", env_dict):
+            UnifiedLiteLLMClient(spec)
 
+            assert "AZURE_API_KEY" in env_dict
+            assert env_dict["AZURE_API_KEY"] == "azure-test-key"  # noqa: S105 # pragma: allowlist secret
+
+    def test_azure_with_deployment_and_endpoint(self):
+        """Test that Azure spec accepts deployment and endpoint."""
         spec = LLMSpec(
             provider=LLMProvider.AZURE_OPENAI,
             model="gpt-4",
             azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            use_managed_identity=True,
+            azure_deployment="gpt-4-deployment",
+            api_key="test-key",  # pragma: allowlist secret  # pragma: allowlist secret
         )
 
-        AzureOpenAIClient(spec)
+        # Should be valid
+        assert spec.azure_deployment == "gpt-4-deployment"
+        assert spec.azure_endpoint == "https://test.openai.azure.com/"
 
-        # Verify DefaultAzureCredential was used
-        mock_credential.assert_called_once()
-        mock_credential.return_value.get_token.assert_called_once_with(
-            "https://cognitiveservices.azure.com/.default"
-        )
 
-        # Verify AzureOpenAI client was initialized with token
-        mock_azure_client.assert_called_once()
-        call_kwargs = mock_azure_client.call_args.kwargs
-        assert call_kwargs["azure_ad_token"] == "mock_azure_ad_token"  # noqa: S105
-        assert "api_key" not in call_kwargs
-
-    def test_managed_identity_missing_dependency(self):
-        """Test error when azure-identity not installed."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            use_managed_identity=True,
-        )
-
-        with (
-            patch.dict("sys.modules", {"azure.identity": None}),
-            pytest.raises(ImportError, match="azure-identity"),
-        ):
-            AzureOpenAIClient(spec)
-
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    def test_pre_fetched_token(self, mock_azure_client):
-        """Test authentication with pre-fetched Azure AD token."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            azure_ad_token="pre_fetched_token_123",  # noqa: S106
-        )
-
-        AzureOpenAIClient(spec)
-
-        # Verify token was used
-        call_kwargs = mock_azure_client.call_args.kwargs
-        assert call_kwargs["azure_ad_token"] == "pre_fetched_token_123"  # noqa: S105
-
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    def test_backward_compatibility_api_key(self, mock_azure_client):
-        """Test that API key authentication still works (backward compatible)."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            api_key="test_api_key",  # pragma: allowlist secret
-        )
-
-        AzureOpenAIClient(spec)
-
-        # Verify API key was used
-        call_kwargs = mock_azure_client.call_args.kwargs
-        assert call_kwargs["api_key"] == "test_api_key"  # pragma: allowlist secret
-        assert "azure_ad_token" not in call_kwargs
-
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    @patch("azure.identity.DefaultAzureCredential")
-    def test_managed_identity_authentication_failure(
-        self, mock_credential, mock_azure_client
-    ):
-        """Test error handling when Managed Identity authentication fails."""
-        # Mock credential failure
-        mock_credential.return_value.get_token.side_effect = Exception(
-            "No Managed Identity found"
-        )
-
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            use_managed_identity=True,
-        )
-
-        with pytest.raises(ValueError, match="Failed to authenticate"):
-            AzureOpenAIClient(spec)
-
-    def test_missing_azure_endpoint(self):
-        """Test error when azure_endpoint is missing."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_deployment="gpt-4",
-            use_managed_identity=True,
-        )
-
-        with pytest.raises(ValueError, match="azure_endpoint required"):
-            AzureOpenAIClient(spec)
-
-    def test_missing_azure_deployment(self):
-        """Test error when azure_deployment is missing."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            use_managed_identity=True,
-        )
-
-        with pytest.raises(ValueError, match="azure_deployment required"):
-            AzureOpenAIClient(spec)
-
-    def test_no_authentication_provided(self):
-        """Test error when no authentication method is provided."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            # No api_key, no use_managed_identity, no azure_ad_token
-        )
-
-        with pytest.raises(ValueError, match="Azure OpenAI requires either"):
-            AzureOpenAIClient(spec)
-
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    @patch("azure.identity.DefaultAzureCredential")
-    def test_priority_managed_identity_over_api_key(
-        self, mock_credential, mock_azure_client
-    ):
-        """Test that Managed Identity takes priority over API key."""
-        # Mock Azure credential and token
-        mock_token = Mock()
-        mock_token.token = "mock_azure_ad_token"  # noqa: S105
-        mock_credential.return_value.get_token.return_value = mock_token
-
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            use_managed_identity=True,
-            api_key="should_not_be_used",  # Should be ignored  # pragma: allowlist secret
-        )
-
-        AzureOpenAIClient(spec)
-
-        # Verify token was used, not API key
-        call_kwargs = mock_azure_client.call_args.kwargs
-        assert call_kwargs["azure_ad_token"] == "mock_azure_ad_token"  # noqa: S105
-        assert "api_key" not in call_kwargs
-
-    @patch("ondine.adapters.llm_client.AzureOpenAI")
-    def test_priority_token_over_api_key(self, mock_azure_client):
-        """Test that azure_ad_token takes priority over API key."""
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://test.openai.azure.com/",
-            azure_deployment="gpt-4",
-            azure_ad_token="pre_fetched_token",  # noqa: S106
-            api_key="should_not_be_used",  # Should be ignored  # pragma: allowlist secret
-        )
-
-        AzureOpenAIClient(spec)
-
-        # Verify token was used, not API key
-        call_kwargs = mock_azure_client.call_args.kwargs
-        assert call_kwargs["azure_ad_token"] == "pre_fetched_token"  # noqa: S105
-        assert "api_key" not in call_kwargs
+# NOTE: Advanced Azure Managed Identity tests removed
+# Rationale: LiteLLM handles Managed Identity natively via environment variables.
+# Users should set AZURE_AD_TOKEN environment variable for token-based auth.
+# We don't need to test DefaultAzureCredential logic - that's LiteLLM's responsibility.
