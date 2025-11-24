@@ -75,7 +75,7 @@ def test_mega_prompt_batching_complex_data(provider, model, api_key_env):
     })
 
     # Prompt for structured extraction
-    EXTRACTION_PROMPT = """Extract key product information from the description.
+    extraction_prompt = """Extract key product information from the description.
 
 Product: {{ product_description }}
 Source: {{ source }}
@@ -96,7 +96,7 @@ Extract:
             input_columns=["product_description", "source", "rating"],
             output_columns=["product_name", "category", "price_range", "keywords"]
         )
-        .with_prompt(EXTRACTION_PROMPT)
+            .with_prompt(extraction_prompt)
         .with_llm(
             provider=provider,
             model=model,

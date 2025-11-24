@@ -66,10 +66,10 @@ def test_structured_invoke_fallback(mock_openai_client):
     # Mock LLMTextCompletionProgram
     with patch(
         "llama_index.core.program.LLMTextCompletionProgram.from_defaults"
-    ) as MockProgram:
+    ) as mock_program:
         program_instance = MagicMock()
         program_instance.return_value = mock_result
-        MockProgram.return_value = program_instance
+        mock_program.return_value = program_instance
 
         # Mock estimate_tokens
         mock_openai_client.estimate_tokens = MagicMock(return_value=10)
@@ -78,7 +78,7 @@ def test_structured_invoke_fallback(mock_openai_client):
         response = mock_openai_client.structured_invoke("prompt", TestModel)
 
         # Assertions
-        MockProgram.assert_called_once_with(
+        mock_program.assert_called_once_with(
             output_cls=TestModel,
             llm=mock_openai_client.client,
             prompt_template_str="{prompt}",
