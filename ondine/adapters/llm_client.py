@@ -26,6 +26,7 @@ from llama_index.core import PromptTemplate
 from llama_index.core.llms import ChatMessage
 from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.azure_openai import AzureOpenAI
+from llama_index.llms.groq import Groq
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.openai_like import OpenAILike
 
@@ -499,32 +500,21 @@ class AnthropicClient(LLMClient):
 
 
 class GroqClient(LLMClient):
-    """Groq LLM client implementation.
-
-    Uses OpenAILike wrapper for Groq's OpenAI-compatible endpoint to avoid
-    XML-wrapping issues in LlamaIndex's native Groq structured_predict.
-    """
+    """Groq LLM client implementation."""
 
     def __init__(self, spec: LLMSpec):
-        """Initialize Groq client via OpenAILike wrapper."""
+        """Initialize Groq client."""
         super().__init__(spec)
 
         api_key = spec.api_key or os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY not found in spec or environment")
 
-        # Use OpenAILike class pointing to Groq's OpenAI-compatible endpoint
-        # This avoids the XML-wrapping bug in LlamaIndex's Groq class
-        # OpenAILike doesn't validate model names, allowing Groq-specific models
-        # See: https://github.com/run-llama/llama_index/issues/17082
-        self.client = OpenAILike(
+        self.client = Groq(
             model=spec.model,
             api_key=api_key,
-            api_base="https://api.groq.com/openai/v1",
             temperature=spec.temperature,
             max_tokens=spec.max_tokens,
-            is_chat_model=True,
-            is_function_calling_model=True,  # Enable structured output support
         )
 
         # Use tiktoken for token estimation

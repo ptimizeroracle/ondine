@@ -264,7 +264,7 @@ class TestMLXClientFactory:
             api_key="test",  # pragma: allowlist secret
         )
 
-        with patch("ondine.adapters.llm_client.OpenAILike"):
+        with patch("ondine.adapters.llm_client.Groq"):
             client = create_llm_client(spec)
             assert isinstance(client, GroqClient)
 

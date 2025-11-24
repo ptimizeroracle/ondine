@@ -209,13 +209,13 @@ class TestCustomLLMClientFactory:
             client = create_llm_client(spec_openai)
             assert isinstance(client, OpenAIClient)
 
-        # Groq (uses OpenAILike now)
+        # Groq
         spec_groq = LLMSpec(
             provider=LLMProvider.GROQ,
             model="llama-3.3-70b-versatile",
             api_key="test",  # pragma: allowlist secret
         )
-        with patch("ondine.adapters.llm_client.OpenAILike"):
+        with patch("ondine.adapters.llm_client.Groq"):
             client = create_llm_client(spec_groq)
             assert isinstance(client, GroqClient)
 
