@@ -1,6 +1,7 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import concurrent.futures
+import logging
 import time
 from decimal import Decimal
 from typing import Any
@@ -97,39 +98,63 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         progress_tracker = getattr(context, "progress_tracker", None)
         progress_task = None
         if progress_tracker:
-            total_prompts = sum(len(b.prompts) for b in batches)
+            # Calculate total rows (handle both aggregated and non-aggregated batches)
+            total_rows_for_progress = 0
+            for batch in batches:
+                if not batch.metadata:
+                    continue
+                if (
+                    batch.metadata
+                    and batch.metadata[0].custom
+                    and batch.metadata[0].custom.get("is_batch")
+                ):
+                    # Aggregated batch: use batch_size from metadata
+                    total_rows_for_progress += batch.metadata[0].custom.get(
+                        "batch_size", len(batch.metadata)
+                    )
+                else:
+                    # Non-aggregated batch: count metadata entries
+                    total_rows_for_progress += len(batch.metadata)
 
-            # Get deployment info for Router tracking
-            deployments = []
-            self._deployment_ids = []  # Store for round-robin assignment
+            # Start progress tracking if available
+            progress_tracker = getattr(context, "progress_tracker", None)
+            progress_task = None
+            self._deployment_map = {}  # Map ID -> Task ID for dynamic tracking
+            self._hash_to_friendly_id = {}  # Map LiteLLM's hash to our friendly ID
+            self._hash_to_label = {}  # Map LiteLLM's hash to display label
+            self._available_names = []  # Queue of friendly names to assign
+
+            # Initialize available names from config
             if hasattr(self.llm_client, "router") and self.llm_client.router:
-                model_list = getattr(self.llm_client.router, "model_list", None)
-                # Defensive: only iterate if model_list is a proper list/tuple
-                if model_list and isinstance(model_list, (list, tuple)):
-                    for dep in model_list:
-                        dep_id = dep.get("model_id", dep.get("model_name", "unknown"))
-                        # Extract actual model from litellm_params
-                        litellm_params = dep.get("litellm_params", {})
-                        actual_model = litellm_params.get("model", "unknown")
+                model_list = getattr(self.llm_client.router, "model_list", [])
+                for dep in model_list:
+                    # Get friendly name and model info
+                    friendly_id = dep.get("model_id", dep.get("model_name", "unknown"))
+                    litellm_params = dep.get("litellm_params", {})
+                    model = litellm_params.get("model", "unknown")
 
-                        deployments.append(
-                            {
-                                "model_id": dep_id,
-                                "name": dep.get("model_name", "unknown"),
-                                "model": actual_model,  # Add actual model for display
-                                "weight": 1.0,  # Equal weight by default
-                            }
-                        )
-                        self._deployment_ids.append(dep_id)
+                    # Create a nice label info object to store
+                    provider = model.split("/")[0] if "/" in model else ""
+                    model_short = model.split("/")[1] if "/" in model else model
+                    # Removed truncation to show full model name
 
-            progress_task = progress_tracker.start_stage(
-                f"{self.name}: {context.total_rows} rows",
-                total_rows=total_prompts,
-                deployments=deployments,  # Pass deployments for sub-progress bars
-            )
-            # Store for access in concurrent loop
-            self._current_progress_task = progress_task
-            self._progress_tracker = progress_tracker
+                    self._available_names.append(
+                        {
+                            "id": friendly_id,
+                            "label": f"{provider}/{model_short} ({friendly_id})",
+                        }
+                    )
+
+            if progress_tracker:
+                progress_task = progress_tracker.start_stage(
+                    f"{self.name}: {total_rows_for_progress:,} rows",
+                    total_rows=total_rows_for_progress,
+                    # Don't pass deployments upfront - we'll add them dynamically
+                )
+                # Store for access in concurrent loop
+                self._current_progress_task = progress_task
+                self._progress_tracker = progress_tracker
+                self._total_rows_for_progress = total_rows_for_progress
 
         # Flatten all prompts from all batches
         all_prompts, batch_map = self._flatten_batches(batches)
@@ -151,22 +176,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             else:
                 # Non-aggregated batch: count metadata entries
                 total_rows += len(batch.metadata)
-
-        # Show model info using Rich utilities (clean, beautiful output)
-        from ondine.utils.rich_utils import display_llm_invocation_start
-
-        model_display = getattr(self.llm_client, "model", "unknown")
-        router_deployments = None
-        if hasattr(self.llm_client, "router") and self.llm_client.router:
-            router_deployments = len(getattr(self.llm_client.router, "model_list", []))
-
-        display_llm_invocation_start(
-            total_rows=total_rows,
-            batch_count=len(batches),
-            concurrency=self.concurrency,
-            model=model_display,
-            router_deployments=router_deployments,
-        )
 
         # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
         all_responses = self._process_all_prompts_concurrent(
@@ -226,6 +235,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         Returns:
             List of LLMResponse objects in same order as all_prompts
         """
+        # Track actual Router distribution (deployment_id -> count)
+        deployment_distribution: dict[str, int] = {}
+
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=self.concurrency
         ) as executor:
@@ -249,28 +261,88 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 # Progress logging every 25% (only for large batches)
                 if len(futures) > 20 and (idx + 1) % max(1, len(futures) // 4) == 0:
                     progress = ((idx + 1) / len(futures)) * 100
-                    self.logger.info(
-                        f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)})"
-                    )
+
+                    # Show actual distribution at milestones
+                    if deployment_distribution:
+                        dist_summary = ", ".join(
+                            f"{dep}: {count}"
+                            for dep, count in sorted(deployment_distribution.items())
+                        )
+                        self.logger.info(
+                            f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)}) | "
+                            f"Distribution: {dist_summary}"
+                        )
+                    else:
+                        self.logger.info(
+                            f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)})"
+                        )
 
                 try:
                     response = future.result()
                     responses.append(response)
 
+                    # Extract ACTUAL deployment used by Router (not round-robin estimate)
+                    actual_deployment_id = self._extract_deployment_from_response(
+                        response
+                    )
+
+                    # Track actual distribution
+                    if actual_deployment_id:
+                        deployment_distribution[actual_deployment_id] = (
+                            deployment_distribution.get(actual_deployment_id, 0) + 1
+                        )
+
+                    # Get batch size for this request (for aggregated batches)
+                    prompt_tuple = all_prompts[idx]
+                    _, metadata, _ = prompt_tuple
+                    batch_size = 1
+                    if metadata.custom and metadata.custom.get("is_batch"):
+                        batch_size = metadata.custom.get("batch_size", 1)
+
+                    # Removed debug logging - distribution tracked in final summary
+
                     # Update progress tracker (including deployment tracking)
                     if progress_tracker and progress_task:
-                        # For Router: estimate deployment using round-robin
-                        # (actual distribution depends on routing strategy, but this gives visual feedback)
-                        deployment_id = None
-                        if hasattr(self, "_deployment_ids") and self._deployment_ids:
-                            dep_idx = idx % len(self._deployment_ids)
-                            deployment_id = self._deployment_ids[dep_idx]
+                        # Update dynamic deployment progress
+                        display_id = None
+                        if actual_deployment_id:
+                            # DYNAMIC MAPPING: Bind unknown hash to next available friendly name
+                            # This solves the "hash mismatch" problem by assigning friendly names
+                            # in order of appearance (First-Seen-First-Assigned).
+                            if actual_deployment_id not in self._hash_to_friendly_id:
+                                if self._available_names:
+                                    # Assign next available friendly name
+                                    next_friendly = self._available_names.pop(0)
+                                    self._hash_to_friendly_id[actual_deployment_id] = (
+                                        next_friendly["id"]
+                                    )
+                                    self._hash_to_label[actual_deployment_id] = (
+                                        next_friendly["label"]
+                                    )
 
+                            # Now look up the friendly info
+                            display_id = self._hash_to_friendly_id.get(
+                                actual_deployment_id, actual_deployment_id
+                            )
+                            label_info = self._hash_to_label.get(
+                                actual_deployment_id, ""
+                            )
+
+                            # Ensure deployment task exists
+                            progress_tracker.ensure_deployment_task(
+                                progress_task,
+                                display_id,
+                                total_rows=self._total_rows_for_progress
+                                // 3,  # Estimate
+                                label_info=label_info,
+                            )
+
+                        # Update progress ONCE (updates both main bar and deployment bar)
                         progress_tracker.update(
                             progress_task,
-                            advance=1,
+                            advance=batch_size,
                             cost=response.cost,
-                            deployment_id=deployment_id,
+                            deployment_id=display_id,
                         )
 
                     # Update context with actual row count
@@ -344,7 +416,87 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             remaining_future.cancel()
                         raise
 
+            # Final distribution summary (INFO level - always visible)
+            if hasattr(self.llm_client, "router") and self.llm_client.router:
+                self.logger.info("=" * 70)
+
+                if deployment_distribution:
+                    # We have actual deployment data
+                    self.logger.info("Router Distribution Summary (ACTUAL):")
+                    total_requests = sum(deployment_distribution.values())
+
+                    # Calculate total rows processed (accounting for batch aggregation)
+                    total_rows_processed = 0
+                    for idx, (_, metadata, _) in enumerate(all_prompts):
+                        if metadata.custom and metadata.custom.get("is_batch"):
+                            total_rows_processed += metadata.custom.get("batch_size", 1)
+                        else:
+                            total_rows_processed += 1
+
+                    for dep_id in sorted(deployment_distribution.keys()):
+                        count = deployment_distribution[dep_id]
+                        percentage = (
+                            (count / total_requests) * 100 if total_requests > 0 else 0
+                        )
+                        self.logger.info(
+                            f"  • {dep_id}: {count}/{total_requests} requests ({percentage:.1f}%)"
+                        )
+
+                    self.logger.info(f"Total API calls: {total_requests}")
+                    self.logger.info(f"Total rows processed: {total_rows_processed}")
+                else:
+                    # No deployment data available
+                    self.logger.info("Router Distribution Summary:")
+                    self.logger.info(
+                        "  ⚠️  Could not extract deployment info from LiteLLM responses"
+                    )
+                    self.logger.info(f"  Total API calls: {len(all_prompts)}")
+                    self.logger.info(
+                        "  Note: Progress bars show estimated distribution (round-robin)"
+                    )
+
+                self.logger.info("=" * 70)
+
             return responses
+
+    def _extract_deployment_from_response(self, response: Any) -> str | None:
+        """
+        Extract actual deployment ID from LiteLLM response.
+
+        LiteLLM Router stores the chosen deployment in response metadata.
+        We check multiple possible locations for maximum compatibility.
+
+        Args:
+            response: LLMResponse object from invoke
+
+        Returns:
+            Deployment ID string or None if not available
+        """
+        try:
+            # Method 1: Check if response has Router metadata (LLMResponse.metadata)
+            if hasattr(response, "metadata") and isinstance(response.metadata, dict):
+                # Check for model_id in metadata (added by some Router strategies)
+                if "model_id" in response.metadata:
+                    return response.metadata["model_id"]
+
+            # Method 2: Check model field (Router sometimes sets this to deployment ID)
+            if hasattr(response, "model") and response.model:
+                # If router is active, model might be deployment ID
+                if hasattr(self.llm_client, "router") and self.llm_client.router:
+                    # Check if model matches any deployment ID
+                    if (
+                        hasattr(self, "_deployment_ids")
+                        and response.model in self._deployment_ids
+                    ):
+                        return response.model
+
+            # Method 3: Fallback - no deployment info available
+            # This happens when Router is not used or deployment tracking is disabled
+            return None
+
+        except Exception:
+            # Defensive: never crash on metadata extraction
+            return None
 
     def _reconstruct_batches(
         self,

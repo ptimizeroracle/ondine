@@ -281,6 +281,21 @@ class UnifiedLiteLLMClient(LLMClient):
         # Calculate cost (LiteLLM has pricing DB) - pass response object for accurate cost
         cost = self._calc_cost_from_response(response)
 
+        # Extract Router deployment info (if available)
+        # LiteLLM Router stores actual deployment ID in _hidden_params
+        metadata = {}
+        if self.router:
+            # Try multiple methods to extract deployment info
+            if hasattr(response, "_hidden_params") and response._hidden_params:
+                hidden = response._hidden_params
+                if isinstance(hidden, dict):
+                    # Method 1: model_id field
+                    if "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
+                    # Method 2: model_region or custom_llm_provider
+                    elif "model_region" in hidden:
+                        metadata["model_id"] = hidden["model_region"]
+
         return LLMResponse(
             text=text,
             tokens_in=tokens_in,
@@ -288,6 +303,7 @@ class UnifiedLiteLLMClient(LLMClient):
             model=self.model,
             cost=cost,
             latency_ms=latency_ms,
+            metadata=metadata,  # Pass deployment info to stage
         )
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
@@ -456,6 +472,20 @@ class UnifiedLiteLLMClient(LLMClient):
 
         cost = self._calc_cost(tokens_in, tokens_out)
 
+        # Extract Router deployment info (Instructor path)
+        # NOTE: Instructor wraps the response, so _hidden_params may not be accessible
+        metadata = {}
+        if self.router:
+            # Try to access underlying completion response
+            if hasattr(result, "_raw_response"):
+                raw = result._raw_response
+                if hasattr(raw, "_hidden_params") and raw._hidden_params:
+                    hidden = raw._hidden_params
+                    if isinstance(hidden, dict):
+                        # Extract model_id from Router response
+                        if "model_id" in hidden:
+                            metadata["model_id"] = hidden["model_id"]
+
         return LLMResponse(
             text=text,
             tokens_in=tokens_in,
@@ -464,4 +494,5 @@ class UnifiedLiteLLMClient(LLMClient):
             cost=cost,
             latency_ms=latency_ms,
             structured_result=result,  # CRITICAL: Keep Pydantic object (avoids re-parsing!)
+            metadata=metadata,  # Pass deployment info
         )

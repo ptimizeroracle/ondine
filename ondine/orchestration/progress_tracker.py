@@ -121,6 +121,7 @@ class RichProgressTracker(ProgressTracker):
         """Initialize rich progress tracker."""
         from rich.progress import (
             BarColumn,
+            MofNCompleteColumn,
             Progress,
             SpinnerColumn,
             TaskProgressColumn,
@@ -133,7 +134,8 @@ class RichProgressTracker(ProgressTracker):
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
             BarColumn(),
-            TaskProgressColumn(),
+            MofNCompleteColumn(),  # Shows "completed/total" (e.g., "120/1200")
+            TaskProgressColumn(),  # Shows percentage
             TimeRemainingColumn(),
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
@@ -202,6 +204,46 @@ class RichProgressTracker(ProgressTracker):
         self.progress.refresh()
 
         return stage_name
+
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
+        """Dynamically add a deployment task if it doesn't exist."""
+        # Initialize dictionary if needed
+        if stage_name not in self.deployment_tasks:
+            self.deployment_tasks[stage_name] = {}
+            self.deployment_stats[stage_name] = {}
+
+        # If task doesn't exist, create it
+        if deployment_id not in self.deployment_tasks[stage_name]:
+            # Use provided label info (e.g. "groq/llama-3...") or format the ID
+            if label_info:
+                # Use full label without truncation
+                label = f"   ├─ {label_info}"
+            else:
+                # Create clean label from ID
+                if len(deployment_id) > 30 and " " not in deployment_id:
+                    # Likely a hash - show shortened version
+                    short_id = deployment_id[:8]
+                    label = f"   ├─ Deployment ({short_id}...)"
+                else:
+                    # Friendly name or short ID
+                    label = (
+                        f"   ├─ {deployment_id[:30]}..."
+                        if len(deployment_id) > 33
+                        else f"   ├─ {deployment_id}"
+                    )
+
+            dep_task_id = self.progress.add_task(
+                label,
+                total=total_rows,
+                cost=0.0,
+            )
+            self.deployment_tasks[stage_name][deployment_id] = dep_task_id
+            self.deployment_stats[stage_name][deployment_id] = 0
+
+            # Refresh to show new bar
+            self.progress.refresh()
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         """Update progress bar, including deployment-specific tracking."""
