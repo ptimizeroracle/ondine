@@ -158,8 +158,11 @@ JSON Array:"""
                 else:
                     # Architecture B: Flat structure - wrap in result
                     # Extract id, put everything else in result
-                    item_id = item.pop("id")
-                    items.append(BatchItem(id=item_id, result=item))
+                    item_copy = dict(item)  # Don't mutate original
+                    item_id = item_copy.pop("id")
+                    # If no other fields, result is None (not empty dict)
+                    result_data = item_copy if item_copy else None
+                    items.append(BatchItem(id=item_id, result=result_data))
             
             batch_result = BatchResult(results=items)
         except Exception as e:

@@ -410,7 +410,7 @@ class UnifiedLiteLLMClient(LLMClient):
         except Exception as e:
             raise ValueError(f"Structured prediction failed: {e}") from e
 
-        # Serialize
+        # Serialize for backward compatibility (text field)
         text = result.model_dump_json()
 
         # Estimate tokens (Instructor doesn't expose usage)
@@ -432,4 +432,5 @@ class UnifiedLiteLLMClient(LLMClient):
             model=self.model,
             cost=cost,
             latency_ms=latency_ms,
+            structured_result=result,  # CRITICAL: Keep Pydantic object (avoids re-parsing!)
         )

@@ -25,6 +25,7 @@ class LLMResponse:
     cost: Decimal
     latency_ms: float
     metadata: dict[str, Any] = field(default_factory=dict)
+    structured_result: Any = None  # Optional: Pydantic object for structured output (avoids serialize/parse cycle)
 
 
 @dataclass

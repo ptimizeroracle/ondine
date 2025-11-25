@@ -271,14 +271,23 @@ class TestUnifiedLiteLLMClient:
 
     def test_calc_cost_with_litellm(self):
         """Test cost calculation uses LiteLLM's pricing DB."""
-        spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-test")
+        spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-test")  # pragma: allowlist secret
+
+        # Create fake response object
+        from litellm import ModelResponse, Choices, Message, Usage
+        fake_response = ModelResponse(
+            id="test",
+            choices=[Choices(finish_reason="stop", index=0, message=Message(content="test", role="assistant"))],
+            model="gpt-4o-mini",
+            usage=Usage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+        )
 
         with patch(
             "ondine.adapters.unified_litellm_client.litellm.completion_cost",
             return_value=0.1234,
         ):
             client = UnifiedLiteLLMClient(spec)
-            cost = client._calc_cost(100, 50)
+            cost = client._calc_cost_from_response(fake_response)
 
             assert cost == Decimal("0.1234")
 
