@@ -87,7 +87,7 @@ class BatchResult(BaseModel):
         Returns:
             List of result strings in ID order.
             - None results are converted to empty string ""
-            - Dict/list results are JSON-serialized
+            - Dict/list results are JSON-serialized (with id injected)
             - Other types are converted to string
         """
         # Sort by ID
@@ -98,7 +98,12 @@ class BatchResult(BaseModel):
         for item in sorted_results:
             if item.result is None:
                 output.append("")
-            elif isinstance(item.result, (dict, list)):
+            elif isinstance(item.result, dict):
+                # Inject id into result dict for downstream parsing
+                # This preserves id as a field in the final DataFrame
+                result_with_id = {"id": item.id, **item.result}
+                output.append(json.dumps(result_with_id))
+            elif isinstance(item.result, list):
                 output.append(json.dumps(item.result))
             else:
                 output.append(str(item.result))
