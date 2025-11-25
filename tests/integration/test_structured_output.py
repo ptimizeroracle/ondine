@@ -36,12 +36,12 @@ class BaconBatch(BaseModel):
 def test_structured_output_e2e(provider, model, api_key_env, base_url):
     """
     E2E test for structured output across multiple providers using Instructor.
-    
+
     Tests UnifiedLiteLLMClient with Instructor auto-detection:
     - OpenAI: Instructor with Mode.TOOLS (function calling)
     - Groq: Instructor with Mode.JSON (JSON mode, no XML issues!)
     - Anthropic: Instructor with Mode.TOOLS (Claude function calling)
-    
+
     Requires respective API keys in environment.
     """
     api_key = os.getenv(api_key_env)
@@ -51,7 +51,7 @@ def test_structured_output_e2e(provider, model, api_key_env, base_url):
     # Create dummy data
     df = pd.DataFrame(
         {
-        "DISTRB_ITM_DESC": ["BACON 15 LB", "BACON SLICED"],
+            "DISTRB_ITM_DESC": ["BACON 15 LB", "BACON SLICED"],
             "DISTRB_PACK_SZ": ["15 LB", "15 LB"],
         }
     )
@@ -116,7 +116,7 @@ CRITICAL: Parse the package size number from DISTRB_PACK_SZ field.""")
     assert "BACON" in result.data["cleaned_description"].iloc[0].upper(), (
         f"{provider} failed to extract description correctly"
     )
-    
+
     # Print results for manual inspection
     print(f"\n{provider.upper()} E2E Results:")
     print(result.data[["cleaned_description", "pack_size"]])

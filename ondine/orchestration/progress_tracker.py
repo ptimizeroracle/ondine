@@ -96,6 +96,7 @@ class RichProgressTracker(ProgressTracker):
     - Automatic ETA and throughput calculation
     - Color-coded output
     - Cost tracking per stage
+    - Router deployment tracking (sub-progress per deployment)
     - Thread-safe for concurrent execution
 
     Requires:
@@ -110,7 +111,7 @@ class RichProgressTracker(ProgressTracker):
 
             for i in range(1000):
                 process_row(i)
-                tracker.update(task, advance=1, cost=0.001)
+                tracker.update(task, advance=1, cost=0.001, deployment_id="groq-key-1")
 
             tracker.finish(task)
         ```
@@ -137,21 +138,73 @@ class RichProgressTracker(ProgressTracker):
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
             expand=True,
+            auto_refresh=False,  # Disable auto-refresh to control rendering
         )
         self.tasks: dict[str, Any] = {}
 
+        # Router deployment tracking
+        self.deployment_tasks: dict[
+            str, dict[str, Any]
+        ] = {}  # stage -> {deployment_id: task_id}
+        self.deployment_stats: dict[
+            str, dict[str, int]
+        ] = {}  # stage -> {deployment_id: count}
+
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
         """Start tracking a stage with rich progress bar."""
+        # Add main task
         task_id = self.progress.add_task(
             f"🚀 {stage_name}",
             total=total_rows,
             cost=metadata.get("cost", 0.0),
         )
         self.tasks[stage_name] = task_id
-        return stage_name  # Use stage_name as task_id for simplicity
+
+        # Initialize deployment tracking for this stage
+        deployments = metadata.get("deployments", [])
+        if deployments:
+            self.deployment_tasks[stage_name] = {}
+            self.deployment_stats[stage_name] = {}
+
+            # Calculate rows per deployment (weighted distribution)
+            weights = [d.get("weight", 1.0) for d in deployments]
+            total_weight = sum(weights)
+
+            # Add ALL deployment bars
+            for deployment in deployments:
+                dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
+                weight = deployment.get("weight", 1.0)
+                dep_rows = int(total_rows * (weight / total_weight))
+
+                # Build label: "key-id (provider/model)"
+                model = deployment.get("model", "")
+                if model:
+                    # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+                    provider = model.split("/")[0] if "/" in model else ""
+                    model_short = model.split("/")[1] if "/" in model else model
+                    # Truncate long model names
+                    if len(model_short) > 25:
+                        model_short = model_short[:22] + "..."
+                    label = f"   ├─ {dep_id} ({provider}/{model_short})"
+                else:
+                    label = f"   ├─ {dep_id}"
+
+                # Create sub-task for this deployment
+                dep_task_id = self.progress.add_task(
+                    label,
+                    total=dep_rows,
+                    cost=0.0,
+                )
+                self.deployment_tasks[stage_name][dep_id] = dep_task_id
+                self.deployment_stats[stage_name][dep_id] = 0
+
+        # Manual refresh to show all bars at once
+        self.progress.refresh()
+
+        return stage_name
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
-        """Update progress bar."""
+        """Update progress bar, including deployment-specific tracking."""
         if task_id not in self.tasks:
             return
 
@@ -160,7 +213,6 @@ class RichProgressTracker(ProgressTracker):
         # Update cost if provided
         update_kwargs = {"advance": advance}
         if "cost" in metadata:
-            # Get current cost and add new cost
             task = self.progress.tasks[rich_task_id]
             current_cost = task.fields.get("cost", 0.0)
             new_cost = float(current_cost) + float(metadata["cost"])
@@ -168,11 +220,27 @@ class RichProgressTracker(ProgressTracker):
 
         self.progress.update(rich_task_id, **update_kwargs)
 
+        # Update deployment-specific progress if provided
+        deployment_id = metadata.get("deployment_id")
+        if deployment_id and task_id in self.deployment_tasks:
+            if deployment_id in self.deployment_tasks[task_id]:
+                dep_task_id = self.deployment_tasks[task_id][deployment_id]
+                self.progress.update(dep_task_id, advance=advance)
+                self.deployment_stats[task_id][deployment_id] += advance
+
+        # Manual refresh since auto_refresh is disabled
+        self.progress.refresh()
+
     def finish(self, task_id: str) -> None:
         """Mark task as complete."""
         if task_id in self.tasks:
             rich_task_id = self.tasks[task_id]
             self.progress.update(rich_task_id, completed=True)
+
+            # Also complete deployment sub-tasks
+            if task_id in self.deployment_tasks:
+                for dep_task_id in self.deployment_tasks[task_id].values():
+                    self.progress.update(dep_task_id, completed=True)
 
     def __enter__(self) -> "RichProgressTracker":
         """Start progress display."""

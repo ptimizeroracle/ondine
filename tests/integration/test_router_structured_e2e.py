@@ -55,7 +55,11 @@ def test_router_with_structured_output_groq_openai():
     # This is EXACTLY like bacon cleaner (with batch processing!)
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["question"], output_columns=["id", "answer", "confidence"])
+        .from_dataframe(
+            df,
+            input_columns=["question"],
+            output_columns=["id", "answer", "confidence"],
+        )
         .with_prompt("Answer the question: {{ question }}")
         .with_batch_size(2)  # CRITICAL: Enable batch processing!
         .with_router(
@@ -99,15 +103,17 @@ def test_router_with_structured_output_groq_openai():
     # Verify
     assert result.success, "Pipeline should succeed"
     assert len(result.data) == 2, "Should process all rows"
-    
+
     # Check required fields
     assert "id" in result.data.columns, "Should have id column"
     assert "answer" in result.data.columns, "Should have answer column"
     assert "confidence" in result.data.columns, "Should have confidence column"
-    
+
     assert result.data["id"].notnull().all(), "All IDs should be non-null"
     assert result.data["answer"].notnull().all(), "All answers should be non-null"
-    assert result.data["confidence"].notnull().all(), "All confidence scores should be non-null"
+    assert result.data["confidence"].notnull().all(), (
+        "All confidence scores should be non-null"
+    )
 
     print("\n✅ Router + Structured Output E2E:")
     print(result.data)
@@ -131,7 +137,9 @@ def test_router_structured_output_groq_only():
 
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["q"], output_columns=["answer", "confidence"])
+        .from_dataframe(
+            df, input_columns=["q"], output_columns=["answer", "confidence"]
+        )
         .with_prompt("{q}")
         .with_router(
             model_list=[
@@ -178,7 +186,9 @@ def test_router_structured_large_batch():
 
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["question"], output_columns=["answer", "confidence"])
+        .from_dataframe(
+            df, input_columns=["question"], output_columns=["answer", "confidence"]
+        )
         .with_prompt("{{ question }}")
         .with_router(
             model_list=[
@@ -215,4 +225,3 @@ def test_router_structured_large_batch():
     print(f"\n✅ Router + Structured Batch ({len(result.data)} rows):")
     print(f"💰 Cost: ${result.costs.total_cost:.4f}")
     print(f"📊 Rows/call: {len(result.data)}")
-

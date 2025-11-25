@@ -19,7 +19,7 @@ class RouterStrategy(str, Enum):
     SIMPLE_SHUFFLE = "simple-shuffle"
     """
     Random selection with equal probability.
-    
+
     Best for: General use, testing
     Use when: You want basic load balancing without optimization
     """
@@ -28,7 +28,7 @@ class RouterStrategy(str, Enum):
     LATENCY_BASED = "latency-based-routing"
     """
     Routes to deployment with lowest average latency.
-    
+
     Best for: Latency-sensitive applications
     Use when: Response time is critical
     Requires: Redis for distributed latency tracking
@@ -37,7 +37,7 @@ class RouterStrategy(str, Enum):
     USAGE_BASED = "usage-based-routing"
     """
     Routes to deployment with lowest usage/load.
-    
+
     Best for: Balanced utilization
     Use when: You want to avoid overloading any single deployment
     Requires: Redis for distributed usage tracking
@@ -47,7 +47,7 @@ class RouterStrategy(str, Enum):
     COST_BASED = "cost-based-routing"
     """
     Routes to cheapest deployment based on LiteLLM's cost database.
-    
+
     Best for: Cost optimization
     Use when: Minimizing API costs is priority
     Note: Costs must be defined in LiteLLM or model_list
@@ -57,7 +57,7 @@ class RouterStrategy(str, Enum):
     LEAST_BUSY = "least-busy"
     """
     Routes to deployment with fewest active requests.
-    
+
     Best for: Real-time load balancing
     Use when: Deployments have different capacities
     Requires: Redis for distributed state
@@ -66,7 +66,7 @@ class RouterStrategy(str, Enum):
     WEIGHTED_PICK = "weighted-pick"
     """
     Routes based on weights assigned to each deployment.
-    
+
     Best for: Custom traffic distribution (e.g., 80% Groq, 20% OpenAI)
     Use when: You want explicit control over traffic split
     Note: Set "weight" in each model's litellm_params
@@ -76,7 +76,7 @@ class RouterStrategy(str, Enum):
     USAGE_BASED_ROUTING_V2 = "usage-based-routing-v2"
     """
     Improved usage-based routing with better load distribution.
-    
+
     Best for: Production workloads with multiple deployments
     Use when: You need sophisticated load balancing
     Requires: Redis for state
@@ -95,4 +95,3 @@ Available Router Strategies:
 
 See: https://docs.litellm.ai/docs/routing
 """
-

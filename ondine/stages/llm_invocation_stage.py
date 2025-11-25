@@ -98,12 +98,36 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         progress_task = None
         if progress_tracker:
             total_prompts = sum(len(b.prompts) for b in batches)
+
+            # Get deployment info for Router tracking
+            deployments = []
+            self._deployment_ids = []  # Store for round-robin assignment
+            if hasattr(self.llm_client, "router") and self.llm_client.router:
+                model_list = getattr(self.llm_client.router, "model_list", [])
+                for dep in model_list:
+                    dep_id = dep.get("model_id", dep.get("model_name", "unknown"))
+                    # Extract actual model from litellm_params
+                    litellm_params = dep.get("litellm_params", {})
+                    actual_model = litellm_params.get("model", "unknown")
+
+                    deployments.append(
+                        {
+                            "model_id": dep_id,
+                            "name": dep.get("model_name", "unknown"),
+                            "model": actual_model,  # Add actual model for display
+                            "weight": 1.0,  # Equal weight by default
+                        }
+                    )
+                    self._deployment_ids.append(dep_id)
+
             progress_task = progress_tracker.start_stage(
                 f"{self.name}: {context.total_rows} rows",
                 total_rows=total_prompts,
+                deployments=deployments,  # Pass deployments for sub-progress bars
             )
             # Store for access in concurrent loop
             self._current_progress_task = progress_task
+            self._progress_tracker = progress_tracker
 
         # Flatten all prompts from all batches
         all_prompts, batch_map = self._flatten_batches(batches)
@@ -126,9 +150,20 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 # Non-aggregated batch: count metadata entries
                 total_rows += len(batch.metadata)
 
-        self.logger.info(
-            f"Processing {total_rows:,} rows in {len(batches)} API calls "
-            f"({self.concurrency} concurrent)"
+        # Show model info using Rich utilities (clean, beautiful output)
+        from ondine.utils.rich_utils import display_llm_invocation_start
+
+        model_display = getattr(self.llm_client, "model", "unknown")
+        router_deployments = None
+        if hasattr(self.llm_client, "router") and self.llm_client.router:
+            router_deployments = len(getattr(self.llm_client.router, "model_list", []))
+
+        display_llm_invocation_start(
+            total_rows=total_rows,
+            batch_count=len(batches),
+            concurrency=self.concurrency,
+            model=model_display,
+            router_deployments=router_deployments,
         )
 
         # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
@@ -220,10 +255,20 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                     response = future.result()
                     responses.append(response)
 
-                    # Update progress tracker
+                    # Update progress tracker (including deployment tracking)
                     if progress_tracker and progress_task:
+                        # For Router: estimate deployment using round-robin
+                        # (actual distribution depends on routing strategy, but this gives visual feedback)
+                        deployment_id = None
+                        if hasattr(self, "_deployment_ids") and self._deployment_ids:
+                            dep_idx = idx % len(self._deployment_ids)
+                            deployment_id = self._deployment_ids[dep_idx]
+
                         progress_tracker.update(
-                            progress_task, advance=1, cost=response.cost
+                            progress_task,
+                            advance=1,
+                            cost=response.cost,
+                            deployment_id=deployment_id,
                         )
 
                     # Update context with actual row count

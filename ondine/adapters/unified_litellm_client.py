@@ -92,11 +92,25 @@ class UnifiedLiteLLMClient(LLMClient):
 
         self.api_key = spec.api_key
 
-        # Suppress LiteLLM noise
+        # Suppress LiteLLM noise and async cleanup warnings
         litellm.suppress_debug_info = True
         litellm.drop_params = True
-        logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+        litellm.set_verbose = False  # CRITICAL: Disable ALL LiteLLM internal logging
+        logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
+        logging.getLogger("LiteLLM Router").setLevel(logging.CRITICAL)
+        logging.getLogger("LiteLLM Proxy").setLevel(logging.CRITICAL)
         logging.getLogger("httpx").setLevel(logging.ERROR)
+
+        # Suppress harmless async cleanup warnings that occur on script exit
+        # (LiteLLM spawns background tasks that may not complete before event loop closes)
+        import warnings
+
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+        warnings.filterwarnings("ignore", message=".*coroutine.*never awaited.*")
+
+        # Suppress asyncio SSL transport errors (harmless cleanup noise)
+        logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
         # Router support (optional)
         self.router = None
@@ -104,28 +118,90 @@ class UnifiedLiteLLMClient(LLMClient):
             self._init_router(spec.router_config)
 
         # Initialize Instructor client ONCE (not per-call!)
+        # Auto-detect mode based on provider:
+        # - Groq: Use JSON mode (function calling is unreliable, generates XML)
+        # - OpenAI/Anthropic: Use TOOLS mode (native function calling)
+        # - Default: JSON mode (safest fallback)
         completion_func = (
             self.router.acompletion if self.router else litellm.acompletion
         )
-        self.instructor_client = instructor.from_litellm(completion_func)
+
+        # Detect provider from model string
+        model_lower = self.model.lower()
+        if "groq" in model_lower:
+            instructor_mode = instructor.Mode.JSON
+            logger.debug("Using Instructor JSON mode for Groq (avoids XML issues)")
+        elif any(p in model_lower for p in ["gpt", "openai", "claude", "anthropic"]):
+            instructor_mode = instructor.Mode.TOOLS
+            logger.debug("Using Instructor TOOLS mode for OpenAI/Anthropic")
+        else:
+            instructor_mode = instructor.Mode.JSON  # Safest default
+            logger.debug("Using Instructor JSON mode (default)")
+
+        self.instructor_client = instructor.from_litellm(
+            completion_func, mode=instructor_mode
+        )
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")
 
     def _init_router(self, config: dict):
-        """Initialize LiteLLM Router - just pass config through."""
+        """
+        Initialize LiteLLM Router - generic wrapper behavior.
+
+        Safety checks:
+        - All deployments must share the same model_name (required for load balancing)
+        - Maps 'debug' config to LiteLLM's 'set_verbose'
+        """
         from litellm import Router
 
+        from ondine.utils.rich_utils import display_router_deployments
+
         try:
+            # Validate all deployments share same model_name (required for Router load balancing)
+            model_names = {m["model_name"] for m in config["model_list"]}
+            if len(model_names) != 1:
+                raise ValueError(
+                    f"Router requires all deployments to share the same model_name. "
+                    f"Found {len(model_names)} different names: {model_names}. "
+                    f"Use unique 'model_id' for tracking instead."
+                )
+
             # Map our 'debug' to LiteLLM's 'set_verbose'
             router_kwargs = dict(config)
-            if router_kwargs.pop("debug", False):
+            verbose_mode = router_kwargs.pop("debug", False)
+            if verbose_mode:
                 router_kwargs["set_verbose"] = True
 
             self.router = Router(**router_kwargs)
-            self.model = config["model_list"][0][
-                "model_name"
-            ]  # Use router's model_name
-            logger.info(f"Router initialized: {len(config['model_list'])} deployments")
+            self.model = model_names.pop()  # Use shared model_name
+
+            # Display Router info using Rich utilities
+            strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
+            display_router_deployments(
+                model_name=self.model,
+                strategy=strategy,
+                deployments=config["model_list"],
+                verbose=verbose_mode or router_kwargs.get("set_verbose", False),
+            )
+
+            # ============================================================
+            # CRITICAL: Aggressively suppress Router's internal JSON logging
+            # ============================================================
+            router_logger = logging.getLogger("LiteLLM Router")
+            router_logger.setLevel(logging.CRITICAL)
+            router_logger.propagate = False
+
+            # Suppress litellm's underlying logger
+            litellm_logger = logging.getLogger("litellm")
+            litellm_logger.setLevel(logging.CRITICAL)
+            litellm_logger.propagate = False
+
+            # Remove all handlers to prevent JSON dumps
+            for handler in router_logger.handlers[:]:
+                router_logger.removeHandler(handler)
+            for handler in litellm_logger.handlers[:]:
+                litellm_logger.removeHandler(handler)
+            # ============================================================
         except Exception as e:
             logger.error(f"Router init failed: {e}")
             self.router = None
@@ -143,10 +219,14 @@ class UnifiedLiteLLMClient(LLMClient):
         call_kwargs = {
             "model": self.model,
             "messages": messages,
-            "api_key": self.api_key,  # Pass key directly (no env var!)
             "temperature": self.spec.temperature,
             "max_tokens": self.spec.max_tokens,
         }
+
+        # CRITICAL: Only pass api_key if NOT using Router
+        # Router has keys embedded in its model_list config!
+        if not self.router and self.api_key:
+            call_kwargs["api_key"] = self.api_key
 
         # Add api_base if custom endpoint
         if hasattr(self.spec, "base_url") and self.spec.base_url:
@@ -202,7 +282,16 @@ class UnifiedLiteLLMClient(LLMClient):
             return future.result()
 
     def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
-        """Calculate cost - try LiteLLM first, fallback to spec."""
+        """
+        Calculate cost using actual token counts from API response.
+
+        Framework-wide behavior:
+        1. Uses LiteLLM's built-in pricing DB (100+ providers)
+        2. Falls back to manual calculation if pricing available in spec
+        3. Returns $0 if neither available (prevents pipeline errors)
+
+        Pipelines consume response.cost without needing to know calculation method.
+        """
         try:
             # LiteLLM has pricing for most models
             cost = litellm.completion_cost(
@@ -212,7 +301,7 @@ class UnifiedLiteLLMClient(LLMClient):
             )
             return Decimal(str(cost)) if cost else Decimal("0")
         except Exception:
-            # Fallback to manual if specified
+            # Fallback to manual calculation if specified in spec
             if (
                 self.spec.input_cost_per_1k_tokens
                 and self.spec.output_cost_per_1k_tokens
@@ -224,6 +313,7 @@ class UnifiedLiteLLMClient(LLMClient):
                     Decimal(tokens_out / 1000) * self.spec.output_cost_per_1k_tokens
                 )
                 return input_cost + output_cost
+            # Return $0 if pricing unavailable (avoids breaking pipelines)
             return Decimal("0")
 
     def estimate_tokens(self, text: str) -> int:
@@ -275,11 +365,22 @@ class UnifiedLiteLLMClient(LLMClient):
             "model": self.model,
             "messages": messages,
             "response_model": output_cls,
-            "api_key": self.api_key,  # Pass key directly
             "temperature": self.spec.temperature,
             "max_tokens": self.spec.max_tokens,
-            "max_retries": 1,  # Ondine handles retries at pipeline level
         }
+
+        # CRITICAL: Only pass api_key if NOT using Router
+        # Router has keys embedded in its model_list config!
+        if not self.router and self.api_key:
+            call_kwargs["api_key"] = self.api_key
+
+        # Retry strategy: Default to 1 (Ondine handles retries at pipeline level)
+        # Allow override via extra_params if needed
+        call_kwargs["max_retries"] = (
+            self.spec.extra_params.get("max_retries", 1)
+            if hasattr(self.spec, "extra_params") and self.spec.extra_params
+            else 1
+        )
 
         if hasattr(self.spec, "base_url") and self.spec.base_url:
             call_kwargs["api_base"] = self.spec.base_url

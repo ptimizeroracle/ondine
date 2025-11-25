@@ -56,7 +56,7 @@ class TestUnifiedLiteLLMClient:
         spec = LLMSpec(
             provider="litellm",  # Generic provider - model string determines actual provider
             model="openai/gpt-4o-mini",
-            api_key="sk-test",
+            api_key="sk-test",  # pragma: allowlist secret
             temperature=0.7,
             max_tokens=100,
         )
@@ -156,10 +156,10 @@ class TestUnifiedLiteLLMClient:
         fake_response = FakeResponse()
 
         # Patch Router from litellm, not from unified_litellm_client
-        with patch("litellm.Router") as MockRouter:
+        with patch("litellm.Router") as mock_router:
             mock_router_instance = Mock()
             mock_router_instance.acompletion = AsyncMock(return_value=fake_response)
-            MockRouter.return_value = mock_router_instance
+            mock_router.return_value = mock_router_instance
 
             client = UnifiedLiteLLMClient(spec)
             await client.ainvoke("test")
@@ -171,31 +171,31 @@ class TestUnifiedLiteLLMClient:
     def test_invoke_script_mode(self):
         """Test invoke() works in script mode (no running loop)."""
         spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-test")
-        fake_response = FakeResponse("script response")
+        FakeResponse("script response")
 
         # Mock get_running_loop to raise RuntimeError (no loop)
-        with patch(
-            "ondine.adapters.unified_litellm_client.asyncio.get_running_loop",
-            side_effect=RuntimeError("no running loop"),
+        with (
+            patch(
+                "ondine.adapters.unified_litellm_client.asyncio.get_running_loop",
+                side_effect=RuntimeError("no running loop"),
+            ),
+            patch("ondine.adapters.unified_litellm_client.asyncio.run") as mock_run,
         ):
-            with patch(
-                "ondine.adapters.unified_litellm_client.asyncio.run"
-            ) as mock_run:
-                mock_run.return_value = LLMResponse(
-                    text="script response",
-                    tokens_in=10,
-                    tokens_out=5,
-                    model="openai/gpt-4o-mini",
-                    cost=Decimal("0.01"),
-                    latency_ms=100,
-                )
+            mock_run.return_value = LLMResponse(
+                text="script response",
+                tokens_in=10,
+                tokens_out=5,
+                model="openai/gpt-4o-mini",
+                cost=Decimal("0.01"),
+                latency_ms=100,
+            )
 
-                client = UnifiedLiteLLMClient(spec)
-                result = client.invoke("test")
+            client = UnifiedLiteLLMClient(spec)
+            result = client.invoke("test")
 
-                # Verify asyncio.run was called (script mode)
-                mock_run.assert_called_once()
-                assert result.text == "script response"
+            # Verify asyncio.run was called (script mode)
+            mock_run.assert_called_once()
+            assert result.text == "script response"
 
     def test_invoke_jupyter_mode(self):
         """Test invoke() works in Jupyter mode (running loop exists)."""
@@ -212,25 +212,27 @@ class TestUnifiedLiteLLMClient:
             latency_ms=100,
         )
 
-        with patch(
-            "ondine.adapters.unified_litellm_client.asyncio.get_running_loop",
-            return_value=mock_loop,
-        ):
-            with patch(
+        with (
+            patch(
+                "ondine.adapters.unified_litellm_client.asyncio.get_running_loop",
+                return_value=mock_loop,
+            ),
+            patch(
                 "ondine.adapters.unified_litellm_client.asyncio.run_coroutine_threadsafe"
-            ) as mock_threadsafe:
-                # Mock the future result
-                mock_future = Mock()
-                mock_future.result.return_value = expected_response
-                mock_threadsafe.return_value = mock_future
+            ) as mock_threadsafe,
+        ):
+            # Mock the future result
+            mock_future = Mock()
+            mock_future.result.return_value = expected_response
+            mock_threadsafe.return_value = mock_future
 
-                client = UnifiedLiteLLMClient(spec)
-                result = client.invoke("test")
+            client = UnifiedLiteLLMClient(spec)
+            result = client.invoke("test")
 
-                # Verify run_coroutine_threadsafe was used (Jupyter mode)
-                mock_threadsafe.assert_called_once()
-                assert mock_threadsafe.call_args.args[1] == mock_loop  # Passed the loop
-                assert result.text == "jupyter response"
+            # Verify run_coroutine_threadsafe was used (Jupyter mode)
+            mock_threadsafe.assert_called_once()
+            assert mock_threadsafe.call_args.args[1] == mock_loop  # Passed the loop
+            assert result.text == "jupyter response"
 
     @pytest.mark.asyncio
     async def test_structured_invoke_async(self):
