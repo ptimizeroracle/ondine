@@ -41,17 +41,30 @@ test-e2e:
     @echo "🌐 Running E2E tests with real providers..."
     @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
 
-# Run comprehensive test suite (wrapper + e2e)
+# Run comprehensive test suite (wrapper + integration + e2e)
 test-comprehensive:
     @echo "🎯 Running comprehensive test suite..."
     @echo ""
-    @echo "Step 1/2: Unit tests (fast, no API)..."
+    @echo "Step 1/3: Wrapper unit tests (fast, no API)..."
     @uv run pytest tests/unit/test_unified_litellm_minimal.py -v
     @echo ""
-    @echo "Step 2/2: E2E tests (real API calls)..."
+    @echo "Step 2/3: All unit tests..."
+    @uv run pytest tests/unit/ -v
+    @echo ""
+    @echo "Step 3/3: Integration + E2E tests (real API calls)..."
     @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
     @echo ""
     @echo "✅ All comprehensive tests passed!"
+
+# Run ONLY fast tests (unit tests, no API calls)
+test-fast:
+    @echo "⚡ Running fast tests (unit only, no API)..."
+    @uv run pytest tests/unit/ -v
+
+# Run full test suite (unit + integration, respects markers)
+test-all:
+    @echo "🧪 Running full test suite (unit + integration)..."
+    @export $(cat .env | xargs) && uv run pytest tests/ -v
 
 # Run tests with coverage report
 test-coverage:
