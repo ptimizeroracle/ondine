@@ -249,8 +249,8 @@ class UnifiedLiteLLMClient(LLMClient):
         tokens_out = response.usage.completion_tokens if response.usage else 0
         latency_ms = (time.time() - start) * 1000
 
-        # Calculate cost (LiteLLM has pricing DB)
-        cost = self._calc_cost(tokens_in, tokens_out)
+        # Calculate cost (LiteLLM has pricing DB) - pass response object for accurate cost
+        cost = self._calc_cost_from_response(response)
 
         return LLMResponse(
             text=text,
@@ -281,26 +281,39 @@ class UnifiedLiteLLMClient(LLMClient):
             )
             return future.result()
 
+    def _calc_cost_from_response(self, response: Any) -> Decimal:
+        """
+        Calculate cost from LiteLLM response object.
+        
+        Uses LiteLLM's completion_cost() with the full response for accurate pricing.
+        """
+        try:
+            # CRITICAL: Pass the full response AND our original model string
+            # Response.model may have provider prefix stripped by LiteLLM
+            cost = litellm.completion_cost(
+                completion_response=response,
+                model=self.model,  # Use our stored model string with provider prefix
+            )
+            logger.debug(f"LiteLLM cost for {self.model}: ${cost}")
+            return Decimal(str(cost)) if cost else Decimal("0")
+        except Exception as e:
+            # Fallback to token-based calculation
+            logger.warning(f"completion_cost failed for {self.model}: {e}, falling back to manual calculation")
+            tokens_in = response.usage.prompt_tokens if response.usage else 0
+            tokens_out = response.usage.completion_tokens if response.usage else 0
+            return self._calc_cost(tokens_in, tokens_out)
+    
     def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
         """
-        Calculate cost using actual token counts from API response.
+        Calculate cost using token counts (fallback method).
 
         Framework-wide behavior:
-        1. Uses LiteLLM's built-in pricing DB (100+ providers)
-        2. Falls back to manual calculation if pricing available in spec
-        3. Returns $0 if neither available (prevents pipeline errors)
+        1. Falls back to manual calculation if pricing available in spec
+        2. Returns $0 if pricing unavailable (prevents pipeline errors)
 
         Pipelines consume response.cost without needing to know calculation method.
         """
         try:
-            # LiteLLM has pricing for most models
-            cost = litellm.completion_cost(
-                model=self.model,
-                prompt=tokens_in,
-                completion=tokens_out,
-            )
-            return Decimal(str(cost)) if cost else Decimal("0")
-        except Exception:
             # Fallback to manual calculation if specified in spec
             if (
                 self.spec.input_cost_per_1k_tokens
@@ -314,6 +327,8 @@ class UnifiedLiteLLMClient(LLMClient):
                 )
                 return input_cost + output_cost
             # Return $0 if pricing unavailable (avoids breaking pipelines)
+            return Decimal("0")
+        except Exception:
             return Decimal("0")
 
     def estimate_tokens(self, text: str) -> int:
