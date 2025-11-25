@@ -258,25 +258,6 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             progress_task = getattr(self, "_current_progress_task", None)
 
             for idx, future in enumerate(futures):
-                # Progress logging every 25% (only for large batches)
-                if len(futures) > 20 and (idx + 1) % max(1, len(futures) // 4) == 0:
-                    progress = ((idx + 1) / len(futures)) * 100
-
-                    # Show actual distribution at milestones
-                    if deployment_distribution:
-                        dist_summary = ", ".join(
-                            f"{dep}: {count}"
-                            for dep, count in sorted(deployment_distribution.items())
-                        )
-                        self.logger.info(
-                            f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)}) | "
-                            f"Distribution: {dist_summary}"
-                        )
-                    else:
-                        self.logger.info(
-                            f"API calls: {progress:.0f}% complete ({idx + 1}/{len(futures)})"
-                        )
-
                 try:
                     response = future.result()
                     responses.append(response)
@@ -438,8 +419,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         percentage = (
                             (count / total_requests) * 100 if total_requests > 0 else 0
                         )
+                        # Use friendly name if available
+                        display_name = getattr(self, "_hash_to_friendly_id", {}).get(
+                            dep_id, dep_id
+                        )
                         self.logger.info(
-                            f"  • {dep_id}: {count}/{total_requests} requests ({percentage:.1f}%)"
+                            f"  • {display_name}: {count}/{total_requests} requests ({percentage:.1f}%)"
                         )
 
                     self.logger.info(f"Total API calls: {total_requests}")
