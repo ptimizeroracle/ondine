@@ -17,17 +17,23 @@ from ondine import PipelineBuilder
 
 
 class ExtractedData(BaseModel):
-    """Test model for structured output (single item)."""
+    """Test model for structured output (user fields only - no id!)."""
 
-    id: int = Field(description="Row ID")
     answer: str = Field(description="The answer to the question")
     confidence: float = Field(description="Confidence score 0-1")
+
+
+class BatchItem(BaseModel):
+    """Single item in batch (internal structure)."""
+    
+    id: int = Field(description="Internal tracking ID")
+    result: ExtractedData = Field(description="User's actual data")
 
 
 class BatchResponse(BaseModel):
     """Batch of extracted data (like BaconBatch)."""
 
-    items: list[ExtractedData]
+    items: list[BatchItem]
 
 
 @pytest.mark.integration
@@ -58,7 +64,7 @@ def test_router_with_structured_output_groq_openai():
         .from_dataframe(
             df,
             input_columns=["question"],
-            output_columns=["id", "answer", "confidence"],
+            output_columns=["answer", "confidence"],  # User fields only (no id)
         )
         .with_prompt("Answer the question: {{ question }}")
         .with_batch_size(2)  # CRITICAL: Enable batch processing!
@@ -104,12 +110,10 @@ def test_router_with_structured_output_groq_openai():
     assert result.success, "Pipeline should succeed"
     assert len(result.data) == 2, "Should process all rows"
 
-    # Check required fields
-    assert "id" in result.data.columns, "Should have id column"
+    # Check required fields (user fields only - id is internal)
     assert "answer" in result.data.columns, "Should have answer column"
     assert "confidence" in result.data.columns, "Should have confidence column"
 
-    assert result.data["id"].notnull().all(), "All IDs should be non-null"
     assert result.data["answer"].notnull().all(), "All answers should be non-null"
     assert result.data["confidence"].notnull().all(), (
         "All confidence scores should be non-null"
