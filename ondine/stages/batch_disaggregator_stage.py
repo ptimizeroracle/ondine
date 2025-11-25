@@ -84,7 +84,7 @@ class BatchDisaggregatorStage(PipelineStage):
 
             # Get the batch response (first and only response in aggregated batch)
             llm_response = batch.responses[0]
-            
+
             # Get cost and latency from batch (will be split evenly)
             batch_cost = batch.cost
             batch_tokens = batch.tokens_used
@@ -94,35 +94,50 @@ class BatchDisaggregatorStage(PipelineStage):
             # OPTIMIZATION: Use structured_result if available (Instructor Pydantic object)
             # This avoids JSON serialize/parse cycle!
             try:
-                if hasattr(llm_response, 'structured_result') and llm_response.structured_result:
+                if (
+                    hasattr(llm_response, "structured_result")
+                    and llm_response.structured_result
+                ):
                     # Fast path: Direct Pydantic object access
                     pydantic_batch = llm_response.structured_result
-                    
+
                     # Extract items from Pydantic batch (assumes .items field)
-                    if hasattr(pydantic_batch, 'items'):
+                    if hasattr(pydantic_batch, "items"):
                         items = pydantic_batch.items
                         # Serialize each item's result to JSON string
                         individual_results = []
                         for item in items:
-                            if hasattr(item, 'result'):
+                            if hasattr(item, "result"):
                                 # Architecture A: {id, result} structure
-                                result_dict = item.result.model_dump() if hasattr(item.result, 'model_dump') else item.result
+                                result_dict = (
+                                    item.result.model_dump()
+                                    if hasattr(item.result, "model_dump")
+                                    else item.result
+                                )
                                 individual_results.append(json.dumps(result_dict))
                             else:
                                 # Architecture B: Flat structure (serialize entire item except id)
                                 item_dict = item.model_dump()
-                                item_dict.pop('id', None)  # Remove id, will be tracked separately
+                                item_dict.pop(
+                                    "id", None
+                                )  # Remove id, will be tracked separately
                                 individual_results.append(json.dumps(item_dict))
                     else:
-                        raise ValueError(f"Pydantic batch has no 'items' field: {type(pydantic_batch)}")
+                        raise ValueError(
+                            f"Pydantic batch has no 'items' field: {type(pydantic_batch)}"
+                        )
                 else:
                     # Fallback: Parse JSON string (backward compatibility)
-                    response_text = llm_response.text if hasattr(llm_response, 'text') else str(llm_response)
-                    individual_results = self.strategy.parse_batch_response(
-                        response_text,
-                        expected_count=batch_metadata.original_count,
-                        metadata=batch_metadata_dict,
+                    response_text = (
+                        llm_response.text
+                        if hasattr(llm_response, "text")
+                        else str(llm_response)
                     )
+                individual_results = self.strategy.parse_batch_response(
+                    response_text,
+                    expected_count=batch_metadata.original_count,
+                    metadata=batch_metadata_dict,
+                )
 
                 # Create disaggregated batch with individual responses
                 disaggregated_batch = ResponseBatch(

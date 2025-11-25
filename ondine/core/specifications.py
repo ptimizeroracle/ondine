@@ -32,6 +32,7 @@ class LLMProvider(str, Enum):
     GROQ = "groq"
     OPENAI_COMPATIBLE = "openai_compatible"
     MLX = "mlx"
+    LITELLM = "litellm"  # Universal LiteLLM provider (auto-detects from model string)
 
 
 class ErrorPolicy(str, Enum):
@@ -207,7 +208,7 @@ class LLMSpec(BaseModel):
 
         spec = LLMSpec(
             model="moonshot/kimi-k2-thinking-turbo",  # Works with ANY LiteLLM provider!
-            api_key="sk-..."
+            api_key="sk-..."  # pragma: allowlist secret
         )
 
         # OLD: Explicit provider (still supported)

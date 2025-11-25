@@ -14,21 +14,21 @@ setup:
 # Run all tests (unit + integration + e2e)
 test:
     @echo "🧪 Running all tests..."
-    uv run pytest -v
+    uv run pytest -v -n auto
 
 # Run only unit tests (fast, no API calls)
 test-unit:
     @echo "🧪 Running unit tests..."
-    uv run pytest tests/unit/ -v
+    uv run pytest tests/unit/ -v -n auto
 
 # Run only integration tests (requires API keys)
 test-integration:
     @echo "🧪 Running integration tests..."
     @if [ -z "$GROQ_API_KEY" ]; then \
         echo "⚠️  Loading API keys from .env..."; \
-        export $(cat .env | xargs) && uv run pytest tests/integration/ -v; \
+        export $(cat .env | xargs) && uv run pytest tests/integration/ -v -n auto --dist loadscope; \
     else \
-        uv run pytest tests/integration/ -v; \
+        uv run pytest tests/integration/ -v -n auto --dist loadscope; \
     fi
 
 # Run minimal wrapper tests (unit only, fast)
@@ -59,17 +59,17 @@ test-comprehensive:
 # Run ONLY fast tests (unit tests, no API calls)
 test-fast:
     @echo "⚡ Running fast tests (unit only, no API)..."
-    @uv run pytest tests/unit/ -v
+    @uv run pytest tests/unit/ -v -n auto
 
 # Run full test suite (unit + integration, respects markers)
 test-all:
     @echo "🧪 Running full test suite (unit + integration)..."
-    @export $(cat .env | xargs) && uv run pytest tests/ -v
+    @export $(cat .env | xargs) && uv run pytest tests/ -v -n auto --dist loadscope
 
 # Run tests with coverage report
 test-coverage:
     @echo "📊 Running tests with coverage..."
-    uv run pytest --cov=ondine --cov-report=html --cov-report=term
+    uv run pytest --cov=ondine --cov-report=html --cov-report=term -n auto
 
 # Run specific test file or test
 test-file FILE:
@@ -79,12 +79,12 @@ test-file FILE:
 # Run tests with detailed output
 test-verbose:
     @echo "🧪 Running tests with verbose output..."
-    uv run pytest -vvs
+    uv run pytest -vvs -n auto
 
 # Run quick tests (fail fast)
 test-quick:
     @echo "⚡ Running quick test (fail fast)..."
-    uv run pytest -x -v
+    uv run pytest -x -v -n auto
 
 # Lint the codebase
 lint:

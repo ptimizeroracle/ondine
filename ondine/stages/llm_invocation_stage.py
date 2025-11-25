@@ -103,22 +103,24 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             deployments = []
             self._deployment_ids = []  # Store for round-robin assignment
             if hasattr(self.llm_client, "router") and self.llm_client.router:
-                model_list = getattr(self.llm_client.router, "model_list", [])
-                for dep in model_list:
-                    dep_id = dep.get("model_id", dep.get("model_name", "unknown"))
-                    # Extract actual model from litellm_params
-                    litellm_params = dep.get("litellm_params", {})
-                    actual_model = litellm_params.get("model", "unknown")
+                model_list = getattr(self.llm_client.router, "model_list", None)
+                # Defensive: only iterate if model_list is a proper list/tuple
+                if model_list and isinstance(model_list, (list, tuple)):
+                    for dep in model_list:
+                        dep_id = dep.get("model_id", dep.get("model_name", "unknown"))
+                        # Extract actual model from litellm_params
+                        litellm_params = dep.get("litellm_params", {})
+                        actual_model = litellm_params.get("model", "unknown")
 
-                    deployments.append(
-                        {
-                            "model_id": dep_id,
-                            "name": dep.get("model_name", "unknown"),
-                            "model": actual_model,  # Add actual model for display
-                            "weight": 1.0,  # Equal weight by default
-                        }
-                    )
-                    self._deployment_ids.append(dep_id)
+                        deployments.append(
+                            {
+                                "model_id": dep_id,
+                                "name": dep.get("model_name", "unknown"),
+                                "model": actual_model,  # Add actual model for display
+                                "weight": 1.0,  # Equal weight by default
+                            }
+                        )
+                        self._deployment_ids.append(dep_id)
 
             progress_task = progress_tracker.start_stage(
                 f"{self.name}: {context.total_rows} rows",

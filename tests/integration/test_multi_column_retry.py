@@ -85,6 +85,7 @@ class TestMultiColumnRetry:
         # Setup mock
         mock_client = Mock()
         mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test-model",
             input_cost_per_1k_tokens=Decimal("0.0001"),
@@ -195,6 +196,7 @@ class TestMultiColumnRetry:
 
         mock_client = Mock()
         mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test-model",
             input_cost_per_1k_tokens=Decimal("0.0001"),

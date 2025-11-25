@@ -440,8 +440,8 @@ class PipelineBuilder:
 
     def with_llm(
         self,
-        provider: str,
         model: str,
+        provider: str | None = None,
         api_key: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
@@ -456,8 +456,11 @@ class PipelineBuilder:
         API keys can be provided explicitly or via environment variables.
 
         Args:
-            provider: Provider name (openai, azure_openai, anthropic, groq, mlx) or custom provider ID
-            model: Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4")
+            model: Model identifier. Can be:
+                  - LiteLLM format: "provider/model" (e.g., "groq/llama-3.3-70b-versatile")
+                  - Short format: "model" (requires provider parameter)
+            provider: Provider name (optional if model includes provider prefix)
+                     Examples: "openai", "groq", "anthropic", or custom provider ID
             api_key: API key (optional, reads from environment if not provided)
             temperature: Sampling temperature (0.0-1.0, default: 0.0 for deterministic)
             max_tokens: Maximum output tokens (optional, uses model default)
@@ -475,16 +478,18 @@ class PipelineBuilder:
 
         Example:
             ```python
-            # Auto cost detection (recommended - works for 1800+ models)
-            builder.with_llm(provider="openai", model="gpt-4o-mini")
+            # NEW: LiteLLM format (provider auto-detected from model string)
+            builder.with_llm(model="groq/llama-3.3-70b-versatile")
+            builder.with_llm(model="openai/gpt-4o-mini")
 
-            # Groq (fast and affordable - costs auto-detected)
+            # OLD: Explicit provider (still supported)
+            builder.with_llm(provider="openai", model="gpt-4o-mini")
             builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
 
             # Manual cost override (custom models)
             builder.with_llm(
-                provider="openai_compatible",
                 model="my-custom-model",
+                provider="openai_compatible",
                 base_url="https://my-api.com/v1",
                 input_cost_per_1k_tokens=Decimal("0.001"),
                 output_cost_per_1k_tokens=Decimal("0.002")
@@ -493,20 +498,31 @@ class PipelineBuilder:
         """
         from ondine.adapters.provider_registry import ProviderRegistry
 
-        # Try to convert to enum for built-in providers
-        try:
-            provider_enum = LLMProvider(provider.lower())
-        except ValueError:
-            # Not a built-in provider - check if it's a custom provider
-            if ProviderRegistry.is_registered(provider):
-                # Use a dummy enum value for validation, but store the actual provider string
-                provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
-                kwargs["custom_provider_id"] = provider
+        # Auto-detect provider from model string if not explicitly provided
+        if provider is None:
+            if "/" in model:
+                # LiteLLM format: "provider/model"
+                provider_enum = LLMProvider.LITELLM
             else:
                 raise ValueError(
-                    f"Unknown provider: {provider}. "
-                    f"Available providers: {', '.join(ProviderRegistry.list_providers())}"
+                    "Provider parameter required when model doesn't include provider prefix.\n"
+                    "Either use LiteLLM format (e.g., 'groq/llama-3.3-70b') or specify provider explicitly."
                 )
+        else:
+            # Try to convert to enum for built-in providers
+            try:
+                provider_enum = LLMProvider(provider.lower())
+            except ValueError:
+                # Not a built-in provider - check if it's a custom provider
+                if ProviderRegistry.is_registered(provider):
+                    # Use a dummy enum value for validation, but store the actual provider string
+                    provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
+                    kwargs["custom_provider_id"] = provider
+                else:
+                    raise ValueError(
+                        f"Unknown provider: {provider}. "
+                        f"Available providers: {', '.join(ProviderRegistry.list_providers())}"
+                    )
 
         self._llm_spec = LLMSpec(
             provider=provider_enum,

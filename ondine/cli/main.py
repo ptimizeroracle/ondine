@@ -69,6 +69,13 @@ PROVIDER_METADATA = {
         "use_case": "Local inference, privacy, offline",
         "requirements": "Apple Silicon Mac, pip install ondine[mlx]",
     },
+    LLMProvider.LITELLM: {
+        "name": "LiteLLM (Universal)",
+        "platform": "Cloud (All)",
+        "cost": "Varies",
+        "use_case": "Auto-detect provider from model string (e.g., 'groq/llama-3.3')",
+        "requirements": "Provider-specific API key",
+    },
 }
 
 # Validate metadata completeness at module load

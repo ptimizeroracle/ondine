@@ -16,7 +16,7 @@ Usage:
     # Advanced: Use extra_params for ANY LiteLLM feature
     spec = LLMSpec(
         model="openai/gpt-4o-mini",
-        api_key="sk-...",
+        api_key="sk-...",  # pragma: allowlist secret
         extra_params={
             'stream': True,              # Streaming
             'caching': True,             # Enable caching
@@ -38,6 +38,7 @@ The extra_params pattern means:
 import asyncio
 import logging
 import time
+import warnings
 from decimal import Decimal
 from typing import Any
 
@@ -48,6 +49,12 @@ from pydantic import BaseModel
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
+
+# CRITICAL: Suppress Pydantic serialization warnings at module level
+# LiteLLM's internal models trigger these harmless warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
+warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +113,33 @@ class UnifiedLiteLLMClient(LLMClient):
         import warnings
 
         warnings.filterwarnings("ignore", category=RuntimeWarning)
+        warnings.filterwarnings(
+            "ignore", category=UserWarning
+        )  # Pydantic serialization warnings
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
         warnings.filterwarnings("ignore", message=".*coroutine.*never awaited.*")
+        warnings.filterwarnings(
+            "ignore", message=".*PydanticSerializationUnexpectedValue.*"
+        )
+        warnings.filterwarnings("ignore", message=".*Pydantic serializer warnings.*")
+        warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
+        warnings.filterwarnings(
+            "ignore", message=".*serialized value may not be as expected.*"
+        )
 
         # Suppress asyncio SSL transport errors (harmless cleanup noise)
         logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
+        # Suppress LiteLLM's internal async client cleanup warnings
+        logging.getLogger("litellm.llms.custom_httpx.async_client_cleanup").setLevel(
+            logging.CRITICAL
+        )
+
+        # CRITICAL: Suppress Pydantic's internal warnings logger
+        logging.getLogger("pydantic").setLevel(logging.CRITICAL)
+        logging.getLogger("pydantic.warnings").setLevel(logging.CRITICAL)
+        logging.getLogger("pydantic._internal").setLevel(logging.CRITICAL)
 
         # Router support (optional)
         self.router = None
@@ -284,7 +313,7 @@ class UnifiedLiteLLMClient(LLMClient):
     def _calc_cost_from_response(self, response: Any) -> Decimal:
         """
         Calculate cost from LiteLLM response object.
-        
+
         Uses LiteLLM's completion_cost() with the full response for accurate pricing.
         """
         try:
@@ -298,11 +327,13 @@ class UnifiedLiteLLMClient(LLMClient):
             return Decimal(str(cost)) if cost else Decimal("0")
         except Exception as e:
             # Fallback to token-based calculation
-            logger.warning(f"completion_cost failed for {self.model}: {e}, falling back to manual calculation")
+            logger.warning(
+                f"completion_cost failed for {self.model}: {e}, falling back to manual calculation"
+            )
             tokens_in = response.usage.prompt_tokens if response.usage else 0
             tokens_out = response.usage.completion_tokens if response.usage else 0
             return self._calc_cost(tokens_in, tokens_out)
-    
+
     def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
         """
         Calculate cost using token counts (fallback method).

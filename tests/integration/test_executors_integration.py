@@ -33,8 +33,7 @@ class TestExecutorIntegration:
             )
             .with_prompt("{question}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .build()
@@ -64,8 +63,7 @@ class TestExecutorIntegration:
             )
             .with_prompt("Answer briefly: {question}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_async_execution(max_concurrency=2)
@@ -94,8 +92,7 @@ class TestExecutorIntegration:
             )
             .with_prompt("What is {number} * 2?")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_streaming(chunk_size=3)
