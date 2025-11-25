@@ -11,25 +11,47 @@ setup:
     uv sync
     @echo "✅ Environment ready!"
 
-# Run all tests (unit + integration)
+# Run all tests (unit + integration + e2e)
 test:
     @echo "🧪 Running all tests..."
     uv run pytest -v
 
-# Run only unit tests
+# Run only unit tests (fast, no API calls)
 test-unit:
     @echo "🧪 Running unit tests..."
     uv run pytest tests/unit/ -v
 
-# Run only integration tests (requires GROQ_API_KEY)
+# Run only integration tests (requires API keys)
 test-integration:
     @echo "🧪 Running integration tests..."
     @if [ -z "$GROQ_API_KEY" ]; then \
-        echo "⚠️  GROQ_API_KEY not set. Loading from .env..."; \
+        echo "⚠️  Loading API keys from .env..."; \
         export $(cat .env | xargs) && uv run pytest tests/integration/ -v; \
     else \
         uv run pytest tests/integration/ -v; \
     fi
+
+# Run minimal wrapper tests (unit only, fast)
+test-wrapper:
+    @echo "🧪 Running UnifiedLiteLLMClient tests..."
+    uv run pytest tests/unit/test_unified_litellm_minimal.py -v
+
+# Run e2e tests with real providers
+test-e2e:
+    @echo "🌐 Running E2E tests with real providers..."
+    @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
+
+# Run comprehensive test suite (wrapper + e2e)
+test-comprehensive:
+    @echo "🎯 Running comprehensive test suite..."
+    @echo ""
+    @echo "Step 1/2: Unit tests (fast, no API)..."
+    @uv run pytest tests/unit/test_unified_litellm_minimal.py -v
+    @echo ""
+    @echo "Step 2/2: E2E tests (real API calls)..."
+    @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
+    @echo ""
+    @echo "✅ All comprehensive tests passed!"
 
 # Run tests with coverage report
 test-coverage:
