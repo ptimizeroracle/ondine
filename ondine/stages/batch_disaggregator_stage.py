@@ -201,9 +201,17 @@ class BatchDisaggregatorStage(PipelineStage):
 
             except Exception as e:
                 # Complete failure - couldn't parse batch at all
+                # Try to identify the provider
+                provider_info = "unknown"
+                if hasattr(llm_response, "model") and llm_response.model:
+                    provider_info = llm_response.model
+                elif hasattr(llm_response, "metadata") and isinstance(llm_response.metadata, dict):
+                    provider_info = llm_response.metadata.get("model_id", "unknown")
+                
                 self.logger.error(
-                    f"Failed to parse batch response: {e}. "
-                    f"Response: {response_text[:200]}"
+                    f"Failed to parse batch response from [{provider_info}]: {e}. "
+                    f"Batch ID: {batch.batch_id}. "
+                    f"Response: {response_text[:500]}"
                 )
 
                 # Create error responses for all rows
