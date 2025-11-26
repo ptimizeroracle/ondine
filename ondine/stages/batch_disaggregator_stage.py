@@ -170,9 +170,7 @@ class BatchDisaggregatorStage(PipelineStage):
                 individual_results = []
                 for i, row_id in enumerate(batch_metadata.row_ids):
                     if i + 1 in e.failed_ids:  # failed_ids are 1-based
-                        individual_results.append(
-                            f"[PARSE_ERROR: Row {i + 1} not found in batch response]"
-                        )
+                        individual_results.append("null")  # Return null so parser produces None -> triggers retry
                     else:
                         # Find the corresponding parsed result
                         result_idx = i - sum(1 for fid in e.failed_ids if fid <= i + 1)
@@ -215,9 +213,7 @@ class BatchDisaggregatorStage(PipelineStage):
                 )
 
                 # Create error responses for all rows
-                error_responses = [
-                    f"[BATCH_PARSE_ERROR: {str(e)}]" for _ in batch_metadata.row_ids
-                ]
+                error_responses = ["null" for _ in batch_metadata.row_ids]
 
                 disaggregated_batch = ResponseBatch(
                     responses=error_responses,
