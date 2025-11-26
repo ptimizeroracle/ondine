@@ -183,18 +183,18 @@ class RichProgressTracker(ProgressTracker):
                 if "label" in deployment:
                     label = f"   ├─ {deployment['label']}"
                 else:
-                    # Build label: "key-id (provider/model)"
-                    model = deployment.get("model", "")
-                    if model:
-                        # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
-                        provider = model.split("/")[0] if "/" in model else ""
-                        model_short = model.split("/")[1] if "/" in model else model
-                        # Truncate long model names
-                        if len(model_short) > 25:
-                            model_short = model_short[:22] + "..."
-                        label = f"   ├─ {dep_id} ({provider}/{model_short})"
-                    else:
-                        label = f"   ├─ {dep_id}"
+                # Build label: "key-id (provider/model)"
+                model = deployment.get("model", "")
+                if model:
+                    # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+                    provider = model.split("/")[0] if "/" in model else ""
+                    model_short = model.split("/")[1] if "/" in model else model
+                    # Truncate long model names
+                    if len(model_short) > 25:
+                        model_short = model_short[:22] + "..."
+                    label = f"   ├─ {dep_id} ({provider}/{model_short})"
+                else:
+                    label = f"   ├─ {dep_id}"
 
                 # Create sub-task for this deployment
                 dep_task_id = self.progress.add_task(
