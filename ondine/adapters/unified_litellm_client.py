@@ -346,10 +346,10 @@ class UnifiedLiteLLMClient(LLMClient):
 
             cost = litellm.completion_cost(
                 completion_response=response,
-                model=model_to_use,  
+                model=model_to_use,
             )
             logger.debug(f"LiteLLM cost for {model_to_use}: ${cost}")
-            return Decimal(str(cost)) if cost else Decimal("0")
+            return Decimal(str(cost)) if cost is not None else Decimal("0")
         except Exception as e:
             # Fallback to token-based calculation
             # Only log warning if it's not the known Router issue (which we try to avoid now)
