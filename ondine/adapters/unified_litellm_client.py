@@ -285,16 +285,24 @@ class UnifiedLiteLLMClient(LLMClient):
         # LiteLLM Router stores actual deployment ID in _hidden_params
         metadata = {}
         if self.router:
+            # DEBUG: Show what metadata we're getting
+            print(f"🔍 Router metadata extraction: response.model={getattr(response, 'model', 'N/A')}")
+            
             # Try multiple methods to extract deployment info
             if hasattr(response, "_hidden_params") and response._hidden_params:
                 hidden = response._hidden_params
+                print(f"   _hidden_params: {hidden}")
                 if isinstance(hidden, dict):
                     # Method 1: model_id field
                     if "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
+                        print(f"   ✓ Found model_id: {hidden['model_id']}")
                     # Method 2: model_region or custom_llm_provider
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
+                        print(f"   ✓ Found model_region: {hidden['model_region']}")
+            else:
+                print(f"   ✗ No _hidden_params found")
 
         return LLMResponse(
             text=text,
@@ -329,37 +337,39 @@ class UnifiedLiteLLMClient(LLMClient):
     def _calc_cost_from_response(self, response: Any) -> Decimal:
         """
         Calculate cost from LiteLLM response object.
-
-        Uses LiteLLM's completion_cost() with the full response for accurate pricing.
+        
+        Simple logic: LiteLLM already calculated the cost, just use it!
         """
+        # SIMPLE: Check if LiteLLM already calculated cost (it's in _hidden_params)
+        if hasattr(response, "_hidden_params") and response._hidden_params:
+            hidden = response._hidden_params
+            if isinstance(hidden, dict) and "response_cost" in hidden:
+                cost = hidden["response_cost"]
+                if cost and cost > 0:
+                    return Decimal(str(cost))
+        
+        # Fallback: Calculate ourselves
         try:
-            # CRITICAL: Pass the full response AND our original model string
-            # Response.model may have provider prefix stripped by LiteLLM (e.g. "llama-3.3" vs "groq/llama-3.3")
-            
-            # LOGIC:
-            # 1. If NOT using Router, self.model is the canonical provider-prefixed name (e.g. "groq/llama-3.3"). Use it.
-            # 2. If using Router, self.model is generic (e.g. "mixed-llm"). We MUST use response.model (e.g. "gpt-4o").
-            
             model_to_use = self.model
             if self.router and hasattr(response, "model") and response.model:
                 model_to_use = response.model
-
+                
             cost = litellm.completion_cost(
                 completion_response=response,
                 model=model_to_use,
             )
-            logger.debug(f"LiteLLM cost for {model_to_use}: ${cost}")
-            return Decimal(str(cost)) if cost is not None else Decimal("0")
-        except Exception as e:
-            # Fallback to token-based calculation
-            # Only log warning if it's not the known Router issue (which we try to avoid now)
-            if "LLM Provider NOT provided" not in str(e):
-                logger.warning(
-                    f"completion_cost failed for {self.model} (using {model_to_use}): {e}, fallback to manual"
-                )
+            if cost and cost > 0:
+                return Decimal(str(cost))
+        except Exception:
+            pass
+        
+        # Last resort: Manual calculation from spec
+        if self.spec.input_cost_per_1k_tokens or self.spec.output_cost_per_1k_tokens:
             tokens_in = response.usage.prompt_tokens if response.usage else 0
             tokens_out = response.usage.completion_tokens if response.usage else 0
             return self._calc_cost(tokens_in, tokens_out)
+        
+        return Decimal("0")
 
     def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
         """
@@ -512,27 +522,44 @@ class UnifiedLiteLLMClient(LLMClient):
         # Extract Router deployment info (Instructor path)
         metadata = {}
         if self.router:
+            # DEBUG: Show what we're extracting
+            print(f"🔍 STRUCTURED Router metadata extraction:")
+            print(f"   raw_response exists: {raw_response is not None}")
+            
             # Use raw_response if available
             source = raw_response if raw_response else result
+            print(f"   source type: {type(source).__name__}")
 
             # Check for _hidden_params
             if hasattr(source, "_hidden_params") and source._hidden_params:
                 hidden = source._hidden_params
+                print(f"   _hidden_params: {hidden}")
                 if isinstance(hidden, dict):
                     # Method 1: model_id field
                     if "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
+                        print(f"   ✓ Found model_id: {hidden['model_id']}")
                     # Method 2: model_region or custom_llm_provider
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
+                        print(f"   ✓ Found model_region: {hidden['model_region']}")
+                    else:
+                        print(f"   ✗ No model_id/model_region in _hidden_params")
+            else:
+                print(f"   ✗ No _hidden_params found on {type(source).__name__}")
 
             # Fallback: Check if result has _raw_response (some instructor versions)
-            elif hasattr(result, "_raw_response"):
+            if not metadata and hasattr(result, "_raw_response"):
+                print(f"   Trying result._raw_response...")
                 raw = result._raw_response
                 if hasattr(raw, "_hidden_params") and raw._hidden_params:
                     hidden = raw._hidden_params
+                    print(f"   _raw_response._hidden_params: {hidden}")
                     if isinstance(hidden, dict) and "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
+                        print(f"   ✓ Found model_id via _raw_response: {hidden['model_id']}")
+            
+            print(f"   FINAL metadata: {metadata}")
 
         return LLMResponse(
             text=text,
