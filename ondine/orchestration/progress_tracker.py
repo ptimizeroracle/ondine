@@ -285,9 +285,6 @@ class RichProgressTracker(ProgressTracker):
                 self.progress.update(dep_task_id, **dep_kwargs)
                 self.deployment_stats[task_id][deployment_id] += advance
 
-        # Manual refresh since auto_refresh is disabled
-        self.progress.refresh()
-
     def finish(self, task_id: str) -> None:
         """Mark task as complete."""
         if task_id in self.tasks:
