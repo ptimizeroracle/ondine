@@ -207,6 +207,11 @@ class ResponseParserStage(
                     )
                     parsed = self.parser.parse(response_text)
 
+                    # Handle None result (e.g. from "null" input for retry)
+                    if parsed is None:
+                        results[metadata.row_index] = {col: None for col in output_cols}
+                        continue
+
                     # Map to output columns
                     row_data = {}
                     if len(output_cols) == 1:

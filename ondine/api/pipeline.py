@@ -786,21 +786,6 @@ class Pipeline:
         specs = self.specifications
         output_cols = specs.dataset.output_columns
 
-        # Check quality
-        quality = result.validate_output_quality(output_cols)
-
-        # Count both nulls and empties as failures
-        total_failed = quality.null_outputs + quality.empty_outputs
-
-        if total_failed == 0:
-            self.logger.info("No failed rows to retry")
-            return result
-
-        self.logger.info(
-            f"Auto-retry enabled: {quality.null_outputs} null + "
-            f"{quality.empty_outputs} empty = {total_failed} failed outputs"
-        )
-
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
             # Find rows where ALL output columns are null/empty (indicates complete failure)
