@@ -590,34 +590,30 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         except ImportError:
             pass
 
-        # Fallback to pattern matching for other providers or generic errors
-        # Model errors (decommissioned, not found)
-        model_patterns = [
-            "model",
-            "decommissioned",
-            "not found",
-            "does not exist",
-            "invalid model",
-            "unknown model",
-            "model_not_found",
-        ]
-        if any(p in error_str for p in model_patterns):
-            return ModelNotFoundError(f"Model error: {error}")
+        # Network errors (retryable) - CHECK FIRST
+        if (
+            "network" in error_str
+            or "timeout" in error_str
+            or "connection" in error_str
+            or "service unavailable" in error_str
+            or "503" in error_str
+            or "502" in error_str
+        ):
+            # Try to extract failing model/provider from exception attributes
+            # LiteLLM often attaches 'model' or 'llm_provider' to the exception
+            provider_info = ""
+            if hasattr(error, "model") and error.model and error.model != "mixed-llm":
+                provider_info = f" [Provider: {error.model}]"
+            elif hasattr(error, "failed_model") and error.failed_model:
+                provider_info = f" [Provider: {error.failed_model}]"
+            elif hasattr(error, "llm_provider") and error.llm_provider:
+                provider_info = f" [Provider: {error.llm_provider}]"
+            
+            return NetworkError(f"{str(error)}{provider_info}")
 
-        # Authentication errors
-        auth_patterns = [
-            "invalid api key",
-            "invalid_api_key",
-            "authentication failed",
-            "401",
-            "403",
-            "unauthorized",
-            "invalid credentials",
-            "api key not found",
-            "permission denied",
-        ]
-        if any(p in error_str for p in auth_patterns):
-            return InvalidAPIKeyError(f"Authentication error: {error}")
+        # Rate limit (retryable)
+        if "rate" in error_str or "429" in error_str:
+            return RateLimitError(str(error))
 
         # Quota/billing errors (not rate limit)
         quota_patterns = [
@@ -631,17 +627,19 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         if any(p in error_str for p in quota_patterns):
             return QuotaExceededError(f"Quota error: {error}")
 
-        # Rate limit (retryable)
-        if "rate" in error_str or "429" in error_str:
-            return RateLimitError(str(error))
-
-        # Network errors (retryable)
-        if (
-            "network" in error_str
-            or "timeout" in error_str
-            or "connection" in error_str
-        ):
-            return NetworkError(str(error))
+        # Fallback to pattern matching for other providers or generic errors
+        # Model errors (decommissioned, not found)
+        model_patterns = [
+            "decommissioned",
+            "not found",
+            "does not exist",
+            "invalid model",
+            "unknown model",
+            "model_not_found",
+        ]
+        # Only check generic "model" if it's clearly a not found error
+        if any(p in error_str for p in model_patterns) or ("model" in error_str and "found" in error_str):
+            return ModelNotFoundError(f"Model error: {error}")
 
         # Default: return original error (will be retried conservatively)
         return error

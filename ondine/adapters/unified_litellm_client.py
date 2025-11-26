@@ -466,25 +466,22 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Call with pre-initialized Instructor client
         raw_response = None
-        try:
-            # Try to get raw response for metadata extraction
-            # Instructor >= 1.0.0 supports create_with_completion
-            if hasattr(
-                self.instructor_client.chat.completions, "create_with_completion"
-            ):
-                (
-                    result,
-                    raw_response,
-                ) = await self.instructor_client.chat.completions.create_with_completion(
-                    **call_kwargs
-                )
-            else:
-                # Fallback for older versions
-                result = await self.instructor_client.chat.completions.create(
-                    **call_kwargs
-                )
-        except Exception as e:
-            raise ValueError(f"Structured prediction failed: {e}") from e
+        # Try to get raw response for metadata extraction
+        # Instructor >= 1.0.0 supports create_with_completion
+        if hasattr(
+            self.instructor_client.chat.completions, "create_with_completion"
+        ):
+            (
+                result,
+                raw_response,
+            ) = await self.instructor_client.chat.completions.create_with_completion(
+                **call_kwargs
+            )
+        else:
+            # Fallback for older versions
+            result = await self.instructor_client.chat.completions.create(
+                **call_kwargs
+            )
 
         # Serialize for backward compatibility (text field)
         text = result.model_dump_json()
