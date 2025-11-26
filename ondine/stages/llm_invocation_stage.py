@@ -654,6 +654,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         ]
         # Only check generic "model" if it's clearly a not found error
         if any(p in error_str for p in model_patterns) or ("model" in error_str and "found" in error_str):
+            # CRITICAL ROUTER LOGIC:
+            # If we are using a Router, a "Model Not Found" on one provider is just a node failure.
+            # We should treat it as a TRANSIENT NetworkError so the retry loop runs again.
+            # The Router (simple-shuffle) will likely pick a different provider next time.
+            if hasattr(self.llm_client, "router") and self.llm_client.router:
+                return NetworkError(f"Router node failed (retryable): {error}")
+            
             return ModelNotFoundError(f"Model error: {error}")
 
         # Default: return original error (will be retried conservatively)
