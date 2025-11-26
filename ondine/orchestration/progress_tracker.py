@@ -140,7 +140,6 @@ class RichProgressTracker(ProgressTracker):
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
             expand=True,
-            transient=True,  # Remove progress bar when finished (cleaner logs)
             auto_refresh=True,  # Enable auto-refresh for smooth animation (spinners, timers)
             refresh_per_second=10,
         )
