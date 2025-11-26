@@ -285,24 +285,16 @@ class UnifiedLiteLLMClient(LLMClient):
         # LiteLLM Router stores actual deployment ID in _hidden_params
         metadata = {}
         if self.router:
-            # DEBUG: Show what metadata we're getting
-            print(f"🔍 Router metadata extraction: response.model={getattr(response, 'model', 'N/A')}")
-            
             # Try multiple methods to extract deployment info
             if hasattr(response, "_hidden_params") and response._hidden_params:
                 hidden = response._hidden_params
-                print(f"   _hidden_params: {hidden}")
                 if isinstance(hidden, dict):
                     # Method 1: model_id field
                     if "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
-                        print(f"   ✓ Found model_id: {hidden['model_id']}")
                     # Method 2: model_region or custom_llm_provider
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
-                        print(f"   ✓ Found model_region: {hidden['model_region']}")
-            else:
-                print(f"   ✗ No _hidden_params found")
 
         return LLMResponse(
             text=text,
@@ -522,44 +514,27 @@ class UnifiedLiteLLMClient(LLMClient):
         # Extract Router deployment info (Instructor path)
         metadata = {}
         if self.router:
-            # DEBUG: Show what we're extracting
-            print(f"🔍 STRUCTURED Router metadata extraction:")
-            print(f"   raw_response exists: {raw_response is not None}")
-            
             # Use raw_response if available
             source = raw_response if raw_response else result
-            print(f"   source type: {type(source).__name__}")
 
             # Check for _hidden_params
             if hasattr(source, "_hidden_params") and source._hidden_params:
                 hidden = source._hidden_params
-                print(f"   _hidden_params: {hidden}")
                 if isinstance(hidden, dict):
                     # Method 1: model_id field
                     if "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
-                        print(f"   ✓ Found model_id: {hidden['model_id']}")
                     # Method 2: model_region or custom_llm_provider
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
-                        print(f"   ✓ Found model_region: {hidden['model_region']}")
-                    else:
-                        print(f"   ✗ No model_id/model_region in _hidden_params")
-            else:
-                print(f"   ✗ No _hidden_params found on {type(source).__name__}")
 
             # Fallback: Check if result has _raw_response (some instructor versions)
             if not metadata and hasattr(result, "_raw_response"):
-                print(f"   Trying result._raw_response...")
                 raw = result._raw_response
                 if hasattr(raw, "_hidden_params") and raw._hidden_params:
                     hidden = raw._hidden_params
-                    print(f"   _raw_response._hidden_params: {hidden}")
                     if isinstance(hidden, dict) and "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
-                        print(f"   ✓ Found model_id via _raw_response: {hidden['model_id']}")
-            
-            print(f"   FINAL metadata: {metadata}")
 
         return LLMResponse(
             text=text,
