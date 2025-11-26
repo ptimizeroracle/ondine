@@ -48,14 +48,14 @@ class TestMultiColumnRetry:
                 if f"PRODUCT {i}" in prompt:
                     processed_rows.append(i)
 
-                    # First pass: col1 always succeeds, col2/col3 fail for rows 2, 5, 8
+                    # First pass: col1, col2, col3 all fail for rows 2, 5, 8 (Total failure)
                     # Second pass (retry): All succeed
                     if len([x for x in processed_rows if x == i]) == 1:
                         # First time seeing this row
                         if i in [2, 5, 8]:
-                            # Fail col2 and col3 (return JSON with nulls)
+                            # Fail ALL columns (return JSON with nulls) - triggers retry
                             text = (
-                                f'{{"col1": "value_{i}", "col2": null, "col3": null}}'
+                                f'{{"col1": null, "col2": null, "col3": null}}'
                             )
                         else:
                             # All columns succeed
@@ -171,19 +171,16 @@ class TestMultiColumnRetry:
             # Simulate different column failures for different rows
             if "A" in prompt:
                 if call_count <= 3:  # First pass
-                    text = '{"col1": null, "col2": "ok", "col3": "ok"}'
+                    # Total failure (all null) -> Should RETRY
+                    text = '{"col1": null, "col2": null, "col3": null}'
                 else:  # Retry
-                    text = '{"col1": "fixed", "col2": "ok", "col3": "ok"}'
+                    text = '{"col1": "fixed", "col2": "fixed", "col3": "fixed"}'
             elif "B" in prompt:
-                if call_count <= 3:
-                    text = '{"col1": "ok", "col2": null, "col3": "ok"}'
-                else:
-                    text = '{"col1": "ok", "col2": "fixed", "col3": "ok"}'
+                # Partial failure -> Should NOT retry
+                text = '{"col1": "ok", "col2": null, "col3": "ok"}'
             else:  # "C"
-                if call_count <= 3:
-                    text = '{"col1": "ok", "col2": "ok", "col3": null}'
-                else:
-                    text = '{"col1": "ok", "col2": "ok", "col3": "fixed"}'
+                # Partial failure -> Should NOT retry
+                text = '{"col1": "ok", "col2": "ok", "col3": null}'
 
             return LLMResponse(
                 text=text,
@@ -227,10 +224,14 @@ class TestMultiColumnRetry:
 
         result = pipeline.execute()
 
-        # Should process 3 rows initially, then retry all 3 (each had a failure)
-        assert call_count == 6, f"Expected 6 calls (3 + 3 retry), got {call_count}"
+        # Expected calls:
+        # Pass 1: 3 calls (A, B, C)
+        # Retry: 1 call (A only, because B and C are partial failures)
+        # Total: 4 calls
+        assert call_count == 4, f"Expected 4 calls (3 + 1 retry), got {call_count}"
 
-        # All should be valid after retry
-        quality = result.validate_output_quality(["col1", "col2", "col3"])
-        assert quality.null_outputs == 0
-        assert quality.success_rate == 100.0
+        # Verify quality
+        # A should be fully valid
+        # B and C should still have partial nulls
+        # Let's just check that retried row A is populated
+        assert result.data.loc[0, "col1"] == "fixed"

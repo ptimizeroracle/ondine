@@ -627,6 +627,21 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         if any(p in error_str for p in quota_patterns):
             return QuotaExceededError(f"Quota error: {error}")
 
+        # Authentication errors (non-retryable)
+        auth_patterns = [
+            "invalid api key",
+            "invalid_api_key",
+            "authentication failed",
+            "401",
+            "403",
+            "unauthorized",
+            "invalid credentials",
+            "api key not found",
+            "permission denied",
+        ]
+        if any(p in error_str for p in auth_patterns):
+            return InvalidAPIKeyError(f"Authentication error: {error}")
+
         # Fallback to pattern matching for other providers or generic errors
         # Model errors (decommissioned, not found)
         model_patterns = [
