@@ -140,8 +140,8 @@ class RichProgressTracker(ProgressTracker):
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
             expand=True,
-            transient=True,      # Remove progress bar when finished (cleaner logs)
-            auto_refresh=True,   # Enable auto-refresh for smooth animation (spinners, timers)
+            transient=True,  # Remove progress bar when finished (cleaner logs)
+            auto_refresh=True,  # Enable auto-refresh for smooth animation (spinners, timers)
             refresh_per_second=10,
         )
         self.tasks: dict[str, Any] = {}
@@ -273,14 +273,16 @@ class RichProgressTracker(ProgressTracker):
         if deployment_id and task_id in self.deployment_tasks:
             if deployment_id in self.deployment_tasks[task_id]:
                 dep_task_id = self.deployment_tasks[task_id][deployment_id]
-                
+
                 # Update deployment cost individually
                 dep_kwargs = {"advance": advance}
                 if "cost" in metadata:
                     dep_task = self.progress.tasks[dep_task_id]
                     current_dep_cost = dep_task.fields.get("cost", 0.0)
-                    dep_kwargs["cost"] = float(current_dep_cost) + float(metadata["cost"])
-                
+                    dep_kwargs["cost"] = float(current_dep_cost) + float(
+                        metadata["cost"]
+                    )
+
                 self.progress.update(dep_task_id, **dep_kwargs)
                 self.deployment_stats[task_id][deployment_id] += advance
 

@@ -334,13 +334,14 @@ class UnifiedLiteLLMClient(LLMClient):
         """
         try:
             # CRITICAL: Pass the full response AND our original model string
-            # Response.model may have provider prefix stripped by LiteLLM
+            # Response.model may have provider prefix stripped by LiteLLM (e.g. "llama-3.3" vs "groq/llama-3.3")
             
-            # If using Router, model_name is often generic (e.g. "mixed-llm").
-            # We need to check if the response itself has the actual model used.
+            # LOGIC:
+            # 1. If NOT using Router, self.model is the canonical provider-prefixed name (e.g. "groq/llama-3.3"). Use it.
+            # 2. If using Router, self.model is generic (e.g. "mixed-llm"). We MUST use response.model (e.g. "gpt-4o").
+            
             model_to_use = self.model
-            if hasattr(response, "model") and response.model:
-                # If response has specific model (e.g. "gpt-4o-mini"), prefer that over generic "mixed-llm"
+            if self.router and hasattr(response, "model") and response.model:
                 model_to_use = response.model
 
             cost = litellm.completion_cost(
@@ -351,10 +352,10 @@ class UnifiedLiteLLMClient(LLMClient):
             return Decimal(str(cost)) if cost else Decimal("0")
         except Exception as e:
             # Fallback to token-based calculation
-            # Only log warning if it's not the known Router issue
+            # Only log warning if it's not the known Router issue (which we try to avoid now)
             if "LLM Provider NOT provided" not in str(e):
                 logger.warning(
-                    f"completion_cost failed for {self.model}: {e}, falling back to manual calculation"
+                    f"completion_cost failed for {self.model} (using {model_to_use}): {e}, fallback to manual"
                 )
             tokens_in = response.usage.prompt_tokens if response.usage else 0
             tokens_out = response.usage.completion_tokens if response.usage else 0
@@ -466,13 +467,20 @@ class UnifiedLiteLLMClient(LLMClient):
         try:
             # Try to get raw response for metadata extraction
             # Instructor >= 1.0.0 supports create_with_completion
-            if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
-                result, raw_response = await self.instructor_client.chat.completions.create_with_completion(
+            if hasattr(
+                self.instructor_client.chat.completions, "create_with_completion"
+            ):
+                (
+                    result,
+                    raw_response,
+                ) = await self.instructor_client.chat.completions.create_with_completion(
                     **call_kwargs
                 )
             else:
                 # Fallback for older versions
-                result = await self.instructor_client.chat.completions.create(**call_kwargs)
+                result = await self.instructor_client.chat.completions.create(
+                    **call_kwargs
+                )
         except Exception as e:
             raise ValueError(f"Structured prediction failed: {e}") from e
 
@@ -482,9 +490,7 @@ class UnifiedLiteLLMClient(LLMClient):
         # Calculate tokens and cost
         # If we have raw_response, use it for accurate usage/cost!
         if raw_response:
-            tokens_in = (
-                raw_response.usage.prompt_tokens if raw_response.usage else 0
-            )
+            tokens_in = raw_response.usage.prompt_tokens if raw_response.usage else 0
             tokens_out = (
                 raw_response.usage.completion_tokens if raw_response.usage else 0
             )

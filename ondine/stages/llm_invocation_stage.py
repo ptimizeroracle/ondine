@@ -1,7 +1,6 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import concurrent.futures
-import logging
 import time
 from decimal import Decimal
 from typing import Any
@@ -130,11 +129,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 for i, dep in enumerate(model_list):
                     # Get friendly name and model info
                     friendly_id = dep.get("model_id", dep.get("model_name", "unknown"))
-                    
+
                     # Ensure ID is unique for visualization even if model_name is shared
                     # (Router requires shared model_name for load balancing)
                     unique_id = f"{friendly_id}_{i}"
-                    
+
                     litellm_params = dep.get("litellm_params", {})
                     model = litellm_params.get("model", "unknown")
 
@@ -154,11 +153,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 # Prepare deployments list for UI initialization
                 deployments_for_progress = []
                 for item in self._available_names:
-                    deployments_for_progress.append({
-                        "model_id": item["id"],
-                        "label": item["label"],
-                        "weight": 1.0,  # Assume equal distribution for UI
-                    })
+                    deployments_for_progress.append(
+                        {
+                            "model_id": item["id"],
+                            "label": item["label"],
+                            "weight": 1.0,  # Assume equal distribution for UI
+                        }
+                    )
 
                 progress_task = progress_tracker.start_stage(
                     f"{self.name}: {total_rows_for_progress:,} rows",

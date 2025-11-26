@@ -247,7 +247,17 @@ class TestUnifiedLiteLLMClient:
         mock_instructor_client = Mock()
         mock_completions = Mock()
         mock_result = TestModel(result="structured output")
+        
+        # Mock create_with_completion (NEW METHOD)
+        mock_raw_response = Mock()
+        mock_raw_response.usage = Mock(prompt_tokens=10, completion_tokens=5)
+        
+        # CRITICAL: Ensure AsyncMock is returned when accessed
+        mock_completions.create_with_completion = AsyncMock(return_value=(mock_result, mock_raw_response))
+        
+        # Also mock create for fallback
         mock_completions.create = AsyncMock(return_value=mock_result)
+        
         mock_instructor_client.chat = Mock()
         mock_instructor_client.chat.completions = mock_completions
 
@@ -258,9 +268,9 @@ class TestUnifiedLiteLLMClient:
             client = UnifiedLiteLLMClient(spec)
             result = await client.structured_invoke_async("test", TestModel)
 
-            # Verify Instructor was called correctly
-            mock_completions.create.assert_called_once()
-            call_kwargs = mock_completions.create.call_args.kwargs
+            # Verify Instructor was called correctly via create_with_completion
+            mock_completions.create_with_completion.assert_called_once()
+            call_kwargs = mock_completions.create_with_completion.call_args.kwargs
             assert call_kwargs["model"] == "openai/gpt-4o-mini"
             assert call_kwargs["response_model"] == TestModel
             assert call_kwargs["api_key"] == "sk-test"
