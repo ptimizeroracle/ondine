@@ -36,6 +36,9 @@ class TestAllProviders:
     def test_provider_execution(self, provider, model, key_name):
         """Test that provider can execute pipeline."""
         df = pd.DataFrame({"text": ["Say hello"]})
+        
+        # Explicitly get API key
+        api_key = os.getenv(key_name)
 
         pipeline = (
             PipelineBuilder.create()
@@ -45,7 +48,12 @@ class TestAllProviders:
                 output_columns=["response"],
             )
             .with_prompt("{text}")
-            .with_llm(provider=provider, model=model, temperature=0.0)
+            .with_llm(
+                provider=provider, 
+                model=model, 
+                temperature=0.0,
+                api_key=api_key  # Pass key explicitly
+            )
             .build()
         )
 
