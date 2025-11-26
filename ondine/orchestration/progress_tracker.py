@@ -289,12 +289,20 @@ class RichProgressTracker(ProgressTracker):
         """Mark task as complete."""
         if task_id in self.tasks:
             rich_task_id = self.tasks[task_id]
-            self.progress.update(rich_task_id, completed=True)
+            
+            # Get total to ensure bar fills up completely
+            task = self.progress.tasks[rich_task_id]
+            total = task.total or 0
+            
+            self.progress.update(rich_task_id, completed=total)
 
             # Also complete deployment sub-tasks
             if task_id in self.deployment_tasks:
                 for dep_task_id in self.deployment_tasks[task_id].values():
-                    self.progress.update(dep_task_id, completed=True)
+                    # Get total for sub-task
+                    dep_task = self.progress.tasks[dep_task_id]
+                    dep_total = dep_task.total or 0
+                    self.progress.update(dep_task_id, completed=dep_total)
 
     def __enter__(self) -> "RichProgressTracker":
         """Start progress display."""
