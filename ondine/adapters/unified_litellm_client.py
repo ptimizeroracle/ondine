@@ -335,17 +335,27 @@ class UnifiedLiteLLMClient(LLMClient):
         try:
             # CRITICAL: Pass the full response AND our original model string
             # Response.model may have provider prefix stripped by LiteLLM
+            
+            # If using Router, model_name is often generic (e.g. "mixed-llm").
+            # We need to check if the response itself has the actual model used.
+            model_to_use = self.model
+            if hasattr(response, "model") and response.model:
+                # If response has specific model (e.g. "gpt-4o-mini"), prefer that over generic "mixed-llm"
+                model_to_use = response.model
+
             cost = litellm.completion_cost(
                 completion_response=response,
-                model=self.model,  # Use our stored model string with provider prefix
+                model=model_to_use,  
             )
-            logger.debug(f"LiteLLM cost for {self.model}: ${cost}")
+            logger.debug(f"LiteLLM cost for {model_to_use}: ${cost}")
             return Decimal(str(cost)) if cost else Decimal("0")
         except Exception as e:
             # Fallback to token-based calculation
-            logger.warning(
-                f"completion_cost failed for {self.model}: {e}, falling back to manual calculation"
-            )
+            # Only log warning if it's not the known Router issue
+            if "LLM Provider NOT provided" not in str(e):
+                logger.warning(
+                    f"completion_cost failed for {self.model}: {e}, falling back to manual calculation"
+                )
             tokens_in = response.usage.prompt_tokens if response.usage else 0
             tokens_out = response.usage.completion_tokens if response.usage else 0
             return self._calc_cost(tokens_in, tokens_out)
@@ -452,39 +462,71 @@ class UnifiedLiteLLMClient(LLMClient):
             call_kwargs.update(self.spec.extra_params)
 
         # Call with pre-initialized Instructor client
+        raw_response = None
         try:
-            result = await self.instructor_client.chat.completions.create(**call_kwargs)
+            # Try to get raw response for metadata extraction
+            # Instructor >= 1.0.0 supports create_with_completion
+            if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
+                result, raw_response = await self.instructor_client.chat.completions.create_with_completion(
+                    **call_kwargs
+                )
+            else:
+                # Fallback for older versions
+                result = await self.instructor_client.chat.completions.create(**call_kwargs)
         except Exception as e:
             raise ValueError(f"Structured prediction failed: {e}") from e
 
         # Serialize for backward compatibility (text field)
         text = result.model_dump_json()
 
-        # Estimate tokens (Instructor doesn't expose usage)
-        full_prompt = (
-            f"{kwargs.get('system_message', '')}\n\n{prompt}"
-            if kwargs.get("system_message")
-            else prompt
-        )
-        tokens_in = self.estimate_tokens(full_prompt)
-        tokens_out = self.estimate_tokens(text)
+        # Calculate tokens and cost
+        # If we have raw_response, use it for accurate usage/cost!
+        if raw_response:
+            tokens_in = (
+                raw_response.usage.prompt_tokens if raw_response.usage else 0
+            )
+            tokens_out = (
+                raw_response.usage.completion_tokens if raw_response.usage else 0
+            )
+            # Use LiteLLM's cost calculation if available
+            cost = self._calc_cost_from_response(raw_response)
+        else:
+            # Fallback estimation
+            full_prompt = (
+                f"{kwargs.get('system_message', '')}\n\n{prompt}"
+                if kwargs.get("system_message")
+                else prompt
+            )
+            tokens_in = self.estimate_tokens(full_prompt)
+            tokens_out = self.estimate_tokens(text)
+            cost = self._calc_cost(tokens_in, tokens_out)
+
         latency_ms = (time.time() - start) * 1000
 
-        cost = self._calc_cost(tokens_in, tokens_out)
-
         # Extract Router deployment info (Instructor path)
-        # NOTE: Instructor wraps the response, so _hidden_params may not be accessible
         metadata = {}
         if self.router:
-            # Try to access underlying completion response
-            if hasattr(result, "_raw_response"):
+            # Use raw_response if available
+            source = raw_response if raw_response else result
+
+            # Check for _hidden_params
+            if hasattr(source, "_hidden_params") and source._hidden_params:
+                hidden = source._hidden_params
+                if isinstance(hidden, dict):
+                    # Method 1: model_id field
+                    if "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
+                    # Method 2: model_region or custom_llm_provider
+                    elif "model_region" in hidden:
+                        metadata["model_id"] = hidden["model_region"]
+
+            # Fallback: Check if result has _raw_response (some instructor versions)
+            elif hasattr(result, "_raw_response"):
                 raw = result._raw_response
                 if hasattr(raw, "_hidden_params") and raw._hidden_params:
                     hidden = raw._hidden_params
-                    if isinstance(hidden, dict):
-                        # Extract model_id from Router response
-                        if "model_id" in hidden:
-                            metadata["model_id"] = hidden["model_id"]
+                    if isinstance(hidden, dict) and "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
 
         return LLMResponse(
             text=text,

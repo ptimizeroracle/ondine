@@ -140,7 +140,9 @@ class RichProgressTracker(ProgressTracker):
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
             expand=True,
-            auto_refresh=False,  # Disable auto-refresh to control rendering
+            transient=True,      # Remove progress bar when finished (cleaner logs)
+            auto_refresh=True,   # Enable auto-refresh for smooth animation (spinners, timers)
+            refresh_per_second=10,
         )
         self.tasks: dict[str, Any] = {}
 
@@ -178,18 +180,22 @@ class RichProgressTracker(ProgressTracker):
                 weight = deployment.get("weight", 1.0)
                 dep_rows = int(total_rows * (weight / total_weight))
 
-                # Build label: "key-id (provider/model)"
-                model = deployment.get("model", "")
-                if model:
-                    # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
-                    provider = model.split("/")[0] if "/" in model else ""
-                    model_short = model.split("/")[1] if "/" in model else model
-                    # Truncate long model names
-                    if len(model_short) > 25:
-                        model_short = model_short[:22] + "..."
-                    label = f"   ├─ {dep_id} ({provider}/{model_short})"
+                # Use provided label if available
+                if "label" in deployment:
+                    label = f"   ├─ {deployment['label']}"
                 else:
-                    label = f"   ├─ {dep_id}"
+                    # Build label: "key-id (provider/model)"
+                    model = deployment.get("model", "")
+                    if model:
+                        # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+                        provider = model.split("/")[0] if "/" in model else ""
+                        model_short = model.split("/")[1] if "/" in model else model
+                        # Truncate long model names
+                        if len(model_short) > 25:
+                            model_short = model_short[:22] + "..."
+                        label = f"   ├─ {dep_id} ({provider}/{model_short})"
+                    else:
+                        label = f"   ├─ {dep_id}"
 
                 # Create sub-task for this deployment
                 dep_task_id = self.progress.add_task(
@@ -267,7 +273,15 @@ class RichProgressTracker(ProgressTracker):
         if deployment_id and task_id in self.deployment_tasks:
             if deployment_id in self.deployment_tasks[task_id]:
                 dep_task_id = self.deployment_tasks[task_id][deployment_id]
-                self.progress.update(dep_task_id, advance=advance)
+                
+                # Update deployment cost individually
+                dep_kwargs = {"advance": advance}
+                if "cost" in metadata:
+                    dep_task = self.progress.tasks[dep_task_id]
+                    current_dep_cost = dep_task.fields.get("cost", 0.0)
+                    dep_kwargs["cost"] = float(current_dep_cost) + float(metadata["cost"])
+                
+                self.progress.update(dep_task_id, **dep_kwargs)
                 self.deployment_stats[task_id][deployment_id] += advance
 
         # Manual refresh since auto_refresh is disabled

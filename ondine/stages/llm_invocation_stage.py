@@ -127,9 +127,14 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Initialize available names from config
             if hasattr(self.llm_client, "router") and self.llm_client.router:
                 model_list = getattr(self.llm_client.router, "model_list", [])
-                for dep in model_list:
+                for i, dep in enumerate(model_list):
                     # Get friendly name and model info
                     friendly_id = dep.get("model_id", dep.get("model_name", "unknown"))
+                    
+                    # Ensure ID is unique for visualization even if model_name is shared
+                    # (Router requires shared model_name for load balancing)
+                    unique_id = f"{friendly_id}_{i}"
+                    
                     litellm_params = dep.get("litellm_params", {})
                     model = litellm_params.get("model", "unknown")
 
@@ -140,16 +145,25 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
                     self._available_names.append(
                         {
-                            "id": friendly_id,
+                            "id": unique_id,
                             "label": f"{provider}/{model_short} ({friendly_id})",
                         }
                     )
 
             if progress_tracker:
+                # Prepare deployments list for UI initialization
+                deployments_for_progress = []
+                for item in self._available_names:
+                    deployments_for_progress.append({
+                        "model_id": item["id"],
+                        "label": item["label"],
+                        "weight": 1.0,  # Assume equal distribution for UI
+                    })
+
                 progress_task = progress_tracker.start_stage(
                     f"{self.name}: {total_rows_for_progress:,} rows",
                     total_rows=total_rows_for_progress,
-                    # Don't pass deployments upfront - we'll add them dynamically
+                    deployments=deployments_for_progress,
                 )
                 # Store for access in concurrent loop
                 self._current_progress_task = progress_task
