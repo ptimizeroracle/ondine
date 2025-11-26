@@ -71,9 +71,9 @@ class JsonBatchStrategy(BatchFormattingStrategy):
             for i, prompt in enumerate(prompts)
         ]
 
-        # Format as prompt
+        # Format as prompt (minified JSON to save tokens)
         items_json = json.dumps(
-            [{"id": item.id, "input": item.input} for item in items], indent=2
+            [{"id": item.id, "input": item.input} for item in items], separators=(",", ":")
         )
 
         return f"""Process these {len(prompts)} items and return a JSON array.
