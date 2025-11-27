@@ -51,8 +51,12 @@ class TestErrorClassification:
         """Create a mock LLM invocation stage for testing."""
         from unittest.mock import MagicMock
 
+        # Ensure router is False to test standard behavior
+        mock_client = MagicMock()
+        mock_client.router = None
+
         return LLMInvocationStage(
-            llm_client=MagicMock(),
+            llm_client=mock_client,
             retry_handler=MagicMock(),
             error_policy="skip",
         )
@@ -285,6 +289,7 @@ class TestIntegration:
 
         # Mock LLM client that raises model error
         mock_client = MagicMock()
+        mock_client.router = None  # Ensure NO router to test fatal behavior
         mock_client.invoke.side_effect = Exception(
             "The model `invalid-model` has been decommissioned"
         )

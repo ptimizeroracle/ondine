@@ -4,6 +4,7 @@ This stage splits batch responses back into individual responses,
 with support for partial extraction and row-by-row retry fallback.
 """
 
+import json
 from typing import Any
 
 from ondine.core.models import ResponseBatch, RowMetadata
@@ -81,8 +82,8 @@ class BatchDisaggregatorStage(PipelineStage):
             batch_metadata_dict = batch.metadata[0].custom.get("batch_metadata", {})
             batch_metadata = BatchMetadata(**batch_metadata_dict)
 
-            # Get the batch response text (first and only response in aggregated batch)
-            response_text = batch.responses[0]
+            # Get the batch response (first and only response in aggregated batch)
+            llm_response = batch.responses[0]
 
             # Get cost and latency from batch (will be split evenly)
             batch_cost = batch.cost
@@ -90,7 +91,48 @@ class BatchDisaggregatorStage(PipelineStage):
             batch_latency = batch.latencies_ms[0] if batch.latencies_ms else 0.0
 
             # Parse batch response
+            # OPTIMIZATION: Use structured_result if available (Instructor Pydantic object)
+            # This avoids JSON serialize/parse cycle!
             try:
+                if (
+                    hasattr(llm_response, "structured_result")
+                    and llm_response.structured_result
+                ):
+                    # Fast path: Direct Pydantic object access
+                    pydantic_batch = llm_response.structured_result
+
+                    # Extract items from Pydantic batch (assumes .items field)
+                    if hasattr(pydantic_batch, "items"):
+                        items = pydantic_batch.items
+                        # Serialize each item's result to JSON string
+                        individual_results = []
+                        for item in items:
+                            if hasattr(item, "result"):
+                                # Architecture A: {id, result} structure
+                                result_dict = (
+                                    item.result.model_dump()
+                                    if hasattr(item.result, "model_dump")
+                                    else item.result
+                                )
+                                individual_results.append(json.dumps(result_dict))
+                            else:
+                                # Architecture B: Flat structure (serialize entire item except id)
+                                item_dict = item.model_dump()
+                                item_dict.pop(
+                                    "id", None
+                                )  # Remove id, will be tracked separately
+                                individual_results.append(json.dumps(item_dict))
+                    else:
+                        raise ValueError(
+                            f"Pydantic batch has no 'items' field: {type(pydantic_batch)}"
+                        )
+                else:
+                    # Fallback: Parse JSON string (backward compatibility)
+                    response_text = (
+                        llm_response.text
+                        if hasattr(llm_response, "text")
+                        else str(llm_response)
+                    )
                 individual_results = self.strategy.parse_batch_response(
                     response_text,
                     expected_count=batch_metadata.original_count,
@@ -129,8 +171,8 @@ class BatchDisaggregatorStage(PipelineStage):
                 for i, row_id in enumerate(batch_metadata.row_ids):
                     if i + 1 in e.failed_ids:  # failed_ids are 1-based
                         individual_results.append(
-                            f"[PARSE_ERROR: Row {i + 1} not found in batch response]"
-                        )
+                            "null"
+                        )  # Return null so parser produces None -> triggers retry
                     else:
                         # Find the corresponding parsed result
                         result_idx = i - sum(1 for fid in e.failed_ids if fid <= i + 1)
@@ -159,15 +201,23 @@ class BatchDisaggregatorStage(PipelineStage):
 
             except Exception as e:
                 # Complete failure - couldn't parse batch at all
+                # Try to identify the provider
+                provider_info = "unknown"
+                if hasattr(llm_response, "model") and llm_response.model:
+                    provider_info = llm_response.model
+                elif hasattr(llm_response, "metadata") and isinstance(
+                    llm_response.metadata, dict
+                ):
+                    provider_info = llm_response.metadata.get("model_id", "unknown")
+
                 self.logger.error(
-                    f"Failed to parse batch response: {e}. "
-                    f"Response: {response_text[:200]}"
+                    f"Failed to parse batch response from [{provider_info}]: {e}. "
+                    f"Batch ID: {batch.batch_id}. "
+                    f"Response: {response_text[:500]}"
                 )
 
                 # Create error responses for all rows
-                error_responses = [
-                    f"[BATCH_PARSE_ERROR: {str(e)}]" for _ in batch_metadata.row_ids
-                ]
+                error_responses = ["null" for _ in batch_metadata.row_ids]
 
                 disaggregated_batch = ResponseBatch(
                     responses=error_responses,

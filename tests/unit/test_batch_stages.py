@@ -229,8 +229,8 @@ class TestBatchDisaggregatorStage:
         # Should create 3 responses (2 successful + 1 error marker)
         assert len(result[0].responses) == 3
 
-        # Check that failed row has error marker
-        assert "[PARSE_ERROR" in result[0].responses[1]  # Row ID 2 (index 1)
+        # Check that failed row has error marker (now "null" to trigger auto-retry)
+        assert result[0].responses[1] == "null"  # Row ID 2 (index 1)
 
     def test_handles_complete_parse_failure(self):
         """Should handle complete parse failures."""
@@ -267,10 +267,10 @@ class TestBatchDisaggregatorStage:
         context = ExecutionContext()
         result = stage.process([batch], context)
 
-        # Should create error responses for all rows
+        # Should create error responses for all rows (now "null" to trigger auto-retry)
         assert len(result[0].responses) == 2
-        assert "[BATCH_PARSE_ERROR" in result[0].responses[0]
-        assert "[BATCH_PARSE_ERROR" in result[0].responses[1]
+        assert result[0].responses[0] == "null"
+        assert result[0].responses[1] == "null"
 
     def test_validation_fails_for_empty_input(self):
         """Should fail validation when input list is empty."""

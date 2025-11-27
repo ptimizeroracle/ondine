@@ -32,6 +32,7 @@ class LLMProvider(str, Enum):
     GROQ = "groq"
     OPENAI_COMPATIBLE = "openai_compatible"
     MLX = "mlx"
+    LITELLM = "litellm"  # Universal LiteLLM provider (auto-detects from model string)
 
 
 class ErrorPolicy(str, Enum):
@@ -188,8 +189,10 @@ class LLMSpec(BaseModel):
     OpenAI, Azure OpenAI, Anthropic, Groq, MLX, and custom OpenAI-compatible APIs.
 
     Attributes:
-        provider: LLM provider (openai, azure_openai, anthropic, groq, mlx, openai_compatible)
-        model: Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4", "llama-3.3-70b-versatile")
+        provider: LLM provider (optional - defaults to "litellm" which auto-detects from model string)
+        model: Model identifier. Can be:
+              - Full format: "provider/model" (e.g., "moonshot/kimi-k2-thinking-turbo")
+              - Short format: "model" (requires provider to be set)
         api_key: API key (optional, reads from environment if not provided)
         temperature: Sampling temperature (0.0-2.0, default: 0.0 for deterministic output)
         max_tokens: Maximum output tokens (optional, uses model default)
@@ -197,27 +200,22 @@ class LLMSpec(BaseModel):
 
     Example:
         ```python
-        # OpenAI
+        # NEW: LiteLLM format (recommended) - provider auto-detected from model
         spec = LLMSpec(
-            provider=LLMProvider.OPENAI,
-            model="gpt-4o-mini",
-            temperature=0.3
+            model="openai/gpt-4o-mini",  # provider extracted from string
+            api_key="sk-..."  # pragma: allowlist secret
         )
 
-        # Groq (fast and affordable)
+        spec = LLMSpec(
+            model="moonshot/kimi-k2-thinking-turbo",  # Works with ANY LiteLLM provider!
+            api_key="sk-..."  # pragma: allowlist secret
+        )
+
+        # OLD: Explicit provider (still supported)
         spec = LLMSpec(
             provider=LLMProvider.GROQ,
             model="llama-3.3-70b-versatile",
             temperature=0.0
-        )
-
-        # Azure with Managed Identity (no API key needed)
-        spec = LLMSpec(
-            provider=LLMProvider.AZURE_OPENAI,
-            model="gpt-4",
-            azure_endpoint="https://your-resource.openai.azure.com/",
-            azure_deployment="gpt-4-deployment",
-            use_managed_identity=True
         )
         ```
 
@@ -225,7 +223,10 @@ class LLMSpec(BaseModel):
         Use LLMProviderPresets for pre-configured common providers.
     """
 
-    provider: LLMProvider
+    provider: LLMProvider | str = Field(
+        default="litellm",
+        description="Provider type (defaults to 'litellm' for universal LiteLLM support)",
+    )
     model: str = Field(..., min_length=1, description="Model identifier")
     api_key: str | None = Field(default=None, description="API key (or from env)")
     temperature: float = Field(
@@ -297,6 +298,16 @@ class LLMSpec(BaseModel):
         description="LiteLLM caching configuration (Redis or in-memory)",
     )
 
+    # Pass-through parameters for LiteLLM (advanced)
+    extra_params: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Extra parameters to pass directly to LiteLLM "
+            "(e.g., stream=True, caching=True, top_p=0.9, response_format={}, tools=[]). "
+            "Enables use of ANY LiteLLM feature without code changes."
+        ),
+    )
+
     # Internal: Custom provider routing (set by PipelineBuilder for registry-based providers)
     custom_provider_id: str | None = Field(
         default=None,
@@ -333,7 +344,7 @@ class LLMSpec(BaseModel):
     @model_validator(mode="after")
     def validate_provider_requirements(self) -> "LLMSpec":
         """Validate provider-specific requirements."""
-        # Check openai_compatible requires base_url
+        # Check openai_compatible requires base_url (only if explicitly set)
         if self.provider == LLMProvider.OPENAI_COMPATIBLE and self.base_url is None:
             raise ValueError("base_url required for openai_compatible provider")
         return self

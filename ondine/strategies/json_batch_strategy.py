@@ -71,9 +71,10 @@ class JsonBatchStrategy(BatchFormattingStrategy):
             for i, prompt in enumerate(prompts)
         ]
 
-        # Format as prompt
+        # Format as prompt (minified JSON to save tokens)
         items_json = json.dumps(
-            [{"id": item.id, "input": item.input} for item in items], indent=2
+            [{"id": item.id, "input": item.input} for item in items],
+            separators=(",", ":"),
         )
 
         return f"""Process these {len(prompts)} items and return a JSON array.
@@ -134,13 +135,38 @@ JSON Array:"""
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in response: {e}") from e
 
+        # Handle both Instructor formats:
+        # 1. Wrapped: {items: [{id: 1, answer: "..."}, ...]} (Instructor Pydantic model)
+        # 2. Direct: [{id: 1, result: {...}}, ...] (Legacy format)
+        if isinstance(data, dict) and "items" in data:
+            # Instructor wraps in {items: [...]} - extract the array
+            data = data["items"]
+
         # Validate it's a list
         if not isinstance(data, list):
-            raise ValueError(f"Expected JSON array, got {type(data)}")
+            raise ValueError(
+                f"Expected JSON array or {{items: [...]}}, got {type(data)}"
+            )
 
         # Parse into BatchResult for validation
+        # Handle two item formats:
+        # A. {id: 1, result: {...}} - wrapped result (bacon cleaner pattern)
+        # B. {id: 1, answer: "...", confidence: ...} - flat fields (test pattern)
         try:
-            items = [BatchItem(**item) for item in data]
+            items = []
+            for item in data:
+                if "result" in item:
+                    # Architecture A: Has explicit result wrapper
+                    items.append(BatchItem(**item))
+                else:
+                    # Architecture B: Flat structure - wrap in result
+                    # Extract id, put everything else in result
+                    item_copy = dict(item)  # Don't mutate original
+                    item_id = item_copy.pop("id")
+                    # If no other fields, result is None (not empty dict)
+                    result_data = item_copy if item_copy else None
+                    items.append(BatchItem(id=item_id, result=result_data))
+
             batch_result = BatchResult(results=items)
         except Exception as e:
             raise ValueError(f"Invalid batch result format: {e}") from e

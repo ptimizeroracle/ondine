@@ -1,670 +1,541 @@
 """
-Unified LiteLLM client - Direct integration with LiteLLM (no LlamaIndex wrapper).
+Minimal LiteLLM wrapper - thin abstraction for easy backend swaps.
 
-This client wraps ALL LiteLLM features directly:
-- litellm.acompletion() for async-first API calls
-- litellm.Router for load balancing and failover
-- litellm.completion_cost() for automatic cost tracking
-- litellm.encode() for token estimation
-- Supports 100+ providers (OpenAI, Groq, Anthropic, Azure, etc.)
+Philosophy:
+- LiteLLM handles ALL providers, routing, caching, retries
+- This wrapper ONLY provides: sync/async normalization, structured output, Ondine response format
+- ZERO provider-specific logic - just pass through to LiteLLM
+- Clean interface makes future backend swaps trivial
 
-Clean abstraction enables future framework swaps while using LiteLLM natively.
+Usage:
+    # Any LiteLLM model format works (provider/model):
+    spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-...")  # pragma: allowlist secret
+    spec = LLMSpec(model="groq/llama-3.3-70b-versatile", api_key="gsk_...")  # pragma: allowlist secret
+    spec = LLMSpec(model="moonshot/kimi-k2-thinking-turbo", api_key="sk-...")  # pragma: allowlist secret
+
+    # Advanced: Use extra_params for ANY LiteLLM feature
+    spec = LLMSpec(
+        model="openai/gpt-4o-mini",
+        api_key="sk-...",  # pragma: allowlist secret
+        extra_params={
+            'stream': True,              # Streaming
+            'caching': True,             # Enable caching
+            'max_retries': 3,            # Built-in retries
+            'top_p': 0.9,                # Sampling params
+            'response_format': {...},    # JSON mode
+            'tools': [...],              # Function calling
+            # ... ANY LiteLLM param works!
+        }
+    )
+    client = UnifiedLiteLLMClient(spec)
+
+The extra_params pattern means:
+- No code changes needed when LiteLLM adds new features
+- User has full control over LiteLLM's capabilities
+- Wrapper stays minimal and maintainable
 """
 
 import asyncio
-import hashlib
 import logging
-import os
 import time
 import warnings
 from decimal import Decimal
 from typing import Any
 
+import instructor
+import litellm
 from pydantic import BaseModel
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
 
+# CRITICAL: Suppress Pydantic serialization warnings at module level
+# LiteLLM's internal models trigger these harmless warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
+warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
+
 logger = logging.getLogger(__name__)
-
-# Suppress LiteLLM async cleanup warnings
-# These occur because asyncio.run() closes the event loop before
-# LiteLLM's aiohttp clients finish cleanup. This is a known issue.
-# See: https://github.com/BerriAI/litellm/issues/
-warnings.filterwarnings("ignore", message=".*coroutine.*was never awaited.*")
-warnings.filterwarnings("ignore", category=ResourceWarning, message=".*unclosed.*")
-
-# Also configure asyncio to suppress these specific warnings
-
-
-# Set a custom exception handler to suppress cleanup errors
-def _suppress_litellm_cleanup_errors(loop, context):
-    """Suppress LiteLLM async cleanup errors."""
-    exception = context.get("exception")
-    message = context.get("message", "")
-
-    # Ignore these specific cleanup errors
-    if "Event loop is closed" in message:
-        return
-    if "Fatal error on SSL transport" in message:
-        return
-    if "coroutine" in message and "was never awaited" in message:
-        return
-
-    # Log other errors normally
-    if exception:
-        logger.debug(f"Async warning: {message}", exc_info=exception)
-
-
-# This will be used when we create event loops
-try:
-    loop = asyncio.get_event_loop()
-    loop.set_exception_handler(_suppress_litellm_cleanup_errors)
-except RuntimeError:
-    # No event loop yet, will be set when created
-    pass
 
 
 class UnifiedLiteLLMClient(LLMClient):
     """
-    Unified LLM client using LiteLLM directly (no wrappers).
+    Thin wrapper around LiteLLM - minimal abstraction.
 
-    Features:
-    - Native async: Uses litellm.acompletion() directly
-    - All providers: OpenAI, Groq, Anthropic, Azure, 100+ more
-    - Router support: Load balancing and failover (optional)
-    - Auto-cost: Uses litellm.completion_cost()
-    - Redis caching: Optional response caching (optional)
-    - Clean abstraction: Can swap to another framework later
+    Just provides:
+    - Async/sync interface
+    - Structured output via Instructor
+    - Ondine response format
+    - Optional Router support
 
-    Example:
-        # OpenAI
-        spec = LLMSpec(provider="openai", model="gpt-4o-mini")
-        client = UnifiedLiteLLMClient(spec)
-
-        # Groq
-        spec = LLMSpec(provider="groq", model="llama-3.3-70b-versatile")
-        client = UnifiedLiteLLMClient(spec)
-
-        # Azure (LiteLLM handles it natively)
-        spec = LLMSpec(provider="azure_openai", model="gpt-4",
-                       azure_endpoint="...", azure_deployment="...")
-        client = UnifiedLiteLLMClient(spec)
+    Everything else (providers, retries, caching) = LiteLLM's job.
     """
 
     def __init__(self, spec: LLMSpec):
-        """
-        Initialize unified LiteLLM client.
-
-        Args:
-            spec: LLM specification with provider, model, and config
-        """
         super().__init__(spec)
 
-        # Suppress verbose LiteLLM logs
-        os.environ["LITELLM_LOG"] = "WARNING"
-        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-        logging.getLogger("litellm").setLevel(logging.WARNING)
-
-        try:
-            import litellm
-
-            litellm.suppress_debug_info = True
-            litellm.drop_params = True
-        except (ImportError, AttributeError):
-            pass
-
         # Build model identifier for LiteLLM
-        self.model_identifier = self._build_model_identifier(spec)
+        # If model has "/", use as-is (e.g., "moonshot/kimi-k2")
+        # Otherwise, prepend provider (e.g., "groq" + "llama-3.3" → "groq/llama-3.3")
+        if "/" in spec.model:
+            self.model = spec.model  # Already has provider prefix
+        else:
+            # Get provider name
+            provider_name = (
+                spec.provider.value
+                if hasattr(spec.provider, "value")
+                else str(spec.provider)
+            )
+            provider_name = (
+                provider_name.replace("litellm_", "").replace("litellm", "").strip()
+            )
 
-        # Set API key if provided
-        if spec.api_key:
-            env_var = self._get_api_key_env_var(spec.provider)
-            os.environ[env_var] = spec.api_key
+            # Only prepend if we have a non-empty provider
+            if provider_name:
+                self.model = f"{provider_name}/{spec.model}"
+            else:
+                self.model = spec.model  # No provider, hope model is complete
 
-        # Router support (optional - for load balancing)
+        self.api_key = spec.api_key
+
+        # Suppress LiteLLM noise and async cleanup warnings
+        litellm.suppress_debug_info = True
+        litellm.drop_params = True
+        litellm.set_verbose = False  # CRITICAL: Disable ALL LiteLLM internal logging
+        logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
+        logging.getLogger("LiteLLM Router").setLevel(logging.CRITICAL)
+        logging.getLogger("LiteLLM Proxy").setLevel(logging.CRITICAL)
+        logging.getLogger("httpx").setLevel(logging.ERROR)
+
+        # Suppress harmless async cleanup warnings that occur on script exit
+        # (LiteLLM spawns background tasks that may not complete before event loop closes)
+        import warnings
+
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        warnings.filterwarnings(
+            "ignore", category=UserWarning
+        )  # Pydantic serialization warnings
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+        warnings.filterwarnings("ignore", message=".*coroutine.*never awaited.*")
+        warnings.filterwarnings(
+            "ignore", message=".*PydanticSerializationUnexpectedValue.*"
+        )
+        warnings.filterwarnings("ignore", message=".*Pydantic serializer warnings.*")
+        warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
+        warnings.filterwarnings(
+            "ignore", message=".*serialized value may not be as expected.*"
+        )
+
+        # Suppress asyncio SSL transport errors (harmless cleanup noise)
+        logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
+        # Suppress LiteLLM's internal async client cleanup warnings
+        logging.getLogger("litellm.llms.custom_httpx.async_client_cleanup").setLevel(
+            logging.CRITICAL
+        )
+
+        # CRITICAL: Suppress Pydantic's internal warnings logger
+        logging.getLogger("pydantic").setLevel(logging.CRITICAL)
+        logging.getLogger("pydantic.warnings").setLevel(logging.CRITICAL)
+        logging.getLogger("pydantic._internal").setLevel(logging.CRITICAL)
+
+        # Router support (optional)
         self.router = None
-        self.use_router = False
-        self.router_model_name = None
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
-            # When using Router, extract the model_name to use
-            if self.router and spec.router_config.get("model_list"):
-                # Use the first model's model_name as default
-                first_model = spec.router_config["model_list"][0]
-                self.router_model_name = first_model.get("model_name")
-                logger.debug(f"Router will use model_name: {self.router_model_name}")
 
-        # Cache support (optional - for response caching)
-        self.cache = None
-        if hasattr(spec, "cache_config") and spec.cache_config:
-            self._init_cache(spec.cache_config)
-
-        logger.debug(
-            f"Initialized UnifiedLiteLLMClient with model: {self.model_identifier}"
+        # Initialize Instructor client ONCE (not per-call!)
+        # Auto-detect mode based on provider:
+        # - Groq: Use JSON mode (function calling is unreliable, generates XML)
+        # - OpenAI/Anthropic: Use TOOLS mode (native function calling)
+        # - Default: JSON mode (safest fallback)
+        completion_func = (
+            self.router.acompletion if self.router else litellm.acompletion
         )
 
-    def _build_model_identifier(self, spec: LLMSpec) -> str:
-        """
-        Build LiteLLM model identifier (format: provider/model).
+        # Detect provider from model string
+        model_lower = self.model.lower()
+        if "groq" in model_lower:
+            instructor_mode = instructor.Mode.JSON
+            logger.debug("Using Instructor JSON mode for Groq (avoids XML issues)")
+        elif any(p in model_lower for p in ["gpt", "openai", "claude", "anthropic"]):
+            instructor_mode = instructor.Mode.TOOLS
+            logger.debug("Using Instructor TOOLS mode for OpenAI/Anthropic")
+        else:
+            instructor_mode = instructor.Mode.JSON  # Safest default
+            logger.debug("Using Instructor JSON mode (default)")
 
-        Examples:
-            - openai + gpt-4o-mini → "openai/gpt-4o-mini"
-            - groq + llama-3.3-70b → "groq/llama-3.3-70b-versatile"
-            - azure_openai + gpt-4 → "azure/deployment-name"
-        """
-        # Get provider name
-        provider_name = (
-            spec.provider.value
-            if hasattr(spec.provider, "value")
-            else str(spec.provider)
+        self.instructor_client = instructor.from_litellm(
+            completion_func, mode=instructor_mode
         )
 
-        # Remove litellm_ prefix if present
-        provider_name = provider_name.replace("litellm_", "")
+        logger.debug(f"Initialized LiteLLM client: {self.model}")
 
-        # Special handling for Azure
-        if provider_name == "azure_openai":
-            # Azure uses deployment name, not model name
-            if hasattr(spec, "azure_deployment") and spec.azure_deployment:
-                return f"azure/{spec.azure_deployment}"
-            return f"azure/{spec.model}"
-
-        # Check if model already has provider prefix
-        if spec.model.startswith(f"{provider_name}/"):
-            return spec.model
-
-        # Add provider prefix
-        return f"{provider_name}/{spec.model}"
-
-    def _get_api_key_env_var(self, provider) -> str:
-        """Get environment variable name for provider API key."""
-        provider_str = provider.value if hasattr(provider, "value") else str(provider)
-
-        env_var_map = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "groq": "GROQ_API_KEY",
-            "azure_openai": "AZURE_API_KEY",
-        }
-
-        return env_var_map.get(provider_str, f"{provider_str.upper()}_API_KEY")
-
-    def _init_router(self, router_config):
+    def _init_router(self, config: dict):
         """
-        Initialize LiteLLM Router with load balancing and optional Redis.
+        Initialize LiteLLM Router - generic wrapper behavior.
 
-        Router features from LiteLLM:
-        - Load balancing (simple-shuffle, latency-based, usage-based)
-        - Automatic failover
-        - Built-in retries with exponential backoff
-        - Redis support for distributed state
-        - Cooldowns for failing deployments
-        - RPM/TPM limits per deployment
-
-        See: https://docs.litellm.ai/docs/routing
+        Safety checks:
+        - All deployments must share the same model_name (required for load balancing)
+        - Maps 'debug' config to LiteLLM's 'set_verbose'
         """
+        from litellm import Router
+
+        from ondine.utils.rich_utils import display_router_deployments
+
         try:
-            from litellm import Router
+            # Validate all deployments share same model_name (required for Router load balancing)
+            model_names = {m["model_name"] for m in config["model_list"]}
+            if len(model_names) != 1:
+                raise ValueError(
+                    f"Router requires all deployments to share the same model_name. "
+                    f"Found {len(model_names)} different names: {model_names}. "
+                    f"Use unique 'model_id' for tracking instead."
+                )
 
-            # Extract config
-            model_list = router_config.get("model_list", [])
-            routing_strategy = router_config.get(
-                "routing_strategy", "simple-shuffle"
-            )  # simple-shuffle is recommended
-            redis_url = router_config.get(
-                "redis_url"
-            )  # Optional: for distributed state
-
-            # Build router kwargs
-            router_kwargs = {
-                "model_list": model_list,
-                "routing_strategy": routing_strategy,
-                "num_retries": router_config.get("num_retries", 3),
-                "timeout": router_config.get("timeout", 30),
-                "set_verbose": router_config.get("debug", False),
-            }
-
-            # Add Redis if configured (LiteLLM native feature!)
-            if redis_url:
-                router_kwargs["redis_host"] = redis_url
-                router_kwargs["cache_responses"] = True  # Enable Redis response caching
-                logger.info(f"Router using Redis at {redis_url} for caching + state")
+            # Map our 'debug' to LiteLLM's 'set_verbose'
+            router_kwargs = dict(config)
+            verbose_mode = router_kwargs.pop("debug", False)
+            if verbose_mode:
+                router_kwargs["set_verbose"] = True
 
             self.router = Router(**router_kwargs)
-            self.use_router = True
+            self.model = model_names.pop()  # Use shared model_name
 
-            logger.info(
-                f"Initialized LiteLLM Router: {len(model_list)} models, "
-                f"strategy={routing_strategy}, redis={'enabled' if redis_url else 'disabled'}"
+            # Display Router info using Rich utilities
+            strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
+            display_router_deployments(
+                model_name=self.model,
+                strategy=strategy,
+                deployments=config["model_list"],
+                verbose=verbose_mode or router_kwargs.get("set_verbose", False),
             )
 
-        except ImportError:
-            logger.warning("LiteLLM Router requested but litellm not installed")
+            # ============================================================
+            # CRITICAL: Aggressively suppress Router's internal JSON logging
+            # ============================================================
+            router_logger = logging.getLogger("LiteLLM Router")
+            router_logger.setLevel(logging.CRITICAL)
+            router_logger.propagate = False
+
+            # Suppress litellm's underlying logger
+            litellm_logger = logging.getLogger("litellm")
+            litellm_logger.setLevel(logging.CRITICAL)
+            litellm_logger.propagate = False
+
+            # Remove all handlers to prevent JSON dumps
+            for handler in router_logger.handlers[:]:
+                router_logger.removeHandler(handler)
+            for handler in litellm_logger.handlers[:]:
+                litellm_logger.removeHandler(handler)
+            # ============================================================
         except Exception as e:
-            logger.error(f"Failed to initialize Router: {e}")
+            logger.error(f"Router init failed: {e}")
             self.router = None
-            self.use_router = False
-
-    def _init_cache(self, cache_config):
-        """
-        Initialize LiteLLM native caching.
-
-        LiteLLM supports multiple caching backends:
-        - Redis (recommended for production)
-        - In-memory (default, single-process only)
-        - DiskCache (for local development)
-
-        See: https://docs.litellm.ai/docs/caching
-
-        Note: Cache is configured globally via litellm.cache, not per-client.
-        This method just sets up the configuration.
-        """
-        try:
-            import litellm
-
-            cache_type = cache_config.get("cache_type", "redis")
-
-            if cache_type == "redis":
-                redis_url = cache_config.get("redis_url", "redis://localhost:6379")
-                # Configure LiteLLM to use Redis caching
-                litellm.cache = litellm.Cache(
-                    type="redis",
-                    host=redis_url,
-                    ttl=cache_config.get("ttl", 3600),
-                )
-                logger.info(f"LiteLLM Redis caching enabled: {redis_url}")
-                self.cache = litellm.cache
-
-            elif cache_type == "memory":
-                # In-memory cache (single process)
-                litellm.cache = litellm.Cache(type="local")
-                logger.info("LiteLLM in-memory caching enabled")
-                self.cache = litellm.cache
-
-            else:
-                logger.warning(f"Unknown cache type: {cache_type}")
-                self.cache = None
-
-        except ImportError:
-            logger.warning("LiteLLM caching requested but dependencies not installed")
-            self.cache = None
-        except Exception as e:
-            logger.error(f"Failed to initialize LiteLLM cache: {e}")
-            self.cache = None
 
     async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
-        """
-        Async invoke LLM (native async, not wrapped).
-
-        If cache is enabled, LiteLLM handles caching automatically.
-        If Router is enabled, LiteLLM handles load balancing + failover automatically.
-
-        Args:
-            prompt: Text prompt
-            **kwargs: Additional parameters (system_message, etc.)
-
-        Returns:
-            LLMResponse with result and metadata
-        """
-        import litellm
-
-        start_time = time.time()
+        """Async call to LLM - pass through to LiteLLM."""
+        start = time.time()
 
         # Build messages
-        messages = self._build_messages(prompt, kwargs)
+        messages = [{"role": "user", "content": prompt}]
+        if kwargs.get("system_message"):
+            messages.insert(0, {"role": "system", "content": kwargs["system_message"]})
 
-        # LiteLLM handles caching automatically if litellm.cache is configured!
-        # No need for manual cache checks - LiteLLM does it for us.
+        # Build call kwargs
+        call_kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.spec.temperature,
+            "max_tokens": self.spec.max_tokens,
+        }
+
+        # CRITICAL: Only pass api_key if NOT using Router
+        # Router has keys embedded in its model_list config!
+        if not self.router and self.api_key:
+            call_kwargs["api_key"] = self.api_key
+
+        # Add api_base if custom endpoint
+        if hasattr(self.spec, "base_url") and self.spec.base_url:
+            call_kwargs["api_base"] = self.spec.base_url
+
+        # CRITICAL: Pass through any extra params from spec (streaming, caching, retries, etc.)
+        # This makes the wrapper truly "thin" - ANY LiteLLM param works without code changes!
+        if hasattr(self.spec, "extra_params") and self.spec.extra_params:
+            call_kwargs.update(self.spec.extra_params)
 
         # Call LiteLLM (Router or direct)
-        # Router provides: load balancing, failover, retries, cooldowns
-        # Cache provides: automatic response caching (if configured)
-        if self.use_router:
-            # When using Router, pass the model_name (not full identifier)
-            model_to_use = self.router_model_name or self.model_identifier
-            response = await self.router.acompletion(
-                model=model_to_use,  # Use model_name from router config
-                messages=messages,
-                temperature=self.spec.temperature,
-                max_tokens=self.spec.max_tokens,
-                caching=True,  # Enable caching for this call
-            )
+        if self.router:
+            response = await self.router.acompletion(**call_kwargs)
         else:
-            response = await litellm.acompletion(
-                model=self.model_identifier,
-                messages=messages,
-                temperature=self.spec.temperature,
-                max_tokens=self.spec.max_tokens,
-                caching=True,  # Enable caching for this call
-            )
-
-        latency_ms = (time.time() - start_time) * 1000
+            response = await litellm.acompletion(**call_kwargs)
 
         # Extract response
-        response_text = response.choices[0].message.content
+        text = response.choices[0].message.content
         tokens_in = response.usage.prompt_tokens if response.usage else 0
         tokens_out = response.usage.completion_tokens if response.usage else 0
+        latency_ms = (time.time() - start) * 1000
 
-        # Extract cached tokens (OpenAI/Anthropic prompt caching)
-        # See: https://docs.litellm.ai/docs/completion/prompt_caching
-        try:
-            if (
-                response.usage
-                and hasattr(response.usage, "prompt_tokens_details")
-                and response.usage.prompt_tokens_details
-            ):
-                cached_tokens = getattr(
-                    response.usage.prompt_tokens_details, "cached_tokens", 0
-                )
+        # Calculate cost (LiteLLM has pricing DB) - pass response object for accurate cost
+        cost = self._calc_cost_from_response(response)
 
-                # Log cache hits
-                if (
-                    cached_tokens
-                    and isinstance(cached_tokens, int)
-                    and cached_tokens > 0
-                ):
-                    cache_pct = (
-                        (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                    )
-                    logger.info(
-                        f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
-                    )
-        except (AttributeError, TypeError):
-            # If response structure is unexpected, skip cache detection
-            pass
-
-        # Calculate cost using LiteLLM
-        cost = self._calculate_cost_litellm(prompt, response_text)
+        # Extract Router deployment info (if available)
+        # LiteLLM Router stores actual deployment ID in _hidden_params
+        metadata = {}
+        if self.router:
+            # Try multiple methods to extract deployment info
+            if hasattr(response, "_hidden_params") and response._hidden_params:
+                hidden = response._hidden_params
+                if isinstance(hidden, dict):
+                    # Method 1: model_id field
+                    if "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
+                    # Method 2: model_region or custom_llm_provider
+                    elif "model_region" in hidden:
+                        metadata["model_id"] = hidden["model_region"]
 
         return LLMResponse(
-            text=response_text,
+            text=text,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             model=self.model,
             cost=cost,
             latency_ms=latency_ms,
+            metadata=metadata,  # Pass deployment info to stage
         )
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """
-        Sync invoke (wraps async).
+        Sync wrapper that works in both scripts and Jupyter notebooks.
 
-        Args:
-            prompt: Text prompt
-            **kwargs: Additional parameters
-
-        Returns:
-            LLMResponse with result and metadata
+        Automatically detects if running in an async context (Jupyter, FastAPI, etc.)
+        and handles it appropriately.
         """
-        return asyncio.run(self.ainvoke(prompt, **kwargs))
-
-    def _build_messages(self, prompt: str, kwargs: dict) -> list[dict]:
-        """Build messages array for LiteLLM."""
-        messages = []
-
-        # Add system message if provided
-        system_message = kwargs.get("system_message")
-        if system_message:
-            messages.append({"role": "system", "content": system_message})
-
-        # Add user prompt
-        messages.append({"role": "user", "content": prompt})
-
-        return messages
-
-    def _generate_cache_key(self, prompt: str, kwargs: dict) -> str:
-        """
-        Generate cache key (DEPRECATED - LiteLLM handles caching natively).
-
-        Kept for backward compatibility with tests.
-        """
-        key_parts = [
-            self.model_identifier,
-            prompt,
-            str(self.spec.temperature),
-            str(kwargs.get("system_message", "")),
-        ]
-        key_string = "|".join(key_parts)
-        return hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()
-
-    def _parse_cached_response(self, cached: dict) -> LLMResponse:
-        """
-        Parse cached response (DEPRECATED - LiteLLM handles caching natively).
-
-        Kept for backward compatibility with tests.
-        """
-        return LLMResponse(**cached)
-
-    def _calculate_cost_litellm(self, prompt: str, completion: str) -> Decimal:
-        """Calculate cost using LiteLLM's pricing database."""
         try:
-            from litellm import completion_cost
-
-            cost = completion_cost(
-                model=self.model_identifier,
-                prompt=prompt,
-                completion=completion,
+            # Check if we're already in an event loop (Jupyter, FastAPI, etc.)
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No loop running - safe to use asyncio.run() (script mode)
+            return asyncio.run(self.ainvoke(prompt, **kwargs))
+        else:
+            # Already in a loop - schedule and wait (Jupyter mode)
+            future = asyncio.run_coroutine_threadsafe(
+                self.ainvoke(prompt, **kwargs), loop
             )
-            return Decimal(str(cost)) if cost else Decimal("0.0")
-        except Exception as e:
-            logger.debug(f"Could not calculate cost via LiteLLM: {e}")
-            # Fallback to spec costs if available
+            return future.result()
+
+    def _calc_cost_from_response(self, response: Any) -> Decimal:
+        """
+        Calculate cost from LiteLLM response object.
+
+        Simple logic: LiteLLM already calculated the cost, just use it!
+        """
+        # SIMPLE: Check if LiteLLM already calculated cost (it's in _hidden_params)
+        if hasattr(response, "_hidden_params") and response._hidden_params:
+            hidden = response._hidden_params
+            if isinstance(hidden, dict) and "response_cost" in hidden:
+                cost = hidden["response_cost"]
+                if cost and cost > 0:
+                    return Decimal(str(cost))
+
+        # Fallback: Calculate ourselves
+        try:
+            model_to_use = self.model
+            if self.router and hasattr(response, "model") and response.model:
+                model_to_use = response.model
+
+            cost = litellm.completion_cost(
+                completion_response=response,
+                model=model_to_use,
+            )
+            if cost and cost > 0:
+                return Decimal(str(cost))
+        except Exception:
+            pass
+
+        # Last resort: Manual calculation from spec
+        if self.spec.input_cost_per_1k_tokens or self.spec.output_cost_per_1k_tokens:
+            tokens_in = response.usage.prompt_tokens if response.usage else 0
+            tokens_out = response.usage.completion_tokens if response.usage else 0
+            return self._calc_cost(tokens_in, tokens_out)
+
+        return Decimal("0")
+
+    def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
+        """
+        Calculate cost using token counts (fallback method).
+
+        Framework-wide behavior:
+        1. Falls back to manual calculation if pricing available in spec
+        2. Returns $0 if pricing unavailable (prevents pipeline errors)
+
+        Pipelines consume response.cost without needing to know calculation method.
+        """
+        try:
+            # Fallback to manual calculation if specified in spec
             if (
                 self.spec.input_cost_per_1k_tokens
                 and self.spec.output_cost_per_1k_tokens
             ):
-                tokens_in = self.estimate_tokens(prompt)
-                tokens_out = self.estimate_tokens(completion)
-                return self.calculate_cost(tokens_in, tokens_out)
-            return Decimal("0.0")
+                input_cost = (
+                    Decimal(tokens_in / 1000) * self.spec.input_cost_per_1k_tokens
+                )
+                output_cost = (
+                    Decimal(tokens_out / 1000) * self.spec.output_cost_per_1k_tokens
+                )
+                return input_cost + output_cost
+            # Return $0 if pricing unavailable (avoids breaking pipelines)
+            return Decimal("0")
+        except Exception:
+            return Decimal("0")
 
     def estimate_tokens(self, text: str) -> int:
-        """
-        Estimate token count using LiteLLM.
-
-        Args:
-            text: Input text
-
-        Returns:
-            Estimated token count
-        """
+        """Estimate tokens using LiteLLM."""
         try:
-            from litellm import encode
-
-            return len(encode(model=self.model_identifier, text=text))
+            return len(litellm.encode(model=self.model, text=text))
         except Exception:
-            # Fallback to word-based estimation
             return int(len(text.split()) * 1.3)
 
     def calculate_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
-        """
-        Calculate cost from token counts.
-
-        Args:
-            tokens_in: Input tokens
-            tokens_out: Output tokens
-
-        Returns:
-            Cost in USD
-        """
-        if (
-            not self.spec.input_cost_per_1k_tokens
-            or not self.spec.output_cost_per_1k_tokens
-        ):
-            return Decimal("0.0")
-
-        input_cost = Decimal(str(tokens_in / 1000)) * self.spec.input_cost_per_1k_tokens
-        output_cost = (
-            Decimal(str(tokens_out / 1000)) * self.spec.output_cost_per_1k_tokens
-        )
-        return input_cost + output_cost
+        """Public cost calculation."""
+        return self._calc_cost(tokens_in, tokens_out)
 
     def structured_invoke(
-        self,
-        prompt: str,
-        output_cls: type[BaseModel],
-        **kwargs: Any,
+        self, prompt: str, output_cls: type[BaseModel], **kwargs: Any
     ) -> LLMResponse:
         """
-        Structured output invocation using Instructor (sync wrapper).
+        Sync wrapper for structured output that works in both scripts and Jupyter.
 
-        Wraps async structured_invoke_async for compatibility with sync pipeline.
-
-        Args:
-            prompt: Text prompt
-            output_cls: Pydantic model class
-            **kwargs: Additional parameters
-
-        Returns:
-            LLMResponse with structured output
+        Automatically detects if running in an async context and handles it appropriately.
         """
-        # Use asyncio.run() with proper cleanup
-        # Suppress event loop warnings from LiteLLM async cleanup
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=RuntimeWarning)
-            warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
-            warnings.filterwarnings(
-                "ignore", message=".*coroutine.*was never awaited.*"
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No loop - use asyncio.run()
+            return asyncio.run(
+                self.structured_invoke_async(prompt, output_cls, **kwargs)
             )
-
-            try:
-                return asyncio.run(
-                    self.structured_invoke_async(prompt, output_cls, **kwargs)
-                )
-            finally:
-                # Clean up any pending tasks to avoid cleanup errors
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.close()
-                except Exception:  # nosec B110
-                    pass  # Ignore asyncio cleanup errors (expected)
+        else:
+            # Loop exists - use run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(
+                self.structured_invoke_async(prompt, output_cls, **kwargs), loop
+            )
+            return future.result()
 
     async def structured_invoke_async(
-        self,
-        prompt: str,
-        output_cls: type[BaseModel],
-        **kwargs: Any,
+        self, prompt: str, output_cls: type[BaseModel], **kwargs: Any
     ) -> LLMResponse:
-        """
-        Async structured output invocation using Instructor.
-
-        Supports dual-path strategy:
-        1. Instructor with Mode.JSON (Groq and safe default)
-        2. Instructor with Mode.TOOLS (OpenAI/Anthropic function calling)
-        3. Native LiteLLM function calling (future)
-
-        Auto-detects best mode based on provider.
-
-        Args:
-            prompt: Text prompt
-            output_cls: Pydantic model class
-            **kwargs: Additional parameters
-
-        Returns:
-            LLMResponse with structured output
-
-        Raises:
-            ValueError: If structured prediction fails
-        """
-        import instructor
-        from litellm import acompletion
-
-        start_time = time.time()
-
-        # Determine mode (auto-detect if not specified)
-        mode = self._get_structured_output_mode()
-
-        # Initialize Instructor client with appropriate mode
-        instructor_client = instructor.from_litellm(acompletion, mode=mode)
+        """Structured output via Instructor - use pre-initialized client."""
+        start = time.time()
 
         # Build messages
-        messages = self._build_messages(prompt, kwargs)
+        messages = [{"role": "user", "content": prompt}]
+        if kwargs.get("system_message"):
+            messages.insert(0, {"role": "system", "content": kwargs["system_message"]})
 
-        # Call Instructor (async)
-        try:
-            result = await instructor_client.chat.completions.create(
-                model=self.model_identifier,
-                messages=messages,
-                response_model=output_cls,
-                temperature=self.spec.temperature,
-                max_tokens=self.spec.max_tokens,
-                max_retries=3,  # Built-in validation retry!
-            )
+        # Build call kwargs
+        call_kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "response_model": output_cls,
+            "temperature": self.spec.temperature,
+            "max_tokens": self.spec.max_tokens,
+        }
 
-            latency_ms = (time.time() - start_time) * 1000
+        # CRITICAL: Only pass api_key if NOT using Router
+        # Router has keys embedded in its model_list config!
+        if not self.router and self.api_key:
+            call_kwargs["api_key"] = self.api_key
 
-            # Serialize result to JSON
-            response_text = result.model_dump_json()
-
-            # Estimate tokens (Instructor doesn't expose usage)
-            full_prompt = prompt
-            if kwargs.get("system_message"):
-                full_prompt = f"{kwargs['system_message']}\n\n{prompt}"
-
-            tokens_in = self.estimate_tokens(full_prompt)
-            tokens_out = self.estimate_tokens(response_text)
-
-            # Calculate cost
-            cost = self._calculate_cost_litellm(full_prompt, response_text)
-
-            return LLMResponse(
-                text=response_text,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                model=self.model,
-                cost=cost,
-                latency_ms=latency_ms,
-            )
-
-        except Exception as e:
-            raise ValueError(f"Structured prediction failed: {e}") from e
-
-    def _get_structured_output_mode(self):
-        """
-        Determine which Instructor mode to use for structured output.
-
-        Auto-detection logic:
-        - Groq: Mode.JSON (no native function calling)
-        - OpenAI/Anthropic: Mode.TOOLS (native function calling)
-        - Others: Mode.JSON (safe default)
-
-        Can be overridden via spec.structured_output_mode if implemented.
-
-        Returns:
-            instructor.Mode enum value
-        """
-        import instructor
-
-        # Check if mode is explicitly configured
-        if hasattr(self.spec, "structured_output_mode"):
-            mode_str = self.spec.structured_output_mode
-            if mode_str == "instructor_json":
-                return instructor.Mode.JSON
-            if mode_str == "instructor_tools":
-                return instructor.Mode.TOOLS
-            if mode_str == "native":
-                logger.warning(
-                    "Native function calling not yet implemented, using Instructor Mode.TOOLS"
-                )
-                return instructor.Mode.TOOLS
-
-        # Auto-detect based on provider
-        provider_str = (
-            self.spec.provider.value
-            if hasattr(self.spec.provider, "value")
-            else str(self.spec.provider)
+        # Retry strategy: Default to 1 (Ondine handles retries at pipeline level)
+        # Allow override via extra_params if needed
+        call_kwargs["max_retries"] = (
+            self.spec.extra_params.get("max_retries", 1)
+            if hasattr(self.spec, "extra_params") and self.spec.extra_params
+            else 1
         )
 
-        if provider_str in ["groq"]:
-            # Groq doesn't have reliable function calling, use JSON mode
-            return instructor.Mode.JSON
-        if provider_str in ["openai", "azure_openai", "anthropic"]:
-            # These providers have good function calling support
-            return instructor.Mode.TOOLS
-        # Safe default for unknown providers
-        return instructor.Mode.JSON
+        if hasattr(self.spec, "base_url") and self.spec.base_url:
+            call_kwargs["api_base"] = self.spec.base_url
+
+        # CRITICAL: Pass through extra params (caching, response_format, tools, etc.)
+        if hasattr(self.spec, "extra_params") and self.spec.extra_params:
+            call_kwargs.update(self.spec.extra_params)
+
+        # Call with pre-initialized Instructor client
+        raw_response = None
+        # Try to get raw response for metadata extraction
+        # Instructor >= 1.0.0 supports create_with_completion
+        if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
+            (
+                result,
+                raw_response,
+            ) = await self.instructor_client.chat.completions.create_with_completion(
+                **call_kwargs
+            )
+        else:
+            # Fallback for older versions
+            result = await self.instructor_client.chat.completions.create(**call_kwargs)
+
+        # Serialize for backward compatibility (text field)
+        text = result.model_dump_json()
+
+        # Calculate tokens and cost
+        # If we have raw_response, use it for accurate usage/cost!
+        if raw_response:
+            tokens_in = raw_response.usage.prompt_tokens if raw_response.usage else 0
+            tokens_out = (
+                raw_response.usage.completion_tokens if raw_response.usage else 0
+            )
+            # Use LiteLLM's cost calculation if available
+            cost = self._calc_cost_from_response(raw_response)
+        else:
+            # Fallback estimation
+            full_prompt = (
+                f"{kwargs.get('system_message', '')}\n\n{prompt}"
+                if kwargs.get("system_message")
+                else prompt
+            )
+            tokens_in = self.estimate_tokens(full_prompt)
+            tokens_out = self.estimate_tokens(text)
+            cost = self._calc_cost(tokens_in, tokens_out)
+
+        latency_ms = (time.time() - start) * 1000
+
+        # Extract Router deployment info (Instructor path)
+        metadata = {}
+        if self.router:
+            # Use raw_response if available
+            source = raw_response if raw_response else result
+
+            # Check for _hidden_params
+            if hasattr(source, "_hidden_params") and source._hidden_params:
+                hidden = source._hidden_params
+                if isinstance(hidden, dict):
+                    # Method 1: model_id field
+                    if "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
+                    # Method 2: model_region or custom_llm_provider
+                    elif "model_region" in hidden:
+                        metadata["model_id"] = hidden["model_region"]
+
+            # Fallback: Check if result has _raw_response (some instructor versions)
+            if not metadata and hasattr(result, "_raw_response"):
+                raw = result._raw_response
+                if hasattr(raw, "_hidden_params") and raw._hidden_params:
+                    hidden = raw._hidden_params
+                    if isinstance(hidden, dict) and "model_id" in hidden:
+                        metadata["model_id"] = hidden["model_id"]
+
+        return LLMResponse(
+            text=text,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            model=self.model,
+            cost=cost,
+            latency_ms=latency_ms,
+            structured_result=result,  # CRITICAL: Keep Pydantic object (avoids re-parsing!)
+            metadata=metadata,  # Pass deployment info
+        )

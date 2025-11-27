@@ -262,15 +262,14 @@ class TestMLXClientFactory:
             api_key="test",  # pragma: allowlist secret
         )
 
-        # Groq now uses UnifiedLiteLLMClient
-        with patch("ondine.adapters.unified_litellm_client.os.environ", {}):
-            client = create_llm_client(spec)
-            assert client is not None
-            assert hasattr(client, "invoke")
-            # Verify it's the unified client
-            from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+        # Groq now uses UnifiedLiteLLMClient (no patching needed - api_key passed directly)
+        client = create_llm_client(spec)
+        assert client is not None
+        assert hasattr(client, "invoke")
+        # Verify it's the unified client
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
-            assert isinstance(client, UnifiedLiteLLMClient)
+        assert isinstance(client, UnifiedLiteLLMClient)
 
 
 class TestMLXClientErrorHandling:

@@ -182,9 +182,12 @@ output:
 
 def test_cli_invalid_provider_helpful_error():
     """
-    CRITICAL REGRESSION TEST: Invalid provider should show available options.
+    REGRESSION TEST: Config validation passes (LiteLLM handles provider validation at runtime).
 
-    This ensures users get actionable error messages, not cryptic failures.
+    Since we use LiteLLM for all providers (100+ supported), provider validation
+    happens at runtime, not config time. Config validation only checks structure.
+
+    Note: Invalid providers will fail during actual execution with LiteLLM error.
     """
     runner = CliRunner()
 
@@ -201,10 +204,10 @@ data:
   input_columns: [text]
   output_columns: [result]
 prompt:
-  template: "Test"
+  template: "Test {{{{text}}}}"
 llm:
-  provider: invalid_provider_xyz
-  model: some-model
+  provider: litellm
+  model: invalid_provider_xyz/some-model
 processing:
   batch_size: 1
 output:
@@ -213,22 +216,14 @@ output:
 
         result = runner.invoke(cli, ["validate", "--config", str(config_file)])
 
-        # Should fail with helpful error
-        assert result.exit_code != 0
+        # Config validation should pass (LiteLLM validates providers at runtime)
+        assert result.exit_code == 0
         output_lower = result.output.lower()
 
-        # Should show validation error with provider options
-        assert (
-            "invalid_provider_xyz" in output_lower
-            or "validation error" in output_lower
-            or "input should be" in output_lower
-        )
+        # Should show success
+        assert "valid" in output_lower or "success" in output_lower
 
-        # Should show available providers in error message
-        assert "openai" in output_lower
-        assert "groq" in output_lower
-
-        print("\n✅ Invalid provider error is helpful")
+        print("\n✅ Config validation passes (provider validation deferred to LiteLLM)")
 
 
 def test_cli_missing_config_file():

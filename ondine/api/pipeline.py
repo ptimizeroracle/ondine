@@ -786,31 +786,26 @@ class Pipeline:
         specs = self.specifications
         output_cols = specs.dataset.output_columns
 
-        # Check quality
-        quality = result.validate_output_quality(output_cols)
-
-        # Count both nulls and empties as failures
-        total_failed = quality.null_outputs + quality.empty_outputs
-
-        if total_failed == 0:
-            self.logger.info("No failed rows to retry")
-            return result
-
-        self.logger.info(
-            f"Auto-retry enabled: {quality.null_outputs} null + "
-            f"{quality.empty_outputs} empty = {total_failed} failed outputs"
-        )
-
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
-            # Find null OR empty rows across ALL output columns
-            failed_mask = pd.Series([False] * len(result.data), index=result.data.index)
+            # Find rows where ALL output columns are null/empty (indicates complete failure)
+            # Start with True (all failed), then AND with each column check
+            failed_mask = pd.Series([True] * len(result.data), index=result.data.index)
 
             for col in output_cols:
                 if col in result.data.columns:
                     null_mask = result.data[col].isna()
-                    empty_mask = result.data[col].astype(str).str.strip() == ""
-                    failed_mask |= null_mask | empty_mask
+                    # Handle potential non-string types gracefully
+                    empty_mask = (
+                        result.data[col].astype(str).str.strip() == ""
+                        if result.data[col].dtype == "object"
+                        or result.data[col].dtype == "string"
+                        else pd.Series(
+                            [False] * len(result.data), index=result.data.index
+                        )
+                    )
+                    # Row is failed ONLY if this column is ALSO null/empty
+                    failed_mask &= null_mask | empty_mask
 
             failed_indices = result.data[failed_mask].index.tolist()
 
