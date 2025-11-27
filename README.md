@@ -951,6 +951,13 @@ MIT License - see LICENSE file for details
 
 ## Recent Updates
 
+### Version 1.4.1 (November 27, 2025)
+
+**Native Caching Upgrade:**
+- 🚀 **Native LiteLLM Caching**: Switched to `litellm.cache` for robust, multi-backend caching (Redis, S3, Memory)
+- 💾 **Disk Caching Support**: New `with_disk_cache()` for zero-setup local persistence (using `diskcache`)
+- 🧹 **Code Cleanup**: Removed custom caching implementation for better maintainability and feature parity with LiteLLM
+
 ### Version 1.4.0 (November 27, 2025)
 
 **Latest Release - Router Optimization & Robust Batching:**
