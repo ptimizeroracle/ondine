@@ -587,8 +587,8 @@ class UnifiedLiteLLMClient(LLMClient):
             # Log if hit
             if cached_tokens > 0:
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                logger.info(
-                    f"✅ Cache hit! {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                logger.debug(
+                    f"✅ Cache hit! ({self.model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
         except Exception:
             # Don't crash on logging errors
