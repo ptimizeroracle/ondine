@@ -586,9 +586,28 @@ class UnifiedLiteLLMClient(LLMClient):
 
             # Log if hit
             if cached_tokens > 0:
+                # Try to get actual model name from response
+                # 1. response.model (usually the human-readable model name, e.g., 'gpt-4o-mini')
+                # 2. hidden params (deployment ID, sometimes a hash)
+                # 3. self.model (fallback to 'mixed-llm')
+                actual_model = getattr(response, "model", None)
+                
+                if not actual_model or "mixed-llm" in actual_model:
+                     if hasattr(response, "_hidden_params"):
+                        hidden = response._hidden_params
+                        if isinstance(hidden, dict):
+                            # Prefer model_region (often provider/model) over model_id (hash)
+                            if "model_region" in hidden:
+                                actual_model = hidden["model_region"]
+                            elif "model_id" in hidden:
+                                actual_model = hidden["model_id"]
+                
+                if not actual_model:
+                    actual_model = self.model
+
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
                 logger.debug(
-                    f"✅ Cache hit! ({self.model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                    f"✅ Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
         except Exception:
             # Don't crash on logging errors

@@ -5,6 +5,7 @@ Provides consistent logging configuration across the SDK using structlog.
 """
 
 import logging
+import os
 import sys
 from typing import Any
 
@@ -15,47 +16,8 @@ from structlog.types import EventDict
 _logging_configured = False
 
 
-def _compact_console_renderer(_: Any, __: str, event_dict: EventDict) -> str:
-    """
-    Custom console renderer with compact formatting (no padding).
-
-    Format: TIMESTAMP [LEVEL] MESSAGE key=value key=value
-    """
-    # Get timestamp
-    timestamp = event_dict.pop("timestamp", "")
-
-    # Get log level and apply color
-    level = event_dict.pop("level", "info").upper()
-    level_colors = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[32m",  # Green
-        "WARNING": "\033[33m",  # Yellow
-        "ERROR": "\033[31m",  # Red
-        "CRITICAL": "\033[35m",  # Magenta
-    }
-    reset = "\033[0m"
-    colored_level = f"{level_colors.get(level, '')}{level}{reset}"
-
-    # Get event message
-    event = event_dict.pop("event", "")
-
-    # Build base message
-    parts = []
-    if timestamp:
-        parts.append(timestamp)
-    parts.append(f"[{colored_level}]")
-    parts.append(event)
-
-    # Add remaining key-value pairs
-    for key, value in event_dict.items():
-        if not key.startswith("_"):  # Skip internal keys
-            parts.append(f"{key}={value}")
-
-    return " ".join(parts)
-
-
 def configure_logging(
-    level: str = "INFO",
+    level: str | None = None,
     json_format: bool = False,
     include_timestamp: bool = True,
 ) -> None:
@@ -63,11 +25,16 @@ def configure_logging(
     Configure structured logging for the SDK.
 
     Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+               Defaults to ONDINE_LOG_LEVEL env var, or INFO.
         json_format: Use JSON output format
         include_timestamp: Include timestamps in logs
     """
     global _logging_configured
+
+    # Resolve level from env var if not provided
+    if level is None:
+        level = os.getenv("ONDINE_LOG_LEVEL", "INFO").upper()
 
     # Set stdlib logging level
     logging.basicConfig(
@@ -75,6 +42,37 @@ def configure_logging(
         stream=sys.stdout,
         level=getattr(logging, level.upper()),
     )
+
+    # CRITICAL: Silence noisy libraries unless ONDINE_TRACE is enabled
+    # We only want to see ondine's debug logs, not every HTTP request
+    trace_mode = os.getenv("ONDINE_TRACE", "false").lower() in ("true", "1", "yes")
+    
+    if not trace_mode:
+        for logger_name in [
+            "litellm",
+            "LiteLLM Router",
+            "LiteLLM Proxy",
+            "httpx",
+            "httpcore",
+            "urllib3",
+            "asyncio",
+            "pydantic",
+            "openai",
+            "instructor",
+        ]:
+            # In standard DEBUG/INFO mode, suppress library noise (to WARNING)
+            # We only want CRITICAL suppression for internal modules we don't control well
+            if logger_name in ["pydantic", "asyncio"]:
+                logging.getLogger(logger_name).setLevel(logging.CRITICAL)
+            else:
+                logging.getLogger(logger_name).setLevel(logging.WARNING)
+            
+            logging.getLogger(logger_name).propagate = False
+    else:
+        # In TRACE mode, let everything through (useful for debugging headers/raw output)
+        # We print a warning so the user knows why their console is flooded
+        if not _logging_configured:
+            print("⚠️ ONDINE_TRACE enabled: External library logs will be visible.")
 
     # Configure structlog processors
     processors = [
@@ -89,8 +87,26 @@ def configure_logging(
     if json_format:
         processors.append(structlog.processors.JSONRenderer())
     else:
-        # Use custom compact console renderer (no padding)
-        processors.append(_compact_console_renderer)
+        # Try to use Rich for pretty logging if available (prevents progress bar glitches)
+        try:
+            from rich.logging import RichHandler
+            
+            # Reconfigure basicConfig to use RichHandler
+            logging.getLogger().handlers = [
+                RichHandler(
+                    rich_tracebacks=True,
+                    markup=True,
+                    show_time=include_timestamp,
+                    show_path=False
+                )
+            ]
+            # Use ConsoleRenderer for structlog which works well with RichHandler
+            # Enable padding for aligned logs (DEBUG   , INFO    )
+            processors.append(structlog.dev.ConsoleRenderer(colors=True, pad_level=True))
+        except ImportError:
+            # Fallback to custom renderer
+            from ondine.utils.logging_utils import _compact_console_renderer
+            processors.append(_compact_console_renderer)
 
     structlog.configure(
         processors=processors,
