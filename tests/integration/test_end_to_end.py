@@ -48,8 +48,7 @@ class TestEndToEndGroq:
             )
             .with_prompt("Answer briefly: {question}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_batch_size(3)
@@ -101,8 +100,7 @@ Return JSON with keys: brand, model, storage
 JSON:"""
             )
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_parser(JSONParser(strict=False))
@@ -141,8 +139,7 @@ JSON:"""
                 )
                 .with_prompt("Convert to uppercase: {text}")
                 .with_llm(
-                    provider="groq",
-                    model="openai/gpt-oss-120b",
+                    model="groq/openai/gpt-oss-20b",
                     temperature=0.0,
                 )
                 .to_csv(str(output_path))
@@ -176,8 +173,7 @@ JSON:"""
             )
             .with_prompt("Process: {text}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_error_policy("skip")
@@ -208,8 +204,7 @@ JSON:"""
             )
             .with_prompt("Echo: {text}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .build()
@@ -248,8 +243,7 @@ JSON:"""
                 )
                 .with_prompt("Process: {text}")
                 .with_llm(
-                    provider="groq",
-                    model="openai/gpt-oss-120b",
+                    model="groq/openai/gpt-oss-20b",
                     temperature=0.0,
                 )
                 .with_checkpoint_dir(str(checkpoint_dir))
@@ -285,8 +279,7 @@ JSON:"""
             )
             .with_prompt("What is {number} times 2? Answer with just the number.")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
                 temperature=0.0,
             )
             .with_concurrency(3)  # Process 3 at a time
@@ -340,8 +333,7 @@ class TestEndToEndWithMock:
             )
             .with_prompt("Test: {missing_column}")
             .with_llm(
-                provider="groq",
-                model="openai/gpt-oss-120b",
+                model="groq/openai/gpt-oss-20b",
             )
             .build()
         )
@@ -502,7 +494,7 @@ class TestCheckpointResumeBehavior:
                 PipelineBuilder.create()
                 .from_dataframe(df, input_columns=["text"], output_columns=["result"])
                 .with_prompt("Process: {text}")
-                .with_llm(provider="groq", model="test-model")
+                .with_llm(model="groq/test-model")
                 .with_checkpoint_dir(str(checkpoint_dir))
                 .with_checkpoint_interval(2)
                 .build()
@@ -536,7 +528,7 @@ class TestCheckpointResumeBehavior:
                 PipelineBuilder.create()
                 .from_dataframe(df, input_columns=["text"], output_columns=["result"])
                 .with_prompt("Process: {text}")
-                .with_llm(provider="groq", model="test-model")
+                .with_llm(model="groq/test-model")
                 .with_checkpoint_dir(str(checkpoint_dir))
                 .with_checkpoint_interval(5)
                 .build()
@@ -600,7 +592,7 @@ class TestMultiStagePipelineE2E:
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["category"])
             .with_prompt("Categorize: {text}")
-            .with_llm(provider="groq", model="test-model")
+            .with_llm(model="groq/test-model")
             .build()
         )
 
@@ -621,7 +613,7 @@ class TestMultiStagePipelineE2E:
                 output_columns=["subcategory"],
             )
             .with_prompt("Subcategorize {text} in {category}")
-            .with_llm(provider="groq", model="test-model")
+            .with_llm(model="groq/test-model")
             .build()
         )
 
@@ -643,8 +635,7 @@ class TestCostTrackingE2E:
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Process: {text}")
             .with_llm(
-                provider="groq",
-                model="test-model",
+                model="groq/test-model",
                 input_cost_per_1k_tokens=Decimal("0.10"),
                 output_cost_per_1k_tokens=Decimal("0.20"),
             )
@@ -686,7 +677,7 @@ class TestCostTrackingE2E:
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Process: {text}")
-            .with_llm(provider="groq", model="test-model")
+            .with_llm(model="groq/test-model")
             .with_concurrency(10)
             .build()
         )

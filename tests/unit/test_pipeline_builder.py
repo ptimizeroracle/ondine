@@ -145,5 +145,5 @@ class TestPipelineBuilder:
         builder = PipelineBuilder.create()
         assert builder.from_dataframe(df, ["text"], ["result"]) is builder
         assert builder.with_prompt("Test: {text}") is builder
-        assert builder.with_llm("groq", "llama-3.1-70b-versatile") is builder
+        assert builder.with_llm("llama-3.1-70b-versatile", provider="groq") is builder
         assert builder.with_batch_size(100) is builder

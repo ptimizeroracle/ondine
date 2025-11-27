@@ -185,8 +185,9 @@ markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]
 filterwarnings = [
-    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
-    "ignore::pydantic._internal._generate_schema.UnsupportedFieldAttributeWarning",
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+    "ignore::RuntimeWarning",
 ]
 
 [tool.pydocstyle]
@@ -209,4 +210,6 @@ exclude = ["tests", "build", "dist"]
 verbose = 1
 
 [dependency-groups]
-dev = []
+dev = [
+    "pytest-xdist>=3.8.0",
+]

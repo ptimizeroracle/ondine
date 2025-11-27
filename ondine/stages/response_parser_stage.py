@@ -207,14 +207,23 @@ class ResponseParserStage(
                     )
                     parsed = self.parser.parse(response_text)
 
+                    # Handle None result (e.g. from "null" input for retry)
+                    if parsed is None:
+                        results[metadata.row_index] = {col: None for col in output_cols}
+                        continue
+
                     # Map to output columns
                     row_data = {}
                     if len(output_cols) == 1:
                         # Single output column
-                        if isinstance(parsed, dict) and "output" in parsed:
+                        if isinstance(parsed, dict) and output_cols[0] in parsed:
+                            # 1. Exact match for column name
+                            row_data[output_cols[0]] = parsed[output_cols[0]]
+                        elif isinstance(parsed, dict) and "output" in parsed:
+                            # 2. "output" field (standard fallback)
                             row_data[output_cols[0]] = parsed["output"]
                         elif isinstance(parsed, dict):
-                            # Use first value
+                            # 3. Use first value (risky but sometimes needed)
                             row_data[output_cols[0]] = next(iter(parsed.values()))
                         else:
                             row_data[output_cols[0]] = parsed

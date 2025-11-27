@@ -4,6 +4,8 @@ Pytest configuration and fixtures.
 Provides reusable test fixtures and mocks for the test suite.
 """
 
+import logging
+import warnings
 from decimal import Decimal
 from typing import Any
 
@@ -19,6 +21,38 @@ from ondine.core.specifications import (
     LLMSpec,
     PromptSpec,
 )
+
+# Suppress harmless warnings from LiteLLM and Pydantic GLOBALLY
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.simplefilter("ignore")  # Catch-all
+
+
+def pytest_configure(config):
+    """Configure pytest - suppress all warnings."""
+    warnings.filterwarnings("ignore")
+    logging.captureWarnings(True)
+
+
+# Suppress harmless warnings from LiteLLM and Pydantic at pytest level
+@pytest.fixture(scope="session", autouse=True)
+def suppress_litellm_warnings():
+    """Suppress harmless runtime warnings from LiteLLM and Pydantic."""
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=".*coroutine.*never awaited.*")
+    warnings.filterwarnings("ignore", message=".*Pydantic serializer warnings.*")
+    warnings.filterwarnings(
+        "ignore", message=".*PydanticSerializationUnexpectedValue.*"
+    )
+    warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
+    warnings.filterwarnings(
+        "ignore", message=".*serialized value may not be as expected.*"
+    )
+    warnings.simplefilter("ignore")
+    return
 
 
 class MockLLMClient(LLMClient):

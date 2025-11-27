@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/ptimizeroracle/ondine/compare/v1.3.4...v1.4.0) (2025-11-27)
+
+### Features
+* **LiteLLM Router Optimizations**
+  * Support for `latency-based-routing` strategy
+  * Router-aware error handling: treat `ModelNotFoundError` as transient node failure to trigger fallback
+  * Enhanced multi-provider support (Groq, OpenAI, Moonshot, Cerebras)
+  * Robust handling of `InstructorRetryException` in Router context
+
+* **Batch Processing Enhancements**
+  * Minified JSON prompt payload (indent=None) to save tokens and context
+  * Graceful handling of empty/failed batches in `BatchDisaggregatorStage`
+  * Relaxed Pydantic validation for failed batches to prevent pipeline crashes
+  * Smarter `auto_retry_failed` logic: only retries rows where *all* output columns are null
+
+### Bug Fixes
+* **Progress Tracking**: Fixed freezing animations and "stuck at 1%" visual glitches in `RichProgressTracker`
+* **Cost Tracking**: Fixed duplicate cost counting and improved per-provider cost attribution in Router mode
+* **Error Handling**: Fixed false positive "Model Not Found" on network timeouts
+* **Response Parsing**: Fixed bug where single-column output parsers grabbed `id` instead of data
+* **Testing**: Fixed regression in `test_non_retryable_errors` by explicitly mocking Router behavior
+
 ## [1.3.4](https://github.com/ptimizeroracle/ondine/compare/v1.3.3...v1.3.4) (2025-11-20)
 
 
