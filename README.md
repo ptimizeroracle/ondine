@@ -26,8 +26,8 @@ SDK for batch processing tabular datasets with LLMs. Built with native LiteLLM i
 - **Observability**: Progress bars, structured logging, metrics, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
 - **Fault Tolerant**: Zero data loss on crashes, resume from checkpoint
-- **100+ Providers**: Native LiteLLM integration supporting OpenAI, Azure, Anthropic, Groq, MLX (Apple Silicon), and 100+ other providers
-- **Load Balancing**: Built-in LiteLLM Router for multi-provider failover and latency-based routing
+- **100+ Providers**: Native LiteLLM integration supporting OpenAI, Azure, Anthropic, Groq, Cerebras, Moonshot, and 100+ others
+- **Smart Routing**: Built-in LiteLLM Router with **latency-based routing** (fastest wins) and automatic failover for high availability
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
 - **Multi-Column Processing**: Generate multiple output columns with composition or JSON parsing
 - **Custom Providers**: Integrate any OpenAI-compatible API (Together.AI, vLLM, Ollama, custom endpoints)
@@ -951,9 +951,19 @@ MIT License - see LICENSE file for details
 
 ## Recent Updates
 
-### Version 1.4.0 (November 24, 2025)
+### Version 1.4.0 (November 27, 2025)
 
-**Latest Release - LiteLLM Native Integration:**
+**Latest Release - Router Optimization & Robust Batching:**
+- 🚀 **Latency-Based Routing**: Automatically routes traffic to the fastest provider (Groq, Cerebras, etc.) in real-time
+- 🛡️ **Resilient Router Fallback**: Fixed critical bug where single-node failures (404/NotFound) stopped pipelines; now automatically retries on other healthy providers
+- 📦 **Minified JSON Batching**: Optimized batch prompt payload (indent=None) to save tokens and context window
+- 🔄 **Smart Auto-Retry**: Improved logic to only retry rows where *all* output columns failed, preserving valid partial data
+- ⚡ **High-Concurrency defaults**: Optimized default settings for multi-provider pools (concurrency=10, batch_size=50)
+- 📊 **Enhanced Progress Tracking**: Fixed UI glitches (freezing bars, 1% stuck) and improved per-provider cost attribution
+
+### Version 1.3.4 (November 24, 2025)
+
+**LiteLLM Native Integration:**
 - 🚀 **Native LiteLLM Integration**: Replaced LlamaIndex wrappers with direct `litellm.acompletion` for 100+ provider support
 - 📦 **Instructor for Structured Output**: Type-safe Pydantic models with auto-detection (JSON mode for Groq, function calling for OpenAI/Anthropic)
 - 🔄 **Router for Load Balancing**: Built-in multi-provider failover and latency-based routing via LiteLLM Router
