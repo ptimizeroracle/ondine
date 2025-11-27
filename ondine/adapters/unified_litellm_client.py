@@ -580,9 +580,7 @@ class UnifiedLiteLLMClient(LLMClient):
             # 2. Check Anthropic format (usage.cache_creation_input_tokens / cache_read_input_tokens)
             # LiteLLM normalizes this, but checking raw just in case
             if cached_tokens == 0 and hasattr(response, "usage"):
-                cached_tokens = getattr(
-                    response.usage, "cache_read_input_tokens", 0
-                )
+                cached_tokens = getattr(response.usage, "cache_read_input_tokens", 0)
 
             # Log if hit
             if cached_tokens > 0:
@@ -591,9 +589,9 @@ class UnifiedLiteLLMClient(LLMClient):
                 # 2. hidden params (deployment ID, sometimes a hash)
                 # 3. self.model (fallback to 'mixed-llm')
                 actual_model = getattr(response, "model", None)
-                
+
                 if not actual_model or "mixed-llm" in actual_model:
-                     if hasattr(response, "_hidden_params"):
+                    if hasattr(response, "_hidden_params"):
                         hidden = response._hidden_params
                         if isinstance(hidden, dict):
                             # Prefer model_region (often provider/model) over model_id (hash)
@@ -601,7 +599,7 @@ class UnifiedLiteLLMClient(LLMClient):
                                 actual_model = hidden["model_region"]
                             elif "model_id" in hidden:
                                 actual_model = hidden["model_id"]
-                
+
                 if not actual_model:
                     actual_model = self.model
 

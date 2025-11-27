@@ -10,7 +10,6 @@ import sys
 from typing import Any
 
 import structlog
-from structlog.types import EventDict
 
 # Track if logging has been configured
 _logging_configured = False
@@ -46,7 +45,7 @@ def configure_logging(
     # CRITICAL: Silence noisy libraries unless ONDINE_TRACE is enabled
     # We only want to see ondine's debug logs, not every HTTP request
     trace_mode = os.getenv("ONDINE_TRACE", "false").lower() in ("true", "1", "yes")
-    
+
     if not trace_mode:
         for logger_name in [
             "litellm",
@@ -66,7 +65,7 @@ def configure_logging(
                 logging.getLogger(logger_name).setLevel(logging.CRITICAL)
             else:
                 logging.getLogger(logger_name).setLevel(logging.WARNING)
-            
+
             logging.getLogger(logger_name).propagate = False
     else:
         # In TRACE mode, let everything through (useful for debugging headers/raw output)
@@ -90,22 +89,25 @@ def configure_logging(
         # Try to use Rich for pretty logging if available (prevents progress bar glitches)
         try:
             from rich.logging import RichHandler
-            
+
             # Reconfigure basicConfig to use RichHandler
             logging.getLogger().handlers = [
                 RichHandler(
                     rich_tracebacks=True,
                     markup=True,
                     show_time=include_timestamp,
-                    show_path=False
+                    show_path=False,
                 )
             ]
             # Use ConsoleRenderer for structlog which works well with RichHandler
             # Enable padding for aligned logs (DEBUG   , INFO    )
-            processors.append(structlog.dev.ConsoleRenderer(colors=True, pad_level=True))
+            processors.append(
+                structlog.dev.ConsoleRenderer(colors=True, pad_level=True)
+            )
         except ImportError:
             # Fallback to custom renderer
             from ondine.utils.logging_utils import _compact_console_renderer
+
             processors.append(_compact_console_renderer)
 
     structlog.configure(
