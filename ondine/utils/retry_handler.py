@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from tenacity import (
+    AsyncRetrying,
     Retrying,
     retry_if_exception_type,
     stop_after_attempt,
@@ -119,6 +120,27 @@ class RetryHandler:
         )
 
         return retryer(func)
+
+    async def execute_async(self, func: Callable[[], T]) -> T:
+        """
+        Execute async function with retry logic.
+
+        Same as execute() but for async functions.
+        """
+        retryer = AsyncRetrying(
+            stop=stop_after_attempt(self.max_attempts),
+            wait=wait_exponential(
+                multiplier=self.initial_delay,
+                max=self.max_delay,
+                exp_base=self.exponential_base,
+            ),
+            retry=retry_if_exception_type(self.retryable_exceptions),
+            reraise=True,
+        )
+
+        async for attempt in retryer:
+            with attempt:
+                return await func()
 
     def calculate_delay(self, attempt: int) -> float:
         """

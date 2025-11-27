@@ -46,6 +46,13 @@ import instructor
 import litellm
 from pydantic import BaseModel
 
+try:
+    import aiohttp
+    from litellm.llms.custom_httpx.aiohttp_handler import BaseLLMAIOHTTPHandler
+    _HAS_AIOHTTP = True
+except ImportError:
+    _HAS_AIOHTTP = False
+
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
@@ -183,6 +190,60 @@ class UnifiedLiteLLMClient(LLMClient):
         )
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")
+
+        # Global connection pooling state
+        self._aiohttp_session = None
+
+    async def start(self):
+        """
+        Initialize global high-performance connection pool (aiohttp).
+
+        This enables Proxy-level performance (1000+ concurrent requests) by reusing
+        connections across all LiteLLM calls.
+        """
+        if not _HAS_AIOHTTP:
+            logger.warning("aiohttp not installed. Global connection pooling disabled.")
+            return
+
+        if self._aiohttp_session:
+            return  # Already started
+
+        try:
+            # Create high-performance session
+            # Limits match LiteLLM Proxy defaults for high throughput
+            self._aiohttp_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(
+                    limit=1000,  # Max total connections
+                    limit_per_host=100,  # Max per provider (e.g. OpenAI)
+                    ttl_dns_cache=600,  # Cache DNS for 10 mins
+                    keepalive_timeout=60,  # Keep idle connections open
+                ),
+                timeout=aiohttp.ClientTimeout(total=600),  # 10 min timeout for batches
+            )
+
+            # Inject into LiteLLM Global Handler
+            # This makes ALL Router/Completion calls use this session
+            litellm.base_llm_aiohttp_handler = BaseLLMAIOHTTPHandler(
+                client_session=self._aiohttp_session
+            )
+            logger.info("🚀 Initialized global high-performance connection pool (aiohttp)")
+        except Exception as e:
+            logger.error(f"Failed to initialize global connection pool: {e}")
+            # Graceful degradation: litellm will create its own sessions
+
+    async def stop(self):
+        """Cleanup global connection pool."""
+        if self._aiohttp_session:
+            try:
+                # Unset global handler first
+                if getattr(litellm, "base_llm_aiohttp_handler", None):
+                    litellm.base_llm_aiohttp_handler = None
+
+                await self._aiohttp_session.close()
+                self._aiohttp_session = None
+                logger.info("🔌 Closed global connection pool")
+            except Exception as e:
+                logger.error(f"Error closing connection pool: {e}")
 
     def _init_router(self, config: dict):
         """

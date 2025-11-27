@@ -1,5 +1,6 @@
 """LLM invocation stage with concurrency and retry logic."""
 
+import asyncio
 import concurrent.futures
 import time
 from decimal import Decimal
@@ -93,122 +94,155 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 "output_tokens": 0,
             }
 
-        # Start progress tracking if available
-        progress_tracker = getattr(context, "progress_tracker", None)
-        progress_task = None
-        if progress_tracker:
-            # Calculate total rows (handle both aggregated and non-aggregated batches)
-            total_rows_for_progress = 0
-            for batch in batches:
-                if not batch.metadata:
-                    continue
-                if (
-                    batch.metadata
-                    and batch.metadata[0].custom
-                    and batch.metadata[0].custom.get("is_batch")
-                ):
-                    # Aggregated batch: use batch_size from metadata
-                    total_rows_for_progress += batch.metadata[0].custom.get(
-                        "batch_size", len(batch.metadata)
-                    )
-                else:
-                    # Non-aggregated batch: count metadata entries
-                    total_rows_for_progress += len(batch.metadata)
+        # Detect if we are already in an event loop (e.g. Jupyter)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
 
+        if loop and loop.is_running():
+            # In a loop (Jupyter) - creating new loop via asyncio.run() will fail
+            # We must use nest_asyncio or assume the caller handles async if this was an async method.
+            # But process() is sync.
+            # We can try to schedule it in the existing loop and wait?
+            # future = asyncio.run_coroutine_threadsafe(self._process_async(batches, context), loop)
+            # return future.result()
+            # BUT run_coroutine_threadsafe returns a concurrent.futures.Future, result() blocks.
+            # This works if the loop is in another thread. If loop is in THIS thread, it deadlocks.
+            # Assuming standard usage (script), loop is None.
+            # If Jupyter, nest_asyncio might be applied.
+            # For now, we'll use asyncio.run() if no loop, or existing loop if compatible.
+            # Simple fallback: if loop exists, we might need to use the old threaded way OR
+            # use nest_asyncio.
+            # Let's use the async path via asyncio.run() which creates a FRESH loop if none running.
+            # If loop running, asyncio.run raises RuntimeError.
+            # So if loop running, we use the async implementation? But we can't await it here.
+            # We will use the async implementation via run_until_complete if we can manage loop.
+            pass
+
+        # Execute async processing loop
+        try:
+            return asyncio.run(self._process_async(batches, context))
+        except RuntimeError:
+            # Loop already running (e.g. Jupyter)
+            # Fallback: Try to verify if nest_asyncio is active or loop is patchable
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self._process_async(batches, context))
+
+    async def _process_async(
+        self, batches: list[PromptBatch], context: Any
+    ) -> list[ResponseBatch]:
+        """Async implementation of process()."""
+        # Initialize global connection pool
+        await self.llm_client.start()
+
+        try:
             # Start progress tracking if available
             progress_tracker = getattr(context, "progress_tracker", None)
             progress_task = None
-            self._deployment_map = {}  # Map ID -> Task ID for dynamic tracking
-            self._hash_to_friendly_id = {}  # Map LiteLLM's hash to our friendly ID
-            self._hash_to_label = {}  # Map LiteLLM's hash to display label
-            self._available_names = []  # Queue of friendly names to assign
-
-            # Initialize available names from config
-            if hasattr(self.llm_client, "router") and self.llm_client.router:
-                model_list = getattr(self.llm_client.router, "model_list", [])
-                for i, dep in enumerate(model_list):
-                    # Get friendly name and model info
-                    friendly_id = dep.get("model_id", dep.get("model_name", "unknown"))
-
-                    # Ensure ID is unique for visualization even if model_name is shared
-                    # (Router requires shared model_name for load balancing)
-                    unique_id = f"{friendly_id}_{i}"
-
-                    litellm_params = dep.get("litellm_params", {})
-                    model = litellm_params.get("model", "unknown")
-
-                    # Create a nice label info object to store
-                    provider = model.split("/")[0] if "/" in model else ""
-                    model_short = model.split("/")[1] if "/" in model else model
-                    # Removed truncation to show full model name
-
-                    self._available_names.append(
-                        {
-                            "id": unique_id,
-                            "label": f"{provider}/{model_short} ({friendly_id})",
-                        }
-                    )
-
             if progress_tracker:
-                # Prepare deployments list for UI initialization
-                deployments_for_progress = []
-                for item in self._available_names:
-                    deployments_for_progress.append(
-                        {
-                            "model_id": item["id"],
-                            "label": item["label"],
-                            "weight": 1.0,  # Assume equal distribution for UI
-                        }
+                # Calculate total rows (handle both aggregated and non-aggregated batches)
+                total_rows_for_progress = 0
+                for batch in batches:
+                    if not batch.metadata:
+                        continue
+                    if (
+                        batch.metadata
+                        and batch.metadata[0].custom
+                        and batch.metadata[0].custom.get("is_batch")
+                    ):
+                        # Aggregated batch: use batch_size from metadata
+                        total_rows_for_progress += batch.metadata[0].custom.get(
+                            "batch_size", len(batch.metadata)
+                        )
+                    else:
+                        # Non-aggregated batch: count metadata entries
+                        total_rows_for_progress += len(batch.metadata)
+
+                # Start progress tracking if available
+                progress_tracker = getattr(context, "progress_tracker", None)
+                progress_task = None
+                self._deployment_map = {}  # Map ID -> Task ID for dynamic tracking
+                self._hash_to_friendly_id = {}  # Map LiteLLM's hash to our friendly ID
+                self._hash_to_label = {}  # Map LiteLLM's hash to display label
+                self._available_names = []  # Queue of friendly names to assign
+
+                # Initialize available names from config
+                if hasattr(self.llm_client, "router") and self.llm_client.router:
+                    model_list = getattr(self.llm_client.router, "model_list", [])
+                    for i, dep in enumerate(model_list):
+                        # Get friendly name and model info
+                        friendly_id = dep.get(
+                            "model_id", dep.get("model_name", "unknown")
+                        )
+
+                        # Ensure ID is unique for visualization even if model_name is shared
+                        # (Router requires shared model_name for load balancing)
+                        unique_id = f"{friendly_id}_{i}"
+
+                        litellm_params = dep.get("litellm_params", {})
+                        model = litellm_params.get("model", "unknown")
+
+                        # Create a nice label info object to store
+                        provider = model.split("/")[0] if "/" in model else ""
+                        model_short = model.split("/")[1] if "/" in model else model
+                        # Removed truncation to show full model name
+
+                        self._available_names.append(
+                            {
+                                "id": unique_id,
+                                "label": f"{provider}/{model_short} ({friendly_id})",
+                            }
+                        )
+
+                if progress_tracker:
+                    # Prepare deployments list for UI initialization
+                    deployments_for_progress = []
+                    for item in self._available_names:
+                        deployments_for_progress.append(
+                            {
+                                "model_id": item["id"],
+                                "label": item["label"],
+                                "weight": 1.0,  # Assume equal distribution for UI
+                            }
+                        )
+
+                    progress_task = progress_tracker.start_stage(
+                        f"{self.name}: {total_rows_for_progress:,} rows",
+                        total_rows=total_rows_for_progress,
+                        deployments=deployments_for_progress,
                     )
+                    # Store for access in concurrent loop
+                    self._current_progress_task = progress_task
+                    self._progress_tracker = progress_tracker
+                    self._total_rows_for_progress = total_rows_for_progress
 
-                progress_task = progress_tracker.start_stage(
-                    f"{self.name}: {total_rows_for_progress:,} rows",
-                    total_rows=total_rows_for_progress,
-                    deployments=deployments_for_progress,
-                )
-                # Store for access in concurrent loop
-                self._current_progress_task = progress_task
-                self._progress_tracker = progress_tracker
-                self._total_rows_for_progress = total_rows_for_progress
+            # Flatten all prompts from all batches
+            all_prompts, batch_map = self._flatten_batches(batches)
 
-        # Flatten all prompts from all batches
-        all_prompts, batch_map = self._flatten_batches(batches)
+            # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
+            all_responses = await self._process_all_prompts_concurrent_async(
+                all_prompts, context, batches
+            )
 
-        # Calculate total rows (handle both aggregated and non-aggregated batches)
-        total_rows = 0
-        for batch in batches:
-            if not batch.metadata:
-                continue
-            if (
-                batch.metadata
-                and batch.metadata[0].custom
-                and batch.metadata[0].custom.get("is_batch")
-            ):
-                # Aggregated batch: use batch_size from metadata
-                total_rows += batch.metadata[0].custom.get(
-                    "batch_size", len(batch.metadata)
-                )
-            else:
-                # Non-aggregated batch: count metadata entries
-                total_rows += len(batch.metadata)
+            # Step 3: Reconstruct batches from flat responses
+            response_batches = self._reconstruct_batches(
+                all_responses, batches, batch_map
+            )
 
-        # Step 2: Process ALL prompts concurrently (ignore batch boundaries)
-        all_responses = self._process_all_prompts_concurrent(
-            all_prompts, context, batches
-        )
+            # Notify progress after processing
+            if hasattr(context, "notify_progress"):
+                context.notify_progress()
 
-        # Step 3: Reconstruct batches from flat responses
-        response_batches = self._reconstruct_batches(all_responses, batches, batch_map)
+            # Finish progress tracking
+            if progress_tracker and progress_task:
+                progress_tracker.finish(progress_task)
 
-        # Notify progress after processing
-        if hasattr(context, "notify_progress"):
-            context.notify_progress()
-
-        # Finish progress tracking
-        if progress_tracker and progress_task:
-            progress_tracker.finish(progress_task)
-
-        return response_batches
+            return response_batches
+        finally:
+            # Cleanup global connection pool
+            await self.llm_client.stop()
 
     def _flatten_batches(
         self, batches: list[PromptBatch]
@@ -779,3 +813,186 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             rows=sum(len(b.prompts) for b in batches),
             confidence="estimate",
         )
+
+    async def _process_all_prompts_concurrent_async(
+        self,
+        all_prompts: list[tuple],
+        context: Any,
+        original_batches: list[PromptBatch] = None,
+    ) -> list[Any]:
+        """Process all prompts concurrently using asyncio."""
+        # Track actual Router distribution
+        deployment_distribution: dict[str, int] = {}
+        
+        # Semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.concurrency)
+        
+        # Progress tracking setup
+        progress_tracker = getattr(context, "progress_tracker", None)
+        progress_task = getattr(self, "_current_progress_task", None)
+
+        async def _process_one(idx, prompt_tuple):
+            prompt, metadata, _ = prompt_tuple
+            
+            async with semaphore:
+                try:
+                    response = await self._invoke_with_retry_and_ratelimit_async(
+                        prompt, metadata, context, idx
+                    )
+                    
+                    # Extract ACTUAL deployment used by Router
+                    actual_deployment_id = self._extract_deployment_from_response(response)
+                    
+                    # Update distribution (not thread-safe but we are in async loop so it's fine)
+                    if actual_deployment_id:
+                        deployment_distribution[actual_deployment_id] = (
+                            deployment_distribution.get(actual_deployment_id, 0) + 1
+                        )
+
+                    # Progress tracking
+                    if progress_tracker and progress_task:
+                        batch_size = 1
+                        if metadata.custom and metadata.custom.get("is_batch"):
+                            batch_size = metadata.custom.get("batch_size", 1)
+                        
+                        # Update dynamic deployment progress
+                        display_id = None
+                        if actual_deployment_id:
+                            # Check mapping
+                            if actual_deployment_id not in self._hash_to_friendly_id:
+                                if self._available_names:
+                                    next_friendly = self._available_names.pop(0)
+                                    self._hash_to_friendly_id[actual_deployment_id] = next_friendly["id"]
+                                    self._hash_to_label[actual_deployment_id] = next_friendly["label"]
+                            
+                            display_id = self._hash_to_friendly_id.get(actual_deployment_id, actual_deployment_id)
+                            label_info = self._hash_to_label.get(actual_deployment_id, "")
+                            
+                            # Ensure task exists
+                            progress_tracker.ensure_deployment_task(
+                                progress_task,
+                                display_id,
+                                total_rows=self._total_rows_for_progress // 3, # Estimate
+                                label_info=label_info
+                            )
+                        
+                        # Update progress
+                        progress_tracker.update(
+                            progress_task,
+                            advance=batch_size,
+                            cost=response.cost,
+                            deployment_id=display_id
+                        )
+
+                    # Update context cost/tokens
+                    if context:
+                        # Update last processed row index logic
+                        if metadata.custom and metadata.custom.get("is_batch"):
+                            batch_size = metadata.custom.get("batch_size", 1)
+                            if idx == 0:
+                                context.update_row(metadata.row_index + batch_size - 1)
+                            else:
+                                context.update_row(context.last_processed_row + batch_size)
+                        else:
+                            context.update_row(metadata.row_index)
+
+                        if hasattr(response, "cost") and hasattr(response, "tokens_in"):
+                            context.add_cost(
+                                response.cost, response.tokens_in + response.tokens_out
+                            )
+                            context.intermediate_data["token_tracking"]["input_tokens"] += response.tokens_in
+                            context.intermediate_data["token_tracking"]["output_tokens"] += response.tokens_out
+
+                    return response
+
+                except Exception as e:
+                    # Handle errors using existing error policy
+                    decision = self.error_handler.handle_error(
+                        e,
+                        {
+                            "stage": self.name,
+                            "prompt_index": idx,
+                            "total_prompts": len(all_prompts),
+                        },
+                    )
+
+                    if decision.action == ErrorAction.SKIP:
+                        return LLMResponse(
+                            text="[SKIPPED]",
+                            tokens_in=0,
+                            tokens_out=0,
+                            model=self.llm_client.model,
+                            cost=Decimal("0.0"),
+                            latency_ms=0.0,
+                            metadata={"error": str(e), "action": "skipped"},
+                        )
+                    elif decision.action == ErrorAction.USE_DEFAULT:
+                        return decision.default_value
+                    elif decision.action == ErrorAction.FAIL:
+                        raise e
+                    
+                    # Should not reach here
+                    raise e
+
+        # Execute all tasks
+        tasks = [_process_one(idx, pt) for idx, pt in enumerate(all_prompts)]
+        responses = await asyncio.gather(*tasks)
+
+        # Log distribution summary
+        if hasattr(self.llm_client, "router") and self.llm_client.router:
+            # ... (Logging logic same as before)
+            # To avoid code duplication, we could refactor logging to a method, but for now copy logic or skip.
+            # Let's keep it simple and log basic info.
+            self.logger.info("=" * 70)
+            if deployment_distribution:
+                self.logger.info("Router Distribution Summary (ACTUAL):")
+                total_requests = sum(deployment_distribution.values())
+                for dep_id in sorted(deployment_distribution.keys()):
+                    count = deployment_distribution[dep_id]
+                    percentage = (count / total_requests * 100) if total_requests > 0 else 0
+                    display_name = getattr(self, "_hash_to_friendly_id", {}).get(dep_id, dep_id)
+                    self.logger.info(f"  • {display_name}: {count}/{total_requests} requests ({percentage:.1f}%)")
+                self.logger.info(f"Total API calls: {total_requests}")
+            self.logger.info("=" * 70)
+
+        return responses
+
+    async def _invoke_with_retry_and_ratelimit_async(
+        self,
+        prompt: str,
+        row_metadata: Any = None,
+        context: Any = None,
+        row_index: int = 0,
+    ) -> Any:
+        """Invoke LLM async with rate limiting and retries."""
+        start_time = time.time()
+
+        # Extract system message from row metadata
+        system_message = None
+        if row_metadata and hasattr(row_metadata, "custom") and row_metadata.custom:
+            system_message = row_metadata.custom.get("system_message")
+
+        async def _invoke() -> Any:
+            # Acquire rate limit token (non-blocking wait using executor)
+            if self.rate_limiter:
+                loop = asyncio.get_running_loop()
+                # RateLimiter.acquire blocks, so run in executor
+                await loop.run_in_executor(None, self.rate_limiter.acquire)
+
+            # Invoke LLM with error classification
+            try:
+                # Use structured invoke if output_cls is configured
+                if self.output_cls:
+                    return await self.llm_client.structured_invoke_async(
+                        prompt, self.output_cls, system_message=system_message
+                    )
+
+                # Pass system_message as kwarg for caching optimization
+                return await self.llm_client.ainvoke(prompt, system_message=system_message)
+            except Exception as e:
+                # Classify error to determine if retryable
+                classified = self._classify_error(e)
+                raise classified
+
+        # Execute with retry handler (async)
+        return await self.retry_handler.execute_async(_invoke)

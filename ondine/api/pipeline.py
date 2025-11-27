@@ -250,6 +250,17 @@ class Pipeline:
             Progress is automatically saved via checkpoints. If execution fails,
             use resume_from to continue from the last checkpoint.
         """
+        # Enable uvloop for high performance (UNIX only)
+        try:
+            import uvloop
+
+            uvloop.install()
+            self.logger.debug("🚀 uvloop enabled for high-performance event loop")
+        except ImportError:
+            pass  # uvloop not installed or not supported (Windows)
+        except Exception as e:
+            self.logger.debug(f"Could not enable uvloop: {e}")
+
         # Validate first
         validation = self.validate()
         if not validation.is_valid:
