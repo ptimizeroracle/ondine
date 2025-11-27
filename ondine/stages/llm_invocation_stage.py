@@ -590,6 +590,28 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         except ImportError:
             pass
 
+        # Try to unwrap Instructor/Tenacity retry exceptions
+        # This is CRITICAL for catching underlying NotFoundError buried in Instructor's retry loop
+        try:
+            from instructor.core.exceptions import InstructorRetryException
+            if isinstance(error, InstructorRetryException):
+                # InstructorRetryException contains the last exception or a list of attempts
+                # We want to classify based on the underlying cause
+                if hasattr(error, "last_attempt") and error.last_attempt:
+                    # If it's a tenacity RetryCallState/Future, try to get exception
+                    if hasattr(error.last_attempt, "exception"):
+                        inner_exc = error.last_attempt.exception()
+                        if inner_exc:
+                            error = inner_exc
+                            error_str = str(error).lower()
+                elif hasattr(error, "args") and error.args:
+                    # Sometimes args[0] is the inner exception
+                    if isinstance(error.args[0], Exception):
+                        error = error.args[0]
+                        error_str = str(error).lower()
+        except ImportError:
+            pass
+
         # Network errors (retryable) - CHECK FIRST
         if (
             "network" in error_str
