@@ -25,7 +25,7 @@ class ExtractedData(BaseModel):
 
 class BatchItem(BaseModel):
     """Single item in batch (internal structure)."""
-    
+
     id: int = Field(description="Internal tracking ID")
     result: ExtractedData = Field(description="User's actual data")
 

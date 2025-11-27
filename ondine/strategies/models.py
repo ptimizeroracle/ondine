@@ -72,7 +72,7 @@ class BatchResult(BaseModel):
     def validate_results(cls, v: list[BatchItem]) -> list[BatchItem]:
         """Validate results list (can be empty for failed batches)."""
         # Allow empty list - will be caught by get_missing_ids later
-        
+
         # Validate all items have IDs
         for item in v:
             if item.id is None:

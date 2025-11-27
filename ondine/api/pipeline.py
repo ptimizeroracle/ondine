@@ -798,11 +798,14 @@ class Pipeline:
                     # Handle potential non-string types gracefully
                     empty_mask = (
                         result.data[col].astype(str).str.strip() == ""
-                        if result.data[col].dtype == "object" or result.data[col].dtype == "string"
-                        else pd.Series([False] * len(result.data), index=result.data.index)
+                        if result.data[col].dtype == "object"
+                        or result.data[col].dtype == "string"
+                        else pd.Series(
+                            [False] * len(result.data), index=result.data.index
+                        )
                     )
                     # Row is failed ONLY if this column is ALSO null/empty
-                    failed_mask &= (null_mask | empty_mask)
+                    failed_mask &= null_mask | empty_mask
 
             failed_indices = result.data[failed_mask].index.tolist()
 

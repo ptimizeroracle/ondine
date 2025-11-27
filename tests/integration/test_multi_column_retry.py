@@ -54,9 +54,7 @@ class TestMultiColumnRetry:
                         # First time seeing this row
                         if i in [2, 5, 8]:
                             # Fail ALL columns (return JSON with nulls) - triggers retry
-                            text = (
-                                f'{{"col1": null, "col2": null, "col3": null}}'
-                            )
+                            text = '{"col1": null, "col2": null, "col3": null}'
                         else:
                             # All columns succeed
                             text = f'{{"col1": "value_{i}", "col2": "data_{i}", "col3": "info_{i}"}}'

@@ -11,7 +11,6 @@ from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import pandas as pd
-import pytest
 from pydantic import BaseModel
 
 from ondine.api import PipelineBuilder
@@ -20,11 +19,13 @@ from ondine.core.models import LLMResponse
 
 class ResultModel(BaseModel):
     """Test model for structured output."""
+
     value: str
 
 
 class BatchResponse(BaseModel):
     """Batch wrapper."""
+
     items: list[dict]
 
 
@@ -35,7 +36,7 @@ class TestBatchRecovery:
     def test_empty_batch_triggers_retry(self, mock_get):
         """
         Test that an empty batch response triggers auto-retry.
-        
+
         Scenario:
         - Batch size 5
         - First call returns {"items": []} (Empty batch failure)
@@ -48,13 +49,13 @@ class TestBatchRecovery:
         # Setup Mock LLM
         # Call 1: Empty batch (Failure)
         # Call 2: Retry (Success - returning individual items or valid batch)
-        
+
         call_count = 0
 
         def mock_invoke(prompt, output_cls=None, **kwargs):
             nonlocal call_count
             call_count += 1
-            
+
             # First call: Return empty batch (simulating the bug)
             if call_count == 1:
                 return LLMResponse(
@@ -65,16 +66,16 @@ class TestBatchRecovery:
                     cost=Decimal("0.001"),
                     latency_ms=100.0,
                 )
-            
+
             # Subsequent calls (Retry): Return valid data
             # The retry pipeline might run row-by-row or batch depending on config
             # Let's assume it runs as a batch of 5 again (since it's a new pipeline)
             # OR row-by-row if batch_size defaults to 1 in retry (it usually copies specs)
-            
+
             # Construct valid response based on prompt
             # Simplified logic: just return a valid batch for simplicity
             # (Real logic would need to parse input prompt to match IDs, but let's assume batch retry)
-            
+
             return LLMResponse(
                 text='{"items": [{"id": 1, "result": {"value": "ok"}}, {"id": 2, "result": {"value": "ok"}}, {"id": 3, "result": {"value": "ok"}}, {"id": 4, "result": {"value": "ok"}}, {"id": 5, "result": {"value": "ok"}}]}',
                 tokens_in=100,
@@ -94,7 +95,7 @@ class TestBatchRecovery:
             input_cost_per_1k_tokens=Decimal("0.001"),
             output_cost_per_1k_tokens=Decimal("0.001"),
         )
-        
+
         # Configure Registry to return our mock class
         mock_client_class = Mock(return_value=mock_client)
         mock_get.return_value = mock_client_class
@@ -124,16 +125,15 @@ class TestBatchRecovery:
         # Verification
         # 1. Should have succeeded
         assert result.success
-        
+
         # 2. Should have processed all 5 rows
         assert len(result.data) == 5
-        
+
         # 3. Should have called LLM at least twice (1 fail + 1 retry)
         assert call_count >= 2, f"Expected at least 2 calls, got {call_count}"
-        
+
         # 4. Data should be valid (no nulls)
         assert result.data["value"].notnull().all()
         assert (result.data["value"] == "ok").all()
-        
-        print(f"\n✅ Batch Recovery Test Passed! Calls: {call_count}")
 
+        print(f"\n✅ Batch Recovery Test Passed! Calls: {call_count}")

@@ -73,7 +73,8 @@ class JsonBatchStrategy(BatchFormattingStrategy):
 
         # Format as prompt (minified JSON to save tokens)
         items_json = json.dumps(
-            [{"id": item.id, "input": item.input} for item in items], separators=(",", ":")
+            [{"id": item.id, "input": item.input} for item in items],
+            separators=(",", ":"),
         )
 
         return f"""Process these {len(prompts)} items and return a JSON array.
@@ -140,10 +141,12 @@ JSON Array:"""
         if isinstance(data, dict) and "items" in data:
             # Instructor wraps in {items: [...]} - extract the array
             data = data["items"]
-        
+
         # Validate it's a list
         if not isinstance(data, list):
-            raise ValueError(f"Expected JSON array or {{items: [...]}}, got {type(data)}")
+            raise ValueError(
+                f"Expected JSON array or {{items: [...]}}, got {type(data)}"
+            )
 
         # Parse into BatchResult for validation
         # Handle two item formats:
@@ -163,7 +166,7 @@ JSON Array:"""
                     # If no other fields, result is None (not empty dict)
                     result_data = item_copy if item_copy else None
                     items.append(BatchItem(id=item_id, result=result_data))
-            
+
             batch_result = BatchResult(results=items)
         except Exception as e:
             raise ValueError(f"Invalid batch result format: {e}") from e

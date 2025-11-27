@@ -247,17 +247,19 @@ class TestUnifiedLiteLLMClient:
         mock_instructor_client = Mock()
         mock_completions = Mock()
         mock_result = TestModel(result="structured output")
-        
+
         # Mock create_with_completion (NEW METHOD)
         mock_raw_response = Mock()
         mock_raw_response.usage = Mock(prompt_tokens=10, completion_tokens=5)
-        
+
         # CRITICAL: Ensure AsyncMock is returned when accessed
-        mock_completions.create_with_completion = AsyncMock(return_value=(mock_result, mock_raw_response))
-        
+        mock_completions.create_with_completion = AsyncMock(
+            return_value=(mock_result, mock_raw_response)
+        )
+
         # Also mock create for fallback
         mock_completions.create = AsyncMock(return_value=mock_result)
-        
+
         mock_instructor_client.chat = Mock()
         mock_instructor_client.chat.completions = mock_completions
 
@@ -281,13 +283,22 @@ class TestUnifiedLiteLLMClient:
 
     def test_calc_cost_with_litellm(self):
         """Test cost calculation uses LiteLLM's pricing DB."""
-        spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-test")  # pragma: allowlist secret
+        spec = LLMSpec(
+            model="openai/gpt-4o-mini", api_key="sk-test"
+        )  # pragma: allowlist secret
 
         # Create fake response object
-        from litellm import ModelResponse, Choices, Message, Usage
+        from litellm import Choices, Message, ModelResponse, Usage
+
         fake_response = ModelResponse(
             id="test",
-            choices=[Choices(finish_reason="stop", index=0, message=Message(content="test", role="assistant"))],
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=Message(content="test", role="assistant"),
+                )
+            ],
             model="gpt-4o-mini",
             usage=Usage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
         )

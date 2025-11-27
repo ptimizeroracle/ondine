@@ -329,7 +329,7 @@ class UnifiedLiteLLMClient(LLMClient):
     def _calc_cost_from_response(self, response: Any) -> Decimal:
         """
         Calculate cost from LiteLLM response object.
-        
+
         Simple logic: LiteLLM already calculated the cost, just use it!
         """
         # SIMPLE: Check if LiteLLM already calculated cost (it's in _hidden_params)
@@ -339,13 +339,13 @@ class UnifiedLiteLLMClient(LLMClient):
                 cost = hidden["response_cost"]
                 if cost and cost > 0:
                     return Decimal(str(cost))
-        
+
         # Fallback: Calculate ourselves
         try:
             model_to_use = self.model
             if self.router and hasattr(response, "model") and response.model:
                 model_to_use = response.model
-                
+
             cost = litellm.completion_cost(
                 completion_response=response,
                 model=model_to_use,
@@ -354,13 +354,13 @@ class UnifiedLiteLLMClient(LLMClient):
                 return Decimal(str(cost))
         except Exception:
             pass
-        
+
         # Last resort: Manual calculation from spec
         if self.spec.input_cost_per_1k_tokens or self.spec.output_cost_per_1k_tokens:
             tokens_in = response.usage.prompt_tokens if response.usage else 0
             tokens_out = response.usage.completion_tokens if response.usage else 0
             return self._calc_cost(tokens_in, tokens_out)
-        
+
         return Decimal("0")
 
     def _calc_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
@@ -468,9 +468,7 @@ class UnifiedLiteLLMClient(LLMClient):
         raw_response = None
         # Try to get raw response for metadata extraction
         # Instructor >= 1.0.0 supports create_with_completion
-        if hasattr(
-            self.instructor_client.chat.completions, "create_with_completion"
-        ):
+        if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
             (
                 result,
                 raw_response,
@@ -479,9 +477,7 @@ class UnifiedLiteLLMClient(LLMClient):
             )
         else:
             # Fallback for older versions
-            result = await self.instructor_client.chat.completions.create(
-                **call_kwargs
-            )
+            result = await self.instructor_client.chat.completions.create(**call_kwargs)
 
         # Serialize for backward compatibility (text field)
         text = result.model_dump_json()

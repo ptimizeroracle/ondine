@@ -170,7 +170,9 @@ class BatchDisaggregatorStage(PipelineStage):
                 individual_results = []
                 for i, row_id in enumerate(batch_metadata.row_ids):
                     if i + 1 in e.failed_ids:  # failed_ids are 1-based
-                        individual_results.append("null")  # Return null so parser produces None -> triggers retry
+                        individual_results.append(
+                            "null"
+                        )  # Return null so parser produces None -> triggers retry
                     else:
                         # Find the corresponding parsed result
                         result_idx = i - sum(1 for fid in e.failed_ids if fid <= i + 1)
@@ -203,9 +205,11 @@ class BatchDisaggregatorStage(PipelineStage):
                 provider_info = "unknown"
                 if hasattr(llm_response, "model") and llm_response.model:
                     provider_info = llm_response.model
-                elif hasattr(llm_response, "metadata") and isinstance(llm_response.metadata, dict):
+                elif hasattr(llm_response, "metadata") and isinstance(
+                    llm_response.metadata, dict
+                ):
                     provider_info = llm_response.metadata.get("model_id", "unknown")
-                
+
                 self.logger.error(
                     f"Failed to parse batch response from [{provider_info}]: {e}. "
                     f"Batch ID: {batch.batch_id}. "
