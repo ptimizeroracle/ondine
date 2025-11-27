@@ -1218,9 +1218,7 @@ class PipelineBuilder:
         }
         return self
 
-    def with_disk_cache(
-        self, cache_dir: str = ".cache"
-    ) -> "PipelineBuilder":
+    def with_disk_cache(self, cache_dir: str = ".cache") -> "PipelineBuilder":
         """
         Enable LiteLLM Disk caching.
 
