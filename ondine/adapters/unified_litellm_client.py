@@ -146,6 +146,17 @@ class UnifiedLiteLLMClient(LLMClient):
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
 
+        # Initialize Cache (optional)
+        # Supports Redis, Disk, S3, etc. via LiteLLM native caching
+        if hasattr(spec, "cache_config") and spec.cache_config:
+            try:
+                from litellm.caching import Cache
+
+                litellm.cache = Cache(**spec.cache_config)
+                logger.debug(f"Initialized LiteLLM cache: {spec.cache_config}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize LiteLLM cache: {e}")
+
         # Initialize Instructor client ONCE (not per-call!)
         # Auto-detect mode based on provider:
         # - Groq: Use JSON mode (function calling is unreliable, generates XML)

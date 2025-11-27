@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1](https://github.com/ptimizeroracle/ondine/compare/v1.4.0...v1.4.1) (2025-11-27)
+
+### Features
+* **Native LiteLLM Caching**:
+  * Replaced custom `RedisResponseCache` with LiteLLM's native `litellm.cache` integration
+  * Added support for **Disk Caching** (`diskcache`) for local persistence without Redis
+  * Simplified `PipelineBuilder` API: `with_disk_cache()` and updated `with_redis_cache()`
+  * Removed 100+ lines of redundant caching code while gaining support for S3, Momento, and more via LiteLLM
+
+### Refactoring
+* **Code Cleanup**: Deleted `ondine/adapters/cache_client.py` in favor of `litellm.caching`
+* **Standardization**: Standardized `LLMSpec.cache_config` structure to match LiteLLM's native format
+
 ## [1.4.0](https://github.com/ptimizeroracle/ondine/compare/v1.3.4...v1.4.0) (2025-11-27)
 
 ### Features

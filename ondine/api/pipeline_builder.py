@@ -1212,9 +1212,30 @@ class PipelineBuilder:
             self._llm_spec = LLMSpec(provider=LLMProvider.OPENAI, model="cached")
 
         self._llm_spec.cache_config = {
-            "cache_type": "redis",
-            "redis_url": redis_url,
+            "type": "redis",
+            "host": redis_url,
             "ttl": ttl,
+        }
+        return self
+
+    def with_disk_cache(self, cache_dir: str = ".cache") -> "PipelineBuilder":
+        """
+        Enable LiteLLM Disk caching.
+
+        Caches responses to the local filesystem.
+
+        Args:
+            cache_dir: Directory to store cache files (default: .cache)
+
+        Returns:
+            Self for chaining
+        """
+        if not self._llm_spec:
+            self._llm_spec = LLMSpec(provider=LLMProvider.OPENAI, model="cached")
+
+        self._llm_spec.cache_config = {
+            "type": "disk",
+            "disk_cache_dir": cache_dir,
         }
         return self
 
