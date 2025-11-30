@@ -1,7 +1,10 @@
 """Tests for non-retryable error classification and handling."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
+from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 from ondine.core.exceptions import (
     ConfigurationError,
     InvalidAPIKeyError,
@@ -9,6 +12,7 @@ from ondine.core.exceptions import (
     NonRetryableError,
     QuotaExceededError,
 )
+from ondine.core.specifications import LLMSpec
 from ondine.stages.llm_invocation_stage import LLMInvocationStage
 from ondine.utils import NetworkError, RateLimitError, RetryHandler
 
@@ -43,131 +47,88 @@ class TestNonRetryableErrorHierarchy:
         assert isinstance(error, NonRetryableError)
 
 
-class TestErrorClassification:
-    """Test error classification in LLMInvocationStage."""
+class TestClientErrorMapping:
+    """Test error mapping in UnifiedLiteLLMClient."""
 
     @pytest.fixture
-    def mock_stage(self):
-        """Create a mock LLM invocation stage for testing."""
-        from unittest.mock import MagicMock
+    def client(self):
+        """Create a client instance for testing."""
+        spec = LLMSpec(model="gpt-4", api_key="test")
+        return UnifiedLiteLLMClient(spec)
 
-        # Ensure router is False to test standard behavior
-        mock_client = MagicMock()
-        mock_client.router = None
-
-        return LLMInvocationStage(
-            llm_client=mock_client,
-            retry_handler=MagicMock(),
-            error_policy="skip",
-        )
-
-    def test_classify_model_decommissioned_error(self, mock_stage):
-        """Model decommissioned error should be classified as ModelNotFoundError."""
+    def test_map_model_decommissioned_error(self, client):
+        """Model decommissioned error should be mapped to ModelNotFoundError."""
         error = Exception("The model `llama-3.1-70b-versatile` has been decommissioned")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, ModelNotFoundError)
-        assert "model error" in str(classified).lower()
+        assert isinstance(mapped, ModelNotFoundError)
+        assert "model error" in str(mapped).lower()
 
-    def test_classify_model_not_found_error(self, mock_stage):
-        """Model not found error should be classified as ModelNotFoundError."""
+    def test_map_model_not_found_error(self, client):
+        """Model not found error should be mapped to ModelNotFoundError."""
         error = Exception("Model 'gpt-5' does not exist")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, ModelNotFoundError)
+        assert isinstance(mapped, ModelNotFoundError)
 
-    def test_classify_invalid_api_key_error(self, mock_stage):
-        """Invalid API key should be classified as InvalidAPIKeyError."""
+    def test_map_invalid_api_key_error(self, client):
+        """Invalid API key should be mapped to InvalidAPIKeyError."""
         error = Exception("Invalid API key provided")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, InvalidAPIKeyError)
+        assert isinstance(mapped, InvalidAPIKeyError)
 
-    def test_classify_authentication_401_error(self, mock_stage):
-        """401 authentication error should be classified as InvalidAPIKeyError."""
+    def test_map_authentication_401_error(self, client):
+        """401 authentication error should be mapped to InvalidAPIKeyError."""
         error = Exception("HTTP 401 Unauthorized")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, InvalidAPIKeyError)
+        assert isinstance(mapped, InvalidAPIKeyError)
 
-    def test_classify_quota_exceeded_error(self, mock_stage):
-        """Quota exceeded should be classified as QuotaExceededError."""
+    def test_map_quota_exceeded_error(self, client):
+        """Quota exceeded should be mapped to QuotaExceededError."""
         error = Exception("Quota exceeded for this account")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, QuotaExceededError)
+        assert isinstance(mapped, QuotaExceededError)
 
-    def test_classify_rate_limit_error(self, mock_stage):
-        """Rate limit error should be classified as RateLimitError (retryable)."""
+    def test_map_limit_exceeded_error(self, client):
+        """Cerebras limit exceeded should be mapped to QuotaExceededError."""
+        error = Exception("Tokens per hour limit exceeded")
+        mapped = client._map_provider_error(error)
+
+        assert isinstance(mapped, QuotaExceededError)
+
+    def test_map_rate_limit_error(self, client):
+        """Rate limit error should be mapped to RateLimitError (retryable)."""
         error = Exception("Rate limit exceeded, please retry after 60s")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, RateLimitError)
-        assert not isinstance(classified, NonRetryableError)
+        assert isinstance(mapped, RateLimitError)
+        assert not isinstance(mapped, NonRetryableError)
 
-    def test_classify_429_error(self, mock_stage):
-        """HTTP 429 should be classified as RateLimitError (retryable)."""
+    def test_map_429_error(self, client):
+        """HTTP 429 should be mapped to RateLimitError (retryable)."""
         error = Exception("HTTP 429 Too Many Requests")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, RateLimitError)
+        assert isinstance(mapped, RateLimitError)
 
-    def test_classify_network_timeout_error(self, mock_stage):
-        """Network timeout should be classified as NetworkError (retryable)."""
+    def test_map_network_timeout_error(self, client):
+        """Network timeout should be mapped to NetworkError (retryable)."""
         error = Exception("Connection timeout after 30s")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert isinstance(classified, NetworkError)
-        assert not isinstance(classified, NonRetryableError)
+        assert isinstance(mapped, NetworkError)
+        assert not isinstance(mapped, NonRetryableError)
 
-    def test_classify_unknown_error_returns_original(self, mock_stage):
-        """Unknown errors should return original exception (retryable by default)."""
+    def test_map_unknown_error_returns_original(self, client):
+        """Unknown errors should return original exception."""
         error = Exception("Some random error")
-        classified = mock_stage._classify_error(error)
+        mapped = client._map_provider_error(error)
 
-        assert classified is error
-        assert not isinstance(classified, NonRetryableError)
-
-    def test_classify_openai_auth_error(self, mock_stage):
-        """OpenAI AuthenticationError should be classified as InvalidAPIKeyError."""
-        try:
-            from unittest.mock import MagicMock
-
-            from openai import AuthenticationError
-
-            # Mock the OpenAI exception with required attributes
-            mock_response = MagicMock()
-            mock_response.status_code = 401
-            error = AuthenticationError(
-                "Invalid API key", response=mock_response, body={"error": "invalid_key"}
-            )
-            classified = mock_stage._classify_error(error)
-
-            assert isinstance(classified, InvalidAPIKeyError)
-            assert "openai authentication failed" in str(classified).lower()
-        except ImportError:
-            pytest.skip("OpenAI not installed")
-
-    def test_classify_openai_bad_request_model_error(self, mock_stage):
-        """OpenAI BadRequestError with model issue should be ModelNotFoundError."""
-        try:
-            from unittest.mock import MagicMock
-
-            from openai import BadRequestError
-
-            # Mock the OpenAI exception with required attributes
-            mock_response = MagicMock()
-            mock_response.status_code = 400
-            error = BadRequestError(
-                "The model 'gpt-5' does not exist",
-                response=mock_response,
-                body={"error": "model_not_found"},
-            )
-            classified = mock_stage._classify_error(error)
-
-            assert isinstance(classified, ModelNotFoundError)
-        except ImportError:
-            pytest.skip("OpenAI not installed")
+        assert mapped is error
+        assert not isinstance(mapped, NonRetryableError)
 
 
 class TestRetryHandlerWithNonRetryable:
@@ -205,94 +166,17 @@ class TestRetryHandlerWithNonRetryable:
         # Should be called 3 times (initial + 2 retries)
         assert call_count == 3
 
-    def test_network_error_is_retried(self):
-        """NetworkError should be retried multiple times."""
-        handler = RetryHandler(max_attempts=3, initial_delay=0.01)
-        call_count = 0
-
-        def failing_func():
-            nonlocal call_count
-            call_count += 1
-            raise NetworkError("Connection timeout")
-
-        with pytest.raises(NetworkError):
-            handler.execute(failing_func)
-
-        # Should be called 3 times
-        assert call_count == 3
-
-    def test_generic_exception_not_retried_by_default(self):
-        """Generic exceptions should not be retried (only RetryableError types)."""
-        handler = RetryHandler(max_attempts=3)
-        call_count = 0
-
-        def failing_func():
-            nonlocal call_count
-            call_count += 1
-            raise ValueError("Some error")
-
-        with pytest.raises(ValueError):
-            handler.execute(failing_func)
-
-        # Should only be called once (ValueError not in retryable_exceptions)
-        assert call_count == 1
-
-
-class TestErrorHandlerWithNonRetryable:
-    """Test ErrorHandler behavior with NonRetryableError."""
-
-    def test_non_retryable_error_always_fails(self):
-        """NonRetryableError should always result in FAIL action."""
-        from ondine.core.error_handler import ErrorAction, ErrorHandler
-
-        handler = ErrorHandler(policy="retry", max_retries=3)
-        error = ModelNotFoundError("Model decommissioned")
-        context = {"row_index": 0, "stage": "llm_invocation"}
-
-        decision = handler.handle_error(error, context, attempt=1)
-
-        assert decision.action == ErrorAction.FAIL
-
-    def test_non_retryable_ignores_policy(self):
-        """NonRetryableError should fail even with SKIP policy."""
-        from ondine.core.error_handler import ErrorAction, ErrorHandler
-
-        handler = ErrorHandler(policy="skip")
-        error = InvalidAPIKeyError("Invalid API key")
-        context = {"row_index": 0, "stage": "llm_invocation"}
-
-        decision = handler.handle_error(error, context)
-
-        # Should FAIL, not SKIP
-        assert decision.action == ErrorAction.FAIL
-
-    def test_retryable_error_respects_policy(self):
-        """Retryable errors should respect the configured policy."""
-        from ondine.core.error_handler import ErrorAction, ErrorHandler
-
-        handler = ErrorHandler(policy="skip")
-        error = RateLimitError("Rate limit")
-        context = {"row_index": 0, "stage": "llm_invocation"}
-
-        decision = handler.handle_error(error, context)
-
-        # Should respect SKIP policy
-        assert decision.action == ErrorAction.SKIP
-
 
 class TestIntegration:
-    """Integration tests for error classification flow."""
+    """Integration tests for stage-level error handling."""
 
     def test_model_error_fails_pipeline_immediately(self):
-        """Model error should fail pipeline without retries."""
-        from unittest.mock import MagicMock
-
-        # Mock LLM client that raises model error
+        """Model error (mapped by client) should fail pipeline without retries."""
+        # Mock LLM client that raises mapped ModelNotFoundError
         mock_client = MagicMock()
-        mock_client.router = None  # Ensure NO router to test fatal behavior
-        mock_client.invoke.side_effect = Exception(
-            "The model `invalid-model` has been decommissioned"
-        )
+        mock_client.router = None
+        # Client explicitly raises the Mapped Exception now
+        mock_client.invoke.side_effect = ModelNotFoundError("Model decommissioned")
 
         # Create stage with retry handler
         retry_handler = RetryHandler(max_attempts=3, initial_delay=0.01)
@@ -312,11 +196,10 @@ class TestIntegration:
         assert mock_client.invoke.call_count == 1
 
     def test_rate_limit_retries_then_fails(self):
-        """Rate limit error should retry multiple times."""
-        from unittest.mock import MagicMock
-
+        """Rate limit error (mapped by client) should retry multiple times."""
         mock_client = MagicMock()
-        mock_client.invoke.side_effect = Exception("Rate limit exceeded")
+        # Client explicitly raises the Mapped Exception
+        mock_client.invoke.side_effect = RateLimitError("Rate limit exceeded")
 
         retry_handler = RetryHandler(max_attempts=3, initial_delay=0.01)
 

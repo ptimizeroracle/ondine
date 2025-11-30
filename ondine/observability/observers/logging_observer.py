@@ -1,14 +1,15 @@
 """
 Logging observer for simple console/file observability.
 
-Delegates to LlamaIndex's Simple handler for automatic LLM call logging.
+Logs LLM interactions using standard Python logging.
 """
 
 import logging
 from typing import Any
 
+import litellm
+
 from ondine.observability.base import PipelineObserver
-from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
 from ondine.observability.registry import observer
 
 logger = logging.getLogger(__name__)
@@ -17,46 +18,45 @@ logger = logging.getLogger(__name__)
 @observer("logging")
 class LoggingObserver(PipelineObserver):
     """
-    Observer that delegates to LlamaIndex's Simple handler.
-
-    LlamaIndex automatically logs:
-    - ✅ LLM calls with prompts and completions
-    - ✅ Token usage
-    - ✅ Latency metrics
+    Observer that uses LiteLLM's verbose logging or standard Python logging.
 
     This provides basic console logging without external dependencies.
 
     Configuration:
-        - (No specific config needed - uses LlamaIndex defaults)
+        - level: Logging level (INFO, DEBUG)
+        - verbose: Enable LiteLLM verbose mode (boolean)
 
     Example:
-        observer = LoggingObserver(config={})
+        observer = LoggingObserver(config={"verbose": True})
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize logging observer.
-
-        Configures LlamaIndex's Simple handler for console logging.
         """
         super().__init__(config)
 
-        # Configure LlamaIndex's Simple handler (console logging)
-        # This will automatically log all LLM calls!
-        LlamaIndexHandlerManager.configure_handler("simple", self.config)
+        # Configure LiteLLM logging
+        if self.config and self.config.get("verbose", False):
+            litellm.set_verbose = True
+            logger.info("LiteLLM verbose logging enabled")
 
-        logger.info("Logging observer initialized (using LlamaIndex SimpleHandler)")
+        # Ensure we have a handler for this logger if none exists
+        if not logger.hasHandlers():
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+
+        logger.info("Logging observer initialized")
 
     def on_llm_call(self, event: Any) -> None:
         """
-        LLM calls are automatically logged by LlamaIndex.
-
-        No action needed - LlamaIndex's Simple handler logs:
-        - Prompt and completion
-        - Token usage
-        - Latency
+        LLM calls are logged via standard logging if enabled.
         """
-        # LlamaIndex handles this automatically!
         pass
 
     def flush(self) -> None:

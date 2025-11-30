@@ -1,15 +1,16 @@
 """
 Langfuse observer for LLM-specific observability.
 
-Delegates to LlamaIndex's built-in Langfuse handler for automatic tracking
-of prompts, completions, tokens, and costs.
+Uses LiteLLM's native Langfuse integration.
 """
 
 import logging
+import os
 from typing import Any
 
+import litellm
+
 from ondine.observability.base import PipelineObserver
-from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
 from ondine.observability.registry import observer
 
 logger = logging.getLogger(__name__)
@@ -18,68 +19,69 @@ logger = logging.getLogger(__name__)
 @observer("langfuse")
 class LangfuseObserver(PipelineObserver):
     """
-    Observer that delegates to LlamaIndex's Langfuse handler.
+    Observer that configures LiteLLM's native Langfuse integration.
 
-    LlamaIndex automatically tracks:
+    LiteLLM automatically tracks:
     - ✅ Full prompts and completions
     - ✅ Token usage and costs
     - ✅ Latency metrics
     - ✅ Model information
-    - ✅ Prompt versioning
+    - ✅ Prompt versioning (via Langfuse)
 
     Configuration:
-        - public_key: Langfuse public key (required)
-        - secret_key: Langfuse secret key (required)
-        - host: Langfuse host URL (optional, defaults to cloud)
+    - Requires environment variables: LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+    - Optional: LANGFUSE_HOST (defaults to cloud)
+    - Or pass in 'config' dict which will be mapped to env vars
 
     Example:
         observer = LangfuseObserver(config={
             "public_key": "pk-lf-...",
             "secret_key": "sk-lf-...",
+            "host": "https://cloud.langfuse.com"
         })
-
-    Raises:
-        ValueError: If required config (public_key, secret_key) missing
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize Langfuse observer.
-
-        Configures LlamaIndex's global Langfuse handler.
         """
         super().__init__(config)
 
-        # Validate required config
-        if not self.config.get("public_key") or not self.config.get("secret_key"):
-            raise ValueError(
-                "Langfuse requires 'public_key' and 'secret_key' in config. "
-                "Get your keys from: https://cloud.langfuse.com"
-            )
+        # 1. Add 'langfuse' to LiteLLM callbacks if not present
+        if "langfuse" not in litellm.success_callback:
+            litellm.success_callback.append("langfuse")
+        if "langfuse" not in litellm.failure_callback:
+            litellm.failure_callback.append("langfuse")
+            logger.info("Added 'langfuse' to LiteLLM callbacks")
 
-        # Configure LlamaIndex's Langfuse handler
-        # This will automatically track all LLM calls!
-        LlamaIndexHandlerManager.configure_handler("langfuse", self.config)
+        # 2. Map config to env vars (LiteLLM/Langfuse SDK relies on these)
+        if self.config:
+            if self.config.get("public_key"):
+                os.environ["LANGFUSE_PUBLIC_KEY"] = self.config["public_key"]
+            if self.config.get("secret_key"):
+                os.environ["LANGFUSE_SECRET_KEY"] = self.config["secret_key"]
+            if self.config.get("host"):
+                os.environ["LANGFUSE_HOST"] = self.config["host"]
 
-        logger.info("Langfuse observer initialized (using LlamaIndex handler)")
+        logger.info("Langfuse observer initialized (LiteLLM native)")
 
     def on_llm_call(self, event: Any) -> None:
         """
-        LLM calls are automatically tracked by LlamaIndex.
-
-        No action needed - LlamaIndex's Langfuse handler captures:
-        - Full prompt and completion text
-        - Token usage and costs
-        - Model information
-        - Latency metrics
+        LLM calls are automatically tracked by LiteLLM's native callback.
         """
-        # LlamaIndex handles this automatically!
         pass
 
     def flush(self) -> None:
-        """Flush events (handled by LlamaIndex/Langfuse SDK)."""
-        pass
+        """Flush events (handled by Langfuse SDK background worker)."""
+        import langfuse
+
+        # Attempt to flush if the SDK exposes it, otherwise rely on atexit
+        try:
+            if hasattr(langfuse, "flush"):
+                langfuse.flush()
+        except Exception:
+            pass
 
     def close(self) -> None:
-        """Cleanup (handled by LlamaIndex/Langfuse SDK)."""
-        pass
+        """Cleanup."""
+        self.flush()

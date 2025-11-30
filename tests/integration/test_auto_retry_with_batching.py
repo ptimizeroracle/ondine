@@ -7,19 +7,22 @@ used multi-row batching.
 """
 
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
+import pytest
 
 from ondine import PipelineBuilder
 from ondine.core.models import LLMResponse
+from ondine.orchestration import AsyncExecutor
 
 
 class TestAutoRetryWithBatching:
     """Test auto-retry compatibility with multi-row batching."""
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_auto_retry_with_single_failed_row_in_large_batch(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_auto_retry_with_single_failed_row_in_large_batch(self, mock_get):
         """
         Edge case: Only 1 row fails in a batch of 10.
 
@@ -31,7 +34,7 @@ class TestAutoRetryWithBatching:
 
         invocations = []
 
-        def mock_invoke(prompt, **kwargs):
+        async def mock_invoke(prompt, **kwargs):
             """Track each invocation and fail row 5 only."""
             rows_in_call = []
             for i in range(10):
@@ -45,7 +48,11 @@ class TestAutoRetryWithBatching:
                 # Batch call
                 results = []
                 for idx, row_num in enumerate(rows_in_call):
-                    times_seen = sum(1 for inv in invocations[:-1] if row_num in inv)
+                    # Count previous attempts for this specific row
+                    times_seen = 0
+                    for inv in invocations[:-1]:
+                        if row_num in inv:
+                            times_seen += 1
 
                     if times_seen == 0 and row_num == 5:
                         result = None  # Fail row 5
@@ -71,7 +78,9 @@ class TestAutoRetryWithBatching:
             )
 
         mock_client = Mock()
-        mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
         mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test",
@@ -90,13 +99,14 @@ class TestAutoRetryWithBatching:
             .with_llm(provider="openai", model="test", temperature=0.0)
             .with_jinja2(True)
             .with_batch_size(10)  # All 10 rows in 1 batch
+            .with_executor(AsyncExecutor())
             .build()
         )
 
         pipeline.specifications.processing.auto_retry_failed = True
         pipeline.specifications.processing.max_retry_attempts = 1
 
-        result = pipeline.execute()
+        result = await pipeline.execute_async()
 
         # Verify: 1 initial call (10 rows) + 1 retry call (1 row) = 2 calls
         assert len(invocations) == 2, f"Expected 2 calls, got {len(invocations)}"

@@ -8,13 +8,15 @@ Verifies that:
 """
 
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
+import pytest
 from pydantic import BaseModel
 
 from ondine.api import PipelineBuilder
 from ondine.core.models import LLMResponse
+from ondine.orchestration import AsyncExecutor
 
 
 class ResultModel(BaseModel):
@@ -33,7 +35,8 @@ class TestBatchRecovery:
     """Test recovery from batch failures."""
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_empty_batch_triggers_retry(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_empty_batch_triggers_retry(self, mock_get):
         """
         Test that an empty batch response triggers auto-retry.
 
@@ -52,7 +55,7 @@ class TestBatchRecovery:
 
         call_count = 0
 
-        def mock_invoke(prompt, output_cls=None, **kwargs):
+        async def mock_invoke(prompt, output_cls=None, **kwargs):
             nonlocal call_count
             call_count += 1
 
@@ -87,7 +90,12 @@ class TestBatchRecovery:
 
         # Mock Client
         mock_client = Mock()
-        mock_client.structured_invoke.side_effect = mock_invoke
+        # Mock async methods
+        mock_client.structured_invoke_async = AsyncMock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)  # Fallback
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
         # We need to mock the attribute access for 'router'
         mock_client.router = None
         mock_client.spec = Mock(
@@ -112,6 +120,7 @@ class TestBatchRecovery:
             .with_llm(provider="groq", model="test")
             .with_batch_size(5)  # Batch all 5
             .with_structured_output(BatchResponse)
+            .with_executor(AsyncExecutor())
             .build()
         )
 
@@ -120,7 +129,7 @@ class TestBatchRecovery:
         pipeline.specifications.processing.max_retry_attempts = 1
 
         # Execute
-        result = pipeline.execute()
+        result = await pipeline.execute_async()
 
         # Verification
         # 1. Should have succeeded

@@ -1,15 +1,16 @@
 """
 OpenTelemetry observer for infrastructure monitoring.
 
-Delegates to LlamaIndex's built-in OpenTelemetry handler for LLM call tracking,
-while adding pipeline-level observability on top.
+Uses LiteLLM's native OpenTelemetry callbacks.
 """
 
 import logging
+import os
 from typing import Any
 
+import litellm
+
 from ondine.observability.base import PipelineObserver
-from ondine.observability.llamaindex_handlers import LlamaIndexHandlerManager
 from ondine.observability.registry import observer
 
 logger = logging.getLogger(__name__)
@@ -18,49 +19,49 @@ logger = logging.getLogger(__name__)
 @observer("opentelemetry")
 class OpenTelemetryObserver(PipelineObserver):
     """
-    Observer that delegates to LlamaIndex's OpenTelemetry handler.
+    Observer that configures LiteLLM's native OpenTelemetry integration.
 
-    LlamaIndex automatically instruments:
+    LiteLLM automatically instruments:
     - ✅ All LLM calls (prompts, completions, tokens, latency)
-    - ✅ Embeddings
-    - ✅ Retrieval operations (when using QueryEngines)
-
-    This observer configures the LlamaIndex handler and can add
-    pipeline-level spans on top if needed.
+    - ✅ Standard OTLP export (compatible with Jaeger, Honeycomb, Datadog, etc.)
 
     Configuration:
-        - Any config accepted by LlamaIndex's OpenTelemetry handler
-        - See: https://docs.llamaindex.ai/en/stable/module_guides/observability/
+    - Uses standard environment variables (OTEL_EXPORTER_OTLP_ENDPOINT, etc.)
+    - Or passes specific config in 'config' dict
 
     Example:
-        observer = OpenTelemetryObserver(config={})
+        observer = OpenTelemetryObserver(config={
+            "service_name": "my-pipeline"
+        })
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize OpenTelemetry observer.
-
-        Configures LlamaIndex's global OpenTelemetry handler.
         """
         super().__init__(config)
 
-        # Configure LlamaIndex's OpenTelemetry handler
-        # This will automatically instrument all LLM calls!
-        LlamaIndexHandlerManager.configure_handler("opentelemetry", self.config)
+        # 1. Add 'otel' to LiteLLM callbacks if not present
+        if "otel" not in litellm.callbacks:
+            litellm.callbacks.append("otel")
+            logger.info("Added 'otel' to LiteLLM callbacks")
 
-        logger.info("OpenTelemetry observer initialized (using LlamaIndex handler)")
+        # 2. Map config to env vars (standard OTel SDK configuration)
+        if self.config:
+            # Allow overriding service name via config
+            if "service_name" in self.config:
+                os.environ["OTEL_SERVICE_NAME"] = self.config["service_name"]
+
+            # Allow overriding endpoint via config
+            if "endpoint" in self.config:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = self.config["endpoint"]
+
+        logger.info("OpenTelemetry observer initialized (LiteLLM native)")
 
     def on_llm_call(self, event: Any) -> None:
         """
-        LLM calls are automatically traced by LlamaIndex.
-
-        No action needed - LlamaIndex's OpenTelemetry handler captures:
-        - Prompt and completion
-        - Token usage
-        - Latency
-        - Model information
+        LLM calls are automatically traced by LiteLLM's native callback.
         """
-        # LlamaIndex handles this automatically!
         pass
 
     def flush(self) -> None:

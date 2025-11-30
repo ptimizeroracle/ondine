@@ -418,6 +418,15 @@ class Pipeline:
 
             return result
 
+        except KeyboardInterrupt:
+            self.logger.warning("\n🛑 Pipeline interrupted by user.")
+            # Save checkpoint on interrupt
+            state_manager.save_checkpoint(context)
+            self.logger.warning(
+                f"Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
+            )
+            raise
+
         except Exception as e:
             # Save checkpoint on error
             state_manager.save_checkpoint(context)
@@ -749,6 +758,21 @@ class Pipeline:
                 observer.on_stage_complete(stage, context, result)
 
             return result
+
+        except KeyboardInterrupt:
+            # Save checkpoint on interrupt
+            self.logger.warning(
+                "\n🛑 Pipeline interrupted by user. Saving checkpoint..."
+            )
+            state_manager.save_checkpoint(context)
+            self.logger.warning(
+                f"Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
+            )
+            # Flush observers
+            if context.observer_dispatcher:
+                context.observer_dispatcher.flush_all()
+                context.observer_dispatcher.close_all()
+            raise
 
         except Exception as e:
             # Notify observers of error

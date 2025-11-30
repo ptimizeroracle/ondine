@@ -10,11 +10,6 @@ from pydantic import BaseModel
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.error_handler import ErrorAction, ErrorHandler
-from ondine.core.exceptions import (
-    InvalidAPIKeyError,
-    ModelNotFoundError,
-    QuotaExceededError,
-)
 from ondine.core.models import (
     CostEstimate,
     LLMResponse,
@@ -127,6 +122,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             # Loop already running (e.g. Jupyter)
             # Fallback: Try to verify if nest_asyncio is active or loop is patchable
             import nest_asyncio
+
             nest_asyncio.apply()
             return asyncio.run(self._process_async(batches, context))
 
@@ -668,11 +664,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             return NetworkError(f"{str(error)}{provider_info}")
 
-        # Rate limit (retryable)
-        if "rate" in error_str or "429" in error_str:
-            return RateLimitError(str(error))
-
-        # Quota/billing errors (not rate limit)
+        # Quota/billing errors (not rate limit) - CHECK BEFORE RATE LIMIT
+        # Because Quota errors often come as RateLimitError(429) but are NOT retryable
         quota_patterns = [
             "quota exceeded",
             "insufficient_quota",
@@ -680,9 +673,27 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             "credits exhausted",
             "account suspended",
             "payment required",
+            "limit exceeded",  # Cerebras "Tokens per hour limit exceeded"
         ]
         if any(p in error_str for p in quota_patterns):
+            # Log the fatal error clearly to stderr so user sees it immediately
+            import sys
+
+            provider_info = ""
+            if hasattr(error, "model") and error.model:
+                provider_info = f"({error.model})"
+            elif hasattr(error, "failed_model") and error.failed_model:
+                provider_info = f"({error.failed_model})"
+
+            print(
+                f"\n[FATAL ERROR] Provider Quota Exceeded {provider_info}: {str(error)}\n",
+                file=sys.stderr,
+            )
             return QuotaExceededError(f"Quota error: {error}")
+
+        # Rate limit (retryable)
+        if "rate" in error_str or "429" in error_str:
+            return RateLimitError(str(error))
 
         # Authentication errors (non-retryable)
         auth_patterns = [
@@ -745,20 +756,15 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             if self.rate_limiter:
                 self.rate_limiter.acquire()
 
-            # Invoke LLM with error classification
-            try:
-                # Use structured invoke if output_cls is configured
-                if self.output_cls:
-                    return self.llm_client.structured_invoke(
-                        prompt, self.output_cls, system_message=system_message
-                    )
+            # Invoke LLM (Client handles error mapping)
+            # Use structured invoke if output_cls is configured
+            if self.output_cls:
+                return self.llm_client.structured_invoke(
+                    prompt, self.output_cls, system_message=system_message
+                )
 
-                # Pass system_message as kwarg for caching optimization
-                return self.llm_client.invoke(prompt, system_message=system_message)
-            except Exception as e:
-                # Classify error to determine if retryable
-                classified = self._classify_error(e)
-                raise classified
+            # Pass system_message as kwarg for caching optimization
+            return self.llm_client.invoke(prompt, system_message=system_message)
 
         # Execute with retry handler (respects NonRetryableError)
         return self.retry_handler.execute(_invoke)
@@ -823,26 +829,31 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         """Process all prompts concurrently using asyncio."""
         # Track actual Router distribution
         deployment_distribution: dict[str, int] = {}
-        
+
         # Semaphore for concurrency control
         semaphore = asyncio.Semaphore(self.concurrency)
-        
+
         # Progress tracking setup
         progress_tracker = getattr(context, "progress_tracker", None)
         progress_task = getattr(self, "_current_progress_task", None)
 
         async def _process_one(idx, prompt_tuple):
             prompt, metadata, _ = prompt_tuple
-            
+
             async with semaphore:
                 try:
                     response = await self._invoke_with_retry_and_ratelimit_async(
                         prompt, metadata, context, idx
                     )
-                    
+
+                    if response is None:
+                        raise RuntimeError("LLM invocation returned None (unexpected)")
+
                     # Extract ACTUAL deployment used by Router
-                    actual_deployment_id = self._extract_deployment_from_response(response)
-                    
+                    actual_deployment_id = self._extract_deployment_from_response(
+                        response
+                    )
+
                     # Update distribution (not thread-safe but we are in async loop so it's fine)
                     if actual_deployment_id:
                         deployment_distribution[actual_deployment_id] = (
@@ -854,7 +865,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         batch_size = 1
                         if metadata.custom and metadata.custom.get("is_batch"):
                             batch_size = metadata.custom.get("batch_size", 1)
-                        
+
                         # Update dynamic deployment progress
                         display_id = None
                         if actual_deployment_id:
@@ -862,26 +873,35 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             if actual_deployment_id not in self._hash_to_friendly_id:
                                 if self._available_names:
                                     next_friendly = self._available_names.pop(0)
-                                    self._hash_to_friendly_id[actual_deployment_id] = next_friendly["id"]
-                                    self._hash_to_label[actual_deployment_id] = next_friendly["label"]
-                            
-                            display_id = self._hash_to_friendly_id.get(actual_deployment_id, actual_deployment_id)
-                            label_info = self._hash_to_label.get(actual_deployment_id, "")
-                            
+                                    self._hash_to_friendly_id[actual_deployment_id] = (
+                                        next_friendly["id"]
+                                    )
+                                    self._hash_to_label[actual_deployment_id] = (
+                                        next_friendly["label"]
+                                    )
+
+                            display_id = self._hash_to_friendly_id.get(
+                                actual_deployment_id, actual_deployment_id
+                            )
+                            label_info = self._hash_to_label.get(
+                                actual_deployment_id, ""
+                            )
+
                             # Ensure task exists
                             progress_tracker.ensure_deployment_task(
                                 progress_task,
                                 display_id,
-                                total_rows=self._total_rows_for_progress // 3, # Estimate
-                                label_info=label_info
+                                total_rows=self._total_rows_for_progress
+                                // 3,  # Estimate
+                                label_info=label_info,
                             )
-                        
+
                         # Update progress
                         progress_tracker.update(
                             progress_task,
                             advance=batch_size,
                             cost=response.cost,
-                            deployment_id=display_id
+                            deployment_id=display_id,
                         )
 
                     # Update context cost/tokens
@@ -892,7 +912,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             if idx == 0:
                                 context.update_row(metadata.row_index + batch_size - 1)
                             else:
-                                context.update_row(context.last_processed_row + batch_size)
+                                context.update_row(
+                                    context.last_processed_row + batch_size
+                                )
                         else:
                             context.update_row(metadata.row_index)
 
@@ -900,8 +922,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             context.add_cost(
                                 response.cost, response.tokens_in + response.tokens_out
                             )
-                            context.intermediate_data["token_tracking"]["input_tokens"] += response.tokens_in
-                            context.intermediate_data["token_tracking"]["output_tokens"] += response.tokens_out
+                            context.intermediate_data["token_tracking"][
+                                "input_tokens"
+                            ] += response.tokens_in
+                            context.intermediate_data["token_tracking"][
+                                "output_tokens"
+                            ] += response.tokens_out
 
                     return response
 
@@ -926,11 +952,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                             latency_ms=0.0,
                             metadata={"error": str(e), "action": "skipped"},
                         )
-                    elif decision.action == ErrorAction.USE_DEFAULT:
+                    if decision.action == ErrorAction.USE_DEFAULT:
                         return decision.default_value
-                    elif decision.action == ErrorAction.FAIL:
+                    if decision.action == ErrorAction.FAIL:
                         raise e
-                    
+
                     # Should not reach here
                     raise e
 
@@ -949,9 +975,15 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 total_requests = sum(deployment_distribution.values())
                 for dep_id in sorted(deployment_distribution.keys()):
                     count = deployment_distribution[dep_id]
-                    percentage = (count / total_requests * 100) if total_requests > 0 else 0
-                    display_name = getattr(self, "_hash_to_friendly_id", {}).get(dep_id, dep_id)
-                    self.logger.info(f"  • {display_name}: {count}/{total_requests} requests ({percentage:.1f}%)")
+                    percentage = (
+                        (count / total_requests * 100) if total_requests > 0 else 0
+                    )
+                    display_name = getattr(self, "_hash_to_friendly_id", {}).get(
+                        dep_id, dep_id
+                    )
+                    self.logger.info(
+                        f"  • {display_name}: {count}/{total_requests} requests ({percentage:.1f}%)"
+                    )
                 self.logger.info(f"Total API calls: {total_requests}")
             self.logger.info("=" * 70)
 
@@ -979,20 +1011,15 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 # RateLimiter.acquire blocks, so run in executor
                 await loop.run_in_executor(None, self.rate_limiter.acquire)
 
-            # Invoke LLM with error classification
-            try:
-                # Use structured invoke if output_cls is configured
-                if self.output_cls:
-                    return await self.llm_client.structured_invoke_async(
-                        prompt, self.output_cls, system_message=system_message
-                    )
+            # Invoke LLM (Client handles error mapping)
+            # Use structured invoke if output_cls is configured
+            if self.output_cls:
+                return await self.llm_client.structured_invoke_async(
+                    prompt, self.output_cls, system_message=system_message
+                )
 
-                # Pass system_message as kwarg for caching optimization
-                return await self.llm_client.ainvoke(prompt, system_message=system_message)
-            except Exception as e:
-                # Classify error to determine if retryable
-                classified = self._classify_error(e)
-                raise classified
+            # Pass system_message as kwarg for caching optimization
+            return await self.llm_client.ainvoke(prompt, system_message=system_message)
 
         # Execute with retry handler (async)
         return await self.retry_handler.execute_async(_invoke)
