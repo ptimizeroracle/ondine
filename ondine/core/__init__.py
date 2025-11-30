@@ -1,5 +1,14 @@
 """Core configuration and data models."""
 
+from ondine.core.data_container import (
+    AsyncDataContainer,
+    AsyncRowIterator,
+    BaseDataContainer,
+    DataContainer,
+    ResultContainer,
+    Row,
+    RowIterator,
+)
 from ondine.core.exceptions import (
     ConfigurationError,
     InvalidAPIKeyError,
@@ -35,6 +44,14 @@ from ondine.core.specifications import (
 )
 
 __all__ = [
+    # Data Container Protocol
+    "DataContainer",
+    "AsyncDataContainer",
+    "ResultContainer",
+    "BaseDataContainer",
+    "Row",
+    "RowIterator",
+    "AsyncRowIterator",
     # Specifications
     "DatasetSpec",
     "PromptSpec",
