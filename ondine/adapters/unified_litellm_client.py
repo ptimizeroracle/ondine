@@ -39,13 +39,17 @@ import asyncio
 import logging
 import os
 import time
+import uuid
 import warnings
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 import instructor
 import litellm
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # Import Ondine Exceptions for mapping
 from ondine.core.exceptions import (
@@ -67,6 +71,12 @@ except ImportError:
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
+
+# Type hint for ObserverDispatcher (avoid circular import)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ondine.observability.dispatcher import ObserverDispatcher
 
 # CRITICAL: Suppress Pydantic serialization warnings at module level
 # LiteLLM's internal models trigger these harmless warnings
@@ -204,6 +214,81 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Global connection pooling state
         self._aiohttp_session = None
+
+        # Observer dispatcher for emitting LLM call events (set via set_observer_dispatcher)
+        self._observer_dispatcher: "ObserverDispatcher | None" = None
+
+    def set_observer_dispatcher(self, dispatcher: "ObserverDispatcher") -> None:
+        """
+        Set the observer dispatcher for emitting LLM call events.
+
+        This decouples observability from LiteLLM's internal callback mechanism,
+        allowing each observer to use its provider's SDK directly.
+
+        Args:
+            dispatcher: The ObserverDispatcher instance to use
+        """
+        self._observer_dispatcher = dispatcher
+
+    def _emit_llm_call_event(
+        self,
+        prompt: str,
+        completion: str,
+        tokens_in: int,
+        tokens_out: int,
+        cost: Decimal,
+        latency_ms: float,
+        metadata: dict,
+        system_message: str | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        """
+        Emit an LLM call event to all registered observers.
+
+        This is called after each successful LLM invocation to notify
+        observers (Langfuse, OpenTelemetry, etc.) about the call.
+        """
+        if not self._observer_dispatcher:
+            return
+
+        try:
+            from ondine.observability.events import LLMCallEvent
+
+            # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+            provider = self.model.split("/")[0] if "/" in self.model else "unknown"
+
+            event = LLMCallEvent(
+                # Context (use placeholder UUIDs - pipeline will set real ones)
+                pipeline_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                run_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                stage_name="LLMInvocation",
+                row_index=0,
+                timestamp=datetime.now(),
+                trace_id=str(uuid.uuid4()),
+                span_id=str(uuid.uuid4())[:16],
+                # LLM Request
+                prompt=prompt,
+                model=self.model,
+                provider=provider,
+                temperature=self.spec.temperature,
+                completion=completion,
+                system_message=system_message,
+                max_tokens=self.spec.max_tokens,
+                # Metrics
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                total_tokens=tokens_in + tokens_out,
+                cost=cost,
+                latency_ms=latency_ms,
+                # Metadata
+                metadata=metadata,
+            )
+
+            self._observer_dispatcher.dispatch("llm_call", event)
+
+        except Exception as e:
+            # Never let observer errors crash the LLM call
+            logger.debug(f"Failed to emit LLM call event: {e}")
 
     async def start(self):
         """
@@ -583,6 +668,18 @@ class UnifiedLiteLLMClient(LLMClient):
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
 
+        # Emit LLM call event to observers
+        self._emit_llm_call_event(
+            prompt=prompt,
+            completion=text,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost=cost,
+            latency_ms=latency_ms,
+            metadata=metadata,
+            system_message=kwargs.get("system_message"),
+        )
+
         return LLMResponse(
             text=text,
             tokens_in=tokens_in,
@@ -639,7 +736,8 @@ class UnifiedLiteLLMClient(LLMClient):
             )
             if cost and cost > 0:
                 return Decimal(str(cost))
-        except Exception:
+        except Exception:  # nosec B110
+            # Cost calculation is non-critical, fallback to manual calculation
             pass
 
         # Last resort: Manual calculation from spec
@@ -826,6 +924,18 @@ class UnifiedLiteLLMClient(LLMClient):
                     if isinstance(hidden, dict) and "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
 
+        # Emit LLM call event to observers
+        self._emit_llm_call_event(
+            prompt=prompt,
+            completion=text,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost=cost,
+            latency_ms=latency_ms,
+            metadata=metadata,
+            system_message=kwargs.get("system_message"),
+        )
+
         return LLMResponse(
             text=text,
             tokens_in=tokens_in,
@@ -887,6 +997,6 @@ class UnifiedLiteLLMClient(LLMClient):
                 logger.debug(
                     f"✅ Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
-        except Exception:
-            # Don't crash on logging errors
+        except Exception:  # nosec B110
+            # Don't crash on logging errors - cache hit detection is non-critical
             pass

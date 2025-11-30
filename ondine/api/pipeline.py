@@ -549,6 +549,13 @@ class Pipeline:
 
         # Stage 3: Invoke LLM
         llm_client = create_llm_client(specs.llm)
+
+        # Wire observer dispatcher to LLM client (for direct SDK integration)
+        if context.observer_dispatcher and hasattr(
+            llm_client, "set_observer_dispatcher"
+        ):
+            llm_client.set_observer_dispatcher(context.observer_dispatcher)
+
         rate_limiter = (
             RateLimiter(
                 specs.processing.rate_limit_rpm,
@@ -758,21 +765,6 @@ class Pipeline:
                 observer.on_stage_complete(stage, context, result)
 
             return result
-
-        except KeyboardInterrupt:
-            # Save checkpoint on interrupt
-            self.logger.warning(
-                "\n🛑 Pipeline interrupted by user. Saving checkpoint..."
-            )
-            state_manager.save_checkpoint(context)
-            self.logger.warning(
-                f"Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
-            )
-            # Flush observers
-            if context.observer_dispatcher:
-                context.observer_dispatcher.flush_all()
-                context.observer_dispatcher.close_all()
-            raise
 
         except Exception as e:
             # Notify observers of error
