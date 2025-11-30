@@ -1,6 +1,8 @@
 """Orchestration engine for pipeline execution control."""
 
 from ondine.orchestration.async_executor import AsyncExecutor
+from ondine.orchestration.concurrency_controller import ConcurrencyController
+from ondine.orchestration.deployment_tracker import DeploymentTracker
 from ondine.orchestration.execution_context import ExecutionContext
 from ondine.orchestration.execution_strategy import ExecutionStrategy
 from ondine.orchestration.observers import (
@@ -9,6 +11,7 @@ from ondine.orchestration.observers import (
     LoggingObserver,
     ProgressBarObserver,
 )
+from ondine.orchestration.progress_reporter import ProgressReporter
 from ondine.orchestration.progress_tracker import (
     LoggingProgressTracker,
     ProgressTracker,
@@ -38,4 +41,8 @@ __all__ = [
     "RichProgressTracker",
     "LoggingProgressTracker",
     "create_progress_tracker",
+    # Extracted components for LLM invocation
+    "ConcurrencyController",
+    "DeploymentTracker",
+    "ProgressReporter",
 ]
