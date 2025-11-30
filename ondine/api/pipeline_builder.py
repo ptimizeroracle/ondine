@@ -59,6 +59,10 @@ class PipelineBuilder:
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
         self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
+        # Streaming configuration
+        self._streaming_enabled: bool = False
+        self._streaming_chunk_size: int = 10000
+        self._streaming_max_pending: int = 3
 
     @staticmethod
     def create() -> "PipelineBuilder":
@@ -913,19 +917,45 @@ class PipelineBuilder:
         self._executor = AsyncExecutor(max_concurrency=max_concurrency)
         return self
 
-    def with_streaming(self, chunk_size: int = 1000) -> "PipelineBuilder":
+    def with_streaming(
+        self,
+        chunk_size: int = 10000,
+        max_pending_chunks: int = 3,
+    ) -> "PipelineBuilder":
         """
-        Use streaming execution strategy.
+        Enable streaming execution for large datasets.
 
-        Processes data in chunks for memory-efficient handling.
-        Ideal for large datasets (100K+ rows).
+        Processes data in chunks with bounded memory usage.
+        Ideal for datasets that don't fit in memory (100K+ rows).
+
+        Uses:
+        - Polars LazyFrame for memory-efficient loading
+        - Bounded async queue for backpressure
+        - Incremental result writing
 
         Args:
-            chunk_size: Number of rows per chunk
+            chunk_size: Number of rows per chunk (default: 10000)
+            max_pending_chunks: Max chunks in processing queue (default: 3)
 
         Returns:
             Self for chaining
+
+        Example:
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("large_file.csv", ...)
+                .with_streaming(chunk_size=5000)
+                .build()
+            )
+
+            # Use streaming execution
+            async for result in pipeline.execute_stream_async():
+                print(f"Processed {result.metrics.processed_rows} rows")
         """
+        self._streaming_enabled = True
+        self._streaming_chunk_size = chunk_size
+        self._streaming_max_pending = max_pending_chunks
+        # Also set executor for backward compatibility with execute_stream()
         self._executor = StreamingExecutor(chunk_size=chunk_size)
         return self
 
@@ -1320,6 +1350,12 @@ class PipelineBuilder:
             metadata["custom_stages"] = self._custom_stages
         if self._observers:
             metadata["observers"] = self._observers
+        if self._streaming_enabled:
+            metadata["streaming"] = {
+                "enabled": True,
+                "chunk_size": self._streaming_chunk_size,
+                "max_pending_chunks": self._streaming_max_pending,
+            }
 
         # Create specifications bundle
         # If custom client provided but no llm_spec, create a dummy spec

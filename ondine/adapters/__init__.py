@@ -19,6 +19,11 @@ from ondine.adapters.data_io import (
 )
 from ondine.adapters.llm_client import LLMClient, MLXClient, create_llm_client
 from ondine.adapters.provider_registry import ProviderRegistry, provider
+from ondine.adapters.streaming_loader import StreamingDataLoader
+from ondine.adapters.streaming_writer import (
+    MultiFormatWriter,
+    StreamingResultWriter,
+)
 from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
 __all__ = [
@@ -43,6 +48,10 @@ __all__ = [
     "DataFrameReader",
     "create_data_reader",
     "create_data_writer",
+    # Streaming I/O (for large datasets)
+    "StreamingDataLoader",
+    "StreamingResultWriter",
+    "MultiFormatWriter",
     # Checkpoint Storage
     "CheckpointStorage",
     "LocalFileCheckpointStorage",

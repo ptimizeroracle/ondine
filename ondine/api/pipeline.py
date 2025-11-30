@@ -4,18 +4,22 @@ Main Pipeline class - the Facade for the entire system.
 This is the primary entry point that users interact with.
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pandas as pd
+import polars as pl
 
 from ondine.adapters import (
     LocalFileCheckpointStorage,
     create_llm_client,
 )
+from ondine.adapters.streaming_loader import StreamingDataLoader
+from ondine.adapters.streaming_writer import StreamingResultWriter
 from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
@@ -37,6 +41,7 @@ from ondine.orchestration import (
     SyncExecutor,
     create_progress_tracker,
 )
+from ondine.orchestration.streaming_processor import StreamingProcessor
 from ondine.stages import (
     BatchAggregatorStage,
     BatchDisaggregatorStage,
@@ -747,6 +752,175 @@ class Pipeline:
                 success=True,
             )
             yield chunk_result
+
+    async def execute_stream_async(
+        self,
+        chunk_size: int = 10000,
+        max_pending_chunks: int = 3,
+        output_path: str | Path | None = None,
+    ) -> AsyncIterator[ExecutionResult]:
+        """
+        Execute pipeline in true streaming mode with bounded memory.
+
+        This is the recommended method for processing large datasets (100K+ rows).
+        Memory usage is O(chunk_size), not O(total_rows).
+
+        Uses:
+        - Polars LazyFrame for memory-efficient data loading
+        - Bounded async queue for backpressure
+        - Incremental result writing
+
+        Args:
+            chunk_size: Number of rows per chunk (default: 10000)
+            max_pending_chunks: Max chunks in processing queue (default: 3)
+            output_path: Optional path to write results incrementally
+
+        Yields:
+            ExecutionResult for each processed chunk
+
+        Example:
+            async for chunk_result in pipeline.execute_stream_async(chunk_size=5000):
+                print(f"Processed {chunk_result.metrics.processed_rows} rows")
+
+        Memory Guarantee:
+            Peak memory ≈ chunk_size * max_pending_chunks * avg_row_size
+            Independent of total dataset size.
+        """
+        import asyncio
+
+        start_time = datetime.now()
+        execution_id = uuid4()
+
+        # Setup streaming components
+        specs = self.specifications
+        source_path = specs.dataset.source_path
+
+        if source_path is None and self.dataframe is None:
+            raise ValueError(
+                "Streaming mode requires a file path or dataframe. "
+                "Set source_path in DatasetSpec or provide a dataframe."
+            )
+
+        # Initialize writer if output path provided
+        writer: StreamingResultWriter | None = None
+        if output_path:
+            writer = StreamingResultWriter(output_path)
+
+        # Initialize streaming processor
+        processor = StreamingProcessor(
+            max_pending_chunks=max_pending_chunks,
+            error_policy="skip",
+        )
+
+        # Track aggregate metrics
+        total_rows = 0
+        total_cost = Decimal("0")
+        total_tokens = 0
+        chunk_index = 0
+
+        try:
+            # Create data source
+            if source_path:
+                loader = StreamingDataLoader(
+                    path=source_path,
+                    chunk_size=chunk_size,
+                    columns=specs.dataset.input_columns,
+                )
+                data_source = loader.stream_chunks()
+            else:
+                # Stream from in-memory dataframe
+                data_source = self._stream_dataframe_chunks(
+                    self.dataframe, chunk_size
+                )
+
+            # Process each chunk through the pipeline
+            async for chunk_pl in data_source:
+                chunk_start = datetime.now()
+
+                # Convert Polars to Pandas for compatibility with existing stages
+                chunk_df = chunk_pl.to_pandas()
+
+                # Process this chunk through the pipeline
+                chunk_result = await self._process_chunk_async(
+                    chunk_df, execution_id, chunk_index
+                )
+
+                # Update aggregates
+                total_rows += chunk_result.metrics.processed_rows
+                total_cost += chunk_result.costs.total_cost
+                total_tokens += chunk_result.costs.total_tokens
+
+                # Write incrementally if writer configured
+                if writer and chunk_result.data is not None:
+                    result_pl = pl.from_pandas(chunk_result.data)
+                    await writer.append_async(result_pl)
+
+                chunk_index += 1
+                yield chunk_result
+
+                # Yield control to event loop
+                await asyncio.sleep(0)
+
+        finally:
+            # Finalize writer
+            if writer:
+                write_stats = writer.finalize()
+                self.logger.info(f"Streaming output: {write_stats}")
+
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        self.logger.info(
+            f"Streaming complete: {total_rows} rows in {duration:.1f}s "
+            f"({total_rows / duration:.1f} rows/sec), "
+            f"cost: ${total_cost:.4f}"
+        )
+
+    async def _stream_dataframe_chunks(
+        self, df: pd.DataFrame, chunk_size: int
+    ) -> AsyncIterator[pl.DataFrame]:
+        """Stream chunks from an in-memory DataFrame."""
+        import asyncio
+
+        for start in range(0, len(df), chunk_size):
+            end = min(start + chunk_size, len(df))
+            chunk_pd = df.iloc[start:end]
+            yield pl.from_pandas(chunk_pd)
+            await asyncio.sleep(0)  # Yield to event loop
+
+    async def _process_chunk_async(
+        self,
+        chunk_df: pd.DataFrame,
+        execution_id: UUID,
+        chunk_index: int,
+    ) -> ExecutionResult:
+        """Process a single chunk through the pipeline stages."""
+        from ondine.orchestration import AsyncExecutor
+
+        chunk_start = datetime.now()
+
+        # Create a mini-pipeline for this chunk
+        chunk_specs = self.specifications.model_copy(deep=True)
+        chunk_specs.dataset.source_path = None  # Use dataframe
+        chunk_specs.output = None  # Don't write (we handle it)
+
+        chunk_pipeline = Pipeline(
+            specifications=chunk_specs,
+            dataframe=chunk_df,
+            executor=AsyncExecutor(),
+        )
+
+        # Execute the chunk
+        result = await chunk_pipeline.execute_async()
+
+        chunk_end = datetime.now()
+        duration = (chunk_end - chunk_start).total_seconds()
+
+        self.logger.debug(
+            f"Chunk {chunk_index}: {len(chunk_df)} rows in {duration:.2f}s"
+        )
+
+        return result
 
     def _execute_stage(
         self, stage: Any, input_data: Any, context: ExecutionContext

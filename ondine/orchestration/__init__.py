@@ -23,6 +23,11 @@ from ondine.orchestration.streaming_executor import (
     StreamingExecutor,
     StreamingResult,
 )
+from ondine.orchestration.streaming_processor import (
+    ChunkResult,
+    StreamingProcessor,
+    StreamingStats,
+)
 from ondine.orchestration.sync_executor import SyncExecutor
 
 __all__ = [
@@ -45,4 +50,8 @@ __all__ = [
     "ConcurrencyController",
     "DeploymentTracker",
     "ProgressReporter",
+    # Streaming processing (for large datasets)
+    "StreamingProcessor",
+    "StreamingStats",
+    "ChunkResult",
 ]
