@@ -135,17 +135,14 @@ class CheckpointInfo:
     path: str | None = None
 
 
-@dataclass
 class ExecutionResult:
     """
     Result from pipeline execution.
 
     Contains the output data, metrics, costs, and any errors.
-    The data is now a ResultContainerImpl (framework-agnostic)
-    instead of pd.DataFrame.
 
     Attributes:
-        data: Result container with output data
+        data: Result data as DataContainer (framework-agnostic)
         metrics: Processing statistics
         costs: Cost breakdown
         errors: List of errors encountered
@@ -159,33 +156,46 @@ class ExecutionResult:
         ```python
         result = pipeline.execute()
 
-        # Access data (framework-agnostic)
+        # Access raw container (default)
         for row in result.data:
             print(row)
 
-        # Convert to Pandas if needed
-        df = result.data.to_pandas()
+        # Convert to Pandas when needed
+        df = result.to_pandas()
+        print(df["column"].iloc[0])
 
-        # Convert to Polars
-        pl_df = result.data.to_polars()
+        # Or Polars
+        pl_df = result.to_polars()
 
-        # Write to file
-        result.data.to_csv("output.csv")
+        # Or list of dicts
+        rows = result.to_list()
 
         # Check execution time
         print(f"Duration: {result.duration:.2f}s")
         ```
     """
 
-    data: Any  # ResultContainerImpl - using Any to avoid circular import
-    metrics: ProcessingStats
-    costs: CostEstimate
-    errors: list[ErrorInfo] = field(default_factory=list)
-    execution_id: UUID = field(default_factory=uuid4)
-    start_time: datetime = field(default_factory=datetime.now)
-    end_time: datetime | None = None
-    success: bool = True
-    metadata: dict[str, Any] = field(default_factory=dict)
+    def __init__(
+        self,
+        data: Any,  # ResultContainerImpl or any DataContainer
+        metrics: "ProcessingStats",
+        costs: "CostEstimate",
+        errors: list["ErrorInfo"] | None = None,
+        execution_id: UUID | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        success: bool = True,
+        metadata: dict[str, Any] | None = None,
+    ):
+        self.data = data  # Store as-is (container)
+        self.metrics = metrics
+        self.costs = costs
+        self.errors = errors or []
+        self.execution_id = execution_id or uuid4()
+        self.start_time = start_time or datetime.now()
+        self.end_time = end_time
+        self.success = success
+        self.metadata = metadata or {}
 
     @property
     def duration(self) -> float:
@@ -208,7 +218,15 @@ class ExecutionResult:
         Returns:
             pandas.DataFrame
         """
-        return self.data.to_pandas()
+        import pandas as pd
+
+        if isinstance(self.data, pd.DataFrame):
+            return self.data
+
+        if hasattr(self.data, "to_pandas"):
+            return self.data.to_pandas()
+
+        return pd.DataFrame(self.data)
 
     def to_polars(self) -> Any:
         """
@@ -217,7 +235,12 @@ class ExecutionResult:
         Returns:
             polars.DataFrame
         """
-        return self.data.to_polars()
+        if hasattr(self.data, "to_polars"):
+            return self.data.to_polars()
+
+        import polars as pl
+
+        return pl.from_pandas(self.to_pandas())
 
     def to_list(self) -> list[dict[str, Any]]:
         """
@@ -226,7 +249,10 @@ class ExecutionResult:
         Returns:
             List of row dictionaries
         """
-        return self.data.to_list()
+        if hasattr(self.data, "to_list"):
+            return self.data.to_list()
+
+        return self.to_pandas().to_dict(orient="records")
 
     def validate_output_quality(self, output_columns: list[str]) -> "QualityReport":
         """
@@ -238,7 +264,9 @@ class ExecutionResult:
         Returns:
             QualityReport with quality metrics and warnings
         """
-        total_rows = len(self.data)
+        # Get data as list of dicts (works with any container)
+        rows = self.to_list()
+        total_rows = len(rows)
         total_columns = len(output_columns)
         total_cells = total_rows * total_columns
 
@@ -247,7 +275,7 @@ class ExecutionResult:
         empty_count = 0
         valid_row_count = 0
 
-        for row in self.data:
+        for row in rows:
             row_has_valid = False
             for col in output_columns:
                 value = row.get(col)

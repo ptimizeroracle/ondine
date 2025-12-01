@@ -60,19 +60,20 @@ class TestBatchProcessingGroq:
         result = pipeline.execute()
 
         # Assertions
+        df = result.to_pandas()
         assert result.success is True
-        assert len(result.data) == 10
-        assert "sentiment" in result.data.columns
+        assert len(df) == 10
+        assert "sentiment" in df.columns
 
         # Check that all rows have results
-        assert result.data["sentiment"].notna().all()
+        assert df["sentiment"].notna().all()
 
         # Check cost and tokens
         print(f"\nCost: ${result.costs.total_cost}")
         print(f"Tokens: {result.costs.total_tokens}")
         print(f"Input tokens: {result.costs.input_tokens}")
         print(f"Output tokens: {result.costs.output_tokens}")
-        print(f"Results:\n{result.data}")
+        print(f"Results:\n{df}")
 
         # Verify batch processing worked (should have tokens from 2 API calls, not 10)
         assert result.costs.total_tokens > 0
@@ -165,12 +166,13 @@ class TestBatchProcessingGroq:
 
         # Execute
         result = pipeline.execute()
+        df = result.to_pandas()
 
         # Should handle gracefully
         assert result.success is True
-        assert len(result.data) == 3
+        assert len(df) == 3
 
-        print(f"\nResults:\n{result.data}")
+        print(f"\nResults:\n{df}")
 
     def test_batch_size_validation(self):
         """Test that batch size validation works."""
@@ -203,8 +205,9 @@ class TestBatchProcessingGroq:
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
         # Should work exactly as before
         assert result.success is True
-        assert len(result.data) == 2
-        assert "result" in result.data.columns
+        assert len(df) == 2
+        assert "result" in df.columns

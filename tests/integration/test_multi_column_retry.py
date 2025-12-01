@@ -244,4 +244,5 @@ class TestMultiColumnRetry:
         # A should be fully valid
         # B and C should still have partial nulls
         # Let's just check that retried row A is populated
-        assert result.data.loc[0, "col1"] == "fixed"
+        df = result.to_pandas()
+        assert df.loc[0, "col1"] == "fixed"

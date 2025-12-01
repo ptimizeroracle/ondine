@@ -99,28 +99,29 @@ def test_router_with_structured_output_groq_openai():
     result = pipeline.execute()
 
     # DEBUG: Print actual data to see what we got
+    df = result.to_pandas()
     print("\n🔍 DEBUG - Result Data:")
-    print(result.data)
+    print(df)
     print("\n🔍 DEBUG - Columns:")
-    print(result.data.columns.tolist())
+    print(df.columns.tolist())
     print("\n🔍 DEBUG - Data types:")
-    print(result.data.dtypes)
+    print(df.dtypes)
 
     # Verify
     assert result.success, "Pipeline should succeed"
-    assert len(result.data) == 2, "Should process all rows"
+    assert len(df) == 2, "Should process all rows"
 
     # Check required fields (user fields only - id is internal)
-    assert "answer" in result.data.columns, "Should have answer column"
-    assert "confidence" in result.data.columns, "Should have confidence column"
+    assert "answer" in df.columns, "Should have answer column"
+    assert "confidence" in df.columns, "Should have confidence column"
 
-    assert result.data["answer"].notnull().all(), "All answers should be non-null"
-    assert result.data["confidence"].notnull().all(), (
+    assert df["answer"].notnull().all(), "All answers should be non-null"
+    assert df["confidence"].notnull().all(), (
         "All confidence scores should be non-null"
     )
 
     print("\n✅ Router + Structured Output E2E:")
-    print(result.data)
+    print(df)
     print(f"💰 Cost: ${result.costs.total_cost:.4f}")
     print("🎯 This validates the bacon cleaner scenario!")
 
@@ -164,11 +165,12 @@ def test_router_structured_output_groq_only():
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success
-    assert len(result.data) == 1
+    assert len(df) == 1
     print("\n✅ Router + Structured (Groq only):")
-    print(result.data)
+    print(df)
 
 
 @pytest.mark.integration
@@ -223,9 +225,10 @@ def test_router_structured_large_batch():
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success
-    assert len(result.data) == 10
-    print(f"\n✅ Router + Structured Batch ({len(result.data)} rows):")
+    assert len(df) == 10
+    print(f"\n✅ Router + Structured Batch ({len(df)} rows):")
     print(f"💰 Cost: ${result.costs.total_cost:.4f}")
-    print(f"📊 Rows/call: {len(result.data)}")
+    print(f"📊 Rows/call: {len(df)}")

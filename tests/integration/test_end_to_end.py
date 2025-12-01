@@ -60,12 +60,13 @@ class TestEndToEndGroq:
 
         # Verify results
         assert result.success is True
-        assert result.data is not None
-        assert len(result.data) == 3
-        assert "answer" in result.data.columns
+        df = result.to_pandas()
+        assert df is not None
+        assert len(df) == 3
+        assert "answer" in df.columns
 
         # Check answers are not empty
-        for answer in result.data["answer"]:
+        for answer in df["answer"]:
             assert len(str(answer)) > 0
             assert answer != "[SKIPPED]"
 
@@ -108,12 +109,13 @@ JSON:"""
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
         # Verify structured output
         assert result.success is True
-        assert "brand" in result.data.columns
-        assert "model" in result.data.columns
-        assert "storage" in result.data.columns
+        assert "brand" in df.columns
+        assert "model" in df.columns
+        assert "storage" in df.columns
 
     def test_csv_to_csv_pipeline(self):
         """Test complete CSV → processing → CSV workflow."""
@@ -290,12 +292,13 @@ JSON:"""
 
         # Verify all rows processed
         assert result.success is True
-        assert len(result.data) == 5
+        df = result.to_pandas()
+        assert len(df) == 5
 
         # Verify order is maintained (responses match input order)
         # Note: We can't verify exact values since LLM might format differently
         # but we can verify we got 5 non-empty responses
-        for answer in result.data["doubled"]:
+        for answer in df["doubled"]:
             assert len(str(answer)) > 0
 
 

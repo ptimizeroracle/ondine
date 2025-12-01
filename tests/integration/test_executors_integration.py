@@ -40,10 +40,11 @@ class TestExecutorIntegration:
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
         assert result.success is True
-        assert len(result.data) == 2
-        assert "answer" in result.data.columns
+        assert len(df) == 2
+        assert "answer" in df.columns
 
     @pytest.mark.asyncio
     async def test_async_executor_full_pipeline(self):
@@ -71,9 +72,10 @@ class TestExecutorIntegration:
         )
 
         result = await pipeline.execute_async()
+        df = result.to_pandas()
 
         assert result.success is True
-        assert len(result.data) == 1
+        assert len(df) == 1
 
     def test_streaming_executor_full_pipeline(self):
         """Test streaming executor with full pipeline execution."""

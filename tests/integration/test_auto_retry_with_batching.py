@@ -114,4 +114,5 @@ class TestAutoRetryWithBatching:
         assert invocations[1] == [5], "Retry should only process the 1 failed row"
 
         # Verify all rows are valid
-        assert result.data["result"].notna().sum() == 10
+        df = result.to_pandas()
+        assert df["result"].notna().sum() == 10

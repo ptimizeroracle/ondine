@@ -136,13 +136,14 @@ class TestBatchRecovery:
         assert result.success
 
         # 2. Should have processed all 5 rows
-        assert len(result.data) == 5
+        df = result.to_pandas()
+        assert len(df) == 5
 
         # 3. Should have called LLM at least twice (1 fail + 1 retry)
         assert call_count >= 2, f"Expected at least 2 calls, got {call_count}"
 
         # 4. Data should be valid (no nulls)
-        assert result.data["value"].notnull().all()
-        assert (result.data["value"] == "ok").all()
+        assert df["value"].notnull().all()
+        assert (df["value"] == "ok").all()
 
         print(f"\n✅ Batch Recovery Test Passed! Calls: {call_count}")

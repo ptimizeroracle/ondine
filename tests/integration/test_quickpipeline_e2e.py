@@ -52,16 +52,17 @@ def test_quickpipeline_auto_detection(model, api_key_env):
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
         assert result.success, f"{model} QuickPipeline failed"
-        assert len(result.data) == 5
+        assert len(df) == 5
         # QuickPipeline auto-names output column as 'result' by default
-        assert "result" in result.data.columns or "output" in result.data.columns
+        assert "result" in df.columns or "output" in df.columns
 
         print(f"\n{model} QuickPipeline Test Results:")
         print(f"  Auto-detected provider: {provider}")
         print("  Auto-detected input: description")
-        print(f"  Processed: {len(result.data)} rows")
+        print(f"  Processed: {len(df)} rows")
         print("  ✅ QuickPipeline auto-detection working")
 
 
@@ -87,9 +88,10 @@ def test_quickpipeline_with_dataframe():
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success
-    assert len(result.data) == 3
+    assert len(df) == 3
 
     print("\nQuickPipeline DataFrame Test:")
     print("  Input: DataFrame (3 rows)")

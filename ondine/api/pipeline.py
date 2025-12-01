@@ -377,10 +377,11 @@ class Pipeline:
             # Optional: Auto-retry failed rows
             if self.specifications.processing.auto_retry_failed:
                 # Get preprocessed data from context (or loaded data if no preprocessing)
-                retry_source_df = context.intermediate_data.get("preprocessed_data")
-                if retry_source_df is None:
-                    retry_source_df = context.intermediate_data.get("loaded_data")
-                result = self._auto_retry_failed_rows(result, retry_source_df)
+                retry_source = context.intermediate_data.get("preprocessed_data")
+                if retry_source is None:
+                    retry_source = context.intermediate_data.get("loaded_data")
+                # Pass container directly (no Pandas conversion)
+                result = self._auto_retry_failed_rows(result, retry_source)
 
             # Cleanup checkpoints on success
             state_manager.cleanup_checkpoints(context.session_id)
@@ -973,7 +974,7 @@ class Pipeline:
             raise
 
     def _auto_retry_failed_rows(
-        self, result: ExecutionResult, original_df: pd.DataFrame
+        self, result: ExecutionResult, original_container: Any
     ) -> ExecutionResult:
         """
         Row-level quality retry (re-executes entire pipeline for failed rows).
@@ -993,6 +994,7 @@ class Pipeline:
         - Creates NEW pipeline instance for retry (isolation)
         - Uses original preprocessed data (not re-preprocessed)
         - Disables auto_retry on retry pipeline (prevents infinite loop)
+        - Uses pure Python iteration (no Pandas dependency internally)
 
         See Also:
         - RetryHandler: Request-level retry for transient errors
@@ -1001,40 +1003,48 @@ class Pipeline:
 
         Args:
             result: Initial execution result
-            original_df: Original (preprocessed) input dataframe
+            original_container: Original (preprocessed) input DataContainer
 
         Returns:
             ExecutionResult with retried rows merged in
         """
-        if original_df is None:
-            self.logger.warning("Cannot retry: original dataframe is None")
+        from ondine.adapters.containers.result_container import ResultContainerImpl
+        from ondine.core.specifications import DataSourceType
+
+        if original_container is None:
+            self.logger.warning("Cannot retry: original data is None")
             return result
 
         specs = self.specifications
         output_cols = specs.dataset.output_columns
 
+        # Convert original container to list for indexing
+        original_rows = original_container.to_list()
+
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
-            # Find rows where ALL output columns are null/empty (indicates complete failure)
-            # Start with True (all failed), then AND with each column check
-            failed_mask = pd.Series([True] * len(result.data), index=result.data.index)
+            # Get current result as list of dicts
+            result_rows = result.to_list()
 
-            for col in output_cols:
-                if col in result.data.columns:
-                    null_mask = result.data[col].isna()
-                    # Handle potential non-string types gracefully
-                    empty_mask = (
-                        result.data[col].astype(str).str.strip() == ""
-                        if result.data[col].dtype == "object"
-                        or result.data[col].dtype == "string"
-                        else pd.Series(
-                            [False] * len(result.data), index=result.data.index
-                        )
-                    )
-                    # Row is failed ONLY if this column is ALSO null/empty
-                    failed_mask &= null_mask | empty_mask
-
-            failed_indices = result.data[failed_mask].index.tolist()
+            # Find failed row indices (pure Python - no Pandas)
+            failed_indices = []
+            for idx, row in enumerate(result_rows):
+                # Check if ALL output columns are null/empty
+                all_failed = True
+                for col in output_cols:
+                    value = row.get(col)
+                    if value is not None:
+                        # Check if it's a non-empty string
+                        if isinstance(value, str):
+                            if value.strip():
+                                all_failed = False
+                                break
+                        else:
+                            # Non-string, non-None value is valid
+                            all_failed = False
+                            break
+                if all_failed:
+                    failed_indices.append(idx)
 
             if not failed_indices:
                 break
@@ -1044,42 +1054,38 @@ class Pipeline:
                 f"{len(failed_indices)} rows"
             )
 
-            # Extract failed rows from original (preprocessed) data
-            retry_df = original_df.loc[failed_indices].copy()
+            # Extract failed rows from original data
+            retry_rows = [original_rows[i] for i in failed_indices]
 
-            # Store original indices for mapping back
-            original_indices = retry_df.index.tolist()
-            retry_df = retry_df.reset_index(drop=True)
+            # Convert to DataFrame for pipeline (Pipeline still expects DataFrame input)
+            retry_df = pd.DataFrame(retry_rows)
 
-            # Create modified specs for retry (use dataframe, not file)
-            from ondine.core.specifications import DataSourceType
-
+            # Create modified specs for retry
             retry_specs = self.specifications.model_copy(deep=True)
             retry_specs.dataset.source_type = DataSourceType.DATAFRAME
-            retry_specs.dataset.source_path = None  # Force use of dataframe
-            retry_specs.processing.enable_preprocessing = False  # Already preprocessed
-            retry_specs.processing.auto_retry_failed = (
-                False  # Prevent infinite retry loop
-            )
-            retry_specs.output = None  # Don't write to file during retry
+            retry_specs.dataset.source_path = None
+            retry_specs.processing.enable_preprocessing = False
+            retry_specs.processing.auto_retry_failed = False
+            retry_specs.output = None
 
             # Create new pipeline for retry
-            retry_pipeline = Pipeline(
-                retry_specs,
-                dataframe=retry_df,
-            )
+            retry_pipeline = Pipeline(retry_specs, dataframe=retry_df)
 
             # Execute retry
             retry_result = retry_pipeline.execute()
 
-            # Merge retry results back (map reset indices to original indices)
-            # IMPORTANT: Use iloc (position-based) for retry_result because it's reset_index
-            # Use loc (label-based) for result.data to preserve original indices
-            for col in output_cols:
-                for new_idx, original_idx in enumerate(original_indices):
-                    result.data.loc[original_idx, col] = retry_result.data.iloc[
-                        new_idx
-                    ][col]
+            # Merge retry results back (pure Python)
+            retry_result_rows = retry_result.to_list()
+            for new_idx, original_idx in enumerate(failed_indices):
+                for col in output_cols:
+                    if new_idx < len(retry_result_rows):
+                        result_rows[original_idx][col] = retry_result_rows[new_idx].get(col)
+
+            # Update result with merged data
+            result.data = ResultContainerImpl(
+                data=result_rows,
+                columns=list(result_rows[0].keys()) if result_rows else [],
+            )
 
             # Update costs
             result.costs.total_cost += retry_result.costs.total_cost

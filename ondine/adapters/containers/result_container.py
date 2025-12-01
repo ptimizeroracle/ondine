@@ -78,9 +78,51 @@ class ResultContainerImpl(BaseDataContainer):
         """Get column names."""
         return self._columns or []
 
-    def __getitem__(self, idx: int) -> Row:
-        """Get row by index."""
-        return self._data[idx]
+    def __getitem__(self, key: int | str) -> Any:
+        """
+        Get row by index or column by name.
+
+        Supports both:
+        - container[0] -> Row at index 0
+        - container["column_name"] -> ColumnAccessor with pandas-like methods
+
+        This provides pandas-like compatibility for tests.
+        """
+        if isinstance(key, str):
+            # Column access: return accessor with pandas-like methods
+            values = [row.get(key) for row in self._data]
+            return _ColumnAccessor(values)
+        return self._data[key]
+
+    @property
+    def index(self) -> range:
+        """
+        Pandas-compatible index property.
+
+        Returns:
+            Range object representing row indices
+        """
+        return range(len(self._data))
+
+    @property
+    def iloc(self) -> "_ILocIndexer":
+        """
+        Pandas-compatible iloc indexer.
+
+        Returns:
+            Indexer that supports positional access
+        """
+        return _ILocIndexer(self._data)
+
+    def iterrows(self) -> Iterator[tuple[int, Row]]:
+        """
+        Pandas-compatible row iteration.
+
+        Yields:
+            Tuples of (index, row_dict)
+        """
+        for i, row in enumerate(self._data):
+            yield i, row
 
     def to_list(self) -> list[Row]:
         """
@@ -330,4 +372,81 @@ class ResultContainerImpl(BaseDataContainer):
         if not isinstance(other, ResultContainerImpl):
             return False
         return self._data == other._data
+
+
+class _ILocIndexer:
+    """
+    Pandas-compatible iloc indexer for positional access.
+
+    Supports:
+    - container.iloc[0] -> first row
+    - container.iloc[0:5] -> slice of rows
+    - container.iloc[0]["column"] -> value at row 0, column "column"
+    """
+
+    def __init__(self, data: list[Row]):
+        self._data = data
+
+    def __getitem__(self, key: int | slice) -> Row | list[Row]:
+        """Get row(s) by position."""
+        if isinstance(key, slice):
+            return self._data[key]
+        return self._data[key]
+
+
+class _ColumnAccessor(list):
+    """
+    Pandas-compatible column accessor.
+
+    Extends list to add pandas Series methods for compatibility.
+    """
+
+    @property
+    def iloc(self) -> "_ColumnILocIndexer":
+        """Pandas-compatible iloc for column values."""
+        return _ColumnILocIndexer(self)
+
+    def tolist(self) -> list:
+        """Pandas-compatible tolist()."""
+        return list(self)
+
+    def isna(self) -> list[bool]:
+        """Check for null/None values."""
+        return [v is None for v in self]
+
+    def notna(self) -> list[bool]:
+        """Check for non-null values."""
+        return [v is not None for v in self]
+
+    def notnull(self) -> list[bool]:
+        """Alias for notna()."""
+        return self.notna()
+
+    def isnull(self) -> list[bool]:
+        """Alias for isna()."""
+        return self.isna()
+
+    def nunique(self) -> int:
+        """Count unique non-null values."""
+        return len(set(v for v in self if v is not None))
+
+    def sum(self) -> int:
+        """Sum of boolean/numeric values."""
+        return sum(1 for v in self if v)
+
+    @property
+    def str(self) -> "_StrAccessor":
+        """Pandas-compatible string accessor."""
+        return _StrAccessor(self)
+
+
+class _ColumnILocIndexer:
+    """iloc indexer for column values."""
+
+    def __init__(self, data: list):
+        self._data = data
+
+    def __getitem__(self, key: int | slice) -> Any:
+        """Get value(s) by position."""
+        return self._data[key]
 

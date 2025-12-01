@@ -45,10 +45,11 @@ def test_global_connection_pool_lifecycle():
             
             # Execute
             result = pipeline.execute()
+            df = result.to_pandas()
             
             # Verify Results
             assert result.success
-            assert len(result.data) == 2
+            assert len(df) == 2
             
             # Verify Lifecycle
             # 1. Session created
