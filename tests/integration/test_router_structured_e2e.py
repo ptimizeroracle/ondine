@@ -116,9 +116,7 @@ def test_router_with_structured_output_groq_openai():
     assert "confidence" in df.columns, "Should have confidence column"
 
     assert df["answer"].notnull().all(), "All answers should be non-null"
-    assert df["confidence"].notnull().all(), (
-        "All confidence scores should be non-null"
-    )
+    assert df["confidence"].notnull().all(), "All confidence scores should be non-null"
 
     print("\n✅ Router + Structured Output E2E:")
     print(df)

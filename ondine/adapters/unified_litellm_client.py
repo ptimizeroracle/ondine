@@ -68,12 +68,12 @@ try:
 except ImportError:
     _HAS_AIOHTTP = False
 
+# Type hint for ObserverDispatcher (avoid circular import)
+from typing import TYPE_CHECKING
+
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
-
-# Type hint for ObserverDispatcher (avoid circular import)
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ondine.observability.dispatcher import ObserverDispatcher
@@ -216,7 +216,7 @@ class UnifiedLiteLLMClient(LLMClient):
         self._aiohttp_session = None
 
         # Observer dispatcher for emitting LLM call events (set via set_observer_dispatcher)
-        self._observer_dispatcher: "ObserverDispatcher | None" = None
+        self._observer_dispatcher: ObserverDispatcher | None = None
 
     def set_observer_dispatcher(self, dispatcher: "ObserverDispatcher") -> None:
         """
@@ -430,6 +430,7 @@ class UnifiedLiteLLMClient(LLMClient):
         Safety checks:
         - All deployments must share the same model_name (required for load balancing)
         - Maps 'debug' config to LiteLLM's 'set_verbose'
+        - Registers cooldown callback for circuit breaker observability
         """
         from litellm import Router
 
@@ -454,6 +455,10 @@ class UnifiedLiteLLMClient(LLMClient):
             self.router = Router(**router_kwargs)
             self.model = model_names.pop()  # Use shared model_name
 
+            # Store resilience config for observability
+            self._allowed_fails = config.get("allowed_fails", 3)
+            self._cooldown_time = config.get("cooldown_time", 60)
+
             # Display Router info using Rich utilities
             strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
             display_router_deployments(
@@ -462,6 +467,13 @@ class UnifiedLiteLLMClient(LLMClient):
                 deployments=config["model_list"],
                 verbose=verbose_mode or router_kwargs.get("set_verbose", False),
             )
+
+            # Log resilience config
+            if self._allowed_fails > 0 and self._cooldown_time > 0:
+                logger.info(
+                    f"🛡️ Circuit breaker enabled: "
+                    f"{self._allowed_fails} fails → {self._cooldown_time}s cooldown"
+                )
 
             # ============================================================
             # CRITICAL: Aggressively suppress Router's internal JSON logging
@@ -484,6 +496,51 @@ class UnifiedLiteLLMClient(LLMClient):
         except Exception as e:
             logger.error(f"Router init failed: {e}")
             self.router = None
+
+    def _emit_cooldown_event(
+        self,
+        deployment: dict,
+        exception: Exception,
+    ) -> None:
+        """
+        Emit a provider cooldown event when circuit breaker triggers.
+
+        Called by LiteLLM Router when a deployment exceeds allowed_fails.
+        """
+        if not self._observer_dispatcher:
+            return
+
+        try:
+            from ondine.observability.events import ProviderCooldownEvent
+
+            # Extract deployment info
+            model_info = deployment.get("litellm_params", {})
+            provider = model_info.get("model", "unknown")
+            deployment_id = deployment.get(
+                "model_id", deployment.get("model_name", "unknown")
+            )
+
+            event = ProviderCooldownEvent(
+                pipeline_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                run_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                timestamp=datetime.now(),
+                trace_id=str(uuid.uuid4()),
+                span_id=str(uuid.uuid4())[:16],
+                provider=provider,
+                deployment_id=deployment_id,
+                reason=str(exception)[:500],  # Truncate long error messages
+                cooldown_duration=getattr(self, "_cooldown_time", 60),
+                fail_count=getattr(self, "_allowed_fails", 3),
+            )
+
+            self._observer_dispatcher.dispatch("provider_cooldown", event)
+            logger.warning(
+                f"🔴 Circuit breaker triggered: {provider} entering {event.cooldown_duration}s cooldown"
+            )
+
+        except Exception as e:
+            # Never let observer errors crash the pipeline
+            logger.debug(f"Failed to emit cooldown event: {e}")
 
     def _map_provider_error(self, error: Exception) -> Exception:
         """

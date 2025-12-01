@@ -8,11 +8,8 @@ execution with type safety.
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID, uuid4
-
-if TYPE_CHECKING:
-    from ondine.adapters.containers.result_container import ResultContainerImpl
 
 
 @dataclass
@@ -311,13 +308,17 @@ class ExecutionResult:
                 f"({valid_outputs}/{total_rows} rows with at least one valid column)"
             )
 
-        if total_cells > 0 and null_count > total_cells * 0.3:  # > 30% of all cells are null
+        if (
+            total_cells > 0 and null_count > total_cells * 0.3
+        ):  # > 30% of all cells are null
             issues.append(
                 f"⚠️  HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
                 f"({null_count / total_cells * 100:.1f}% of all output cells)"
             )
 
-        if total_cells > 0 and empty_count > total_cells * 0.1:  # > 10% of all cells are empty
+        if (
+            total_cells > 0 and empty_count > total_cells * 0.1
+        ):  # > 10% of all cells are empty
             warnings.append(
                 f"Empty outputs detected: {empty_count} empty cells out of {total_cells} total "
                 f"({empty_count / total_cells * 100:.1f}% of all output cells)"

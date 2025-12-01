@@ -154,9 +154,7 @@ Extract:
         assert len(row["product_name"]) > 0, f"Row {idx}: product_name is empty"
 
     # Verify specific extractions (spot checks)
-    headphones_row = df[
-        df["product_description"].str.contains("Headphones")
-    ].iloc[0]
+    headphones_row = df[df["product_description"].str.contains("Headphones")].iloc[0]
     assert "headphone" in headphones_row["product_name"].lower(), (
         "Headphones not extracted correctly"
     )
@@ -164,9 +162,7 @@ Extract:
         "Price not extracted from headphones"
     )
 
-    coffee_row = df[
-        df["product_description"].str.contains("Coffee")
-    ].iloc[0]
+    coffee_row = df[df["product_description"].str.contains("Coffee")].iloc[0]
     assert "coffee" in coffee_row["product_name"].lower(), (
         "Coffee not extracted correctly"
     )

@@ -121,8 +121,7 @@ class ResultContainerImpl(BaseDataContainer):
         Yields:
             Tuples of (index, row_dict)
         """
-        for i, row in enumerate(self._data):
-            yield i, row
+        yield from enumerate(self._data)
 
     def to_list(self) -> list[Row]:
         """
@@ -147,8 +146,7 @@ class ResultContainerImpl(BaseDataContainer):
             import pandas as pd
         except ImportError:
             raise ImportError(
-                "Pandas is required for to_pandas(). "
-                "Install with: pip install pandas"
+                "Pandas is required for to_pandas(). Install with: pip install pandas"
             )
 
         return pd.DataFrame(self._data)
@@ -167,8 +165,7 @@ class ResultContainerImpl(BaseDataContainer):
             import polars as pl
         except ImportError:
             raise ImportError(
-                "Polars is required for to_polars(). "
-                "Install with: pip install polars"
+                "Polars is required for to_polars(). Install with: pip install polars"
             )
 
         return pl.DataFrame(self._data)
@@ -434,11 +431,6 @@ class _ColumnAccessor(list):
         """Sum of boolean/numeric values."""
         return sum(1 for v in self if v)
 
-    @property
-    def str(self) -> "_StrAccessor":
-        """Pandas-compatible string accessor."""
-        return _StrAccessor(self)
-
 
 class _ColumnILocIndexer:
     """iloc indexer for column values."""
@@ -449,4 +441,3 @@ class _ColumnILocIndexer:
     def __getitem__(self, key: int | slice) -> Any:
         """Get value(s) by position."""
         return self._data[key]
-

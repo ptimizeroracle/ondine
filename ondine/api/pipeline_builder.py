@@ -1158,16 +1158,25 @@ class PipelineBuilder:
         timeout: int = 120,
         num_retries: int = 0,  # Default 0: let Instructor/Ondine handle retries
         redis_url: str | None = None,
+        # Circuit breaker / resilience params (sensible defaults)
+        allowed_fails: int = 3,  # Failures before provider cooldown
+        cooldown_time: int = 60,  # Seconds to disable failed provider
         **router_kwargs,
     ) -> "PipelineBuilder":
         """
-        Enable LiteLLM Router for load balancing and failover.
+        Enable LiteLLM Router for load balancing, failover, and resilience.
 
         Router provides:
         - Load balancing across multiple deployments
         - Automatic failover with health tracking
+        - Built-in circuit breaker (cooldown on failures)
         - Built-in retries with exponential backoff
         - Redis for distributed state (optional)
+
+        Resilience is ENABLED BY DEFAULT with sensible settings:
+        - 3 failures → provider goes into cooldown
+        - 60 second cooldown period
+        - Automatic failover to healthy providers
 
         All LiteLLM Router parameters are supported via **router_kwargs!
         Just pass any parameter directly - it flows through to LiteLLM.
@@ -1178,9 +1187,10 @@ class PipelineBuilder:
             timeout: Request timeout in seconds (default: 120)
             num_retries: Retry attempts (default: 0 = let Instructor handle retries)
             redis_url: Redis URL for distributed state (optional)
+            allowed_fails: Failures before cooldown (default: 3). Set to 0 to disable.
+            cooldown_time: Cooldown duration in seconds (default: 60). Set to 0 to disable.
             **router_kwargs: ANY LiteLLM Router parameter! Examples:
-                - allowed_fails=0: Disable cooldowns
-                - cooldown_time=0: No cooldown delay
+                - fallbacks=["backup-model"]: Fallback model names
                 - enable_pre_call_checks=False: Skip health checks (faster!)
                 - set_verbose=True: Enable debug logging
                 - debug=True: Enable provider tracking
@@ -1191,11 +1201,25 @@ class PipelineBuilder:
 
         Example:
             ```python
+            # Basic usage (resilience enabled by default)
             .with_router(
                 model_list=[
                     {"model_name": "fast", "litellm_params": {"model": "groq/llama-3.3-70b", "rpm": 30}},
                     {"model_name": "fast", "litellm_params": {"model": "openai/gpt-4o-mini", "rpm": 500}}
                 ]
+            )
+
+            # Custom resilience settings
+            .with_router(
+                model_list=[...],
+                allowed_fails=5,     # More lenient
+                cooldown_time=120,   # Longer cooldown
+            )
+
+            # Disable circuit breaker (not recommended)
+            .with_router(
+                model_list=[...],
+                allowed_fails=0,     # Never cooldown
             )
             ```
 
@@ -1211,6 +1235,9 @@ class PipelineBuilder:
             "routing_strategy": routing_strategy,
             "timeout": timeout,
             "num_retries": num_retries,
+            # Circuit breaker / resilience params
+            "allowed_fails": allowed_fails,
+            "cooldown_time": cooldown_time,
             **router_kwargs,  # ALL other params pass directly to LiteLLM Router!
         }
 

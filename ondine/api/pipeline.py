@@ -41,7 +41,6 @@ from ondine.orchestration import (
     SyncExecutor,
     create_progress_tracker,
 )
-from ondine.orchestration.streaming_processor import StreamingProcessor
 from ondine.stages import (
     BatchAggregatorStage,
     BatchDisaggregatorStage,
@@ -507,7 +506,6 @@ class Pipeline:
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
-            from ondine.adapters.containers import DictListContainer
             from ondine.utils.input_preprocessing import preprocess_container
 
             self.logger.info("Preprocessing loaded data...")
@@ -833,11 +831,8 @@ class Pipeline:
         if output_path:
             writer = StreamingResultWriter(output_path)
 
-        # Initialize streaming processor
-        processor = StreamingProcessor(
-            max_pending_chunks=max_pending_chunks,
-            error_policy="skip",
-        )
+        # Note: StreamingProcessor is available for advanced use cases
+        # but current implementation processes chunks directly
 
         # Track aggregate metrics
         total_rows = 0
@@ -856,14 +851,10 @@ class Pipeline:
                 data_source = loader.stream_chunks()
             else:
                 # Stream from in-memory dataframe
-                data_source = self._stream_dataframe_chunks(
-                    self.dataframe, chunk_size
-                )
+                data_source = self._stream_dataframe_chunks(self.dataframe, chunk_size)
 
             # Process each chunk through the pipeline
             async for chunk_pl in data_source:
-                chunk_start = datetime.now()
-
                 # Convert Polars to Pandas for compatibility with existing stages
                 chunk_df = chunk_pl.to_pandas()
 
@@ -1079,7 +1070,9 @@ class Pipeline:
             for new_idx, original_idx in enumerate(failed_indices):
                 for col in output_cols:
                     if new_idx < len(retry_result_rows):
-                        result_rows[original_idx][col] = retry_result_rows[new_idx].get(col)
+                        result_rows[original_idx][col] = retry_result_rows[new_idx].get(
+                            col
+                        )
 
             # Update result with merged data
             result.data = ResultContainerImpl(

@@ -122,9 +122,7 @@ Review: {{ text }}"""
     assert "summary" in df.columns
     assert "sentiment" in df.columns
     assert df["summary"].notnull().all(), f"{provider} returned null summaries"
-    assert df["sentiment"].notnull().all(), (
-        f"{provider} returned null sentiments"
-    )
+    assert df["sentiment"].notnull().all(), f"{provider} returned null sentiments"
 
     # Verify sentiment extraction (be lenient - models vary in interpretation)
     sentiment_0 = str(df["sentiment"].iloc[0])
@@ -214,9 +212,7 @@ Return:
     # Verify success
     assert result.success, f"{provider} batched pipeline failed"
     df_result = result.to_pandas()
-    assert len(df_result) == 6, (
-        f"{provider} returned {len(df_result)} rows, expected 6"
-    )
+    assert len(df_result) == 6, f"{provider} returned {len(df_result)} rows, expected 6"
 
     # CRITICAL ASSERTION: Each row must have its EXACT input price extracted
     for i, row in df_result.iterrows():

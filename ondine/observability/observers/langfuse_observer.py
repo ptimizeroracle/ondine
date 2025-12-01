@@ -14,6 +14,8 @@ from ondine.observability.events import (
     LLMCallEvent,
     PipelineEndEvent,
     PipelineStartEvent,
+    ProviderCooldownEvent,
+    ProviderRecoveredEvent,
 )
 from ondine.observability.registry import observer
 
@@ -180,9 +182,75 @@ class LangfuseObserver(PipelineObserver):
                     "duration_ms": event.total_duration_ms,
                 },
             )
-            logger.debug(f"Updated Langfuse trace with final metrics")
+            logger.debug("Updated Langfuse trace with final metrics")
         except Exception as e:
             logger.debug(f"Failed to update Langfuse trace: {e}")
+
+    def on_provider_cooldown(self, event: ProviderCooldownEvent) -> None:
+        """
+        Log provider cooldown as a span in Langfuse.
+        """
+        if not self._client:
+            return
+
+        try:
+            # Create a span to track the cooldown event
+            if self._current_trace:
+                self._current_trace.span(
+                    name="provider-cooldown",
+                    metadata={
+                        "provider": event.provider,
+                        "deployment_id": event.deployment_id,
+                        "reason": event.reason,
+                        "cooldown_duration": event.cooldown_duration,
+                        "fail_count": event.fail_count,
+                        "event_type": "circuit_breaker_triggered",
+                        **event.metadata,
+                    },
+                    level="WARNING",
+                )
+            else:
+                # Standalone event
+                trace = self._client.trace(
+                    name=f"provider-cooldown-{event.deployment_id[:8]}",
+                )
+                trace.span(
+                    name="provider-cooldown",
+                    metadata={
+                        "provider": event.provider,
+                        "deployment_id": event.deployment_id,
+                        "reason": event.reason,
+                        "cooldown_duration": event.cooldown_duration,
+                        "fail_count": event.fail_count,
+                        "event_type": "circuit_breaker_triggered",
+                    },
+                    level="WARNING",
+                )
+        except Exception as e:
+            logger.debug(f"Failed to log provider cooldown to Langfuse: {e}")
+
+    def on_provider_recovered(self, event: ProviderRecoveredEvent) -> None:
+        """
+        Log provider recovery as a span in Langfuse.
+        """
+        if not self._client:
+            return
+
+        try:
+            if self._current_trace:
+                self._current_trace.span(
+                    name="provider-recovered",
+                    metadata={
+                        "provider": event.provider,
+                        "deployment_id": event.deployment_id,
+                        "cooldown_duration": event.cooldown_duration,
+                        "event_type": "circuit_breaker_recovered",
+                        **event.metadata,
+                    },
+                    level="DEFAULT",
+                )
+        except Exception as e:
+            logger.debug(f"Failed to log provider recovery to Langfuse: {e}")
 
     def flush(self) -> None:
         """Flush buffered events to Langfuse."""

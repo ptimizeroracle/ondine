@@ -14,6 +14,8 @@ from ondine.observability.events import (
     LLMCallEvent,
     PipelineEndEvent,
     PipelineStartEvent,
+    ProviderCooldownEvent,
+    ProviderRecoveredEvent,
     StageEndEvent,
     StageStartEvent,
 )
@@ -52,8 +54,12 @@ class LoggingObserver(PipelineObserver):
         self._level = getattr(logging, level_name.upper(), logging.INFO)
 
         # Configure what to log
-        self._log_prompts = self.config.get("log_prompts", False) if self.config else False
-        self._log_completions = self.config.get("log_completions", False) if self.config else False
+        self._log_prompts = (
+            self.config.get("log_prompts", False) if self.config else False
+        )
+        self._log_completions = (
+            self.config.get("log_completions", False) if self.config else False
+        )
 
         # Ensure we have a handler
         if not logger.hasHandlers():
@@ -88,11 +94,17 @@ class LoggingObserver(PipelineObserver):
         )
 
         if self._log_prompts:
-            prompt_preview = event.prompt[:100] + "..." if len(event.prompt) > 100 else event.prompt
+            prompt_preview = (
+                event.prompt[:100] + "..." if len(event.prompt) > 100 else event.prompt
+            )
             msg += f" prompt={prompt_preview!r}"
 
         if self._log_completions:
-            completion_preview = event.completion[:100] + "..." if len(event.completion) > 100 else event.completion
+            completion_preview = (
+                event.completion[:100] + "..."
+                if len(event.completion) > 100
+                else event.completion
+            )
             msg += f" completion={completion_preview!r}"
 
         logger.log(self._level, msg)
@@ -120,6 +132,24 @@ class LoggingObserver(PipelineObserver):
             self._level,
             f"Pipeline {status}: {event.rows_processed} rows, "
             f"${float(event.total_cost):.4f}, {event.total_duration_ms:.0f}ms",
+        )
+
+    def on_provider_cooldown(self, event: ProviderCooldownEvent) -> None:
+        """Log provider cooldown (circuit breaker triggered)."""
+        logger.warning(
+            f"🔴 Provider cooldown: {event.provider} "
+            f"(deployment={event.deployment_id}, "
+            f"fails={event.fail_count}, "
+            f"cooldown={event.cooldown_duration}s) "
+            f"Reason: {event.reason[:100]}"
+        )
+
+    def on_provider_recovered(self, event: ProviderRecoveredEvent) -> None:
+        """Log provider recovery from cooldown."""
+        logger.info(
+            f"🟢 Provider recovered: {event.provider} "
+            f"(deployment={event.deployment_id}, "
+            f"was down for {event.cooldown_duration}s)"
         )
 
     def flush(self) -> None:

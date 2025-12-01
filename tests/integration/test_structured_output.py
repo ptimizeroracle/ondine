@@ -106,9 +106,7 @@ CRITICAL: Parse the package size number from DISTRB_PACK_SZ field.""")
     assert result.success, f"{provider} pipeline failed"
     assert len(df) == 2, f"{provider} returned wrong number of rows"
     assert "cleaned_description" in df.columns
-    assert df["pack_size"].notnull().all(), (
-        f"{provider} returned null pack_size values"
-    )
+    assert df["pack_size"].notnull().all(), f"{provider} returned null pack_size values"
 
     # Verify extraction correctness
     assert df["pack_size"].iloc[0] == 15.0, (

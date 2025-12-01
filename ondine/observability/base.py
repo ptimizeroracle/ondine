@@ -13,6 +13,8 @@ from ondine.observability.events import (
     LLMCallEvent,
     PipelineEndEvent,
     PipelineStartEvent,
+    ProviderCooldownEvent,
+    ProviderRecoveredEvent,
     StageEndEvent,
     StageStartEvent,
 )
@@ -120,6 +122,28 @@ class PipelineObserver(ABC):
 
         Args:
             event: Pipeline end event with final statistics
+        """
+        pass
+
+    def on_provider_cooldown(self, event: ProviderCooldownEvent) -> None:
+        """
+        Called when a provider enters cooldown (circuit breaker triggered).
+
+        Use this to log provider failures, send alerts, or update dashboards.
+
+        Args:
+            event: Provider cooldown event with failure details
+        """
+        pass
+
+    def on_provider_recovered(self, event: ProviderRecoveredEvent) -> None:
+        """
+        Called when a provider recovers from cooldown.
+
+        Use this to log recovery, update dashboards, or clear alerts.
+
+        Args:
+            event: Provider recovered event with recovery details
         """
         pass
 
