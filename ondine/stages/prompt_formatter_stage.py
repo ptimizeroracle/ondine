@@ -52,7 +52,18 @@ class PromptFormatterStage(
         self, input_data: tuple[DataContainer, PromptSpec], context: Any
     ) -> list[PromptBatch]:
         """Format prompts from DataContainer rows."""
-        container, prompt_spec = input_data
+        container_or_df, prompt_spec = input_data
+
+        # Auto-wrap pandas DataFrame for backward compatibility
+        try:
+            import pandas as pd
+            if isinstance(container_or_df, pd.DataFrame):
+                from ondine.adapters.containers import PandasContainer
+                container = PandasContainer(container_or_df)
+            else:
+                container = container_or_df
+        except ImportError:
+            container = container_or_df
 
         prompts: list[str] = []
         metadata_list: list[RowMetadata] = []

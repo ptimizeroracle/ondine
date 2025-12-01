@@ -506,10 +506,11 @@ class Pipeline:
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
-            from ondine.utils.input_preprocessing import preprocess_dataframe
+            from ondine.adapters.containers import DictListContainer
+            from ondine.utils.input_preprocessing import preprocess_container
 
             self.logger.info("Preprocessing loaded data...")
-            df, stats = preprocess_dataframe(
+            df, stats = preprocess_container(
                 df,
                 input_columns=specs.dataset.input_columns,
                 max_length=specs.processing.preprocessing_max_length,
@@ -643,10 +644,35 @@ class Pipeline:
         if specs.output:
             writer = ResultWriterStage()
             return self._execute_stage(writer, (df, results_df, specs.output), context)
-        # Merge results with original
-        for col in results_df.columns:
-            df[col] = results_df[col]
-        return df
+
+        # Merge results with original data container
+        # Build lookup from results by row_index
+        from ondine.adapters.containers import ResultContainerImpl
+
+        results_lookup: dict[int, dict] = {}
+        result_columns = [c for c in results_df.columns if c != "_row_index"]
+        for row in results_df:
+            row_idx = row.get("_row_index", row.get("row_index"))
+            if row_idx is not None:
+                results_lookup[row_idx] = row
+
+        # Merge into new container
+        merged_rows: list[dict] = []
+        for idx, orig_row in enumerate(df):
+            merged_row = dict(orig_row)
+            if idx in results_lookup:
+                result_row = results_lookup[idx]
+                for col in result_columns:
+                    merged_row[col] = result_row.get(col)
+            merged_rows.append(merged_row)
+
+        # Determine merged columns
+        merged_columns = list(df.columns)
+        for col in result_columns:
+            if col not in merged_columns:
+                merged_columns.append(col)
+
+        return ResultContainerImpl(data=merged_rows, columns=merged_columns)
 
     async def execute_async(self, resume_from: UUID | None = None) -> ExecutionResult:
         """

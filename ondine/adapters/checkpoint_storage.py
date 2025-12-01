@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from decimal import Decimal
 from uuid import UUID
 
 from ondine.core.models import CheckpointInfo
@@ -181,17 +182,21 @@ class LocalFileCheckpointStorage(CheckpointStorage):
 
                 # Try to load checkpoint for additional info
                 data = self.load(session_id)
-                row_index = data.get("last_processed_row", 0) if data else 0
-                stage_index = data.get("current_stage_index", 0) if data else 0
+                rows_processed = data.get("last_processed_row", 0) if data else 0
+                stage = data.get("current_stage", "unknown") if data else "unknown"
+                total_rows = data.get("total_rows", 0) if data else 0
+                cost_so_far = Decimal(str(data.get("accumulated_cost", 0))) if data else Decimal("0")
 
                 checkpoints.append(
                     CheckpointInfo(
+                        checkpoint_id=session_id,
                         session_id=session_id,
-                        checkpoint_path=str(checkpoint_file),
-                        row_index=row_index,
-                        stage_index=stage_index,
                         timestamp=datetime.fromtimestamp(stat.st_mtime),
-                        size_bytes=stat.st_size,
+                        rows_processed=rows_processed,
+                        total_rows=total_rows,
+                        cost_so_far=cost_so_far,
+                        stage=stage,
+                        path=str(checkpoint_file),
                     )
                 )
             except Exception:  # nosec B112

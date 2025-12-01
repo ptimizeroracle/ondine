@@ -48,7 +48,9 @@ class TestDataLoaderStage:
 
         result = stage.process(spec, context)
 
-        assert isinstance(result, pd.DataFrame)
+        # DataLoaderStage now returns DataContainer
+        from ondine.core.data_container import DataContainer
+        assert isinstance(result, DataContainer)
         assert len(result) == 3
         assert "text" in result.columns
 
@@ -359,9 +361,13 @@ class TestResponseParserStage:
 
         result_df = stage.process([batch], context)
 
-        assert isinstance(result_df, pd.DataFrame)
+        # ResponseParserStage now returns ResultContainerImpl
+        from ondine.adapters.containers import ResultContainerImpl
+        assert isinstance(result_df, ResultContainerImpl)
         assert len(result_df) == 2
         assert "name" in result_df.columns
         assert "value" in result_df.columns
-        assert result_df.iloc[0]["name"] == "test1"
-        assert result_df.iloc[1]["value"] == 20
+        # Access by iteration
+        rows = list(result_df)
+        assert rows[0]["name"] == "test1"
+        assert rows[1]["value"] == 20

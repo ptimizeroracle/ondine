@@ -360,6 +360,12 @@ class LoggingProgressTracker(ProgressTracker):
         self.logger.info(f"Starting {stage_name} ({total_rows} rows)")
         return stage_name
 
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
+        """LoggingTracker has no deployment sub-tasks, so we ignore this request."""
+        pass
+
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         """Update progress via periodic logging."""
         if task_id not in self.tasks:
