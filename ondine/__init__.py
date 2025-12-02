@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore", message=".*PyTorch.*TensorFlow.*Flax.*")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-__version__ = "1.3.4"
+__version__ = "1.4.0"
 
 # Layer 4: High-Level API
 from ondine.api.dataset_processor import DatasetProcessor
