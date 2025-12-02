@@ -2806,6 +2806,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#ondine.observability.events.ProviderCooldownEvent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ProviderCooldownEvent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.observability.events.ProviderRecoveredEvent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ProviderRecoveredEvent
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3161,6 +3183,112 @@ Contains full prompt/completion text, tokens, cost, and optional RAG metadata.</
 
         <p>Emitted when pipeline execution completes.</p>
 <p>Contains final metrics for the entire pipeline run.</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.observability.events.ProviderCooldownEvent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ProviderCooldownEvent</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#ondine.observability.events.ProviderCooldownEvent" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ProviderCooldownEvent</span><span class="p">(</span><span class="n">pipeline_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">run_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">span_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">deployment_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cooldown_duration</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fail_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">())</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Emitted when a provider enters cooldown (circuit breaker triggered).</p>
+<p>This happens when a provider exceeds <code>allowed_fails</code> threshold.
+The provider will be temporarily disabled for <code>cooldown_duration</code> seconds.</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="ondine.observability.events.ProviderRecoveredEvent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ProviderRecoveredEvent</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#ondine.observability.events.ProviderRecoveredEvent" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ProviderRecoveredEvent</span><span class="p">(</span><span class="n">pipeline_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">run_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">span_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">deployment_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cooldown_duration</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">())</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Emitted when a provider recovers from cooldown.</p>
+<p>This happens when the cooldown period expires and the provider
+becomes available again.</p>
 
 
 
