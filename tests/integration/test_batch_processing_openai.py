@@ -121,8 +121,10 @@ class TestBatchProcessingGroq:
         assert result_batch.success is True
 
         # Both should have same number of rows
-        assert len(result_individual.data) == 5
-        assert len(result_batch.data) == 5
+        df_individual = result_individual.to_pandas()
+        df_batch = result_batch.to_pandas()
+        assert len(df_individual) == 5
+        assert len(df_batch) == 5
 
         # Compare costs (batch should be cheaper per row due to fewer API calls)
         cost_per_row_individual = (

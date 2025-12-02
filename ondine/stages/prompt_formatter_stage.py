@@ -133,7 +133,12 @@ class PromptFormatterStage(
 
             try:
                 # Extract only template variables from row
-                row_data = {k: v for k, v in row.items() if k in template_str}
+                # Note: For Jinja2, we pass all row data since variable extraction
+                # from Jinja2 templates is complex (filters, expressions, etc.)
+                if use_jinja2:
+                    row_data = dict(row)
+                else:
+                    row_data = {k: v for k, v in row.items() if k in template_str}
 
                 # Format prompt (Jinja2 or f-string)
                 if use_jinja2 and jinja_template:

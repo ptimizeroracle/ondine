@@ -228,7 +228,7 @@ class TestValidateOutputQuality:
 
         quality = result.validate_output_quality(["output"])
 
-        # 40% nulls should trigger HIGH NULL RATE warning
+        # 40% nulls should trigger HIGH NULL RATE issue
         assert any("HIGH NULL RATE" in issue for issue in quality.issues)
 
     def test_no_warnings_for_excellent_quality(self):

@@ -63,10 +63,14 @@ class ConcurrencyController:
         (if configured) permits the operation.
         """
         await self._semaphore.acquire()
-        if self._rate_limiter:
-            # RateLimiter.acquire() is sync, but we're in async context
-            # This is fine - it's a quick token bucket check
-            self._rate_limiter.acquire()
+        try:
+            if self._rate_limiter:
+                # RateLimiter.acquire() is sync, but we're in async context
+                # This is fine - it's a quick token bucket check
+                self._rate_limiter.acquire()
+        except Exception:
+            self._semaphore.release()
+            raise
 
     def release(self) -> None:
         """Release a concurrency slot."""

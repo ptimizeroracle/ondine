@@ -232,6 +232,10 @@ class StreamingProcessor:
             f"{self._stats.failed_chunks} failures"
         )
 
+        # Re-raise producer error after stream is consumed
+        if producer_error:
+            raise producer_error
+
     async def process_with_concurrency(
         self,
         data_source: AsyncIterator[pl.DataFrame],
@@ -268,8 +272,13 @@ class StreamingProcessor:
                 try:
                     result = await processor(chunk)
                     await results.put(result)
+                    # Update stats
+                    self._stats.total_chunks += 1
+                    self._stats.total_rows += len(chunk)
+                    self._stats.successful_chunks += 1
                 except Exception as e:
                     logger.error(f"Error processing chunk {index}: {e}")
+                    self._stats.failed_chunks += 1
                     if self.error_policy == "fail":
                         await results.put(None)  # Signal error
                         raise

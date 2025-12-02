@@ -285,7 +285,9 @@ class StreamingParquetContainer(BaseDataContainer):
         ):
             # Convert batch to list of dicts
             table = batch.to_pydict()
-            num_rows = len(next(iter(table.values())))
+            if not table:
+                continue
+            num_rows = len(next(iter(table.values()), []))
 
             for i in range(num_rows):
                 yield {k: v[i] for k, v in table.items()}

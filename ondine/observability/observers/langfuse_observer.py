@@ -154,8 +154,11 @@ class LangfuseObserver(PipelineObserver):
                     metadata={
                         "provider": event.provider,
                         "temperature": event.temperature,
+                        "max_tokens": event.max_tokens,
                         "latency_ms": event.latency_ms,
                         "cost": float(event.cost),
+                        "row_index": event.row_index,
+                        "stage_name": event.stage_name,
                         **event.metadata,
                     },
                 )
@@ -223,6 +226,7 @@ class LangfuseObserver(PipelineObserver):
                         "cooldown_duration": event.cooldown_duration,
                         "fail_count": event.fail_count,
                         "event_type": "circuit_breaker_triggered",
+                        **event.metadata,
                     },
                     level="WARNING",
                 )

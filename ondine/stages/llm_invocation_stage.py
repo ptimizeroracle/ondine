@@ -216,9 +216,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             return response
 
         except Exception as e:
-            return self._handle_error(
-                e, idx, len(context.intermediate_data.get("items", []))
-            )
+            return self._handle_error(e, idx, self._total_rows)
 
     def _invoke_with_retry_and_ratelimit(
         self,

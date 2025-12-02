@@ -84,8 +84,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
 warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
 
-logger = logging.getLogger(__name__)
-
 
 class UnifiedLiteLLMClient(LLMClient):
     """
