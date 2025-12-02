@@ -9,7 +9,6 @@ import csv
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 from ondine.core.data_container import BaseDataContainer, Row
 
@@ -223,7 +222,7 @@ class StreamingCSVContainer(BaseDataContainer):
             if i < n:
                 reservoir.append(row)
             else:
-                j = random.randint(0, i)
+                j = random.randint(0, i)  # noqa: S311  # nosec B311
                 if j < n:
                     reservoir[j] = row
         return reservoir
@@ -386,4 +385,3 @@ class StreamingJSONContainer(BaseDataContainer):
 
     def __repr__(self) -> str:
         return f"StreamingJSONContainer(path={self.path})"
-

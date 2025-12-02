@@ -71,13 +71,15 @@ class TestValidateOutputQuality:
 
     def test_detects_null_outputs(self):
         """Should count null values."""
-        data = ResultContainerImpl([
-            {"output": None},
-            {"output": "valid"},
-            {"output": None},
-            {"output": "valid"},
-            {"output": None},
-        ])
+        data = ResultContainerImpl(
+            [
+                {"output": None},
+                {"output": "valid"},
+                {"output": None},
+                {"output": "valid"},
+                {"output": None},
+            ]
+        )
 
         result = ExecutionResult(
             data=data,
@@ -97,13 +99,15 @@ class TestValidateOutputQuality:
 
     def test_detects_empty_strings(self):
         """Should count empty strings."""
-        data = ResultContainerImpl([
-            {"output": "valid"},
-            {"output": ""},
-            {"output": "  "},
-            {"output": "valid"},
-            {"output": ""},
-        ])
+        data = ResultContainerImpl(
+            [
+                {"output": "valid"},
+                {"output": ""},
+                {"output": "  "},
+                {"output": "valid"},
+                {"output": ""},
+            ]
+        )
 
         result = ExecutionResult(
             data=data,
@@ -120,9 +124,7 @@ class TestValidateOutputQuality:
 
     def test_excellent_quality_score(self):
         """Should assign excellent for 95%+ success."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 96 + [{"output": None}] * 4
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 96 + [{"output": None}] * 4)
 
         result = ExecutionResult(
             data=data,
@@ -139,9 +141,7 @@ class TestValidateOutputQuality:
 
     def test_good_quality_score(self):
         """Should assign good for 80-94% success."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 85 + [{"output": None}] * 15
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 85 + [{"output": None}] * 15)
 
         result = ExecutionResult(
             data=data,
@@ -158,9 +158,7 @@ class TestValidateOutputQuality:
 
     def test_poor_quality_score(self):
         """Should assign poor for 50-79% success."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 60 + [{"output": None}] * 40
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 60 + [{"output": None}] * 40)
 
         result = ExecutionResult(
             data=data,
@@ -177,9 +175,7 @@ class TestValidateOutputQuality:
 
     def test_critical_quality_score(self):
         """Should assign critical for <50% success."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 30 + [{"output": None}] * 70
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 30 + [{"output": None}] * 70)
 
         result = ExecutionResult(
             data=data,
@@ -196,9 +192,7 @@ class TestValidateOutputQuality:
 
     def test_detects_metrics_mismatch(self):
         """Should detect when reported failures don't match nulls."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 50 + [{"output": None}] * 50
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 50 + [{"output": None}] * 50)
 
         result = ExecutionResult(
             data=data,
@@ -222,9 +216,7 @@ class TestValidateOutputQuality:
 
     def test_generates_warnings_for_high_null_rate(self):
         """Should warn when null rate exceeds 30%."""
-        data = ResultContainerImpl(
-            [{"output": "valid"}] * 60 + [{"output": None}] * 40
-        )
+        data = ResultContainerImpl([{"output": "valid"}] * 60 + [{"output": None}] * 40)
 
         result = ExecutionResult(
             data=data,
@@ -264,11 +256,13 @@ class TestMultipleOutputColumns:
 
     def test_counts_nulls_across_columns(self):
         """Should count nulls across all output columns."""
-        data = ResultContainerImpl([
-            {"col1": "valid", "col2": None},
-            {"col1": None, "col2": "valid"},
-            {"col1": "valid", "col2": "valid"},
-        ])
+        data = ResultContainerImpl(
+            [
+                {"col1": "valid", "col2": None},
+                {"col1": None, "col2": "valid"},
+                {"col1": "valid", "col2": "valid"},
+            ]
+        )
 
         result = ExecutionResult(
             data=data,
@@ -288,11 +282,13 @@ class TestMultipleOutputColumns:
 
     def test_row_invalid_when_all_columns_null(self):
         """Row is invalid only when ALL output columns are null."""
-        data = ResultContainerImpl([
-            {"col1": None, "col2": None},  # Invalid row
-            {"col1": "valid", "col2": None},  # Valid (has col1)
-            {"col1": None, "col2": "valid"},  # Valid (has col2)
-        ])
+        data = ResultContainerImpl(
+            [
+                {"col1": None, "col2": None},  # Invalid row
+                {"col1": "valid", "col2": None},  # Valid (has col1)
+                {"col1": None, "col2": "valid"},  # Valid (has col2)
+            ]
+        )
 
         result = ExecutionResult(
             data=data,

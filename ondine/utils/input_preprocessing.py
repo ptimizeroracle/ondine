@@ -7,9 +7,13 @@ Best practices: Remove noise, normalize whitespace, control length.
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from ondine.adapters.containers import DictListContainer
+    from ondine.core.data_container import DataContainer
 
 
 @dataclass
@@ -225,8 +229,7 @@ def preprocess_container(
     Returns:
         (cleaned_container, stats)
     """
-    from ondine.adapters.containers import DictListContainer
-    from ondine.core.data_container import DataContainer
+    from ondine.adapters.containers import DictListContainer  # noqa: PLC0415
 
     preprocessor = TextPreprocessor(max_length)
 

@@ -88,7 +88,7 @@ class DictListContainer(BaseDataContainer):
             self._columns = list(row.keys())
         else:
             # Add any new columns
-            for key in row.keys():
+            for key in row:
                 if key not in self._columns:
                     self._columns.append(key)
 
@@ -177,7 +177,9 @@ class DictListContainer(BaseDataContainer):
         return self._data[-n:]
 
     @classmethod
-    def from_records(cls, records: list[tuple], columns: list[str]) -> "DictListContainer":
+    def from_records(
+        cls, records: list[tuple], columns: list[str]
+    ) -> "DictListContainer":
         """
         Create from list of tuples with column names.
 
@@ -233,4 +235,3 @@ class DictListContainer(BaseDataContainer):
         if not isinstance(other, DictListContainer):
             return False
         return self._data == other._data and self._columns == other._columns
-

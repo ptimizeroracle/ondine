@@ -276,4 +276,3 @@ class ResultContainer(Protocol):
 # Type aliases for clarity
 RowIterator = Iterator[Row]
 AsyncRowIterator = AsyncIterator[Row]
-

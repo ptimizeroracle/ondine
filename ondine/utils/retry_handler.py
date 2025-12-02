@@ -141,6 +141,8 @@ class RetryHandler:
         async for attempt in retryer:
             with attempt:
                 return await func()
+        # Unreachable: retryer with reraise=True always raises if exhausted
+        raise RuntimeError("Retry exhausted without success")  # noqa: RET503
 
     def calculate_delay(self, attempt: int) -> float:
         """

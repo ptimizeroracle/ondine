@@ -150,9 +150,8 @@ class PolarsContainer(BaseDataContainer):
 
             filtered = self._df.filter(pl.Series(mask))
             return PolarsContainer(filtered)
-        else:
-            # Assume it's a Polars expression
-            return PolarsContainer(self._df.filter(predicate))
+        # Assume it's a Polars expression
+        return PolarsContainer(self._df.filter(predicate))
 
     def sample(self, n: int = 10, seed: int | None = None) -> "PolarsContainer":
         """
@@ -274,4 +273,3 @@ class PolarsContainer(BaseDataContainer):
 
     def __repr__(self) -> str:
         return f"PolarsContainer(rows={len(self)}, columns={self.columns})"
-

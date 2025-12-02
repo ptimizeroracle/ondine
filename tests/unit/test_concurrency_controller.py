@@ -102,4 +102,3 @@ class TestConcurrencyController:
         )
         repr_str = repr(controller_with_limiter)
         assert "rate_limiter=True" in repr_str
-

@@ -8,9 +8,9 @@ is achieved by blocking the producer when the queue is full.
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, TypeVar, Generic
+from typing import Any, Generic, TypeVar
 
 import polars as pl
 
@@ -173,8 +173,7 @@ class StreamingProcessor:
                 try:
                     # Process chunk
                     logger.debug(
-                        f"Consumer: processing chunk {chunk_index}, "
-                        f"rows: {len(chunk)}"
+                        f"Consumer: processing chunk {chunk_index}, rows: {len(chunk)}"
                     )
 
                     result_df = await processor(chunk)
@@ -303,4 +302,3 @@ class StreamingProcessor:
             f"StreamingProcessor(max_pending_chunks={self.max_pending_chunks}, "
             f"error_policy={self.error_policy!r})"
         )
-

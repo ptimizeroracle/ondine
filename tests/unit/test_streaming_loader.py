@@ -1,6 +1,5 @@
 """Unit tests for StreamingDataLoader."""
 
-import tempfile
 from pathlib import Path
 
 import polars as pl
@@ -216,4 +215,3 @@ class TestStreamingDataLoader:
         assert len(all_cols) == 3
         assert len(subset_cols) == 1
         assert subset_cols == ["id"]
-

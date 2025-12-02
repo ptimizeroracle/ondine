@@ -18,7 +18,9 @@ from ondine.stages.pipeline_stage import PipelineStage
 
 
 class ResultWriterStage(
-    PipelineStage[tuple[DataContainer, ResultContainerImpl, OutputSpec], ResultContainerImpl]
+    PipelineStage[
+        tuple[DataContainer, ResultContainerImpl, OutputSpec], ResultContainerImpl
+    ]
 ):
     """
     Write results to destination with merge support.

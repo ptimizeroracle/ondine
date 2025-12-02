@@ -1,7 +1,7 @@
 """Unit tests for StreamingProcessor."""
 
 import asyncio
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import polars as pl
 import pytest
@@ -139,12 +139,15 @@ class TestStreamingProcessor:
             pl.DataFrame({"id": list(range(10, 20))}),  # Will fail
         ]
 
-        with pytest.raises(ValueError, match="Chunk 2 failed"):
+        async def process():
             results = []
             async for result in processor.process_stream(
                 async_iter(chunks), sometimes_failing_processor
             ):
                 results.append(result)
+
+        with pytest.raises(ValueError, match="Chunk 2 failed"):
+            await process()
 
     @pytest.mark.asyncio
     async def test_backpressure(self):
@@ -268,4 +271,3 @@ class TestChunkResult:
         )
 
         assert result.metadata["processing_time"] == 0.5
-

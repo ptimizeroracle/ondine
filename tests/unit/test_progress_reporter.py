@@ -3,8 +3,6 @@
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-import pytest
-
 from ondine.orchestration.deployment_tracker import DeploymentTracker
 from ondine.orchestration.progress_reporter import ProgressReporter
 
@@ -37,7 +35,9 @@ class TestProgressReporter:
         mock_tracker.start_stage.return_value = "task-123"
 
         reporter = ProgressReporter(tracker=mock_tracker)
-        reporter.start("LLMInvocation", total_rows=1000, deployments=[{"model_id": "test"}])
+        reporter.start(
+            "LLMInvocation", total_rows=1000, deployments=[{"model_id": "test"}]
+        )
 
         mock_tracker.start_stage.assert_called_once()
         assert reporter.is_active
@@ -123,4 +123,3 @@ class TestProgressReporter:
         repr_str = repr(reporter_active)
         assert "active=True" in repr_str
         assert "total_rows=50" in repr_str
-

@@ -114,7 +114,9 @@ class TestStreamingResultWriter:
         assert writer.rows_written == 2
 
     @pytest.mark.asyncio
-    async def test_append_async(self, tmp_path: Path, sample_chunks: list[pl.DataFrame]):
+    async def test_append_async(
+        self, tmp_path: Path, sample_chunks: list[pl.DataFrame]
+    ):
         """Test async append."""
         output_path = tmp_path / "output.parquet"
         writer = StreamingResultWriter(output_path)
@@ -180,15 +182,19 @@ class TestStreamingResultWriter:
 class TestMultiFormatWriter:
     """Tests for MultiFormatWriter."""
 
-    def test_append_to_multiple(self, tmp_path: Path, sample_chunks: list[pl.DataFrame]):
+    def test_append_to_multiple(
+        self, tmp_path: Path, sample_chunks: list[pl.DataFrame]
+    ):
         """Test appending to multiple writers."""
         parquet_path = tmp_path / "output.parquet"
         csv_path = tmp_path / "output.csv"
 
-        writer = MultiFormatWriter([
-            StreamingResultWriter(parquet_path),
-            StreamingResultWriter(csv_path),
-        ])
+        writer = MultiFormatWriter(
+            [
+                StreamingResultWriter(parquet_path),
+                StreamingResultWriter(csv_path),
+            ]
+        )
 
         for chunk in sample_chunks:
             writer.append(chunk)
@@ -212,10 +218,12 @@ class TestMultiFormatWriter:
         parquet_path = tmp_path / "output.parquet"
         csv_path = tmp_path / "output.csv"
 
-        writer = MultiFormatWriter([
-            StreamingResultWriter(parquet_path),
-            StreamingResultWriter(csv_path),
-        ])
+        writer = MultiFormatWriter(
+            [
+                StreamingResultWriter(parquet_path),
+                StreamingResultWriter(csv_path),
+            ]
+        )
 
         for chunk in sample_chunks:
             await writer.append_async(chunk)
@@ -225,10 +233,11 @@ class TestMultiFormatWriter:
 
     def test_repr(self, tmp_path: Path):
         """Test string representation."""
-        writer = MultiFormatWriter([
-            StreamingResultWriter(tmp_path / "a.parquet"),
-            StreamingResultWriter(tmp_path / "b.csv"),
-        ])
+        writer = MultiFormatWriter(
+            [
+                StreamingResultWriter(tmp_path / "a.parquet"),
+                StreamingResultWriter(tmp_path / "b.csv"),
+            ]
+        )
 
         assert "MultiFormatWriter(writers=2)" in repr(writer)
-

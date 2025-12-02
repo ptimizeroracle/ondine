@@ -6,7 +6,7 @@ from typing import Any
 
 from ondine.core.data_container import DataContainer
 from ondine.core.models import CostEstimate, ValidationResult
-from ondine.core.specifications import DatasetSpec, DataSourceType
+from ondine.core.specifications import DatasetSpec
 from ondine.stages.pipeline_stage import PipelineStage
 
 
@@ -77,15 +77,15 @@ def create_container(spec: DatasetSpec, dataframe: Any = None) -> DataContainer:
             encoding=spec.encoding or "utf-8",
             columns=spec.input_columns,
         )
-    elif suffix == ".parquet" or suffix == ".pq":
+    if suffix == ".parquet" or suffix == ".pq":
         return StreamingParquetContainer(path=path, columns=spec.input_columns)
-    elif suffix in (".json", ".jsonl", ".ndjson"):
+    if suffix in (".json", ".jsonl", ".ndjson"):
         return StreamingJSONContainer(
             path=path,
             encoding=spec.encoding or "utf-8",
             columns=spec.input_columns,
         )
-    elif suffix in (".xlsx", ".xls"):
+    if suffix in (".xlsx", ".xls"):
         # Excel requires Pandas
         try:
             import pandas as pd

@@ -50,6 +50,7 @@ class TestDataLoaderStage:
 
         # DataLoaderStage now returns DataContainer
         from ondine.core.data_container import DataContainer
+
         assert isinstance(result, DataContainer)
         assert len(result) == 3
         assert "text" in result.columns
@@ -363,6 +364,7 @@ class TestResponseParserStage:
 
         # ResponseParserStage now returns ResultContainerImpl
         from ondine.adapters.containers import ResultContainerImpl
+
         assert isinstance(result_df, ResultContainerImpl)
         assert len(result_df) == 2
         assert "name" in result_df.columns

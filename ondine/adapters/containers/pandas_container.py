@@ -154,10 +154,9 @@ class PandasContainer(BaseDataContainer):
         if callable(predicate):
             mask = self._df.apply(predicate, axis=1)
             return PandasContainer(self._df[mask])
-        elif isinstance(predicate, str):
+        if isinstance(predicate, str):
             return PandasContainer(self._df.query(predicate))
-        else:
-            return PandasContainer(self._df[predicate])
+        return PandasContainer(self._df[predicate])
 
     def sample(
         self,
@@ -271,8 +270,7 @@ class PandasContainer(BaseDataContainer):
             import polars as pl
         except ImportError:
             raise ImportError(
-                "Polars is required for to_polars(). "
-                "Install with: pip install polars"
+                "Polars is required for to_polars(). Install with: pip install polars"
             )
         return pl.from_pandas(self._df)
 
@@ -294,4 +292,3 @@ class PandasContainer(BaseDataContainer):
 
     def __repr__(self) -> str:
         return f"PandasContainer(rows={len(self)}, columns={self.columns})"
-

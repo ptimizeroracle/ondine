@@ -1,7 +1,5 @@
 """Tests for DeploymentTracker."""
 
-import pytest
-
 from ondine.orchestration.deployment_tracker import DeploymentInfo, DeploymentTracker
 
 
@@ -160,4 +158,3 @@ class TestDeploymentInfo:
         assert info.label == "Test Label"
         assert info.model == "groq/llama"
         assert info.provider == "groq"
-

@@ -9,9 +9,9 @@ import json
 import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from decimal import Decimal
 from uuid import UUID
 
 from ondine.core.models import CheckpointInfo
@@ -185,7 +185,11 @@ class LocalFileCheckpointStorage(CheckpointStorage):
                 rows_processed = data.get("last_processed_row", 0) if data else 0
                 stage = data.get("current_stage", "unknown") if data else "unknown"
                 total_rows = data.get("total_rows", 0) if data else 0
-                cost_so_far = Decimal(str(data.get("accumulated_cost", 0))) if data else Decimal("0")
+                cost_so_far = (
+                    Decimal(str(data.get("accumulated_cost", 0)))
+                    if data
+                    else Decimal("0")
+                )
 
                 checkpoints.append(
                     CheckpointInfo(

@@ -5,7 +5,7 @@ Maps internal LiteLLM deployment hashes to user-friendly identifiers
 and tracks request distribution across deployments.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -206,4 +206,3 @@ class DeploymentTracker:
             f"DeploymentTracker(deployments={len(self._hash_to_friendly)}, "
             f"total_requests={self.total_requests})"
         )
-

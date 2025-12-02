@@ -297,7 +297,9 @@ class TestDataWriters:
             writer = CSVWriter()
             confirmation = writer.write(df, Path(csv_path))
 
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
             assert confirmation.rows_written == 2
             assert Path(csv_path).exists()
 
@@ -340,7 +342,9 @@ class TestDataWriters:
 
             df = pd.DataFrame({"text": ["test"]})
             confirmation = writer.write(df, csv_path)
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
         finally:
             csv_path.unlink(missing_ok=True)
 
@@ -361,7 +365,9 @@ class TestDataWriters:
             writer = ExcelWriter()
             confirmation = writer.write(df, excel_path)
 
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
             assert confirmation.rows_written == 2
             assert excel_path.exists()
 
@@ -454,7 +460,9 @@ class TestDataWriters:
             writer = ParquetWriter()
             confirmation = writer.write(df, parquet_path)
 
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
             assert confirmation.rows_written == 2
             assert parquet_path.exists()
 
@@ -508,7 +516,9 @@ class TestDataWriters:
             writer = ParquetWriter()
             confirmation = writer.write(df, parquet_path)
 
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
             assert confirmation.rows_written == 1000
 
             # Verify file exists and has data
@@ -529,7 +539,9 @@ class TestDataWriters:
 
             df = pd.DataFrame({"text": ["test"]})
             confirmation = writer.write(df, excel_path)
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
         finally:
             excel_path.unlink(missing_ok=True)
 
@@ -544,7 +556,9 @@ class TestDataWriters:
 
             df = pd.DataFrame({"text": ["test"]})
             confirmation = writer.write(df, parquet_path)
-            assert confirmation.rows_written > 0  # WriteConfirmation no longer has success field
+            assert (
+                confirmation.rows_written > 0
+            )  # WriteConfirmation no longer has success field
         finally:
             parquet_path.unlink(missing_ok=True)
 

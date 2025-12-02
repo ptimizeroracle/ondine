@@ -13,6 +13,7 @@ import logging
 import os
 
 import pandas as pd
+
 from ondine import PipelineBuilder
 
 # Configure logging
@@ -26,7 +27,9 @@ def main():
 
     # 1. Verify Environment (Docker sets these automatically)
     otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    print(f"📡 OpenTelemetry Endpoint: {otel_endpoint or 'Not Set (will fallback to default)'}")
+    print(
+        f"📡 OpenTelemetry Endpoint: {otel_endpoint or 'Not Set (will fallback to default)'}"
+    )
 
     # 2. Create Sample Data
     df = pd.DataFrame(
@@ -48,17 +51,13 @@ def main():
             """
             Analyze the sentiment and complexity of this text.
             Return a short summary.
-            
+
             Text: {text}
             """
         )
         # Using a fake model for demo (or OpenAI if key provided)
         # For testing without keys, we can use a mock provider or handle errors
-        .with_llm(
-            provider="openai",
-            model="gpt-4o-mini",
-            temperature=0.7
-        )
+        .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.7)
         .with_observer("opentelemetry")  # Activate the OTel observer
         .build()
     )
@@ -67,7 +66,7 @@ def main():
     try:
         print("⚡ Executing pipeline...")
         result = pipeline.execute()
-        
+
         if result.success:
             print("\n✅ Pipeline Success!")
             print(result.data)
@@ -88,4 +87,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

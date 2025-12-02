@@ -233,4 +233,3 @@ class MultiFormatWriter:
 
     def __repr__(self) -> str:
         return f"MultiFormatWriter(writers={len(self.writers)})"
-

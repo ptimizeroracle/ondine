@@ -6,7 +6,7 @@ from typing import Any
 
 from jinja2 import Template as Jinja2Template
 
-from ondine.core.data_container import DataContainer, Row
+from ondine.core.data_container import DataContainer
 from ondine.core.models import (
     CostEstimate,
     PromptBatch,
@@ -57,8 +57,10 @@ class PromptFormatterStage(
         # Auto-wrap pandas DataFrame for backward compatibility
         try:
             import pandas as pd
+
             if isinstance(container_or_df, pd.DataFrame):
                 from ondine.adapters.containers import PandasContainer
+
                 container = PandasContainer(container_or_df)
             else:
                 container = container_or_df
@@ -102,7 +104,9 @@ class PromptFormatterStage(
 
         for row_count, row in enumerate(container, 1):
             # row is now a dict (Row type)
-            idx = row.get("_index", row_count - 1)  # Use _index if available, else position
+            idx = row.get(
+                "_index", row_count - 1
+            )  # Use _index if available, else position
 
             # Hybrid progress: Log every 10% OR every 30 seconds (only for slow operations)
             current_time = time.time()

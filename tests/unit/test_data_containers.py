@@ -1,6 +1,5 @@
 """Unit tests for DataContainer implementations."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -197,8 +196,8 @@ class TestStreamingCSVContainer:
         """Test schema inference."""
         container = StreamingCSVContainer(sample_csv)
         schema = container.schema
-        assert schema["id"] == int
-        assert schema["name"] == str
+        assert schema["id"] is int
+        assert schema["name"] is str
 
 
 class TestPolarsContainer:
@@ -429,4 +428,3 @@ class TestDataContainerProtocol:
         df = pd.DataFrame(sample_rows)
         container = PandasContainer(df)
         assert isinstance(container, DataContainer)
-

@@ -4,14 +4,12 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-import pandas as pd
 import polars as pl
 import pytest
 
 from ondine.adapters.streaming_loader import StreamingDataLoader
 from ondine.adapters.streaming_writer import StreamingResultWriter
 from ondine.api import PipelineBuilder
-from ondine.orchestration import AsyncExecutor
 from ondine.orchestration.streaming_processor import StreamingProcessor
 
 
@@ -98,14 +96,10 @@ class TestStreamingProcessorIntegration:
 
         async def transform(chunk: pl.DataFrame) -> pl.DataFrame:
             # Add a computed column
-            return chunk.with_columns(
-                (pl.col("id") * 2).alias("id_doubled")
-            )
+            return chunk.with_columns((pl.col("id") * 2).alias("id_doubled"))
 
         results = []
-        async for result in processor.process_stream(
-            loader.stream_chunks(), transform
-        ):
+        async for result in processor.process_stream(loader.stream_chunks(), transform):
             results.append(result)
 
         assert len(results) == 10
@@ -283,9 +277,7 @@ class TestMemoryBounded:
         async def identity(chunk: pl.DataFrame) -> pl.DataFrame:
             return chunk
 
-        async for result in processor.process_stream(
-            loader.stream_chunks(), identity
-        ):
+        async for result in processor.process_stream(loader.stream_chunks(), identity):
             await writer.append_async(result)
 
         writer.finalize()
@@ -305,4 +297,3 @@ class TestMemoryBounded:
         # Memory should be reasonable (less than 200MB for this test)
         # This is a loose bound to avoid flaky tests
         assert peak_mb < 200, f"Peak memory {peak_mb:.1f}MB exceeds expected bound"
-

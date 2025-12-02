@@ -94,4 +94,3 @@ class ConcurrencyController:
             f"ConcurrencyController(max_concurrent={self._max_concurrent}, "
             f"rate_limiter={self._rate_limiter is not None})"
         )
-

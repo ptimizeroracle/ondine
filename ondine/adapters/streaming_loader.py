@@ -9,9 +9,12 @@ not O(total_rows).
 import logging
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +205,9 @@ class StreamingDataLoader:
             "num_chunks": (total_rows + chunk_rows - 1) // chunk_rows,
             "estimated_full_load_mb": (total_rows * avg_row_bytes) / (1024 * 1024),
             "estimated_streaming_mb": (chunk_rows * avg_row_bytes * 2) / (1024 * 1024),
-            "memory_savings_ratio": total_rows / (chunk_rows * 2) if chunk_rows > 0 else 0,
+            "memory_savings_ratio": total_rows / (chunk_rows * 2)
+            if chunk_rows > 0
+            else 0,
         }
 
     def __repr__(self) -> str:
@@ -211,4 +216,3 @@ class StreamingDataLoader:
             f"chunk_size={self.chunk_size}, "
             f"columns={self.columns})"
         )
-

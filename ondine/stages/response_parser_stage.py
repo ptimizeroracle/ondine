@@ -4,18 +4,20 @@ import json
 import re
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ValidationError
 
 from ondine.adapters.containers.result_container import ResultContainerImpl
-from ondine.core.data_container import Row
 from ondine.core.models import (
     CostEstimate,
     ResponseBatch,
     ValidationResult,
 )
 from ondine.stages.pipeline_stage import PipelineStage
+
+if TYPE_CHECKING:
+    from ondine.core.data_container import Row  # noqa: TC001
 
 
 class ResponseParser(ABC):
@@ -238,7 +240,11 @@ class ResponseParserStage(
                     else:
                         # Multiple output columns
                         for col in output_cols:
-                            row_data[col] = parsed.get(col, None) if isinstance(parsed, dict) else None
+                            row_data[col] = (
+                                parsed.get(col, None)
+                                if isinstance(parsed, dict)
+                                else None
+                            )
 
                     results[metadata.row_index] = row_data
 
