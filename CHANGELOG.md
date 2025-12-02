@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/ptimizeroracle/ondine/compare/v1.3.4...v1.4.0) (2025-12-02)
+
+
+### Features
+
+* LiteLLM Integration - 348 Lines Removed  ([#46](https://github.com/ptimizeroracle/ondine/issues/46)) ([b9bd5ea](https://github.com/ptimizeroracle/ondine/commit/b9bd5ea2bbdca4903ecfd8de74a95dedc28bdee4))
+* LiteLLM Native Integration - Aggressive Refactor ([#48](https://github.com/ptimizeroracle/ondine/issues/48)) ([a2afc1d](https://github.com/ptimizeroracle/ondine/commit/a2afc1d197a618576651fd277d3ce31116636690))
+* Native LlamaIndex Structured Output with Multi-Provider E2E Tests ([#44](https://github.com/ptimizeroracle/ondine/issues/44)) ([f6969d7](https://github.com/ptimizeroracle/ondine/commit/f6969d7750b6e988d1dae587e93eb6fe6ddfbcd9))
+
 ## [1.4.2] - 2025-12-01
 
 ### Features
