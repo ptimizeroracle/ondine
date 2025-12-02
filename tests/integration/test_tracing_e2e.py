@@ -67,8 +67,9 @@ class TestFullPipelineTracing:
                 result = pipeline.execute()
 
             # Verify execution succeeded
+            df = result.to_pandas()
             assert result is not None
-            assert len(result.data) == 2
+            assert len(df) == 2
 
             # TODO: Verify span hierarchy was created
             # TODO: Verify span attributes (model, tokens, cost)

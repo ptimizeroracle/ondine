@@ -6,19 +6,22 @@ missing failures in other columns.
 """
 
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
+import pytest
 
 from ondine.api import PipelineBuilder
 from ondine.core.models import LLMResponse
+from ondine.orchestration import AsyncExecutor
 
 
 class TestMultiColumnRetry:
     """Test auto-retry with multiple output columns."""
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_retry_detects_failures_in_all_output_columns(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_retry_detects_failures_in_all_output_columns(self, mock_get):
         """
         CRITICAL TEST: Verify retry detects failures across ALL output columns.
 
@@ -41,7 +44,7 @@ class TestMultiColumnRetry:
         # Track which rows are processed
         processed_rows = []
 
-        def mock_invoke(prompt, **kwargs):
+        async def mock_invoke(prompt, **kwargs):
             """Mock LLM that tracks calls and fails specific columns."""
             # Extract row identifier from prompt
             for i in range(10):
@@ -82,7 +85,9 @@ class TestMultiColumnRetry:
 
         # Setup mock
         mock_client = Mock()
-        mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
         mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test-model",
@@ -107,6 +112,7 @@ class TestMultiColumnRetry:
             .with_parser(JSONParser(strict=False))
             .with_processing_batch_size(10)  # Internal batching only, not multi-row
             .with_concurrency(1)
+            .with_executor(AsyncExecutor())
             .build()
         )
 
@@ -115,7 +121,7 @@ class TestMultiColumnRetry:
         pipeline.specifications.processing.max_retry_attempts = 1
 
         # Execute (should process all 10, then retry 3 failed)
-        result = pipeline.execute()
+        result = await pipeline.execute_async()
 
         # Verify execution counts
         # First pass: 10 rows
@@ -144,7 +150,10 @@ class TestMultiColumnRetry:
         assert quality.success_rate == 100.0
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_retry_continues_until_all_columns_valid_or_max_attempts(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_retry_continues_until_all_columns_valid_or_max_attempts(
+        self, mock_get
+    ):
         """
         Test that retry continues for all columns until max attempts.
 
@@ -162,7 +171,7 @@ class TestMultiColumnRetry:
 
         call_count = 0
 
-        def mock_invoke(prompt, **kwargs):
+        async def mock_invoke(prompt, **kwargs):
             nonlocal call_count
             call_count += 1
 
@@ -190,7 +199,9 @@ class TestMultiColumnRetry:
             )
 
         mock_client = Mock()
-        mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
         mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test-model",
@@ -214,13 +225,14 @@ class TestMultiColumnRetry:
             .with_parser(JSONParser(strict=False))
             .with_processing_batch_size(3)  # Internal batching only, not multi-row
             .with_concurrency(1)
+            .with_executor(AsyncExecutor())
             .build()
         )
 
         pipeline.specifications.processing.auto_retry_failed = True
         pipeline.specifications.processing.max_retry_attempts = 1
 
-        result = pipeline.execute()
+        result = await pipeline.execute_async()
 
         # Expected calls:
         # Pass 1: 3 calls (A, B, C)
@@ -232,4 +244,5 @@ class TestMultiColumnRetry:
         # A should be fully valid
         # B and C should still have partial nulls
         # Let's just check that retried row A is populated
-        assert result.data.loc[0, "col1"] == "fixed"
+        df = result.to_pandas()
+        assert df.loc[0, "col1"] == "fixed"

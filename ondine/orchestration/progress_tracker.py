@@ -157,7 +157,7 @@ class RichProgressTracker(ProgressTracker):
         """Start tracking a stage with rich progress bar."""
         # Add main task
         task_id = self.progress.add_task(
-            f"🚀 {stage_name}",
+            f"{stage_name}",
             total=total_rows,
             cost=metadata.get("cost", 0.0),
         )
@@ -273,8 +273,13 @@ class RichProgressTracker(ProgressTracker):
             if deployment_id in self.deployment_tasks[task_id]:
                 dep_task_id = self.deployment_tasks[task_id][deployment_id]
 
-                # Update deployment cost individually
-                dep_kwargs = {"advance": advance}
+                # Update deployment stats first
+                self.deployment_stats[task_id][deployment_id] += advance
+                new_count = self.deployment_stats[task_id][deployment_id]
+
+                # Update deployment progress - show rows THIS deployment processed
+                # Set total = completed so bar always shows 100% (X/X format)
+                dep_kwargs = {"completed": new_count, "total": new_count}
                 if "cost" in metadata:
                     dep_task = self.progress.tasks[dep_task_id]
                     current_dep_cost = dep_task.fields.get("cost", 0.0)
@@ -283,7 +288,6 @@ class RichProgressTracker(ProgressTracker):
                     )
 
                 self.progress.update(dep_task_id, **dep_kwargs)
-                self.deployment_stats[task_id][deployment_id] += advance
 
     def finish(self, task_id: str) -> None:
         """Mark task as complete."""
@@ -296,13 +300,16 @@ class RichProgressTracker(ProgressTracker):
 
             self.progress.update(rich_task_id, completed=total)
 
-            # Also complete deployment sub-tasks
+            # Update deployment sub-tasks to show ACTUAL distribution
+            # Don't force to 100% - show real counts
             if task_id in self.deployment_tasks:
-                for dep_task_id in self.deployment_tasks[task_id].values():
-                    # Get total for sub-task
-                    dep_task = self.progress.tasks[dep_task_id]
-                    dep_total = dep_task.total or 0
-                    self.progress.update(dep_task_id, completed=dep_total)
+                for dep_id, dep_task_id in self.deployment_tasks[task_id].items():
+                    # Get actual count from stats
+                    actual_count = self.deployment_stats.get(task_id, {}).get(dep_id, 0)
+                    # Update total to match actual count (so bar shows 100% of actual)
+                    self.progress.update(
+                        dep_task_id, completed=actual_count, total=actual_count
+                    )
 
     def __enter__(self) -> "RichProgressTracker":
         """Start progress display."""
@@ -359,6 +366,12 @@ class LoggingProgressTracker(ProgressTracker):
         }
         self.logger.info(f"Starting {stage_name} ({total_rows} rows)")
         return stage_name
+
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
+        """LoggingTracker has no deployment sub-tasks, so we ignore this request."""
+        pass
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         """Update progress via periodic logging."""

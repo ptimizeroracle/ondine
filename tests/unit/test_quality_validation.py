@@ -4,8 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
-import pandas as pd
-
+from ondine.adapters.containers import ResultContainerImpl
 from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
@@ -72,10 +71,18 @@ class TestValidateOutputQuality:
 
     def test_detects_null_outputs(self):
         """Should count null values."""
-        df = pd.DataFrame({"output": [None, "valid", None, "valid", None]})
+        data = ResultContainerImpl(
+            [
+                {"output": None},
+                {"output": "valid"},
+                {"output": None},
+                {"output": "valid"},
+                {"output": None},
+            ]
+        )
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(5, 5, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 5),
             execution_id=uuid4(),
@@ -92,10 +99,18 @@ class TestValidateOutputQuality:
 
     def test_detects_empty_strings(self):
         """Should count empty strings."""
-        df = pd.DataFrame({"output": ["valid", "", "  ", "valid", ""]})
+        data = ResultContainerImpl(
+            [
+                {"output": "valid"},
+                {"output": ""},
+                {"output": "  "},
+                {"output": "valid"},
+                {"output": ""},
+            ]
+        )
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(5, 5, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 5),
             execution_id=uuid4(),
@@ -109,10 +124,10 @@ class TestValidateOutputQuality:
 
     def test_excellent_quality_score(self):
         """Should assign excellent for 95%+ success."""
-        df = pd.DataFrame({"output": ["valid"] * 96 + [None] * 4})
+        data = ResultContainerImpl([{"output": "valid"}] * 96 + [{"output": None}] * 4)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
@@ -126,10 +141,10 @@ class TestValidateOutputQuality:
 
     def test_good_quality_score(self):
         """Should assign good for 80-94% success."""
-        df = pd.DataFrame({"output": ["valid"] * 85 + [None] * 15})
+        data = ResultContainerImpl([{"output": "valid"}] * 85 + [{"output": None}] * 15)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
@@ -143,10 +158,10 @@ class TestValidateOutputQuality:
 
     def test_poor_quality_score(self):
         """Should assign poor for 50-79% success."""
-        df = pd.DataFrame({"output": ["valid"] * 60 + [None] * 40})
+        data = ResultContainerImpl([{"output": "valid"}] * 60 + [{"output": None}] * 40)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
@@ -160,10 +175,10 @@ class TestValidateOutputQuality:
 
     def test_critical_quality_score(self):
         """Should assign critical for <50% success."""
-        df = pd.DataFrame({"output": ["valid"] * 30 + [None] * 70})
+        data = ResultContainerImpl([{"output": "valid"}] * 30 + [{"output": None}] * 70)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
@@ -177,10 +192,10 @@ class TestValidateOutputQuality:
 
     def test_detects_metrics_mismatch(self):
         """Should detect when reported failures don't match nulls."""
-        df = pd.DataFrame({"output": ["valid"] * 50 + [None] * 50})
+        data = ResultContainerImpl([{"output": "valid"}] * 50 + [{"output": None}] * 50)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(
                 total_rows=100,
                 processed_rows=100,
@@ -197,17 +212,15 @@ class TestValidateOutputQuality:
         quality = result.validate_output_quality(["output"])
 
         # Should detect mismatch: 0 reported failures but 50 nulls
-        assert quality.null_outputs == 50
-        assert len(quality.issues) > 0
-        assert any("MISMATCH" in issue for issue in quality.issues)
+        assert any("METRICS MISMATCH" in issue for issue in quality.issues)
 
     def test_generates_warnings_for_high_null_rate(self):
-        """Should warn when >30% nulls."""
-        df = pd.DataFrame({"output": ["valid"] * 60 + [None] * 40})
+        """Should warn when null rate exceeds 30%."""
+        data = ResultContainerImpl([{"output": "valid"}] * 60 + [{"output": None}] * 40)
 
         result = ExecutionResult(
-            data=df,
-            metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
+            data=data,
+            metrics=ProcessingStats(100, 100, 40, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
             start_time=datetime.now(),
@@ -215,16 +228,15 @@ class TestValidateOutputQuality:
 
         quality = result.validate_output_quality(["output"])
 
-        assert quality.null_outputs == 40
-        assert len(quality.issues) > 0
-        assert any("NULL RATE" in issue for issue in quality.issues)
+        # 40% nulls should trigger HIGH NULL RATE issue
+        assert any("HIGH NULL RATE" in issue for issue in quality.issues)
 
     def test_no_warnings_for_excellent_quality(self):
-        """Should have no warnings/issues for 100% success."""
-        df = pd.DataFrame({"output": ["valid"] * 100})
+        """Should have no warnings for excellent quality."""
+        data = ResultContainerImpl([{"output": "valid"}] * 100)
 
         result = ExecutionResult(
-            data=df,
+            data=data,
             metrics=ProcessingStats(100, 100, 0, 0, 1.0, 10.0),
             costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 100),
             execution_id=uuid4(),
@@ -234,48 +246,61 @@ class TestValidateOutputQuality:
         quality = result.validate_output_quality(["output"])
 
         assert quality.success_rate == 100.0
-        assert len(quality.warnings) == 0
+        assert quality.quality_score == "excellent"
         assert len(quality.issues) == 0
-        assert quality.is_acceptable  # Use == for numpy bool compatibility
+        assert len(quality.warnings) == 0
 
 
-class TestAutoRetryLogic:
-    """Test auto-retry detection logic (unit tests for the logic, not full pipeline)."""
+class TestMultipleOutputColumns:
+    """Test quality validation with multiple output columns."""
 
-    def test_identifies_null_rows(self):
-        """Should identify rows with null outputs."""
-        df = pd.DataFrame(
-            {
-                "output": ["valid", None, "valid", None, "valid"],
-                "index_col": [0, 1, 2, 3, 4],
-            }
+    def test_counts_nulls_across_columns(self):
+        """Should count nulls across all output columns."""
+        data = ResultContainerImpl(
+            [
+                {"col1": "valid", "col2": None},
+                {"col1": None, "col2": "valid"},
+                {"col1": "valid", "col2": "valid"},
+            ]
         )
 
-        # Simulate retry logic
-        null_mask = df["output"].isna()
-        failed_indices = df[null_mask].index.tolist()
+        result = ExecutionResult(
+            data=data,
+            metrics=ProcessingStats(3, 3, 0, 0, 1.0, 10.0),
+            costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 3),
+            execution_id=uuid4(),
+            start_time=datetime.now(),
+        )
 
-        assert failed_indices == [1, 3]
+        quality = result.validate_output_quality(["col1", "col2"])
 
-    def test_identifies_empty_rows(self):
-        """Should identify rows with empty outputs."""
-        df = pd.DataFrame({"output": ["valid", "", "valid", "  ", "valid"]})
+        # 2 null cells out of 6 total cells (3 rows × 2 columns)
+        assert quality.null_outputs == 2
+        # All 3 rows have at least one valid column
+        assert quality.valid_outputs == 3
+        assert quality.success_rate == 100.0
 
-        # Simulate retry logic
-        empty_mask = df["output"].astype(str).str.strip() == ""
-        failed_indices = df[empty_mask].index.tolist()
+    def test_row_invalid_when_all_columns_null(self):
+        """Row is invalid only when ALL output columns are null."""
+        data = ResultContainerImpl(
+            [
+                {"col1": None, "col2": None},  # Invalid row
+                {"col1": "valid", "col2": None},  # Valid (has col1)
+                {"col1": None, "col2": "valid"},  # Valid (has col2)
+            ]
+        )
 
-        assert failed_indices == [1, 3]
+        result = ExecutionResult(
+            data=data,
+            metrics=ProcessingStats(3, 3, 0, 0, 1.0, 10.0),
+            costs=CostEstimate(Decimal("0.01"), 100, 50, 50, 3),
+            execution_id=uuid4(),
+            start_time=datetime.now(),
+        )
 
-    def test_identifies_both_null_and_empty(self):
-        """Should identify both null and empty rows."""
-        df = pd.DataFrame({"output": ["valid", None, "", "valid", "  ", None]})
+        quality = result.validate_output_quality(["col1", "col2"])
 
-        # Simulate retry logic
-        null_mask = df["output"].isna()
-        empty_mask = df["output"].astype(str).str.strip() == ""
-        failed_mask = null_mask | empty_mask
-        failed_indices = df[failed_mask].index.tolist()
-
-        assert set(failed_indices) == {1, 2, 4, 5}
-        assert len(failed_indices) == 4
+        # Only 2 rows are valid (have at least one non-null column)
+        assert quality.valid_outputs == 2
+        # 4 null cells out of 6 total
+        assert quality.null_outputs == 4

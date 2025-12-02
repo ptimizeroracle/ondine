@@ -111,14 +111,20 @@ class ErrorHandler:
         row_index = context.get("row_index", "unknown")
         stage = context.get("stage", "unknown")
 
-        # Log the error
-        logger.error(
-            f"Error in {stage} at row {row_index}: {error}",
-            exc_info=True,
-        )
+        # Log the error (debug level to keep output clean)
+        logger.debug(f"Error in {stage} at row {row_index}: {error}")
 
-        # Check for NonRetryableError first (fail fast)
+        # Check for NonRetryableError first (fail fast UNLESS policy is SKIP)
         if isinstance(error, NonRetryableError):
+            if self.policy == ErrorPolicy.SKIP:
+                logger.debug(
+                    f"Skipping row {row_index} due to NonRetryableError: {error}"
+                )
+                return ErrorDecision(
+                    action=ErrorAction.SKIP,
+                    context=context,
+                )
+
             logger.error(
                 f"❌ NON-RETRYABLE ERROR: {error}\n"
                 f"   Type: {type(error).__name__}\n"
@@ -157,7 +163,7 @@ class ErrorHandler:
             )
 
         if self.policy == ErrorPolicy.SKIP:
-            logger.info(f"Skipping row {row_index} due to error")
+            logger.info(f"Skipping row {row_index} due to error: {error}")
             return ErrorDecision(
                 action=ErrorAction.SKIP,
                 context=context,

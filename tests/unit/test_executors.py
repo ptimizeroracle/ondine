@@ -141,9 +141,11 @@ class TestStreamingExecutor:
         loaded_data = data_loader.process(spec, context)
 
         # Mock the stage to accept chunks
+        # DataContainer doesn't have iloc - use slicing via list conversion
         chunks_processed = 0
-        for i in range(0, len(loaded_data), 2):
-            chunk = loaded_data.iloc[i : i + 2]
+        rows = list(loaded_data)
+        for i in range(0, len(rows), 2):
+            chunk = rows[i : i + 2]
             processing_stage.process(chunk, context)
             chunks_processed += 1
 

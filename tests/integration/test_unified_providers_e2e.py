@@ -115,19 +115,18 @@ Review: {{ text }}"""
 
     # Verify success
     assert result.success, f"{provider} pipeline failed"
-    assert len(result.data) == 2, f"{provider} returned wrong number of rows"
+    df = result.to_pandas()
+    assert len(df) == 2, f"{provider} returned wrong number of rows"
 
     # Verify structured output worked
-    assert "summary" in result.data.columns
-    assert "sentiment" in result.data.columns
-    assert result.data["summary"].notnull().all(), f"{provider} returned null summaries"
-    assert result.data["sentiment"].notnull().all(), (
-        f"{provider} returned null sentiments"
-    )
+    assert "summary" in df.columns
+    assert "sentiment" in df.columns
+    assert df["summary"].notnull().all(), f"{provider} returned null summaries"
+    assert df["sentiment"].notnull().all(), f"{provider} returned null sentiments"
 
     # Verify sentiment extraction (be lenient - models vary in interpretation)
-    sentiment_0 = str(result.data["sentiment"].iloc[0])
-    sentiment_1 = str(result.data["sentiment"].iloc[1])
+    sentiment_0 = str(df["sentiment"].iloc[0])
+    sentiment_1 = str(df["sentiment"].iloc[1])
     print(f"  Sentiments: '{sentiment_0}' vs '{sentiment_1}'")
 
     # Verify automatic cost tracking (THE KEY FEATURE!)
@@ -141,7 +140,7 @@ Review: {{ text }}"""
     assert result.costs.output_tokens > 0, f"{provider} token counting failed"
 
     print(f"\n✅ {provider.upper()} Results:")
-    print(f"  Rows processed: {len(result.data)}")
+    print(f"  Rows processed: {len(df)}")
     print(f"  Cost: ${result.costs.total_cost:.6f}")
     print(f"  Tokens: {result.costs.input_tokens} in, {result.costs.output_tokens} out")
     print("  Structured output: Working ✅")
@@ -212,12 +211,11 @@ Return:
 
     # Verify success
     assert result.success, f"{provider} batched pipeline failed"
-    assert len(result.data) == 6, (
-        f"{provider} returned {len(result.data)} rows, expected 6"
-    )
+    df_result = result.to_pandas()
+    assert len(df_result) == 6, f"{provider} returned {len(df_result)} rows, expected 6"
 
     # CRITICAL ASSERTION: Each row must have its EXACT input price extracted
-    for i, row in result.data.iterrows():
+    for i, row in df_result.iterrows():
         input_price = test_data[i]["price"]
         extracted_price = row["extracted_price"]
 
@@ -246,7 +244,7 @@ Return:
         5: "expensive",  # $500
     }
 
-    for i, row in result.data.iterrows():
+    for i, row in df_result.iterrows():
         category = str(row["price_category"]).lower().strip()
         expected = expected_categories[i]
         # Allow some flexibility in naming but verify the logic
@@ -264,16 +262,17 @@ Return:
             )
 
     # Verify uniqueness (sanity check)
-    unique_prices = result.data["extracted_price"].nunique()
+    df = result.to_pandas()
+    unique_prices = df["extracted_price"].nunique()
     assert unique_prices == 6, (
         f"{provider} CRITICAL BUG: Only {unique_prices} unique prices extracted from 6 rows! "
-        f"Extracted values: {result.data['extracted_price'].tolist()}"
+        f"Extracted values: {df['extracted_price'].tolist()}"
     )
 
     print(f"\n✅ {provider.upper()} Multi-Row Batching PASSED:")
     print("  Input prices:     [1, 5, 10, 50, 100, 500]")
-    print(f"  Extracted prices: {result.data['extracted_price'].tolist()}")
-    print(f"  Categories:       {result.data['price_category'].tolist()}")
+    print(f"  Extracted prices: {df['extracted_price'].tolist()}")
+    print(f"  Categories:       {df['price_category'].tolist()}")
     print("  ✅ Each row correctly extracted (no duplication)")
     print("  ✅ Mega-prompt batching working correctly")
 

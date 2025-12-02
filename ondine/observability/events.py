@@ -170,3 +170,45 @@ class PipelineEndEvent:
     input_tokens: int = 0
     output_tokens: int = 0
     metrics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProviderCooldownEvent:
+    """
+    Emitted when a provider enters cooldown (circuit breaker triggered).
+
+    This happens when a provider exceeds `allowed_fails` threshold.
+    The provider will be temporarily disabled for `cooldown_duration` seconds.
+    """
+
+    pipeline_id: UUID
+    run_id: UUID
+    timestamp: datetime
+    trace_id: str
+    span_id: str
+    provider: str  # e.g., "groq/llama-3.3-70b"
+    deployment_id: str  # LiteLLM model_id
+    reason: str  # Error message that triggered cooldown
+    cooldown_duration: int  # Seconds until recovery
+    fail_count: int = 0  # Number of failures that triggered cooldown
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProviderRecoveredEvent:
+    """
+    Emitted when a provider recovers from cooldown.
+
+    This happens when the cooldown period expires and the provider
+    becomes available again.
+    """
+
+    pipeline_id: UUID
+    run_id: UUID
+    timestamp: datetime
+    trace_id: str
+    span_id: str
+    provider: str  # e.g., "groq/llama-3.3-70b"
+    deployment_id: str  # LiteLLM model_id
+    cooldown_duration: int  # How long the provider was in cooldown
+    metadata: dict[str, Any] = field(default_factory=dict)

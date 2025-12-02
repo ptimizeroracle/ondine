@@ -11,8 +11,6 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-import pandas as pd
-
 
 @dataclass
 class LLMResponse:
@@ -58,110 +56,145 @@ class CostEstimate:
 
     total_cost: Decimal
     total_tokens: int
-    input_tokens: int
-    output_tokens: int
-    rows: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    rows: int = 0
     breakdown_by_stage: dict[str, Decimal] = field(default_factory=dict)
     confidence: str = "estimate"  # estimate, sample-based, actual
 
 
 @dataclass
 class ProcessingStats:
-    """
-    Statistics from pipeline execution.
-
-    Tracks processing metrics for monitoring and debugging.
-
-    Attributes:
-        total_rows: Total number of rows in dataset
-        processed_rows: Rows successfully processed
-        failed_rows: Rows that failed processing
-        skipped_rows: Rows skipped due to errors
-
-    Example:
-        ```python
-        result = pipeline.execute()
-
-        # Check success rate
-        success_rate = result.metrics.success_count / result.metrics.total_rows * 100
-        print(f"Success rate: {success_rate:.1f}%")
-
-        # Check for failures
-        if result.metrics.failed_rows > 0:
-            print(f"Warning: {result.metrics.failed_rows} rows failed")
-        ```
-    """
+    """Statistics from pipeline execution."""
 
     total_rows: int
     processed_rows: int
-    failed_rows: int
-    skipped_rows: int
-    rows_per_second: float
-    total_duration_seconds: float
+    failed_rows: int = 0
+    skipped_rows: int = 0
+    rows_per_second: float = 0.0
+    total_duration_seconds: float = 0.0
     stage_durations: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
 class ErrorInfo:
-    """Information about an error during processing."""
+    """Information about a processing error."""
 
     row_index: int
-    stage_name: str
+    stage: str
     error_type: str
-    error_message: str
-    timestamp: datetime
-    context: dict[str, Any] = field(default_factory=dict)
+    message: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    retryable: bool = True
 
 
 @dataclass
+class RowMetadata:
+    """Metadata for tracking individual rows through the pipeline."""
+
+    row_index: int
+    row_id: Any = None
+    custom: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PromptBatch:
+    """Batch of prompts for processing."""
+
+    prompts: list[str]
+    metadata: list[RowMetadata]
+    batch_id: int | str = 0
+
+
+@dataclass
+class ResponseBatch:
+    """Batch of responses from LLM."""
+
+    responses: (
+        list[str] | list["LLMResponse"]
+    )  # Can be strings or full LLMResponse objects
+    metadata: list[RowMetadata]
+    tokens_used: int = 0
+    cost: Decimal = Decimal("0")
+    batch_id: int | str = 0
+    latencies_ms: list[float] = field(default_factory=list)
+
+
+@dataclass
+class CheckpointInfo:
+    """Information about a saved checkpoint."""
+
+    checkpoint_id: UUID
+    session_id: UUID
+    timestamp: datetime
+    rows_processed: int
+    total_rows: int
+    cost_so_far: Decimal
+    stage: str
+    path: str | None = None
+
+
 class ExecutionResult:
     """
-    Complete result from pipeline execution.
+    Result from pipeline execution.
 
-    Contains all output data, metrics, costs, and execution metadata from a pipeline run.
+    Contains the output data, metrics, costs, and any errors.
 
     Attributes:
-        data: DataFrame with input data and generated output columns
-        metrics: Processing statistics (total_rows, success_count, failed_rows, etc.)
-        costs: Cost breakdown (total_cost, input_tokens, output_tokens)
-        errors: List of errors encountered during execution
-        execution_id: Unique ID for this execution session
+        data: Result data as DataContainer (framework-agnostic)
+        metrics: Processing statistics
+        costs: Cost breakdown
+        errors: List of errors encountered
+        execution_id: Unique execution identifier
         start_time: When execution started
-        end_time: When execution completed (None if still running)
-        success: Whether execution completed successfully
+        end_time: When execution completed
+        success: Whether execution succeeded
         metadata: Additional execution metadata
 
     Example:
         ```python
         result = pipeline.execute()
 
-        # Access output data
-        print(result.data.head())
-        result.data.to_csv("output.csv")
+        # Access raw container (default)
+        for row in result.data:
+            print(row)
 
-        # Check metrics
-        print(f"Total: {result.metrics.total_rows}")
-        print(f"Success: {result.metrics.success_count}")
-        print(f"Failed: {result.metrics.failed_rows}")
+        # Convert to Pandas when needed
+        df = result.to_pandas()
+        print(df["column"].iloc[0])
 
-        # Check costs
-        print(f"Cost: ${result.costs.total_cost}")
-        print(f"Tokens: {result.costs.total_tokens}")
+        # Or Polars
+        pl_df = result.to_polars()
+
+        # Or list of dicts
+        rows = result.to_list()
 
         # Check execution time
         print(f"Duration: {result.duration:.2f}s")
         ```
     """
 
-    data: pd.DataFrame
-    metrics: ProcessingStats
-    costs: CostEstimate
-    errors: list[ErrorInfo] = field(default_factory=list)
-    execution_id: UUID = field(default_factory=uuid4)
-    start_time: datetime = field(default_factory=datetime.now)
-    end_time: datetime | None = None
-    success: bool = True
-    metadata: dict[str, Any] = field(default_factory=dict)
+    def __init__(
+        self,
+        data: Any,  # ResultContainerImpl or any DataContainer
+        metrics: "ProcessingStats",
+        costs: "CostEstimate",
+        errors: list["ErrorInfo"] | None = None,
+        execution_id: UUID | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        success: bool = True,
+        metadata: dict[str, Any] | None = None,
+    ):
+        self.data = data  # Store as-is (container)
+        self.metrics = metrics
+        self.costs = costs
+        self.errors = errors or []
+        self.execution_id = execution_id or uuid4()
+        self.start_time = start_time or datetime.now()
+        self.end_time = end_time
+        self.success = success
+        self.metadata = metadata or {}
 
     @property
     def duration(self) -> float:
@@ -177,6 +210,49 @@ class ExecutionResult:
             return 0.0
         return (self.metrics.failed_rows / self.metrics.total_rows) * 100
 
+    def to_pandas(self) -> Any:
+        """
+        Convert result data to Pandas DataFrame.
+
+        Returns:
+            pandas.DataFrame
+        """
+        import pandas as pd
+
+        if isinstance(self.data, pd.DataFrame):
+            return self.data
+
+        if hasattr(self.data, "to_pandas"):
+            return self.data.to_pandas()
+
+        return pd.DataFrame(self.data)
+
+    def to_polars(self) -> Any:
+        """
+        Convert result data to Polars DataFrame.
+
+        Returns:
+            polars.DataFrame
+        """
+        if hasattr(self.data, "to_polars"):
+            return self.data.to_polars()
+
+        import polars as pl
+
+        return pl.from_pandas(self.to_pandas())
+
+    def to_list(self) -> list[dict[str, Any]]:
+        """
+        Convert result data to list of dictionaries.
+
+        Returns:
+            List of row dictionaries
+        """
+        if hasattr(self.data, "to_list"):
+            return self.data.to_list()
+
+        return self.to_pandas().to_dict(orient="records")
+
     def validate_output_quality(self, output_columns: list[str]) -> "QualityReport":
         """
         Validate the quality of output data by checking for null/empty values.
@@ -187,37 +263,31 @@ class ExecutionResult:
         Returns:
             QualityReport with quality metrics and warnings
         """
-        total_rows = len(self.data)
+        # Get data as list of dicts (works with any container)
+        rows = self.to_list()
+        total_rows = len(rows)
         total_columns = len(output_columns)
         total_cells = total_rows * total_columns
 
         # Count null and empty values across ALL output columns
         null_count = 0
         empty_count = 0
+        valid_row_count = 0
 
-        for col in output_columns:
-            if col in self.data.columns:
-                # Count nulls (None, NaN, NaT)
-                null_count += self.data[col].isna().sum()
-                # Count empty strings (only for string columns)
-                if self.data[col].dtype == "object":
-                    empty_count += (self.data[col].astype(str).str.strip() == "").sum()
-
-        # Count rows with at least one valid output column
-        # A row is "valid" if at least one output column has non-null, non-empty data
-        valid_row_mask = False
-        for col in output_columns:
-            if col in self.data.columns:
-                non_null = ~self.data[col].isna()
-                if self.data[col].dtype == "object":
-                    non_empty = self.data[col].astype(str).str.strip() != ""
-                    valid_row_mask |= non_null & non_empty
+        for row in rows:
+            row_has_valid = False
+            for col in output_columns:
+                value = row.get(col)
+                if value is None:
+                    null_count += 1
+                elif isinstance(value, str) and value.strip() == "":
+                    empty_count += 1
                 else:
-                    valid_row_mask |= non_null
+                    row_has_valid = True
+            if row_has_valid:
+                valid_row_count += 1
 
-        valid_outputs = (
-            valid_row_mask.sum() if isinstance(valid_row_mask, pd.Series) else 0
-        )
+        valid_outputs = valid_row_count
         success_rate = (valid_outputs / total_rows * 100) if total_rows > 0 else 0.0
 
         # Determine quality score
@@ -236,17 +306,21 @@ class ExecutionResult:
 
         if success_rate < 70.0:
             issues.append(
-                f"⚠️  LOW SUCCESS RATE: Only {success_rate:.1f}% of rows have valid data "
+                f"LOW SUCCESS RATE: Only {success_rate:.1f}% of rows have valid data "
                 f"({valid_outputs}/{total_rows} rows with at least one valid column)"
             )
 
-        if null_count > total_cells * 0.3:  # > 30% of all cells are null
+        if (
+            total_cells > 0 and null_count > total_cells * 0.3
+        ):  # > 30% of all cells are null
             issues.append(
-                f"⚠️  HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
+                f"HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
                 f"({null_count / total_cells * 100:.1f}% of all output cells)"
             )
 
-        if empty_count > total_cells * 0.1:  # > 10% of all cells are empty
+        if (
+            total_cells > 0 and empty_count > total_cells * 0.1
+        ):  # > 10% of all cells are empty
             warnings.append(
                 f"Empty outputs detected: {empty_count} empty cells out of {total_cells} total "
                 f"({empty_count / total_cells * 100:.1f}% of all output cells)"
@@ -255,7 +329,7 @@ class ExecutionResult:
         # Check if reported metrics match actual data quality
         if self.metrics.failed_rows == 0 and null_count > 0:
             issues.append(
-                f"⚠️  METRICS MISMATCH: Pipeline reported 0 failures but "
+                f"METRICS MISMATCH: Pipeline reported 0 failures but "
                 f"{null_count} cells have null outputs. This may indicate silent errors."
             )
 
@@ -319,50 +393,6 @@ class WriteConfirmation:
 
     path: str
     rows_written: int
-    success: bool
+    bytes_written: int = 0
+    format: str = "csv"
     timestamp: datetime = field(default_factory=datetime.now)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class CheckpointInfo:
-    """Information about a checkpoint."""
-
-    session_id: UUID
-    checkpoint_path: str
-    row_index: int
-    stage_index: int
-    timestamp: datetime
-    size_bytes: int
-
-
-@dataclass
-class RowMetadata:
-    """Metadata for a single row during processing."""
-
-    row_index: int
-    row_id: Any | None = None
-    batch_id: int | None = None
-    attempt: int = 1
-    custom: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class PromptBatch:
-    """Batch of prompts for processing."""
-
-    prompts: list[str]
-    metadata: list[RowMetadata]
-    batch_id: int
-
-
-@dataclass
-class ResponseBatch:
-    """Batch of responses from LLM."""
-
-    responses: list[str]
-    metadata: list[RowMetadata]
-    tokens_used: int
-    cost: Decimal
-    batch_id: int
-    latencies_ms: list[float] = field(default_factory=list)

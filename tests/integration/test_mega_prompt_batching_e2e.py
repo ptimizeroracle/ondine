@@ -141,11 +141,12 @@ Extract:
     result = pipeline.execute()
 
     # Verify success
+    df = result.to_pandas()
     assert result.success, f"{provider} pipeline failed: {result.error}"
-    assert len(result.data) == 10, f"Expected 10 rows, got {len(result.data)}"
+    assert len(df) == 10, f"Expected 10 rows, got {len(df)}"
 
     # Verify all rows have results
-    for idx, row in result.data.iterrows():
+    for idx, row in df.iterrows():
         assert row["product_name"] is not None, f"Row {idx}: product_name is None"
         assert isinstance(row["product_name"], str), (
             f"Row {idx}: product_name not a string"
@@ -153,9 +154,7 @@ Extract:
         assert len(row["product_name"]) > 0, f"Row {idx}: product_name is empty"
 
     # Verify specific extractions (spot checks)
-    headphones_row = result.data[
-        result.data["product_description"].str.contains("Headphones")
-    ].iloc[0]
+    headphones_row = df[df["product_description"].str.contains("Headphones")].iloc[0]
     assert "headphone" in headphones_row["product_name"].lower(), (
         "Headphones not extracted correctly"
     )
@@ -163,16 +162,14 @@ Extract:
         "Price not extracted from headphones"
     )
 
-    coffee_row = result.data[
-        result.data["product_description"].str.contains("Coffee")
-    ].iloc[0]
+    coffee_row = df[df["product_description"].str.contains("Coffee")].iloc[0]
     assert "coffee" in coffee_row["product_name"].lower(), (
         "Coffee not extracted correctly"
     )
     assert coffee_row["category"] is not None, "Category not extracted from coffee"
 
     # Verify keywords are lists (structured output should enforce schema)
-    for idx, row in result.data.iterrows():
+    for idx, row in df.iterrows():
         if row["keywords"] is not None:
             assert isinstance(row["keywords"], list), (
                 f"Row {idx}: expected keywords to be list from structured output, "
@@ -180,13 +177,13 @@ Extract:
             )
 
     print(f"\n{provider.upper()} Mega-Prompt Batching Test Results:")
-    print(f"  Rows processed: {len(result.data)}/10")
+    print(f"  Rows processed: {len(df)}/10")
     print("  API calls: 2 (5 rows per batch)")
     print(f"  Cost: ${result.costs.total_cost:.4f}")
     print("  ✅ Batching working correctly")
     print("\nSample extractions:")
     for i in range(3):
-        print(f"  {i + 1}. {result.data.iloc[i]['product_name'][:50]}")
+        print(f"  {i + 1}. {df.iloc[i]['product_name'][:50]}")
 
 
 @pytest.mark.integration
@@ -232,11 +229,12 @@ def test_mega_prompt_preserves_order():
 
     result = pipeline.execute()
 
+    df = result.to_pandas()
     assert result.success, "Pipeline failed"
-    assert len(result.data) == 20, f"Expected 20 rows, got {len(result.data)}"
+    assert len(df) == 20, f"Expected 20 rows, got {len(df)}"
 
     # Verify order is preserved
-    for idx, row in result.data.iterrows():
+    for idx, row in df.iterrows():
         expected_id = row["id"]
         # The extracted_id might be a string, so convert for comparison
         if row["extracted_id"] is not None:
@@ -297,12 +295,13 @@ def test_mega_prompt_handles_null_values():
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success, "Pipeline should handle null values gracefully"
-    assert len(result.data) == 5, f"Expected 5 rows, got {len(result.data)}"
+    assert len(df) == 5, f"Expected 5 rows, got {len(df)}"
 
     # Verify all rows have some result (even if input was null)
-    for idx, row in result.data.iterrows():
+    for idx, row in df.iterrows():
         assert row["summary"] is not None, (
             f"Row {idx} with null input should still have output"
         )

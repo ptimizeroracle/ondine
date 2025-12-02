@@ -102,22 +102,21 @@ CRITICAL: Parse the package size number from DISTRB_PACK_SZ field.""")
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success, f"{provider} pipeline failed"
-    assert len(result.data) == 2, f"{provider} returned wrong number of rows"
-    assert "cleaned_description" in result.data.columns
-    assert result.data["pack_size"].notnull().all(), (
-        f"{provider} returned null pack_size values"
-    )
+    assert len(df) == 2, f"{provider} returned wrong number of rows"
+    assert "cleaned_description" in df.columns
+    assert df["pack_size"].notnull().all(), f"{provider} returned null pack_size values"
 
     # Verify extraction correctness
-    assert result.data["pack_size"].iloc[0] == 15.0, (
+    assert df["pack_size"].iloc[0] == 15.0, (
         f"{provider} failed to extract pack_size correctly from '15 LB'"
     )
-    assert "BACON" in result.data["cleaned_description"].iloc[0].upper(), (
+    assert "BACON" in df["cleaned_description"].iloc[0].upper(), (
         f"{provider} failed to extract description correctly"
     )
 
     # Print results for manual inspection
     print(f"\n{provider.upper()} E2E Results:")
-    print(result.data[["cleaned_description", "pack_size"]])
+    print(df[["cleaned_description", "pack_size"]])
     print(f"Cost: ${result.costs.total_cost:.4f}")

@@ -63,12 +63,13 @@ def test_router_multi_provider_fallback():
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success
-    assert len(result.data) == 2
-    assert result.data["answer"].notnull().all()
+    assert len(df) == 2
+    assert df["answer"].notnull().all()
 
     print("\nRouter Multi-Provider E2E:")
-    print(result.data)
+    print(df)
     print(f"Cost: ${result.costs.total_cost:.4f}")
     print("Note: Router automatically picked best deployment!")
 
@@ -119,11 +120,12 @@ def test_router_same_provider_load_balance():
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success
-    assert len(result.data) == 3
+    assert len(df) == 3
     print("\nRouter Load Balancing E2E:")
-    print(f"Processed: {len(result.data)} rows")
+    print(f"Processed: {len(df)} rows")
     print(f"Cost: ${result.costs.total_cost:.4f}")
 
 
