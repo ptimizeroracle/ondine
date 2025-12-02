@@ -64,3 +64,6 @@ docs/ARCHITECTURE.md
 # Local working directory
 .local/
 multi_stage_classification_groq.py
+
+# Cache directory
+.cache/

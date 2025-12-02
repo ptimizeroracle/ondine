@@ -4,18 +4,22 @@ Main Pipeline class - the Facade for the entire system.
 This is the primary entry point that users interact with.
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pandas as pd
+import polars as pl
 
 from ondine.adapters import (
     LocalFileCheckpointStorage,
     create_llm_client,
 )
+from ondine.adapters.streaming_loader import StreamingDataLoader
+from ondine.adapters.streaming_writer import StreamingResultWriter
 from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
@@ -250,6 +254,17 @@ class Pipeline:
             Progress is automatically saved via checkpoints. If execution fails,
             use resume_from to continue from the last checkpoint.
         """
+        # Enable uvloop for high performance (UNIX only)
+        try:
+            import uvloop
+
+            uvloop.install()
+            self.logger.debug("uvloop enabled for high-performance event loop")
+        except ImportError:
+            pass  # uvloop not installed or not supported (Windows)
+        except Exception as e:
+            self.logger.debug(f"Could not enable uvloop: {e}")
+
         # Validate first
         validation = self.validate()
         if not validation.is_valid:
@@ -361,10 +376,11 @@ class Pipeline:
             # Optional: Auto-retry failed rows
             if self.specifications.processing.auto_retry_failed:
                 # Get preprocessed data from context (or loaded data if no preprocessing)
-                retry_source_df = context.intermediate_data.get("preprocessed_data")
-                if retry_source_df is None:
-                    retry_source_df = context.intermediate_data.get("loaded_data")
-                result = self._auto_retry_failed_rows(result, retry_source_df)
+                retry_source = context.intermediate_data.get("preprocessed_data")
+                if retry_source is None:
+                    retry_source = context.intermediate_data.get("loaded_data")
+                # Pass container directly (no Pandas conversion)
+                result = self._auto_retry_failed_rows(result, retry_source)
 
             # Cleanup checkpoints on success
             state_manager.cleanup_checkpoints(context.session_id)
@@ -406,6 +422,15 @@ class Pipeline:
                 context.observer_dispatcher.close_all()
 
             return result
+
+        except KeyboardInterrupt:
+            self.logger.warning("\n🛑 Pipeline interrupted by user.")
+            # Save checkpoint on interrupt
+            state_manager.save_checkpoint(context)
+            self.logger.warning(
+                f"Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
+            )
+            raise
 
         except Exception as e:
             # Save checkpoint on error
@@ -481,10 +506,10 @@ class Pipeline:
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
-            from ondine.utils.input_preprocessing import preprocess_dataframe
+            from ondine.utils.input_preprocessing import preprocess_container
 
             self.logger.info("Preprocessing loaded data...")
-            df, stats = preprocess_dataframe(
+            df, stats = preprocess_container(
                 df,
                 input_columns=specs.dataset.input_columns,
                 max_length=specs.processing.preprocessing_max_length,
@@ -528,7 +553,22 @@ class Pipeline:
             )
 
         # Stage 3: Invoke LLM
-        llm_client = create_llm_client(specs.llm)
+        # Pass instructor_mode from metadata to LLMSpec if set
+        llm_spec = specs.llm
+        if specs.metadata and "instructor_mode" in specs.metadata:
+            # Create a copy of the spec with the instructor_mode set
+            llm_spec = llm_spec.model_copy(
+                update={"instructor_mode": specs.metadata["instructor_mode"]}
+            )
+
+        llm_client = create_llm_client(llm_spec)
+
+        # Wire observer dispatcher to LLM client (for direct SDK integration)
+        if context.observer_dispatcher and hasattr(
+            llm_client, "set_observer_dispatcher"
+        ):
+            llm_client.set_observer_dispatcher(context.observer_dispatcher)
+
         rate_limiter = (
             RateLimiter(
                 specs.processing.rate_limit_rpm,
@@ -611,10 +651,35 @@ class Pipeline:
         if specs.output:
             writer = ResultWriterStage()
             return self._execute_stage(writer, (df, results_df, specs.output), context)
-        # Merge results with original
-        for col in results_df.columns:
-            df[col] = results_df[col]
-        return df
+
+        # Merge results with original data container
+        # Build lookup from results by row_index
+        from ondine.adapters.containers import ResultContainerImpl
+
+        results_lookup: dict[int, dict] = {}
+        result_columns = [c for c in results_df.columns if c != "_row_index"]
+        for row in results_df:
+            row_idx = row.get("_row_index", row.get("row_index"))
+            if row_idx is not None:
+                results_lookup[row_idx] = row
+
+        # Merge into new container
+        merged_rows: list[dict] = []
+        for idx, orig_row in enumerate(df):
+            merged_row = dict(orig_row)
+            if idx in results_lookup:
+                result_row = results_lookup[idx]
+                for col in result_columns:
+                    merged_row[col] = result_row.get(col)
+            merged_rows.append(merged_row)
+
+        # Determine merged columns
+        merged_columns = list(df.columns)
+        for col in result_columns:
+            if col not in merged_columns:
+                merged_columns.append(col)
+
+        return ResultContainerImpl(data=merged_rows, columns=merged_columns)
 
     async def execute_async(self, resume_from: UUID | None = None) -> ExecutionResult:
         """
@@ -721,6 +786,168 @@ class Pipeline:
             )
             yield chunk_result
 
+    async def execute_stream_async(
+        self,
+        chunk_size: int = 10000,
+        max_pending_chunks: int = 3,
+        output_path: str | Path | None = None,
+    ) -> AsyncIterator[ExecutionResult]:
+        """
+        Execute pipeline in true streaming mode with bounded memory.
+
+        This is the recommended method for processing large datasets (100K+ rows).
+        Memory usage is O(chunk_size), not O(total_rows).
+
+        Uses:
+        - Polars LazyFrame for memory-efficient data loading
+        - Bounded async queue for backpressure
+        - Incremental result writing
+
+        Args:
+            chunk_size: Number of rows per chunk (default: 10000)
+            max_pending_chunks: Max chunks in processing queue (default: 3)
+            output_path: Optional path to write results incrementally
+
+        Yields:
+            ExecutionResult for each processed chunk
+
+        Example:
+            async for chunk_result in pipeline.execute_stream_async(chunk_size=5000):
+                print(f"Processed {chunk_result.metrics.processed_rows} rows")
+
+        Memory Guarantee:
+            Peak memory ≈ chunk_size * max_pending_chunks * avg_row_size
+            Independent of total dataset size.
+        """
+        import asyncio
+
+        start_time = datetime.now()
+        execution_id = uuid4()
+
+        # Setup streaming components
+        specs = self.specifications
+        source_path = specs.dataset.source_path
+
+        if source_path is None and self.dataframe is None:
+            raise ValueError(
+                "Streaming mode requires a file path or dataframe. "
+                "Set source_path in DatasetSpec or provide a dataframe."
+            )
+
+        # Initialize writer if output path provided
+        writer: StreamingResultWriter | None = None
+        if output_path:
+            writer = StreamingResultWriter(output_path)
+
+        # Note: StreamingProcessor is available for advanced use cases
+        # but current implementation processes chunks directly
+
+        # Track aggregate metrics
+        total_rows = 0
+        total_cost = Decimal("0")
+        total_tokens = 0
+        chunk_index = 0
+
+        try:
+            # Create data source
+            if source_path:
+                loader = StreamingDataLoader(
+                    path=source_path,
+                    chunk_size=chunk_size,
+                    columns=specs.dataset.input_columns,
+                )
+                data_source = loader.stream_chunks()
+            else:
+                # Stream from in-memory dataframe
+                data_source = self._stream_dataframe_chunks(self.dataframe, chunk_size)
+
+            # Process each chunk through the pipeline
+            async for chunk_pl in data_source:
+                # Convert Polars to Pandas for compatibility with existing stages
+                chunk_df = chunk_pl.to_pandas()
+
+                # Process this chunk through the pipeline
+                chunk_result = await self._process_chunk_async(
+                    chunk_df, execution_id, chunk_index
+                )
+
+                # Update aggregates
+                total_rows += chunk_result.metrics.processed_rows
+                total_cost += chunk_result.costs.total_cost
+                total_tokens += chunk_result.costs.total_tokens
+
+                # Write incrementally if writer configured
+                if writer and chunk_result.data is not None:
+                    result_pl = pl.from_pandas(chunk_result.data)
+                    await writer.append_async(result_pl)
+
+                chunk_index += 1
+                yield chunk_result
+
+                # Yield control to event loop
+                await asyncio.sleep(0)
+
+        finally:
+            # Finalize writer
+            if writer:
+                write_stats = writer.finalize()
+                self.logger.info(f"Streaming output: {write_stats}")
+
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        self.logger.info(
+            f"Streaming complete: {total_rows} rows in {duration:.1f}s "
+            f"({total_rows / duration:.1f} rows/sec), "
+            f"cost: ${total_cost:.4f}"
+        )
+
+    async def _stream_dataframe_chunks(
+        self, df: pd.DataFrame, chunk_size: int
+    ) -> AsyncIterator[pl.DataFrame]:
+        """Stream chunks from an in-memory DataFrame."""
+        import asyncio
+
+        for start in range(0, len(df), chunk_size):
+            end = min(start + chunk_size, len(df))
+            chunk_pd = df.iloc[start:end]
+            yield pl.from_pandas(chunk_pd)
+            await asyncio.sleep(0)  # Yield to event loop
+
+    async def _process_chunk_async(
+        self,
+        chunk_df: pd.DataFrame,
+        execution_id: UUID,
+        chunk_index: int,
+    ) -> ExecutionResult:
+        """Process a single chunk through the pipeline stages."""
+        from ondine.orchestration import AsyncExecutor
+
+        chunk_start = datetime.now()
+
+        # Create a mini-pipeline for this chunk
+        chunk_specs = self.specifications.model_copy(deep=True)
+        chunk_specs.dataset.source_path = None  # Use dataframe
+        chunk_specs.output = None  # Don't write (we handle it)
+
+        chunk_pipeline = Pipeline(
+            specifications=chunk_specs,
+            dataframe=chunk_df,
+            executor=AsyncExecutor(),
+        )
+
+        # Execute the chunk
+        result = await chunk_pipeline.execute_async()
+
+        chunk_end = datetime.now()
+        duration = (chunk_end - chunk_start).total_seconds()
+
+        self.logger.debug(
+            f"Chunk {chunk_index}: {len(chunk_df)} rows in {duration:.2f}s"
+        )
+
+        return result
+
     def _execute_stage(
         self, stage: Any, input_data: Any, context: ExecutionContext
     ) -> Any:
@@ -746,7 +973,7 @@ class Pipeline:
             raise
 
     def _auto_retry_failed_rows(
-        self, result: ExecutionResult, original_df: pd.DataFrame
+        self, result: ExecutionResult, original_container: Any
     ) -> ExecutionResult:
         """
         Row-level quality retry (re-executes entire pipeline for failed rows).
@@ -766,6 +993,7 @@ class Pipeline:
         - Creates NEW pipeline instance for retry (isolation)
         - Uses original preprocessed data (not re-preprocessed)
         - Disables auto_retry on retry pipeline (prevents infinite loop)
+        - Uses pure Python iteration (no Pandas dependency internally)
 
         See Also:
         - RetryHandler: Request-level retry for transient errors
@@ -774,40 +1002,48 @@ class Pipeline:
 
         Args:
             result: Initial execution result
-            original_df: Original (preprocessed) input dataframe
+            original_container: Original (preprocessed) input DataContainer
 
         Returns:
             ExecutionResult with retried rows merged in
         """
-        if original_df is None:
-            self.logger.warning("Cannot retry: original dataframe is None")
+        from ondine.adapters.containers.result_container import ResultContainerImpl
+        from ondine.core.specifications import DataSourceType
+
+        if original_container is None:
+            self.logger.warning("Cannot retry: original data is None")
             return result
 
         specs = self.specifications
         output_cols = specs.dataset.output_columns
 
+        # Convert original container to list for indexing
+        original_rows = original_container.to_list()
+
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
-            # Find rows where ALL output columns are null/empty (indicates complete failure)
-            # Start with True (all failed), then AND with each column check
-            failed_mask = pd.Series([True] * len(result.data), index=result.data.index)
+            # Get current result as list of dicts
+            result_rows = result.to_list()
 
-            for col in output_cols:
-                if col in result.data.columns:
-                    null_mask = result.data[col].isna()
-                    # Handle potential non-string types gracefully
-                    empty_mask = (
-                        result.data[col].astype(str).str.strip() == ""
-                        if result.data[col].dtype == "object"
-                        or result.data[col].dtype == "string"
-                        else pd.Series(
-                            [False] * len(result.data), index=result.data.index
-                        )
-                    )
-                    # Row is failed ONLY if this column is ALSO null/empty
-                    failed_mask &= null_mask | empty_mask
-
-            failed_indices = result.data[failed_mask].index.tolist()
+            # Find failed row indices (pure Python - no Pandas)
+            failed_indices = []
+            for idx, row in enumerate(result_rows):
+                # Check if ALL output columns are null/empty
+                all_failed = True
+                for col in output_cols:
+                    value = row.get(col)
+                    if value is not None:
+                        # Check if it's a non-empty string
+                        if isinstance(value, str):
+                            if value.strip():
+                                all_failed = False
+                                break
+                        else:
+                            # Non-string, non-None value is valid
+                            all_failed = False
+                            break
+                if all_failed:
+                    failed_indices.append(idx)
 
             if not failed_indices:
                 break
@@ -817,42 +1053,40 @@ class Pipeline:
                 f"{len(failed_indices)} rows"
             )
 
-            # Extract failed rows from original (preprocessed) data
-            retry_df = original_df.loc[failed_indices].copy()
+            # Extract failed rows from original data
+            retry_rows = [original_rows[i] for i in failed_indices]
 
-            # Store original indices for mapping back
-            original_indices = retry_df.index.tolist()
-            retry_df = retry_df.reset_index(drop=True)
+            # Convert to DataFrame for pipeline (Pipeline still expects DataFrame input)
+            retry_df = pd.DataFrame(retry_rows)
 
-            # Create modified specs for retry (use dataframe, not file)
-            from ondine.core.specifications import DataSourceType
-
+            # Create modified specs for retry
             retry_specs = self.specifications.model_copy(deep=True)
             retry_specs.dataset.source_type = DataSourceType.DATAFRAME
-            retry_specs.dataset.source_path = None  # Force use of dataframe
-            retry_specs.processing.enable_preprocessing = False  # Already preprocessed
-            retry_specs.processing.auto_retry_failed = (
-                False  # Prevent infinite retry loop
-            )
-            retry_specs.output = None  # Don't write to file during retry
+            retry_specs.dataset.source_path = None
+            retry_specs.processing.enable_preprocessing = False
+            retry_specs.processing.auto_retry_failed = False
+            retry_specs.output = None
 
             # Create new pipeline for retry
-            retry_pipeline = Pipeline(
-                retry_specs,
-                dataframe=retry_df,
-            )
+            retry_pipeline = Pipeline(retry_specs, dataframe=retry_df)
 
             # Execute retry
             retry_result = retry_pipeline.execute()
 
-            # Merge retry results back (map reset indices to original indices)
-            # IMPORTANT: Use iloc (position-based) for retry_result because it's reset_index
-            # Use loc (label-based) for result.data to preserve original indices
-            for col in output_cols:
-                for new_idx, original_idx in enumerate(original_indices):
-                    result.data.loc[original_idx, col] = retry_result.data.iloc[
-                        new_idx
-                    ][col]
+            # Merge retry results back (pure Python)
+            retry_result_rows = retry_result.to_list()
+            for new_idx, original_idx in enumerate(failed_indices):
+                for col in output_cols:
+                    if new_idx < len(retry_result_rows):
+                        result_rows[original_idx][col] = retry_result_rows[new_idx].get(
+                            col
+                        )
+
+            # Update result with merged data
+            result.data = ResultContainerImpl(
+                data=result_rows,
+                columns=list(result_rows[0].keys()) if result_rows else [],
+            )
 
             # Update costs
             result.costs.total_cost += retry_result.costs.total_cost

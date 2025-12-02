@@ -177,10 +177,11 @@ class TestComposerExecution:
 
         # Execute
         result = composer.execute()
+        df = result.to_pandas()
 
         assert isinstance(result, ExecutionResult)
-        assert "output1" in result.data.columns
-        assert len(result.data) == 2
+        assert "output1" in df.columns
+        assert len(df) == 2
 
     @patch("ondine.api.pipeline.Pipeline.execute")
     def test_execute_multiple_independent_columns(self, mock_execute):
@@ -263,11 +264,12 @@ class TestComposerExecution:
         composer.add_column("explanation", p2, depends_on=["match_score"])
 
         result = composer.execute()
+        df = result.to_pandas()
 
         # Should execute in order: match_score -> explanation
         assert execution_log == ["match_score", "explanation"]
-        assert "match_score" in result.data.columns
-        assert "explanation" in result.data.columns
+        assert "match_score" in df.columns
+        assert "explanation" in df.columns
 
 
 class TestComposerConfiguration:

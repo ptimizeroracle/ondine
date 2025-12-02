@@ -4,17 +4,20 @@ import json
 import re
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from pydantic import BaseModel, ValidationError
 
+from ondine.adapters.containers.result_container import ResultContainerImpl
 from ondine.core.models import (
     CostEstimate,
     ResponseBatch,
     ValidationResult,
 )
 from ondine.stages.pipeline_stage import PipelineStage
+
+if TYPE_CHECKING:
+    from ondine.core.data_container import Row  # noqa: TC001
 
 
 class ResponseParser(ABC):
@@ -147,16 +150,19 @@ class RegexParser(ResponseParser):
 
 
 class ResponseParserStage(
-    PipelineStage[tuple[list[ResponseBatch], list[str]], pd.DataFrame]
+    PipelineStage[tuple[list[ResponseBatch], list[str]], ResultContainerImpl]
 ):
     """
-    Parse LLM responses into structured DataFrame.
+    Parse LLM responses into structured ResultContainer.
+
+    Now returns ResultContainerImpl instead of pd.DataFrame for
+    framework-agnostic output.
 
     Responsibilities:
     - Parse responses using configured parser
     - Map parsed data to output columns
     - Handle parse errors gracefully
-    - Return DataFrame with results
+    - Return ResultContainer with results
     """
 
     def __init__(
@@ -179,8 +185,8 @@ class ResponseParserStage(
         self,
         input_data: tuple[list[ResponseBatch], list[str]] | list[ResponseBatch],
         context: Any,
-    ) -> pd.DataFrame:
-        """Parse responses into DataFrame."""
+    ) -> ResultContainerImpl:
+        """Parse responses into ResultContainer."""
         # Handle both tuple (batches, output_cols) and list [batches] for backward compatibility
         if isinstance(input_data, tuple):
             batches, output_cols = input_data
@@ -192,8 +198,8 @@ class ResponseParserStage(
             batches = input_data
             output_cols = self.output_columns
 
-        # Initialize result storage
-        results: dict[int, dict[str, Any]] = {}
+        # Initialize result storage - use dict to maintain row_index ordering
+        results: dict[int, Row] = {}
 
         # Parse all responses
         for batch in batches:
@@ -209,11 +215,15 @@ class ResponseParserStage(
 
                     # Handle None result (e.g. from "null" input for retry)
                     if parsed is None:
-                        results[metadata.row_index] = {col: None for col in output_cols}
+                        results[metadata.row_index] = {
+                            "_row_index": metadata.row_index,
+                            **{col: None for col in output_cols},
+                        }
                         continue
 
                     # Map to output columns
-                    row_data = {}
+                    row_data: Row = {"_row_index": metadata.row_index}
+
                     if len(output_cols) == 1:
                         # Single output column
                         if isinstance(parsed, dict) and output_cols[0] in parsed:
@@ -230,7 +240,11 @@ class ResponseParserStage(
                     else:
                         # Multiple output columns
                         for col in output_cols:
-                            row_data[col] = parsed.get(col, None)
+                            row_data[col] = (
+                                parsed.get(col, None)
+                                if isinstance(parsed, dict)
+                                else None
+                            )
 
                     results[metadata.row_index] = row_data
 
@@ -239,15 +253,23 @@ class ResponseParserStage(
                         f"Failed to parse response at row {metadata.row_index}: {e}"
                     )
                     # Store None for failed parses
-                    results[metadata.row_index] = {col: None for col in output_cols}
+                    results[metadata.row_index] = {
+                        "_row_index": metadata.row_index,
+                        **{col: None for col in output_cols},
+                    }
 
-        # Create DataFrame
-        df = pd.DataFrame.from_dict(results, orient="index")
-        df.index.name = "row_index"
+        # Convert to list sorted by row_index
+        sorted_results = [results[idx] for idx in sorted(results.keys())]
+
+        # Create ResultContainer
+        container = ResultContainerImpl(
+            data=sorted_results,
+            columns=["_row_index"] + list(output_cols),
+        )
 
         self.logger.info(f"Parsed {len(results)} responses")
 
-        return df
+        return container
 
     def validate_input(
         self, input_data: tuple[list[ResponseBatch], list[str]]

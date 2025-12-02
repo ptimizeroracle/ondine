@@ -77,6 +77,10 @@ class MockLLMClient(LLMClient):
             latency_ms=100.0,
         )
 
+    async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+        """Mock async invoke."""
+        return self.invoke(prompt, **kwargs)
+
     def structured_invoke(self, prompt: str, output_cls, **kwargs: Any) -> LLMResponse:
         """Mock structured invoke (required by abstract base)."""
         from pydantic import BaseModel
@@ -95,6 +99,20 @@ class MockLLMClient(LLMClient):
             cost=Decimal("0.001"),
             latency_ms=100.0,
         )
+
+    async def structured_invoke_async(
+        self, prompt: str, output_cls, **kwargs: Any
+    ) -> LLMResponse:
+        """Mock structured async invoke."""
+        return self.structured_invoke(prompt, output_cls, **kwargs)
+
+    async def start(self):
+        """Mock start."""
+        pass
+
+    async def stop(self):
+        """Mock stop."""
+        pass
 
     def estimate_tokens(self, text: str) -> int:
         """Mock token estimation."""

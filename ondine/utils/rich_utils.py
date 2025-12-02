@@ -164,7 +164,7 @@ def display_router_deployments(
     console = get_console()
 
     # Summary line (always shown)
-    summary = f"🌐 Router: {len(deployments)} deployments for '{model_name}' | Strategy: {strategy}"
+    summary = f"Router: {len(deployments)} deployments for '{model_name}' | Strategy: {strategy}"
 
     if console:
         console.print(f"[{THEME['info']}]{summary}[/{THEME['info']}]")
@@ -277,13 +277,13 @@ def display_pipeline_summary(
 
         panel = Panel(
             table,
-            title="[bold green]✅ Pipeline Complete[/bold green]",
+            title="[bold green]Pipeline Complete[/bold green]",
             border_style="green",
         )
         console.print(panel)
     else:
         # Fallback
-        print("\n✅ Pipeline Complete")
+        print("\nPipeline Complete")
         print(f"   Rows: {processed_rows:,}/{total_rows:,}")
         print(f"   Failed: {failed_rows:,}")
         print(f"   Duration: {duration:.2f}s")
@@ -353,9 +353,9 @@ def print_success(message: str) -> None:
     """Print success message with green checkmark."""
     console = get_console()
     if console:
-        console.print(f"[{THEME['success']}]✅ {message}[/{THEME['success']}]")
+        console.print(f"[{THEME['success']}]{message}[/{THEME['success']}]")
     else:
-        print(f"✅ {message}")
+        print(f"{message}")
 
 
 def print_error(message: str) -> None:
@@ -371,18 +371,18 @@ def print_warning(message: str) -> None:
     """Print warning message with yellow triangle."""
     console = get_console()
     if console:
-        console.print(f"[{THEME['warning']}]⚠️  {message}[/{THEME['warning']}]")
+        console.print(f"[{THEME['warning']}]WARNING: {message}[/{THEME['warning']}]")
     else:
-        print(f"⚠️  {message}")
+        print(f"WARNING: {message}")
 
 
 def print_info(message: str) -> None:
     """Print info message with cyan color."""
     console = get_console()
     if console:
-        console.print(f"[{THEME['info']}]ℹ️  {message}[/{THEME['info']}]")
+        console.print(f"[{THEME['info']}]{message}[/{THEME['info']}]")
     else:
-        print(f"ℹ️  {message}")
+        print(f"INFO: {message}")
 
 
 def print_step(step: int, total: int, message: str) -> None:
@@ -428,9 +428,9 @@ def display_llm_invocation_start(
     )
 
     if console:
-        console.print(f"[{THEME['info']}]🚀 {message}[/{THEME['info']}]")
+        console.print(f"[{THEME['info']}]{message}[/{THEME['info']}]")
     else:
-        print(f"🚀 {message}")
+        print(message)
 
 
 # =============================================================================

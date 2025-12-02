@@ -2,6 +2,7 @@
 
 from ondine.stages.batch_aggregator_stage import BatchAggregatorStage
 from ondine.stages.batch_disaggregator_stage import BatchDisaggregatorStage
+from ondine.stages.batch_processor import BatchMap, BatchProcessor, PromptItem
 from ondine.stages.data_loader_stage import DataLoaderStage
 from ondine.stages.llm_invocation_stage import LLMInvocationStage
 from ondine.stages.multi_run_stage import (
@@ -52,4 +53,8 @@ __all__ = [
     # Stage Registry
     "StageRegistry",
     "stage",
+    # Batch processing utilities
+    "BatchProcessor",
+    "BatchMap",
+    "PromptItem",
 ]

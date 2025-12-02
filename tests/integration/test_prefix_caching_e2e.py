@@ -74,9 +74,10 @@ Focus on building confidence in mathematical reasoning."""
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success, "Pipeline failed"
-    assert len(result.data) == 5, "Wrong number of rows"
-    assert result.data["answer"].notnull().all(), "Some answers are null"
+    assert len(df) == 5, "Wrong number of rows"
+    assert df["answer"].notnull().all(), "Some answers are null"
 
     # Verify cost tracking
     assert result.costs.total_cost > 0, "Cost not tracked"
@@ -84,15 +85,15 @@ Focus on building confidence in mathematical reasoning."""
 
     # Print results
     print("\nPrefix Caching E2E (Groq):")
-    print(f"Rows processed: {len(result.data)}")
+    print(f"Rows processed: {len(df)}")
     print(f"Total cost: ${result.costs.total_cost:.4f}")
     print(f"Input tokens: {result.costs.input_tokens}")
     print(f"Output tokens: {result.costs.output_tokens}")
-    print(f"Cost per row: ${result.costs.total_cost / len(result.data):.6f}")
+    print(f"Cost per row: ${result.costs.total_cost / len(df):.6f}")
 
     # Sample answers
     print("\nSample answers:")
-    for i, row in result.data.head(3).iterrows():
+    for i, row in df.head(3).iterrows():
         print(f"Q: {row['question']} → A: {row['answer'][:50]}...")
 
     # Verify message structure was correct
@@ -149,12 +150,13 @@ Focus on the primary emotional tone conveyed."""
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success
-    assert len(result.data) == 5
-    assert result.data["sentiment"].notnull().all()
+    assert len(df) == 5
+    assert df["sentiment"].notnull().all()
 
     print("\nPrefix Caching E2E (OpenAI):")
-    print(f"Rows: {len(result.data)}")
+    print(f"Rows: {len(df)}")
     print(f"Cost: ${result.costs.total_cost:.4f}")
     print(f"Input tokens: {result.costs.input_tokens}")
     print("Note: OpenAI automatically cached the system message!")
@@ -200,9 +202,10 @@ You should avoid speculation and stick to factual information."""
     )
 
     result = pipeline.execute()
+    df = result.to_pandas()
 
     assert result.success
-    assert len(result.data) == 3
+    assert len(df) == 3
 
     print("\nPrefix Caching E2E (Anthropic):")
     print(f"Cost: ${result.costs.total_cost:.4f}")

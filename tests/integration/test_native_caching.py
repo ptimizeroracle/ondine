@@ -90,9 +90,10 @@ def test_disk_caching_integration(mock_acompletion, clean_cache_dir):
     assert litellm.cache.type == "disk"
 
     # Verify success
+    df = result.to_pandas()
     assert result.metrics.total_rows == 1
     assert result.metrics.failed_rows == 0
-    assert result.data.iloc[0]["output"] == "Hello World"
+    assert df.iloc[0]["output"] == "Hello World"
 
     # Verify cache config was actually set on the spec
     assert pipeline.specifications.llm.cache_config["type"] == "disk"

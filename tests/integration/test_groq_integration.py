@@ -41,15 +41,16 @@ class TestGroqIntegration:
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
-        assert len(result.data) == 1
+        assert len(df) == 1
         assert result.metrics.processed_rows == 1
         # Groq API returns $0 cost but does track tokens
         assert result.costs.total_cost >= 0
         assert result.costs.total_tokens > 0
         # Verify we got a valid answer (not skipped)
-        assert result.data["answer"].iloc[0] != "[SKIPPED]"
-        assert len(result.data["answer"].iloc[0]) > 0
+        assert df["answer"].iloc[0] != "[SKIPPED]"
+        assert len(df["answer"].iloc[0]) > 0
 
     def test_batch_processing(self):
         """Test batch processing with Groq."""
@@ -82,10 +83,11 @@ class TestGroqIntegration:
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
-        assert len(result.data) == 3
+        assert len(df) == 3
         assert result.metrics.processed_rows == 3
-        assert "answer" in result.data.columns
+        assert "answer" in df.columns
 
     def test_cost_tracking(self):
         """Test cost tracking with Groq."""
@@ -116,4 +118,5 @@ class TestGroqIntegration:
         assert result.costs.total_cost >= 0
         assert result.costs.total_tokens > 0
         # Verify we got valid output
-        assert result.data["response"].iloc[0] != "[SKIPPED]"
+        df = result.to_pandas()
+        assert df["response"].iloc[0] != "[SKIPPED]"

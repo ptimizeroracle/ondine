@@ -55,8 +55,9 @@ def test_rate_limiting_enforces_rpm(provider, model, api_key_env):
     elapsed_time = time.time() - start_time
 
     # Verify success
+    df = result.to_pandas()
     assert result.success, f"{provider} pipeline failed"
-    assert len(result.data) == 6, f"Expected 6 rows, got {len(result.data)}"
+    assert len(df) == 6, f"Expected 6 rows, got {len(df)}"
 
     # Calculate actual RPM
     actual_rpm = (6 / elapsed_time) * 60

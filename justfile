@@ -26,7 +26,7 @@ test-integration:
     @echo "🧪 Running integration tests..."
     @if [ -z "$GROQ_API_KEY" ]; then \
         echo "⚠️  Loading API keys from .env..."; \
-        export $(cat .env | xargs) && uv run pytest tests/integration/ -v -n auto --dist loadscope; \
+        export $(grep -v '^#' .env | xargs) && uv run pytest tests/integration/ -v -n auto --dist loadscope; \
     else \
         uv run pytest tests/integration/ -v -n auto --dist loadscope; \
     fi
@@ -39,7 +39,7 @@ test-wrapper:
 # Run e2e tests with real providers
 test-e2e:
     @echo "🌐 Running E2E tests with real providers..."
-    @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
+    @export $(grep -v '^#' .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
 
 # Run comprehensive test suite (wrapper + integration + e2e)
 test-comprehensive:
@@ -52,7 +52,7 @@ test-comprehensive:
     @uv run pytest tests/unit/ -v
     @echo ""
     @echo "Step 3/3: Integration + E2E tests (real API calls)..."
-    @export $(cat .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
+    @export $(grep -v '^#' .env | xargs) && uv run pytest tests/integration/test_unified_providers_e2e.py -v
     @echo ""
     @echo "✅ All comprehensive tests passed!"
 
@@ -64,7 +64,7 @@ test-fast:
 # Run full test suite (unit + integration, respects markers)
 test-all:
     @echo "🧪 Running full test suite (unit + integration)..."
-    @export $(cat .env | xargs) && uv run pytest tests/ -v -n auto --dist loadscope
+    @export $(grep -v '^#' .env | xargs) && uv run pytest tests/ -v -n auto --dist loadscope
 
 # Run tests with coverage report
 test-coverage:
@@ -149,17 +149,17 @@ cli-validate CONFIG:
 # Process data with config
 cli-process CONFIG:
     @echo "⚙️  Processing with {{CONFIG}}..."
-    @export $(cat .env | xargs) && uv run ondine process --config {{CONFIG}}
+    @export $(grep -v '^#' .env | xargs) && uv run ondine process --config {{CONFIG}}
 
 # Estimate cost for a config
 cli-estimate CONFIG:
     @echo "💰 Estimating cost for {{CONFIG}}..."
-    @export $(cat .env | xargs) && uv run ondine estimate --config {{CONFIG}}
+    @export $(grep -v '^#' .env | xargs) && uv run ondine estimate --config {{CONFIG}}
 
 # Run a simple example
 example NAME:
     @echo "🚀 Running example: {{NAME}}"
-    @export $(cat .env | xargs) && uv run python examples/{{NAME}}.py
+    @export $(grep -v '^#' .env | xargs) && uv run python examples/{{NAME}}.py
 
 # Run quickstart example
 quickstart:
@@ -172,7 +172,7 @@ groq-example:
 # Start interactive Python shell with ondine loaded
 shell:
     @echo "🐍 Starting Python shell..."
-    @export $(cat .env | xargs) && uv run python -c "import ondine; from ondine import PipelineBuilder; print('Ondine loaded! Use PipelineBuilder to get started.'); import IPython; IPython.embed()"
+    @export $(grep -v '^#' .env | xargs) && uv run python -c "import ondine; from ondine import PipelineBuilder; print('Ondine loaded! Use PipelineBuilder to get started.'); import IPython; IPython.embed()"
 
 # Generate documentation
 docs:
@@ -182,7 +182,7 @@ docs:
 # Run end-to-end test with real API
 e2e-test:
     @echo "🌐 Running end-to-end test with Groq API..."
-    @export $(cat .env | xargs) && uv run pytest tests/integration/test_end_to_end.py::TestEndToEndGroq -v
+    @export $(grep -v '^#' .env | xargs) && uv run pytest tests/integration/test_end_to_end.py::TestEndToEndGroq -v
 
 # Check test coverage percentage
 coverage-report:
@@ -259,7 +259,7 @@ check-deps:
 # Run integration tests with specific provider
 test-provider PROVIDER:
     @echo "🧪 Testing {{PROVIDER}} integration..."
-    @export $(cat .env | xargs) && uv run pytest tests/integration/test_{{PROVIDER}}_integration.py -v
+    @export $(grep -v '^#' .env | xargs) && uv run pytest tests/integration/test_{{PROVIDER}}_integration.py -v
 
 # Cleanup test outputs
 clean-test-outputs:
@@ -283,7 +283,7 @@ run-examples:
     @echo "🚀 Running all examples..."
     @for example in examples/*.py; do \
         echo "Running $$example..."; \
-        export $(cat .env | xargs) && uv run python $$example || true; \
+        export $(grep -v '^#' .env | xargs) && uv run python $$example || true; \
     done
 
 # Initialize .env file if it doesn't exist

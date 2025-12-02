@@ -59,6 +59,10 @@ class PipelineBuilder:
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
         self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
+        # Streaming configuration
+        self._streaming_enabled: bool = False
+        self._streaming_chunk_size: int = 10000
+        self._streaming_max_pending: int = 3
 
     @staticmethod
     def create() -> "PipelineBuilder":
@@ -913,19 +917,45 @@ class PipelineBuilder:
         self._executor = AsyncExecutor(max_concurrency=max_concurrency)
         return self
 
-    def with_streaming(self, chunk_size: int = 1000) -> "PipelineBuilder":
+    def with_streaming(
+        self,
+        chunk_size: int = 10000,
+        max_pending_chunks: int = 3,
+    ) -> "PipelineBuilder":
         """
-        Use streaming execution strategy.
+        Enable streaming execution for large datasets.
 
-        Processes data in chunks for memory-efficient handling.
-        Ideal for large datasets (100K+ rows).
+        Processes data in chunks with bounded memory usage.
+        Ideal for datasets that don't fit in memory (100K+ rows).
+
+        Uses:
+        - Polars LazyFrame for memory-efficient loading
+        - Bounded async queue for backpressure
+        - Incremental result writing
 
         Args:
-            chunk_size: Number of rows per chunk
+            chunk_size: Number of rows per chunk (default: 10000)
+            max_pending_chunks: Max chunks in processing queue (default: 3)
 
         Returns:
             Self for chaining
+
+        Example:
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("large_file.csv", ...)
+                .with_streaming(chunk_size=5000)
+                .build()
+            )
+
+            # Use streaming execution
+            async for result in pipeline.execute_stream_async():
+                print(f"Processed {result.metrics.processed_rows} rows")
         """
+        self._streaming_enabled = True
+        self._streaming_chunk_size = chunk_size
+        self._streaming_max_pending = max_pending_chunks
+        # Also set executor for backward compatibility with execute_stream()
         self._executor = StreamingExecutor(chunk_size=chunk_size)
         return self
 
@@ -1126,18 +1156,27 @@ class PipelineBuilder:
         model_list: list[dict],
         routing_strategy: str = "simple-shuffle",
         timeout: int = 120,
-        num_retries: int = 0,  # Default 0: let Instructor/Ondine handle retries
+        num_retries: int = 2,  # Default 2: retry failed requests with other providers
         redis_url: str | None = None,
+        # Circuit breaker / resilience params (sensible defaults)
+        allowed_fails: int = 3,  # Failures before provider cooldown
+        cooldown_time: int = 60,  # Seconds to disable failed provider
         **router_kwargs,
     ) -> "PipelineBuilder":
         """
-        Enable LiteLLM Router for load balancing and failover.
+        Enable LiteLLM Router for load balancing, failover, and resilience.
 
         Router provides:
         - Load balancing across multiple deployments
         - Automatic failover with health tracking
+        - Built-in circuit breaker (cooldown on failures)
         - Built-in retries with exponential backoff
         - Redis for distributed state (optional)
+
+        Resilience is ENABLED BY DEFAULT with sensible settings:
+        - 3 failures → provider goes into cooldown
+        - 60 second cooldown period
+        - Automatic failover to healthy providers
 
         All LiteLLM Router parameters are supported via **router_kwargs!
         Just pass any parameter directly - it flows through to LiteLLM.
@@ -1146,11 +1185,12 @@ class PipelineBuilder:
             model_list: List of deployment configs (required)
             routing_strategy: "simple-shuffle", "weighted-pick", "latency-based-routing", etc.
             timeout: Request timeout in seconds (default: 120)
-            num_retries: Retry attempts (default: 0 = let Instructor handle retries)
+            num_retries: Retry attempts with other providers on failure (default: 2)
             redis_url: Redis URL for distributed state (optional)
+            allowed_fails: Failures before cooldown (default: 3). Set to 0 to disable.
+            cooldown_time: Cooldown duration in seconds (default: 60). Set to 0 to disable.
             **router_kwargs: ANY LiteLLM Router parameter! Examples:
-                - allowed_fails=0: Disable cooldowns
-                - cooldown_time=0: No cooldown delay
+                - fallbacks=["backup-model"]: Fallback model names
                 - enable_pre_call_checks=False: Skip health checks (faster!)
                 - set_verbose=True: Enable debug logging
                 - debug=True: Enable provider tracking
@@ -1161,11 +1201,25 @@ class PipelineBuilder:
 
         Example:
             ```python
+            # Basic usage (resilience enabled by default)
             .with_router(
                 model_list=[
                     {"model_name": "fast", "litellm_params": {"model": "groq/llama-3.3-70b", "rpm": 30}},
                     {"model_name": "fast", "litellm_params": {"model": "openai/gpt-4o-mini", "rpm": 500}}
                 ]
+            )
+
+            # Custom resilience settings
+            .with_router(
+                model_list=[...],
+                allowed_fails=5,     # More lenient
+                cooldown_time=120,   # Longer cooldown
+            )
+
+            # Disable circuit breaker (not recommended)
+            .with_router(
+                model_list=[...],
+                allowed_fails=0,     # Never cooldown
             )
             ```
 
@@ -1181,6 +1235,9 @@ class PipelineBuilder:
             "routing_strategy": routing_strategy,
             "timeout": timeout,
             "num_retries": num_retries,
+            # Circuit breaker / resilience params
+            "allowed_fails": allowed_fails,
+            "cooldown_time": cooldown_time,
             **router_kwargs,  # ALL other params pass directly to LiteLLM Router!
         }
 
@@ -1239,7 +1296,11 @@ class PipelineBuilder:
         }
         return self
 
-    def with_structured_output(self, schema: Any) -> "PipelineBuilder":
+    def with_structured_output(
+        self,
+        schema: Any,
+        mode: str = "auto",
+    ) -> "PipelineBuilder":
         """
         Configure structured output using a Pydantic model.
 
@@ -1249,15 +1310,42 @@ class PipelineBuilder:
         Automatically configures JSONParser to handle the structured JSON output,
         unless a custom parser was already configured.
 
+        **Batch Processing Note:**
+        When using with_batch_size() > 1, your Pydantic model should have an
+        'items' field containing a list. Ondine will automatically match items
+        to rows by position. Example:
+
+            class MyBatch(BaseModel):
+                items: list[MyResult]  # Results matched by position
+
         Args:
             schema: Pydantic model class defining the expected output structure
+            mode: Instructor mode for structured output:
+                - "auto" (default): Intelligent detection based on model capabilities
+                  Uses LiteLLM's model info, provider registry, and safe fallbacks
+                - "tools": Function calling mode (most reliable, not all models support)
+                - "json": JSON mode (universal compatibility, works with all models)
+                - "json_schema": OpenAI's native JSON schema mode
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # Auto-detect best mode (recommended)
+            .with_structured_output(MySchema)
+
+            # Force JSON mode (for models that don't support function calling)
+            .with_structured_output(MySchema, mode="json")
+
+            # Force TOOLS mode (for OpenAI/Anthropic)
+            .with_structured_output(MySchema, mode="tools")
+            ```
         """
         if not hasattr(self, "_custom_metadata"):
             self._custom_metadata = {}
         self._custom_metadata["structured_output_model"] = schema
+        self._custom_metadata["instructor_mode"] = mode
 
         # Auto-inject JSONParser if no parser configured
         # Structured output always returns JSON, so we need a JSON parser
@@ -1320,6 +1408,12 @@ class PipelineBuilder:
             metadata["custom_stages"] = self._custom_stages
         if self._observers:
             metadata["observers"] = self._observers
+        if self._streaming_enabled:
+            metadata["streaming"] = {
+                "enabled": True,
+                "chunk_size": self._streaming_chunk_size,
+                "max_pending_chunks": self._streaming_max_pending,
+            }
 
         # Create specifications bundle
         # If custom client provided but no llm_spec, create a dummy spec

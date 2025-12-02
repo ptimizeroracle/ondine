@@ -7,9 +7,13 @@ Best practices: Remove noise, normalize whitespace, control length.
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from ondine.adapters.containers import DictListContainer
+    from ondine.core.data_container import DataContainer
 
 
 @dataclass
@@ -207,3 +211,66 @@ def preprocess_dataframe(
     )
 
     return result, stats
+
+
+def preprocess_container(
+    container: "DataContainer",
+    input_columns: list[str],
+    max_length: int = 500,
+) -> tuple["DictListContainer", PreprocessingStats]:
+    """
+    Preprocess input columns in a DataContainer.
+
+    Args:
+        container: Input data container
+        input_columns: Columns to clean
+        max_length: Max chars per field
+
+    Returns:
+        (cleaned_container, stats)
+    """
+    from ondine.adapters.containers import DictListContainer  # noqa: PLC0415
+
+    preprocessor = TextPreprocessor(max_length)
+
+    chars_before = 0
+    chars_after = 0
+    truncated = 0
+    nulls = 0
+    processed_rows: list[dict] = []
+
+    for row in container:
+        new_row = dict(row)
+
+        for col in input_columns:
+            if col not in new_row:
+                continue
+
+            original = new_row[col]
+
+            if original is None:
+                nulls += 1
+                continue
+
+            original_str = str(original)
+            chars_before += len(original_str)
+
+            cleaned = preprocessor.process(original_str)
+            chars_after += len(cleaned)
+
+            if len(original_str) > max_length:
+                truncated += 1
+
+            new_row[col] = cleaned
+
+        processed_rows.append(new_row)
+
+    stats = PreprocessingStats(
+        rows_processed=len(processed_rows),
+        chars_before=chars_before,
+        chars_after=chars_after,
+        truncated_count=truncated,
+        null_count=nulls,
+    )
+
+    return DictListContainer(data=processed_rows, columns=container.columns), stats

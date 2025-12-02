@@ -6,19 +6,22 @@ to verify retry processes only failed rows.
 """
 
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
+import pytest
 
 from ondine import PipelineBuilder
 from ondine.core.models import LLMResponse
+from ondine.orchestration import AsyncExecutor
 
 
 class TestAutoRetryActualExecution:
     """Integration tests that actually execute retry logic."""
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_retry_processes_only_failed_rows_not_all(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_retry_processes_only_failed_rows_not_all(self, mock_get):
         """
         CRITICAL TEST: Verify retry processes ONLY failed rows.
 
@@ -35,7 +38,7 @@ class TestAutoRetryActualExecution:
         # Track which rows are processed
         processed_rows = []
 
-        def mock_invoke(prompt, **kwargs):
+        async def mock_invoke(prompt, **kwargs):
             """Mock LLM that tracks calls and fails specific rows."""
             # Extract row identifier from prompt
             for i in range(10):
@@ -74,7 +77,9 @@ class TestAutoRetryActualExecution:
 
         # Setup mock
         mock_client = Mock()
-        mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
         mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test-model",
@@ -94,6 +99,7 @@ class TestAutoRetryActualExecution:
             .with_llm(provider="groq", model="test", temperature=0.0)
             .with_processing_batch_size(10)  # Internal batching only
             .with_concurrency(1)
+            .with_executor(AsyncExecutor())
             .build()
         )
 
@@ -102,7 +108,24 @@ class TestAutoRetryActualExecution:
         pipeline.specifications.processing.max_retry_attempts = 1
 
         # Execute (should process all 10, then retry 3 failed)
-        result = pipeline.execute()
+        # Use execute_async or wrap execute?
+        # Pipeline.execute is sync wrapper around async process.
+        # But mock_client.ainvoke is async.
+        # LLMInvocationStage calls asyncio.run() internally if loop is not running.
+        # But we are in an async test (loop IS running).
+        # LLMInvocationStage detects loop and uses it?
+        # The new implementation of LLMInvocationStage.process:
+        # if loop and loop.is_running(): pass (assumes caller handles await?)
+        # NO. It says "return asyncio.run(...)" which raises RuntimeError if loop running.
+        # So I should use pipeline.execute_async() if available, or mock LLMInvocationStage.process to use await?
+
+        # Wait, Pipeline.execute() handles asyncio.run().
+        # If I run this test with pytest-asyncio, a loop IS running.
+        # pipeline.execute() will crash with "asyncio.run() cannot be called from a running event loop".
+
+        # I should assume Pipeline handles this or test uses execute_async?
+        # Pipeline has execute_async.
+        result = await pipeline.execute_async()
 
         # Verify execution counts
         # First pass: 10 rows
@@ -128,13 +151,14 @@ class TestAutoRetryActualExecution:
         assert quality.success_rate == 100.0
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
-    def test_retry_respects_max_attempts(self, mock_get):
+    @pytest.mark.asyncio
+    async def test_retry_respects_max_attempts(self, mock_get):
         """Should stop retrying after max_retry_attempts."""
         df = pd.DataFrame({"text": ["row1", "row2", "row3"]})
 
         call_count = {"count": 0}
 
-        def mock_invoke(prompt, **kwargs):
+        async def mock_invoke(prompt, **kwargs):
             """Mock that always returns empty (forces retries)."""
             call_count["count"] += 1
             return LLMResponse(
@@ -147,7 +171,9 @@ class TestAutoRetryActualExecution:
             )
 
         mock_client = Mock()
-        mock_client.invoke = Mock(side_effect=mock_invoke)
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
         mock_client.router = None  # No router in mock (single deployment)
         mock_client.spec = Mock(
             model="test",
@@ -163,6 +189,7 @@ class TestAutoRetryActualExecution:
             .with_prompt(template="Clean: {text}")
             .with_llm(provider="groq", model="test", temperature=0.0)
             .with_processing_batch_size(3)  # Internal batching only, not multi-row
+            .with_executor(AsyncExecutor())
             .build()
         )
 
@@ -170,7 +197,7 @@ class TestAutoRetryActualExecution:
         pipeline.specifications.processing.auto_retry_failed = True
         pipeline.specifications.processing.max_retry_attempts = 2
 
-        pipeline.execute()
+        await pipeline.execute_async()
 
         # Should call LLM exactly: 3 (initial) + 3 (retry 1) + 3 (retry 2) = 9 times
         # NOT infinite loop

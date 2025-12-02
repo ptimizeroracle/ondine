@@ -64,13 +64,14 @@ def test_unified_client_basic_invoke_e2e(provider, model, api_key_env):
     result = pipeline.execute()
 
     # Verify basic functionality
+    df = result.to_pandas()
     assert result.success, f"{provider} pipeline failed"
-    assert len(result.data) == 2, f"{provider} returned wrong number of rows"
-    assert "answer" in result.data.columns
+    assert len(df) == 2, f"{provider} returned wrong number of rows"
+    assert "answer" in df.columns
 
     # Verify answers are not empty
-    assert result.data["answer"].notnull().all(), f"{provider} returned null answers"
-    assert all(len(str(ans)) > 0 for ans in result.data["answer"]), (
+    assert df["answer"].notnull().all(), f"{provider} returned null answers"
+    assert all(len(str(ans)) > 0 for ans in df["answer"]), (
         f"{provider} returned empty answers"
     )
 
@@ -79,7 +80,7 @@ def test_unified_client_basic_invoke_e2e(provider, model, api_key_env):
     assert result.costs.total_tokens > 0, f"{provider} token tracking failed"
 
     print(f"\n{provider.upper()} E2E Results:")
-    print(result.data)
+    print(df)
     print(f"Cost: ${result.costs.total_cost:.4f}")
     print(f"Tokens: {result.costs.total_tokens}")
 
@@ -124,12 +125,13 @@ def test_unified_client_groq_async_e2e():
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success
-    assert len(result.data) == 3
-    assert result.data["answer"].notnull().all()
+    assert len(df) == 3
+    assert df["answer"].notnull().all()
 
     print("\nGroq Async E2E Results:")
-    print(result.data)
+    print(df)
     print(f"Cost: ${result.costs.total_cost:.4f}")
 
 
@@ -219,10 +221,11 @@ def test_unified_client_batch_processing_e2e():
     result = pipeline.execute()
 
     # Verify
+    df = result.to_pandas()
     assert result.success
-    assert len(result.data) == 6
-    assert result.data["category"].notnull().sum() >= 4, "Too many null responses"
+    assert len(df) == 6
+    assert df["category"].notnull().sum() >= 4, "Too many null responses"
 
     print("\nBatch Processing E2E:")
-    print(result.data)
+    print(df)
     print(f"API calls saved: {6 / 3} calls instead of 6 (50% reduction)")

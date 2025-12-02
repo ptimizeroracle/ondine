@@ -93,7 +93,15 @@ class BatchDisaggregatorStage(PipelineStage):
             # Parse batch response
             # OPTIMIZATION: Use structured_result if available (Instructor Pydantic object)
             # This avoids JSON serialize/parse cycle!
+            # Initialize response_text for error handling
+            response_text = ""
             try:
+                # Debug: Check what type llm_response is
+                self.logger.debug(
+                    f"llm_response type: {type(llm_response)}, "
+                    f"has structured_result: {hasattr(llm_response, 'structured_result')}, "
+                    f"structured_result: {getattr(llm_response, 'structured_result', None) is not None}"
+                )
                 if (
                     hasattr(llm_response, "structured_result")
                     and llm_response.structured_result
@@ -104,17 +112,42 @@ class BatchDisaggregatorStage(PipelineStage):
                     # Extract items from Pydantic batch (assumes .items field)
                     if hasattr(pydantic_batch, "items"):
                         items = pydantic_batch.items
+                        # Debug: Log first item to see structure
+                        if items:
+                            first_item = items[0]
+                            self.logger.debug(
+                                f"First item type: {type(first_item)}, "
+                                f"has result: {hasattr(first_item, 'result')}, "
+                                f"result type: {type(getattr(first_item, 'result', None))}, "
+                                f"result value: {getattr(first_item, 'result', None)}"
+                            )
+                        # Log if item count doesn't match expected
+                        if len(items) != batch_metadata.original_count:
+                            self.logger.warning(
+                                f"Pydantic batch has {len(items)} items, expected {batch_metadata.original_count}. "
+                                f"Batch ID: {batch.batch_id}"
+                            )
+                        # Set response_text for error handling (serialize Pydantic for debugging)
+                        response_text = str(pydantic_batch)
                         # Serialize each item's result to JSON string
                         individual_results = []
                         for item in items:
-                            if hasattr(item, "result"):
+                            if hasattr(item, "result") and item.result is not None:
                                 # Architecture A: {id, result} structure
-                                result_dict = (
-                                    item.result.model_dump()
-                                    if hasattr(item.result, "model_dump")
-                                    else item.result
-                                )
+                                if hasattr(item.result, "model_dump"):
+                                    # Pydantic model - serialize properly
+                                    result_dict = item.result.model_dump()
+                                elif isinstance(item.result, dict):
+                                    result_dict = item.result
+                                elif isinstance(item.result, str):
+                                    # String result (error or simple response)
+                                    result_dict = {"_raw": item.result}
+                                else:
+                                    result_dict = {"_raw": str(item.result)}
                                 individual_results.append(json.dumps(result_dict))
+                            elif hasattr(item, "result"):
+                                # result is None - serialize as empty dict
+                                individual_results.append(json.dumps({}))
                             else:
                                 # Architecture B: Flat structure (serialize entire item except id)
                                 item_dict = item.model_dump()
@@ -133,11 +166,11 @@ class BatchDisaggregatorStage(PipelineStage):
                         if hasattr(llm_response, "text")
                         else str(llm_response)
                     )
-                individual_results = self.strategy.parse_batch_response(
-                    response_text,
-                    expected_count=batch_metadata.original_count,
-                    metadata=batch_metadata_dict,
-                )
+                    individual_results = self.strategy.parse_batch_response(
+                        response_text,
+                        expected_count=batch_metadata.original_count,
+                        metadata=batch_metadata_dict,
+                    )
 
                 # Create disaggregated batch with individual responses
                 disaggregated_batch = ResponseBatch(

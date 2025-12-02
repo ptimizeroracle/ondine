@@ -232,7 +232,6 @@ class CSVWriter(DataWriter):
         return WriteConfirmation(
             path=str(path),
             rows_written=len(data),
-            success=True,
         )
 
     def atomic_write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
@@ -254,7 +253,6 @@ class CSVWriter(DataWriter):
             return WriteConfirmation(
                 path=str(path),
                 rows_written=len(data),
-                success=True,
             )
         except Exception as e:
             # Cleanup on failure
@@ -273,7 +271,6 @@ class ExcelWriter(DataWriter):
         return WriteConfirmation(
             path=str(path),
             rows_written=len(data),
-            success=True,
         )
 
     def atomic_write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
@@ -287,7 +284,6 @@ class ExcelWriter(DataWriter):
             return WriteConfirmation(
                 path=str(path),
                 rows_written=len(data),
-                success=True,
             )
         except Exception as e:
             if temp_path.exists():
@@ -305,7 +301,6 @@ class ParquetWriter(DataWriter):
         return WriteConfirmation(
             path=str(path),
             rows_written=len(data),
-            success=True,
         )
 
     def atomic_write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
@@ -319,7 +314,6 @@ class ParquetWriter(DataWriter):
             return WriteConfirmation(
                 path=str(path),
                 rows_written=len(data),
-                success=True,
             )
         except Exception as e:
             if temp_path.exists():

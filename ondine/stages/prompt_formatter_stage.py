@@ -1,11 +1,12 @@
 """Prompt formatting stage for template-based prompt generation."""
 
+import time
 from decimal import Decimal
 from typing import Any
 
-import pandas as pd
 from jinja2 import Template as Jinja2Template
 
+from ondine.core.data_container import DataContainer
 from ondine.core.models import (
     CostEstimate,
     PromptBatch,
@@ -17,10 +18,13 @@ from ondine.stages.pipeline_stage import PipelineStage
 
 
 class PromptFormatterStage(
-    PipelineStage[tuple[pd.DataFrame, PromptSpec], list[PromptBatch]]
+    PipelineStage[tuple[DataContainer, PromptSpec], list[PromptBatch]]
 ):
     """
     Format prompts using template and row data.
+
+    Now accepts DataContainer instead of pd.DataFrame for
+    framework-agnostic processing.
 
     Responsibilities:
     - Extract input columns from rows
@@ -45,10 +49,23 @@ class PromptFormatterStage(
         self.use_jinja2 = use_jinja2
 
     def process(
-        self, input_data: tuple[pd.DataFrame, PromptSpec], context: Any
+        self, input_data: tuple[DataContainer, PromptSpec], context: Any
     ) -> list[PromptBatch]:
-        """Format prompts from DataFrame rows."""
-        df, prompt_spec = input_data
+        """Format prompts from DataContainer rows."""
+        container_or_df, prompt_spec = input_data
+
+        # Auto-wrap pandas DataFrame for backward compatibility
+        try:
+            import pandas as pd
+
+            if isinstance(container_or_df, pd.DataFrame):
+                from ondine.adapters.containers import PandasContainer
+
+                container = PandasContainer(container_or_df)
+            else:
+                container = container_or_df
+        except ImportError:
+            container = container_or_df
 
         prompts: list[str] = []
         metadata_list: list[RowMetadata] = []
@@ -70,28 +87,30 @@ class PromptFormatterStage(
             use_jinja2 = self.use_jinja2
 
         # Create template renderer
+        jinja_template = None
         if use_jinja2:
             # Note: autoescape=False is intentional for LLM prompts (not HTML)
             # We're generating text prompts, not web content, so HTML escaping
             # would corrupt the prompt data sent to the LLM
-            template = Jinja2Template(template_str, autoescape=False)  # noqa: S701
+            jinja_template = Jinja2Template(template_str, autoescape=False)  # noqa: S701
 
         # Format prompt for each row
-        # Performance optimization: Use itertuples() instead of iterrows() for 10× speedup
-        # itertuples() returns namedtuples which are much faster than Series objects
-        import time
-
-        total_rows = len(df)
+        total_rows = len(container)
         start_time = time.time()
         last_log_time = start_time
         last_log_pct = 0
 
         self.logger.info(f"Formatting {total_rows:,} prompts...")
 
-        for row_count, row in enumerate(df.itertuples(index=True), 1):
+        for row_count, row in enumerate(container, 1):
+            # row is now a dict (Row type)
+            idx = row.get(
+                "_index", row_count - 1
+            )  # Use _index if available, else position
+
             # Hybrid progress: Log every 10% OR every 30 seconds (only for slow operations)
             current_time = time.time()
-            current_pct = int((row_count / total_rows) * 100)
+            current_pct = int((row_count / total_rows) * 100) if total_rows > 0 else 100
             elapsed = current_time - start_time
 
             # Only log progress if operation is taking >5 seconds
@@ -113,20 +132,17 @@ class PromptFormatterStage(
                 last_log_pct = current_pct
 
             try:
-                # Extract index (first element of namedtuple)
-                idx = row[0]
-
-                # Extract input columns from namedtuple
-                # Build row_data dict from column names and namedtuple attributes
-                row_data = {}
-                for col in df.columns:
-                    if col in template_str:
-                        # Get attribute by column name (namedtuples have column names as attributes)
-                        row_data[col] = getattr(row, col)
+                # Extract only template variables from row
+                # Note: For Jinja2, we pass all row data since variable extraction
+                # from Jinja2 templates is complex (filters, expressions, etc.)
+                if use_jinja2:
+                    row_data = dict(row)
+                else:
+                    row_data = {k: v for k, v in row.items() if k in template_str}
 
                 # Format prompt (Jinja2 or f-string)
-                if use_jinja2:
-                    prompt = template.render(**row_data)
+                if use_jinja2 and jinja_template:
+                    prompt = jinja_template.render(**row_data)
                 else:
                     prompt = template_str.format(**row_data)
 
@@ -143,8 +159,7 @@ class PromptFormatterStage(
                 prompts.append(prompt)
 
                 # Create metadata with system message for LLM stage
-                # Get 'id' column if it exists
-                row_id = getattr(row, "id", None) if hasattr(row, "id") else None
+                row_id = row.get("id")
                 metadata = RowMetadata(
                     row_index=idx,
                     row_id=row_id,
@@ -154,7 +169,7 @@ class PromptFormatterStage(
                 )
                 metadata_list.append(metadata)
 
-            except (KeyError, AttributeError) as e:
+            except KeyError as e:
                 self.logger.warning(f"Missing template variable at row {idx}: {e}")
                 continue
             except Exception as e:
@@ -204,31 +219,31 @@ class PromptFormatterStage(
         return "\n".join(formatted)
 
     def validate_input(
-        self, input_data: tuple[pd.DataFrame, PromptSpec]
+        self, input_data: tuple[DataContainer, PromptSpec]
     ) -> ValidationResult:
-        """Validate DataFrame and prompt specification."""
+        """Validate DataContainer and prompt specification."""
         result = ValidationResult(is_valid=True)
 
-        df, prompt_spec = input_data
+        container, prompt_spec = input_data
 
-        # Check DataFrame not empty
-        if df.empty:
-            result.add_error("DataFrame is empty")
+        # Check container not empty
+        if len(container) == 0:
+            result.add_error("DataContainer is empty")
 
-        # Check template variables exist in DataFrame
+        # Check template variables exist in container columns
         template = prompt_spec.template
         import re
 
         variables = re.findall(r"\{(\w+)\}", template)
-        missing_vars = set(variables) - set(df.columns)
+        missing_vars = set(variables) - set(container.columns)
 
         if missing_vars:
-            result.add_error(f"Template variables not in DataFrame: {missing_vars}")
+            result.add_error(f"Template variables not in container: {missing_vars}")
 
         return result
 
     def estimate_cost(
-        self, input_data: tuple[pd.DataFrame, PromptSpec]
+        self, input_data: tuple[DataContainer, PromptSpec]
     ) -> CostEstimate:
         """Prompt formatting has no LLM cost."""
         return CostEstimate(

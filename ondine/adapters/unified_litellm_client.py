@@ -37,8 +37,11 @@ The extra_params pattern means:
 
 import asyncio
 import logging
+import os
 import time
+import uuid
 import warnings
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -46,17 +49,40 @@ import instructor
 import litellm
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
+# Import Ondine Exceptions for mapping
+from ondine.core.exceptions import (
+    InvalidAPIKeyError,
+    ModelNotFoundError,
+    QuotaExceededError,
+)
+from ondine.utils.retry_handler import NetworkError
+from ondine.utils.retry_handler import RateLimitError as OndineRateLimitError
+
+try:
+    import aiohttp
+    from litellm.llms.custom_httpx.aiohttp_handler import BaseLLMAIOHTTPHandler
+
+    _HAS_AIOHTTP = True
+except ImportError:
+    _HAS_AIOHTTP = False
+
+# Type hint for ObserverDispatcher (avoid circular import)
+from typing import TYPE_CHECKING
+
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
+
+if TYPE_CHECKING:
+    from ondine.observability.dispatcher import ObserverDispatcher
 
 # CRITICAL: Suppress Pydantic serialization warnings at module level
 # LiteLLM's internal models trigger these harmless warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", message=".*Expected.*fields but got.*")
 warnings.filterwarnings("ignore", message=".*serialized value may not be as expected.*")
-
-logger = logging.getLogger(__name__)
 
 
 class UnifiedLiteLLMClient(LLMClient):
@@ -158,31 +184,260 @@ class UnifiedLiteLLMClient(LLMClient):
                 logger.warning(f"Failed to initialize LiteLLM cache: {e}")
 
         # Initialize Instructor client ONCE (not per-call!)
-        # Auto-detect mode based on provider:
-        # - Groq: Use JSON mode (function calling is unreliable, generates XML)
-        # - OpenAI/Anthropic: Use TOOLS mode (native function calling)
-        # - Default: JSON mode (safest fallback)
+        # Use intelligent mode detection (layered approach)
+        from ondine.adapters.instructor_mode import detect_instructor_mode
+
         completion_func = (
             self.router.acompletion if self.router else litellm.acompletion
         )
 
-        # Detect provider from model string
-        model_lower = self.model.lower()
-        if "groq" in model_lower:
-            instructor_mode = instructor.Mode.JSON
-            logger.debug("Using Instructor JSON mode for Groq (avoids XML issues)")
-        elif any(p in model_lower for p in ["gpt", "openai", "claude", "anthropic"]):
-            instructor_mode = instructor.Mode.TOOLS
-            logger.debug("Using Instructor TOOLS mode for OpenAI/Anthropic")
-        else:
-            instructor_mode = instructor.Mode.JSON  # Safest default
-            logger.debug("Using Instructor JSON mode (default)")
+        # Get router model list if available
+        router_model_list = None
+        if self.router and hasattr(self.router, "model_list"):
+            router_model_list = self.router.model_list
+
+        # Detect best instructor mode using layered approach:
+        # 1. User override (from spec.instructor_mode if set)
+        # 2. Special cases (reasoning_effort)
+        # 3. LiteLLM model capabilities lookup
+        # 4. Provider registry fallback
+        # 5. Safe default (JSON)
+        instructor_mode = detect_instructor_mode(
+            model=self.model,
+            extra_params=spec.extra_params,
+            user_override=getattr(spec, "instructor_mode", "auto"),
+            router_model_list=router_model_list,
+        )
 
         self.instructor_client = instructor.from_litellm(
             completion_func, mode=instructor_mode
         )
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")
+
+        # Global connection pooling state
+        self._aiohttp_session = None
+
+        # Observer dispatcher for emitting LLM call events (set via set_observer_dispatcher)
+        self._observer_dispatcher: ObserverDispatcher | None = None
+
+    def set_observer_dispatcher(self, dispatcher: "ObserverDispatcher") -> None:
+        """
+        Set the observer dispatcher for emitting LLM call events.
+
+        This decouples observability from LiteLLM's internal callback mechanism,
+        allowing each observer to use its provider's SDK directly.
+
+        Args:
+            dispatcher: The ObserverDispatcher instance to use
+        """
+        self._observer_dispatcher = dispatcher
+
+    def _emit_llm_call_event(
+        self,
+        prompt: str,
+        completion: str,
+        tokens_in: int,
+        tokens_out: int,
+        cost: Decimal,
+        latency_ms: float,
+        metadata: dict,
+        system_message: str | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        """
+        Emit an LLM call event to all registered observers.
+
+        This is called after each successful LLM invocation to notify
+        observers (Langfuse, OpenTelemetry, etc.) about the call.
+        """
+        if not self._observer_dispatcher:
+            return
+
+        try:
+            from ondine.observability.events import LLMCallEvent
+
+            # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+            provider = self.model.split("/")[0] if "/" in self.model else "unknown"
+
+            event = LLMCallEvent(
+                # Context (use placeholder UUIDs - pipeline will set real ones)
+                pipeline_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                run_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                stage_name="LLMInvocation",
+                row_index=0,
+                timestamp=datetime.now(),
+                trace_id=str(uuid.uuid4()),
+                span_id=str(uuid.uuid4())[:16],
+                # LLM Request
+                prompt=prompt,
+                model=self.model,
+                provider=provider,
+                temperature=self.spec.temperature,
+                completion=completion,
+                system_message=system_message,
+                max_tokens=self.spec.max_tokens,
+                # Metrics
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                total_tokens=tokens_in + tokens_out,
+                cost=cost,
+                latency_ms=latency_ms,
+                # Metadata
+                metadata=metadata,
+            )
+
+            self._observer_dispatcher.dispatch("llm_call", event)
+
+        except Exception as e:
+            # Never let observer errors crash the LLM call
+            logger.debug(f"Failed to emit LLM call event: {e}")
+
+    async def start(self):
+        """
+        Initialize global high-performance connection pool (aiohttp).
+
+        This enables Proxy-level performance (1000+ concurrent requests) by reusing
+        connections across all LiteLLM calls.
+        """
+        if not _HAS_AIOHTTP:
+            logger.warning("aiohttp not installed. Global connection pooling disabled.")
+            return
+
+        if self._aiohttp_session:
+            return  # Already started
+
+        try:
+            # Load limits from env or default to high performance
+            total_limit = int(os.getenv("LITELLM_POOL_LIMIT", "1000"))
+            host_limit = int(os.getenv("LITELLM_POOL_LIMIT_PER_HOST", "100"))
+
+            # Create high-performance session
+            # Limits match LiteLLM Proxy defaults for high throughput
+            self._aiohttp_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(
+                    limit=total_limit,  # Max total connections
+                    limit_per_host=host_limit,  # Max per provider (e.g. OpenAI)
+                    ttl_dns_cache=600,  # Cache DNS for 10 mins
+                    keepalive_timeout=60,  # Keep idle connections open
+                ),
+                timeout=aiohttp.ClientTimeout(total=600),  # 10 min timeout for batches
+            )
+
+            # Inject into LiteLLM Global Handler
+            # This makes ALL Router/Completion calls use this session
+            litellm.base_llm_aiohttp_handler = BaseLLMAIOHTTPHandler(
+                client_session=self._aiohttp_session
+            )
+            logger.info(
+                f"Initialized global high-performance connection pool (limit={total_limit}, per_host={host_limit})"
+            )
+
+            # Perform connectivity check to prune dead providers
+            await self.verify_connectivity()
+
+        except Exception as e:
+            logger.error(f"Failed to initialize global connection pool: {e}")
+            # Graceful degradation: litellm will create its own sessions
+
+    async def verify_connectivity(self):
+        """
+        Verify connectivity for all configured providers.
+
+        Prunes dead/invalid providers from the Router's model_list to prevent
+        runtime errors during batch processing.
+        """
+        if not self.router:
+            return
+
+        logger.info("Performing Pre-flight Health Check...")
+
+        # Access internal model list (LiteLLM Router stores it here)
+        if not hasattr(self.router, "model_list") or not self.router.model_list:
+            return
+
+        working_models = []
+        failed_models = []
+
+        # We need to iterate a copy because we might modify the list
+        for model in self.router.model_list:
+            # Get model alias for display
+            model_info = model.get("litellm_params", {})
+            model_name = model_info.get("model", "unknown")
+            alias = model.get("model_name", model_name)  # The routing alias
+
+            # Create a friendly display name
+            display_name = f"{model_name} ({alias})"
+
+            # Skip if no API key (unless it's local/no-auth)
+            # Actually, just try pinging it.
+
+            try:
+                # Send minimal ping (1 token)
+                # Use litellm.acompletion directly with specific params
+                # We bypass the router to test the specific deployment
+                logger.info(f"  -> Testing {display_name}...")
+
+                # Construct clean ping args to avoid conflicts
+                # Use a safe prompt "What is 1+1?" to avoid content filters
+                ping_kwargs = {
+                    "model": model_info.get("model"),
+                    "api_key": model_info.get("api_key"),
+                    "api_base": model_info.get("api_base"),
+                    "messages": [{"role": "user", "content": "What is 1+1?"}],
+                    "max_tokens": 1,
+                    "timeout": 10,  # Fast fail
+                }
+                # Filter out None values
+                ping_kwargs = {k: v for k, v in ping_kwargs.items() if v is not None}
+
+                await litellm.acompletion(**ping_kwargs)
+                logger.info("     OK")
+                working_models.append(model)
+
+            except Exception as e:
+                error_str = str(e).lower()
+                # If we get a ContentPolicyViolation or BadRequest, the provider IS reachable
+                # It just didn't like our ping prompt. Treat this as HEALTHY.
+                if (
+                    "content_policy_violation" in error_str
+                    or "badrequest" in error_str
+                    or "400" in error_str
+                ):
+                    logger.info(
+                        f"     OK (connectivity verified despite error: {error_str[:50]}...)"
+                    )
+                    working_models.append(model)
+                else:
+                    error_msg = str(e).split("\n")[0][:100]
+                    logger.warning(f"     ❌ FAILED: {error_msg}")
+                    failed_models.append(model)
+
+        # If we found failures, just warn (User requested to NOT remove them)
+        if failed_models:
+            logger.warning(
+                f"WARNING: Found {len(failed_models)} unhealthy providers, but keeping them in Router as requested."
+            )
+            if not working_models:
+                logger.error(
+                    "❌ ALL providers failed health check! Pipeline will likely fail."
+                )
+
+            # self.router.model_list = working_models # DISABLED: Keep all providers
+
+    async def stop(self):
+        """Cleanup global connection pool."""
+        if self._aiohttp_session:
+            try:
+                # Unset global handler first
+                if getattr(litellm, "base_llm_aiohttp_handler", None):
+                    litellm.base_llm_aiohttp_handler = None
+
+                await self._aiohttp_session.close()
+                self._aiohttp_session = None
+                logger.info("🔌 Closed global connection pool")
+            except Exception as e:
+                logger.error(f"Error closing connection pool: {e}")
 
     def _init_router(self, config: dict):
         """
@@ -191,6 +446,7 @@ class UnifiedLiteLLMClient(LLMClient):
         Safety checks:
         - All deployments must share the same model_name (required for load balancing)
         - Maps 'debug' config to LiteLLM's 'set_verbose'
+        - Registers cooldown callback for circuit breaker observability
         """
         from litellm import Router
 
@@ -215,6 +471,10 @@ class UnifiedLiteLLMClient(LLMClient):
             self.router = Router(**router_kwargs)
             self.model = model_names.pop()  # Use shared model_name
 
+            # Store resilience config for observability
+            self._allowed_fails = config.get("allowed_fails", 3)
+            self._cooldown_time = config.get("cooldown_time", 60)
+
             # Display Router info using Rich utilities
             strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
             display_router_deployments(
@@ -223,6 +483,13 @@ class UnifiedLiteLLMClient(LLMClient):
                 deployments=config["model_list"],
                 verbose=verbose_mode or router_kwargs.get("set_verbose", False),
             )
+
+            # Log resilience config
+            if self._allowed_fails > 0 and self._cooldown_time > 0:
+                logger.info(
+                    f"Circuit breaker enabled: "
+                    f"{self._allowed_fails} fails → {self._cooldown_time}s cooldown"
+                )
 
             # ============================================================
             # CRITICAL: Aggressively suppress Router's internal JSON logging
@@ -245,6 +512,167 @@ class UnifiedLiteLLMClient(LLMClient):
         except Exception as e:
             logger.error(f"Router init failed: {e}")
             self.router = None
+
+    def _emit_cooldown_event(
+        self,
+        deployment: dict,
+        exception: Exception,
+    ) -> None:
+        """
+        Emit a provider cooldown event when circuit breaker triggers.
+
+        Called by LiteLLM Router when a deployment exceeds allowed_fails.
+        """
+        if not self._observer_dispatcher:
+            return
+
+        try:
+            from ondine.observability.events import ProviderCooldownEvent
+
+            # Extract deployment info
+            model_info = deployment.get("litellm_params", {})
+            provider = model_info.get("model", "unknown")
+            deployment_id = deployment.get(
+                "model_id", deployment.get("model_name", "unknown")
+            )
+
+            event = ProviderCooldownEvent(
+                pipeline_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                run_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                timestamp=datetime.now(),
+                trace_id=str(uuid.uuid4()),
+                span_id=str(uuid.uuid4())[:16],
+                provider=provider,
+                deployment_id=deployment_id,
+                reason=str(exception)[:500],  # Truncate long error messages
+                cooldown_duration=getattr(self, "_cooldown_time", 60),
+                fail_count=getattr(self, "_allowed_fails", 3),
+            )
+
+            self._observer_dispatcher.dispatch("provider_cooldown", event)
+            logger.warning(
+                f"🔴 Circuit breaker triggered: {provider} entering {event.cooldown_duration}s cooldown"
+            )
+
+        except Exception as e:
+            # Never let observer errors crash the pipeline
+            logger.debug(f"Failed to emit cooldown event: {e}")
+
+    def _map_provider_error(self, error: Exception) -> Exception:
+        """
+        Map provider-specific exceptions to Ondine domain exceptions.
+
+        Centralizes error classification logic to decouple stages from provider details.
+        Distinguishes between Fatal (NonRetryable) and Transient (Retryable) errors.
+
+        Args:
+            error: The raw exception from LiteLLM/Provider
+
+        Returns:
+            Mapped Ondine exception or original exception if no mapping exists
+        """
+        error_str = str(error).lower()
+
+        # 1. Unwrap Instructor Retry Exceptions (recursively)
+        try:
+            from instructor.core.exceptions import InstructorRetryException
+
+            if isinstance(error, InstructorRetryException):
+                # Try to find the underlying cause
+                if hasattr(error, "last_attempt") and error.last_attempt:
+                    if hasattr(error.last_attempt, "exception"):
+                        inner_exc = error.last_attempt.exception()
+                        if inner_exc:
+                            # Recurse to map the inner exception
+                            return self._map_provider_error(inner_exc)
+                elif hasattr(error, "args") and error.args:
+                    if isinstance(error.args[0], Exception):
+                        return self._map_provider_error(error.args[0])
+        except ImportError:
+            pass
+
+        # 2. Check for Network errors (Retryable) - CHECK FIRST
+        if (
+            "network" in error_str
+            or "timeout" in error_str
+            or "connection" in error_str
+            or "service unavailable" in error_str
+            or "503" in error_str
+            or "502" in error_str
+        ):
+            provider_info = ""
+            if hasattr(error, "model") and error.model and error.model != "mixed-llm":
+                provider_info = f" [Provider: {error.model}]"
+            return NetworkError(f"{str(error)}{provider_info}")
+
+        # 3. Check for Quota/Billing errors (Fatal) - CHECK BEFORE RATE LIMIT
+        # Because Providers often return 429 for BOTH Rate Limit and Quota
+        quota_patterns = [
+            "quota exceeded",
+            "insufficient_quota",
+            "billing",
+            "credits exhausted",
+            "account suspended",
+            "payment required",
+            "tokens per day limit exceeded",  # Cerebras Quota
+            "tokens per hour limit exceeded",  # Cerebras Quota
+            "tokens per month limit exceeded",  # Cerebras Quota
+        ]
+        if any(p in error_str for p in quota_patterns):
+            return QuotaExceededError(f"Quota error: {error}")
+
+        # 4. Check for Rate Limit (Retryable)
+        # LiteLLM usually wraps these in its own RateLimitError, but check string too
+        if (
+            "rate" in error_str
+            or "429" in error_str
+            or isinstance(error, litellm.RateLimitError)
+        ):
+            return OndineRateLimitError(str(error))
+
+        # 5. Check for Authentication errors (Fatal)
+        auth_patterns = [
+            "invalid api key",
+            "authentication failed",
+            "401",
+            "403",
+            "unauthorized",
+            "invalid credentials",
+            "permission denied",
+        ]
+        # Check OpenAI/Anthropic specific auth errors types if available
+        try:
+            from openai import AuthenticationError as OpenAIAuthError
+
+            if isinstance(error, OpenAIAuthError):
+                return InvalidAPIKeyError(f"OpenAI authentication failed: {error}")
+        except ImportError:
+            pass
+
+        try:
+            from anthropic import AuthenticationError as AnthropicAuthError
+
+            if isinstance(error, AnthropicAuthError):
+                return InvalidAPIKeyError(f"Anthropic authentication failed: {error}")
+        except ImportError:
+            pass
+
+        if any(p in error_str for p in auth_patterns):
+            return InvalidAPIKeyError(f"Authentication error: {error}")
+
+        # 6. Check for Model Not Found (Fatal)
+        model_patterns = [
+            "decommissioned",
+            "not found",
+            "does not exist",
+            "invalid model",
+            "unknown model",
+        ]
+        if any(p in error_str for p in model_patterns):
+            return ModelNotFoundError(f"Model error: {error}")
+
+        # Return original if no mapping matches
+        return error
 
     async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """Async call to LLM - pass through to LiteLLM."""
@@ -278,10 +706,13 @@ class UnifiedLiteLLMClient(LLMClient):
             call_kwargs.update(self.spec.extra_params)
 
         # Call LiteLLM (Router or direct)
-        if self.router:
-            response = await self.router.acompletion(**call_kwargs)
-        else:
-            response = await litellm.acompletion(**call_kwargs)
+        try:
+            if self.router:
+                response = await self.router.acompletion(**call_kwargs)
+            else:
+                response = await litellm.acompletion(**call_kwargs)
+        except Exception as e:
+            raise self._map_provider_error(e)
 
         # Extract response
         text = response.choices[0].message.content
@@ -309,6 +740,18 @@ class UnifiedLiteLLMClient(LLMClient):
                     # Method 2: model_region or custom_llm_provider
                     elif "model_region" in hidden:
                         metadata["model_id"] = hidden["model_region"]
+
+        # Emit LLM call event to observers
+        self._emit_llm_call_event(
+            prompt=prompt,
+            completion=text,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost=cost,
+            latency_ms=latency_ms,
+            metadata=metadata,
+            system_message=kwargs.get("system_message"),
+        )
 
         return LLMResponse(
             text=text,
@@ -366,7 +809,8 @@ class UnifiedLiteLLMClient(LLMClient):
             )
             if cost and cost > 0:
                 return Decimal(str(cost))
-        except Exception:
+        except Exception:  # nosec B110
+            # Cost calculation is non-critical, fallback to manual calculation
             pass
 
         # Last resort: Manual calculation from spec
@@ -413,8 +857,37 @@ class UnifiedLiteLLMClient(LLMClient):
             return int(len(text.split()) * 1.3)
 
     def calculate_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
-        """Public cost calculation."""
-        return self._calc_cost(tokens_in, tokens_out)
+        """
+        Public cost calculation for estimates.
+
+        Uses LiteLLM's pricing database first, falls back to spec pricing.
+        For Router configs, uses the first deployment's model for pricing.
+        """
+        # Determine model to use for pricing lookup
+        model_for_pricing = self.model
+
+        # If using Router, get the actual model from first deployment
+        if (
+            self.router
+            and hasattr(self.router, "model_list")
+            and self.router.model_list
+        ):
+            first_deployment = self.router.model_list[0]
+            litellm_params = first_deployment.get("litellm_params", {})
+            model_for_pricing = litellm_params.get("model", self.model)
+
+        try:
+            # Use LiteLLM's cost_per_token for accurate pricing
+            input_cost, output_cost = litellm.cost_per_token(
+                model=model_for_pricing,
+                prompt_tokens=tokens_in,
+                completion_tokens=tokens_out,
+            )
+            # cost_per_token returns TOTAL cost, not per-token
+            return Decimal(str(input_cost + output_cost))
+        except Exception:  # nosec B110
+            # Fallback to spec-based calculation
+            return self._calc_cost(tokens_in, tokens_out)
 
     def structured_invoke(
         self, prompt: str, output_cls: type[BaseModel], **kwargs: Any
@@ -480,18 +953,25 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Call with pre-initialized Instructor client
         raw_response = None
-        # Try to get raw response for metadata extraction
-        # Instructor >= 1.0.0 supports create_with_completion
-        if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
-            (
-                result,
-                raw_response,
-            ) = await self.instructor_client.chat.completions.create_with_completion(
-                **call_kwargs
-            )
-        else:
-            # Fallback for older versions
-            result = await self.instructor_client.chat.completions.create(**call_kwargs)
+        try:
+            # Try to get raw response for metadata extraction
+            # Instructor >= 1.0.0 supports create_with_completion
+            if hasattr(
+                self.instructor_client.chat.completions, "create_with_completion"
+            ):
+                (
+                    result,
+                    raw_response,
+                ) = await self.instructor_client.chat.completions.create_with_completion(
+                    **call_kwargs
+                )
+            else:
+                # Fallback for older versions
+                result = await self.instructor_client.chat.completions.create(
+                    **call_kwargs
+                )
+        except Exception as e:
+            raise self._map_provider_error(e)
 
         # Serialize for backward compatibility (text field)
         text = result.model_dump_json()
@@ -545,6 +1025,18 @@ class UnifiedLiteLLMClient(LLMClient):
                     hidden = raw._hidden_params
                     if isinstance(hidden, dict) and "model_id" in hidden:
                         metadata["model_id"] = hidden["model_id"]
+
+        # Emit LLM call event to observers
+        self._emit_llm_call_event(
+            prompt=prompt,
+            completion=text,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost=cost,
+            latency_ms=latency_ms,
+            metadata=metadata,
+            system_message=kwargs.get("system_message"),
+        )
 
         return LLMResponse(
             text=text,
@@ -605,8 +1097,8 @@ class UnifiedLiteLLMClient(LLMClient):
 
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
                 logger.debug(
-                    f"✅ Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                    f"Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
-        except Exception:
-            # Don't crash on logging errors
+        except Exception:  # nosec B110
+            # Don't crash on logging errors - cache hit detection is non-critical
             pass

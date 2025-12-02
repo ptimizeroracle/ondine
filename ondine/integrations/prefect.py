@@ -121,9 +121,9 @@ def llm_transform_task(
     result = pipeline.execute()
 
     # Log metrics (Prefect will capture)
-    print(f"✅ Processed {result.metrics.total_rows} rows")
-    print(f"💰 Cost: ${result.costs.total_cost}")
-    print(f"⏱️  Duration: {result.duration:.2f}s")
+    print(f"Processed {result.metrics.total_rows} rows")
+    print(f"Cost: ${result.costs.total_cost}")
+    print(f"Duration: {result.duration:.2f}s")
 
     return result.data
 

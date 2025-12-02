@@ -58,10 +58,11 @@ class TestAllProviders:
         )
 
         result = pipeline.execute()
+        df = result.to_pandas()
 
         # Verify result
-        assert len(result.data) == 1
-        assert "response" in result.data.columns
+        assert len(df) == 1
+        assert "response" in df.columns
         assert result.metrics.processed_rows == 1
         assert result.costs.total_cost >= 0
 

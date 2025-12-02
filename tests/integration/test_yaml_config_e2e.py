@@ -84,11 +84,12 @@ output:
         specs = ConfigLoader.from_yaml(str(yaml_file))
         pipeline = Pipeline(specs)
         result = pipeline.execute()
+        df = result.to_pandas()
 
         # Verify execution
         assert result.success, f"{provider} YAML pipeline failed"
-        assert len(result.data) == 10, f"Expected 10 rows, got {len(result.data)}"
-        assert "output_text" in result.data.columns
+        assert len(df) == 10, f"Expected 10 rows, got {len(df)}"
+        assert "output_text" in df.columns
 
         # Verify settings were applied (check via specs)
         specs = pipeline.specifications
@@ -99,7 +100,7 @@ output:
 
         print(f"\n{provider.upper()} YAML Config Test Results:")
         print(f"  Loaded from: {yaml_file.name}")
-        print(f"  Processed: {len(result.data)} rows")
+        print(f"  Processed: {len(df)} rows")
         print("  Settings applied: batch_size=10, concurrency=2, rate_limit=30")
         print("  ✅ YAML configuration working correctly")
 
@@ -169,13 +170,14 @@ output:
         specs = ConfigLoader.from_yaml(str(yaml_file))
         pipeline = Pipeline(specs)
         result = pipeline.execute()
+        df = result.to_pandas()
 
         assert result.success
-        assert len(result.data) == 3
-        assert "category" in result.data.columns
-        assert "color" in result.data.columns
+        assert len(df) == 3
+        assert "category" in df.columns
+        assert "color" in df.columns
 
         print("\nMulti-Column YAML Test Results:")
-        print(f"  Processed: {len(result.data)} rows")
-        print(f"  Output columns: {list(result.data.columns)}")
+        print(f"  Processed: {len(df)} rows")
+        print(f"  Output columns: {list(df.columns)}")
         print("  ✅ Multi-column YAML config working")

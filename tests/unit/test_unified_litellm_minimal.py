@@ -77,7 +77,7 @@ class TestUnifiedLiteLLMClient:
             call_kwargs = mock_completion.call_args.kwargs
 
             assert call_kwargs["model"] == "openai/gpt-4o-mini"
-            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["api_key"] == "sk-test"  # pragma: allowlist secret
             assert call_kwargs["temperature"] == 0.7
             assert call_kwargs["max_tokens"] == 100
             assert call_kwargs["messages"] == [
@@ -150,7 +150,7 @@ class TestUnifiedLiteLLMClient:
         }
         spec = LLMSpec(
             model="fast-model",  # Will be overridden by router
-            api_key="sk-test",
+            api_key="sk-test",  # pragma: allowlist secret
         )
         spec.router_config = router_config
         fake_response = FakeResponse()
@@ -159,6 +159,8 @@ class TestUnifiedLiteLLMClient:
         with patch("litellm.Router") as mock_router:
             mock_router_instance = Mock()
             mock_router_instance.acompletion = AsyncMock(return_value=fake_response)
+            # Mock model_list as a real list so it's iterable
+            mock_router_instance.model_list = router_config["model_list"]
             mock_router.return_value = mock_router_instance
 
             client = UnifiedLiteLLMClient(spec)
@@ -275,7 +277,7 @@ class TestUnifiedLiteLLMClient:
             call_kwargs = mock_completions.create_with_completion.call_args.kwargs
             assert call_kwargs["model"] == "openai/gpt-4o-mini"
             assert call_kwargs["response_model"] == TestModel
-            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["api_key"] == "sk-test"  # pragma: allowlist secret
 
             # Verify response is serialized JSON
             assert '"result"' in result.text
@@ -284,8 +286,9 @@ class TestUnifiedLiteLLMClient:
     def test_calc_cost_with_litellm(self):
         """Test cost calculation uses LiteLLM's pricing DB."""
         spec = LLMSpec(
-            model="openai/gpt-4o-mini", api_key="sk-test"
-        )  # pragma: allowlist secret
+            model="openai/gpt-4o-mini",
+            api_key="sk-test",  # pragma: allowlist secret
+        )
 
         # Create fake response object
         from litellm import Choices, Message, ModelResponse, Usage
@@ -316,7 +319,7 @@ class TestUnifiedLiteLLMClient:
         """Test cost calculation falls back to spec values when LiteLLM fails."""
         spec = LLMSpec(
             model="custom/model",
-            api_key="sk-test",
+            api_key="sk-test",  # pragma: allowlist secret
             input_cost_per_1k_tokens=Decimal("0.01"),
             output_cost_per_1k_tokens=Decimal("0.02"),
         )
@@ -348,7 +351,10 @@ class TestUnifiedLiteLLMClient:
 
     def test_estimate_tokens_fallback(self):
         """Test token estimation falls back to word count when encode fails."""
-        spec = LLMSpec(model="custom/model", api_key="sk-test")
+        spec = LLMSpec(
+            model="custom/model",
+            api_key="sk-test",  # pragma: allowlist secret
+        )
 
         with patch(
             "ondine.adapters.unified_litellm_client.litellm.encode",

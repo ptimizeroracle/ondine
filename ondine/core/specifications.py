@@ -286,6 +286,18 @@ class LLMSpec(BaseModel):
         ),
     )
 
+    # Instructor mode override (for structured output)
+    instructor_mode: str = Field(
+        default="auto",
+        description=(
+            "Instructor mode for structured output: "
+            "'auto' (intelligent detection based on model capabilities), "
+            "'tools' (function calling - most reliable but not all models support), "
+            "'json' (JSON mode - universal compatibility), "
+            "'json_schema' (OpenAI native JSON schema mode)"
+        ),
+    )
+
     # Router configuration (Phase 3) - for load balancing and failover
     router_config: dict[str, Any] | None = Field(
         default=None,
