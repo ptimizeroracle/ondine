@@ -259,7 +259,7 @@ class Pipeline:
             import uvloop
 
             uvloop.install()
-            self.logger.debug("🚀 uvloop enabled for high-performance event loop")
+            self.logger.debug("uvloop enabled for high-performance event loop")
         except ImportError:
             pass  # uvloop not installed or not supported (Windows)
         except Exception as e:
@@ -553,7 +553,15 @@ class Pipeline:
             )
 
         # Stage 3: Invoke LLM
-        llm_client = create_llm_client(specs.llm)
+        # Pass instructor_mode from metadata to LLMSpec if set
+        llm_spec = specs.llm
+        if specs.metadata and "instructor_mode" in specs.metadata:
+            # Create a copy of the spec with the instructor_mode set
+            llm_spec = llm_spec.model_copy(
+                update={"instructor_mode": specs.metadata["instructor_mode"]}
+            )
+
+        llm_client = create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration)
         if context.observer_dispatcher and hasattr(

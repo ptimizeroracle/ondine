@@ -137,7 +137,7 @@ class LoggingObserver(PipelineObserver):
     def on_provider_cooldown(self, event: ProviderCooldownEvent) -> None:
         """Log provider cooldown (circuit breaker triggered)."""
         logger.warning(
-            f"🔴 Provider cooldown: {event.provider} "
+            f"Provider cooldown: {event.provider} "
             f"(deployment={event.deployment_id}, "
             f"fails={event.fail_count}, "
             f"cooldown={event.cooldown_duration}s) "
@@ -147,7 +147,7 @@ class LoggingObserver(PipelineObserver):
     def on_provider_recovered(self, event: ProviderRecoveredEvent) -> None:
         """Log provider recovery from cooldown."""
         logger.info(
-            f"🟢 Provider recovered: {event.provider} "
+            f"Provider recovered: {event.provider} "
             f"(deployment={event.deployment_id}, "
             f"was down for {event.cooldown_duration}s)"
         )

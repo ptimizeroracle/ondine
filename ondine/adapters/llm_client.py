@@ -201,7 +201,7 @@ class MLXClient(LLMClient):
         print(f"🔄 Loading MLX model: {spec.model}...")
         try:
             self.mlx_model, self.mlx_tokenizer = self.mlx_lm.load(spec.model)
-            print("✅ Model loaded successfully")
+            print("Model loaded successfully")
         except Exception as e:
             raise Exception(
                 f"Failed to load MLX model '{spec.model}'. "

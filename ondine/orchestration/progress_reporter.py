@@ -111,10 +111,11 @@ class ProgressReporter:
             self._deployment_tracker.record_request(deployment_id)
 
             # Ensure deployment task exists in progress tracker
+            # Use full total - actual count will be shown at finish()
             self._tracker.ensure_deployment_task(
                 self._task_id,
                 display_id,
-                total_rows=self._total_rows // 3,  # Estimate per deployment
+                total_rows=self._total_rows,
                 label_info=label_info,
             )
 
@@ -146,7 +147,5 @@ class ProgressReporter:
 
     def __repr__(self) -> str:
         return (
-            f"ProgressReporter(active={self.is_active}, "
-            f"total_rows={self._total_rows})"
+            f"ProgressReporter(active={self.is_active}, total_rows={self._total_rows})"
         )
-

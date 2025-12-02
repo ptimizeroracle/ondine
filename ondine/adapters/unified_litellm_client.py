@@ -186,25 +186,30 @@ class UnifiedLiteLLMClient(LLMClient):
                 logger.warning(f"Failed to initialize LiteLLM cache: {e}")
 
         # Initialize Instructor client ONCE (not per-call!)
-        # Auto-detect mode based on provider:
-        # - Groq: Use JSON mode (function calling is unreliable, generates XML)
-        # - OpenAI/Anthropic: Use TOOLS mode (native function calling)
-        # - Default: JSON mode (safest fallback)
+        # Use intelligent mode detection (layered approach)
+        from ondine.adapters.instructor_mode import detect_instructor_mode
+
         completion_func = (
             self.router.acompletion if self.router else litellm.acompletion
         )
 
-        # Detect provider from model string
-        model_lower = self.model.lower()
-        if "groq" in model_lower:
-            instructor_mode = instructor.Mode.JSON
-            logger.debug("Using Instructor JSON mode for Groq (avoids XML issues)")
-        elif any(p in model_lower for p in ["gpt", "openai", "claude", "anthropic"]):
-            instructor_mode = instructor.Mode.TOOLS
-            logger.debug("Using Instructor TOOLS mode for OpenAI/Anthropic")
-        else:
-            instructor_mode = instructor.Mode.JSON  # Safest default
-            logger.debug("Using Instructor JSON mode (default)")
+        # Get router model list if available
+        router_model_list = None
+        if self.router and hasattr(self.router, "model_list"):
+            router_model_list = self.router.model_list
+
+        # Detect best instructor mode using layered approach:
+        # 1. User override (from spec.instructor_mode if set)
+        # 2. Special cases (reasoning_effort)
+        # 3. LiteLLM model capabilities lookup
+        # 4. Provider registry fallback
+        # 5. Safe default (JSON)
+        instructor_mode = detect_instructor_mode(
+            model=self.model,
+            extra_params=spec.extra_params,
+            user_override=getattr(spec, "instructor_mode", "auto"),
+            router_model_list=router_model_list,
+        )
 
         self.instructor_client = instructor.from_litellm(
             completion_func, mode=instructor_mode
@@ -327,7 +332,7 @@ class UnifiedLiteLLMClient(LLMClient):
                 client_session=self._aiohttp_session
             )
             logger.info(
-                f"🚀 Initialized global high-performance connection pool (limit={total_limit}, per_host={host_limit})"
+                f"Initialized global high-performance connection pool (limit={total_limit}, per_host={host_limit})"
             )
 
             # Perform connectivity check to prune dead providers
@@ -347,7 +352,7 @@ class UnifiedLiteLLMClient(LLMClient):
         if not self.router:
             return
 
-        logger.info("🏥 Performing Pre-flight Health Check...")
+        logger.info("Performing Pre-flight Health Check...")
 
         # Access internal model list (LiteLLM Router stores it here)
         if not hasattr(self.router, "model_list") or not self.router.model_list:
@@ -373,15 +378,15 @@ class UnifiedLiteLLMClient(LLMClient):
                 # Send minimal ping (1 token)
                 # Use litellm.acompletion directly with specific params
                 # We bypass the router to test the specific deployment
-                logger.info(f"  👉 Testing {display_name}...")
+                logger.info(f"  -> Testing {display_name}...")
 
-                # Construct clean ping args to avoid conflicts (e.g. user max_tokens vs ping max_tokens)
-                # Explicitly select ONLY what we need for a ping
+                # Construct clean ping args to avoid conflicts
+                # Use a safe prompt "What is 1+1?" to avoid content filters
                 ping_kwargs = {
                     "model": model_info.get("model"),
                     "api_key": model_info.get("api_key"),
                     "api_base": model_info.get("api_base"),
-                    "messages": [{"role": "user", "content": "Hi"}],
+                    "messages": [{"role": "user", "content": "What is 1+1?"}],
                     "max_tokens": 1,
                     "timeout": 10,  # Fast fail
                 }
@@ -389,18 +394,31 @@ class UnifiedLiteLLMClient(LLMClient):
                 ping_kwargs = {k: v for k, v in ping_kwargs.items() if v is not None}
 
                 await litellm.acompletion(**ping_kwargs)
-                logger.info("     ✅ OK")
+                logger.info("     OK")
                 working_models.append(model)
 
             except Exception as e:
-                error_msg = str(e).split("\n")[0][:100]
-                logger.warning(f"     ❌ FAILED: {error_msg}")
-                failed_models.append(model)
+                error_str = str(e).lower()
+                # If we get a ContentPolicyViolation or BadRequest, the provider IS reachable
+                # It just didn't like our ping prompt. Treat this as HEALTHY.
+                if (
+                    "content_policy_violation" in error_str
+                    or "badrequest" in error_str
+                    or "400" in error_str
+                ):
+                    logger.info(
+                        f"     OK (connectivity verified despite error: {error_str[:50]}...)"
+                    )
+                    working_models.append(model)
+                else:
+                    error_msg = str(e).split("\n")[0][:100]
+                    logger.warning(f"     ❌ FAILED: {error_msg}")
+                    failed_models.append(model)
 
         # If we found failures, just warn (User requested to NOT remove them)
         if failed_models:
             logger.warning(
-                f"⚠️ Found {len(failed_models)} unhealthy providers, but keeping them in Router as requested."
+                f"WARNING: Found {len(failed_models)} unhealthy providers, but keeping them in Router as requested."
             )
             if not working_models:
                 logger.error(
@@ -471,7 +489,7 @@ class UnifiedLiteLLMClient(LLMClient):
             # Log resilience config
             if self._allowed_fails > 0 and self._cooldown_time > 0:
                 logger.info(
-                    f"🛡️ Circuit breaker enabled: "
+                    f"Circuit breaker enabled: "
                     f"{self._allowed_fails} fails → {self._cooldown_time}s cooldown"
                 )
 
@@ -841,8 +859,37 @@ class UnifiedLiteLLMClient(LLMClient):
             return int(len(text.split()) * 1.3)
 
     def calculate_cost(self, tokens_in: int, tokens_out: int) -> Decimal:
-        """Public cost calculation."""
-        return self._calc_cost(tokens_in, tokens_out)
+        """
+        Public cost calculation for estimates.
+
+        Uses LiteLLM's pricing database first, falls back to spec pricing.
+        For Router configs, uses the first deployment's model for pricing.
+        """
+        # Determine model to use for pricing lookup
+        model_for_pricing = self.model
+
+        # If using Router, get the actual model from first deployment
+        if (
+            self.router
+            and hasattr(self.router, "model_list")
+            and self.router.model_list
+        ):
+            first_deployment = self.router.model_list[0]
+            litellm_params = first_deployment.get("litellm_params", {})
+            model_for_pricing = litellm_params.get("model", self.model)
+
+        try:
+            # Use LiteLLM's cost_per_token for accurate pricing
+            input_cost, output_cost = litellm.cost_per_token(
+                model=model_for_pricing,
+                prompt_tokens=tokens_in,
+                completion_tokens=tokens_out,
+            )
+            # cost_per_token returns TOTAL cost, not per-token
+            return Decimal(str(input_cost + output_cost))
+        except Exception:  # nosec B110
+            # Fallback to spec-based calculation
+            return self._calc_cost(tokens_in, tokens_out)
 
     def structured_invoke(
         self, prompt: str, output_cls: type[BaseModel], **kwargs: Any
@@ -1052,7 +1099,7 @@ class UnifiedLiteLLMClient(LLMClient):
 
                 cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
                 logger.debug(
-                    f"✅ Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
+                    f"Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
                 )
         except Exception:  # nosec B110
             # Don't crash on logging errors - cache hit detection is non-critical

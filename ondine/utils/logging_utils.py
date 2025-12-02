@@ -71,7 +71,9 @@ def configure_logging(
         # In TRACE mode, let everything through (useful for debugging headers/raw output)
         # We print a warning so the user knows why their console is flooded
         if not _logging_configured:
-            print("⚠️ ONDINE_TRACE enabled: External library logs will be visible.")
+            print(
+                "WARNING: ONDINE_TRACE enabled: External library logs will be visible."
+            )
 
     # Configure structlog processors
     processors = [

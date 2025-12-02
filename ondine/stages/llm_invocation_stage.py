@@ -1,7 +1,6 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import asyncio
-import time
 from decimal import Decimal
 from typing import Any
 
@@ -133,10 +132,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             progress_reporter = ProgressReporter(progress_tracker, deployment_tracker)
 
             # Calculate total rows and start progress
+            # Note: We don't pre-create deployment bars anymore - they're created
+            # dynamically as deployments are actually used (more accurate)
             total_rows = BatchProcessor.calculate_total_rows(batches)
             if progress_tracker:
-                deployments = deployment_tracker.get_deployments_for_progress()
-                progress_reporter.start(self.name, total_rows, deployments)
+                # Pass empty list - deployment bars created dynamically
+                progress_reporter.start(self.name, total_rows, deployments=[])
 
             # Store for access in processing loop
             self._deployment_tracker = deployment_tracker
@@ -188,9 +189,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         return list(responses)
 
-    async def _process_single_item(
-        self, idx: int, item, context: Any
-    ) -> LLMResponse:
+    async def _process_single_item(self, idx: int, item, context: Any) -> LLMResponse:
         """Process a single prompt item with error handling."""
         try:
             response = await self._invoke_async(item.prompt, item.metadata)
@@ -217,7 +216,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             return response
 
         except Exception as e:
-            return self._handle_error(e, idx, len(context.intermediate_data.get("items", [])))
+            return self._handle_error(
+                e, idx, len(context.intermediate_data.get("items", []))
+            )
 
     def _invoke_with_retry_and_ratelimit(
         self,
@@ -304,8 +305,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # Update cost and token tracking
         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
             context.add_cost(response.cost, response.tokens_in + response.tokens_out)
-            context.intermediate_data["token_tracking"]["input_tokens"] += response.tokens_in
-            context.intermediate_data["token_tracking"]["output_tokens"] += response.tokens_out
+            context.intermediate_data["token_tracking"]["input_tokens"] += (
+                response.tokens_in
+            )
+            context.intermediate_data["token_tracking"]["output_tokens"] += (
+                response.tokens_out
+            )
 
     def _handle_error(self, error: Exception, idx: int, total: int) -> LLMResponse:
         """Handle processing error according to error policy."""
@@ -352,7 +357,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             self.logger.info(f"Total API calls: {total_requests}")
         else:
             self.logger.info("Router Distribution Summary:")
-            self.logger.info("  ⚠️  Could not extract deployment info from responses")
+            self.logger.info(
+                "  WARNING: Could not extract deployment info from responses"
+            )
 
         self.logger.info("=" * 70)
 
@@ -414,11 +421,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             pass
 
         # Network errors (retryable)
-        if any(p in error_str for p in ["network", "timeout", "connection", "503", "502"]):
+        if any(
+            p in error_str for p in ["network", "timeout", "connection", "503", "502"]
+        ):
             return NetworkError(str(error))
 
         # Quota errors (non-retryable)
-        quota_patterns = ["quota exceeded", "insufficient_quota", "billing", "limit exceeded"]
+        quota_patterns = [
+            "quota exceeded",
+            "insufficient_quota",
+            "billing",
+            "limit exceeded",
+        ]
         if any(p in error_str for p in quota_patterns):
             return QuotaExceededError(f"Quota error: {error}")
 
@@ -432,7 +446,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             return InvalidAPIKeyError(f"Authentication error: {error}")
 
         # Model errors
-        model_patterns = ["decommissioned", "not found", "does not exist", "invalid model"]
+        model_patterns = [
+            "decommissioned",
+            "not found",
+            "does not exist",
+            "invalid model",
+        ]
         if any(p in error_str for p in model_patterns):
             if hasattr(self.llm_client, "router") and self.llm_client.router:
                 return NetworkError(f"Router node failed (retryable): {error}")

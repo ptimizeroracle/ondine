@@ -2,8 +2,6 @@
 
 from decimal import Decimal
 
-import pytest
-
 from ondine.core.models import LLMResponse, PromptBatch, RowMetadata
 from ondine.stages.batch_processor import BatchMap, BatchProcessor, PromptItem
 
@@ -128,8 +126,12 @@ class TestBatchProcessor:
         )
 
         assert len(response_batches) == 2
-        assert response_batches[0].responses == ["Response A", "Response B"]
-        assert response_batches[1].responses == ["Response C"]
+        # Now responses are LLMResponse objects, so we check their text
+        assert [r.text for r in response_batches[0].responses] == [
+            "Response A",
+            "Response B",
+        ]
+        assert [r.text for r in response_batches[1].responses] == ["Response C"]
         assert response_batches[0].batch_id == "batch-1"
         assert response_batches[1].batch_id == "batch-2"
 
@@ -190,9 +192,7 @@ class TestBatchProcessor:
         batch = PromptBatch(
             prompts=["Aggregated prompt"],
             metadata=[
-                RowMetadata(
-                    row_index=0, custom={"is_batch": True, "batch_size": 10}
-                )
+                RowMetadata(row_index=0, custom={"is_batch": True, "batch_size": 10})
             ],
             batch_id="batch-1",
         )
@@ -207,13 +207,10 @@ class TestBatchProcessor:
 
     def test_get_batch_size_aggregated(self):
         """Test getting batch size for aggregated row."""
-        metadata = RowMetadata(
-            row_index=0, custom={"is_batch": True, "batch_size": 25}
-        )
+        metadata = RowMetadata(row_index=0, custom={"is_batch": True, "batch_size": 25})
         assert BatchProcessor.get_batch_size(metadata) == 25
 
     def test_get_batch_size_aggregated_no_size(self):
         """Test getting batch size for aggregated row without explicit size."""
         metadata = RowMetadata(row_index=0, custom={"is_batch": True})
         assert BatchProcessor.get_batch_size(metadata) == 1  # Default
-

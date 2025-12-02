@@ -149,23 +149,36 @@ JSON Array:"""
             )
 
         # Parse into BatchResult for validation
-        # Handle two item formats:
-        # A. {id: 1, result: {...}} - wrapped result (bacon cleaner pattern)
-        # B. {id: 1, answer: "...", confidence: ...} - flat fields (test pattern)
+        # Strategy: Use POSITION-BASED matching by default (user-friendly!)
+        # Only use 'id' field if it looks like a batch index (int in valid range)
         try:
             items = []
-            for item in data:
-                if "result" in item:
-                    # Architecture A: Has explicit result wrapper
+            for idx, item in enumerate(data):
+                # Check if 'id' looks like a batch index (int, 1-based, in range)
+                has_batch_id = (
+                    "id" in item
+                    and isinstance(item.get("id"), int | str)
+                    and str(item.get("id")).isdigit()
+                    and 1 <= int(item.get("id")) <= expected_count
+                )
+
+                if has_batch_id and "result" in item:
+                    # Legacy format A: {id: 1, result: {...}}
                     items.append(BatchItem(**item))
-                else:
-                    # Architecture B: Flat structure - wrap in result
-                    # Extract id, put everything else in result
-                    item_copy = dict(item)  # Don't mutate original
+                elif has_batch_id:
+                    # Legacy format B: {id: 1, field1: ..., field2: ...}
+                    item_copy = dict(item)
                     item_id = item_copy.pop("id")
-                    # If no other fields, result is None (not empty dict)
                     result_data = item_copy if item_copy else None
-                    items.append(BatchItem(id=item_id, result=result_data))
+                    items.append(BatchItem(id=int(item_id), result=result_data))
+                else:
+                    # PREFERRED: Position-based matching (no id needed!)
+                    # User's 'id' field (if any) is preserved as business data
+                    if "result" in item:
+                        result_data = item["result"]
+                    else:
+                        result_data = item  # Entire item is the result (user's fields)
+                    items.append(BatchItem(id=idx + 1, result=result_data))
 
             batch_result = BatchResult(results=items)
         except Exception as e:

@@ -325,7 +325,7 @@ def process(
                 console.print(f"  [red]• {error}[/red]")
             sys.exit(1)
 
-        console.print("[green]✅ Validation passed[/green]")
+        console.print("[green]Validation passed[/green]")
 
         # Estimate cost
         console.print("\n[cyan]Estimating cost...[/cyan]")
@@ -352,7 +352,7 @@ def process(
         result = pipeline.execute()
 
         # Display results
-        console.print("\n[green]✅ Processing complete![/green]")
+        console.print("\n[green]Processing complete![/green]")
 
         results_table = Table(title="Execution Results")
         results_table.add_column("Metric", style="cyan")
@@ -403,7 +403,7 @@ def process(
 
         # Display warnings and issues
         if quality.warnings:
-            console.print("\n[yellow]⚠️  Warnings:[/yellow]")
+            console.print("\n[yellow]Warnings:[/yellow]")
             for warning in quality.warnings:
                 console.print(f"  [yellow]• {warning}[/yellow]")
 
@@ -421,7 +421,7 @@ def process(
 
         if quality.is_acceptable:
             console.print(
-                f"\n[green]✅ Output quality is acceptable ({quality.success_rate:.1f}% success)[/green]"
+                f"\n[green]Output quality is acceptable ({quality.success_rate:.1f}% success)[/green]"
             )
         else:
             console.print(
@@ -535,7 +535,7 @@ def estimate(
         # Warning if expensive
         if estimate.total_cost > 10.0:
             console.print(
-                f"\n[yellow]⚠️  Warning: Estimated cost (${estimate.total_cost}) exceeds $10[/yellow]"
+                f"\n[yellow]Warning: Estimated cost (${estimate.total_cost}) exceeds $10[/yellow]"
             )
 
     except Exception as e:
@@ -602,7 +602,7 @@ def resume(
         # Load checkpoint
         checkpoint_info = state_manager.get_latest_checkpoint(session_uuid)
         console.print(
-            f"[green]✅ Found checkpoint at row {checkpoint_info.row_index}[/green]"
+            f"[green]Found checkpoint at row {checkpoint_info.row_index}[/green]"
         )
 
         # Resume execution
@@ -611,7 +611,7 @@ def resume(
         # Note: Full resume implementation would load the original pipeline
         # and continue from checkpoint. For now, we show the checkpoint info.
         console.print(
-            "\n[yellow]⚠️  Full resume functionality requires the original pipeline configuration[/yellow]"
+            "\n[yellow]Full resume functionality requires the original pipeline configuration[/yellow]"
         )
         console.print(
             "[yellow]Please use Pipeline.execute(resume_from=session_id) in Python code[/yellow]"
@@ -676,7 +676,7 @@ def validate(config: Path, verbose: bool):
         console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
         specs = ConfigLoader.from_yaml(str(config))
 
-        console.print("[green]✅ Configuration loaded successfully[/green]")
+        console.print("[green]Configuration loaded successfully[/green]")
 
         # Display configuration summary
         if verbose:
@@ -704,7 +704,7 @@ def validate(config: Path, verbose: bool):
         validation = pipeline.validate()
 
         if validation.is_valid:
-            console.print("[green]✅ Pipeline configuration is valid[/green]")
+            console.print("[green]Pipeline configuration is valid[/green]")
 
             if validation.warnings:
                 console.print("\n[yellow]Warnings:[/yellow]")

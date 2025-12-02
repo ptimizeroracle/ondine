@@ -1156,7 +1156,7 @@ class PipelineBuilder:
         model_list: list[dict],
         routing_strategy: str = "simple-shuffle",
         timeout: int = 120,
-        num_retries: int = 0,  # Default 0: let Instructor/Ondine handle retries
+        num_retries: int = 2,  # Default 2: retry failed requests with other providers
         redis_url: str | None = None,
         # Circuit breaker / resilience params (sensible defaults)
         allowed_fails: int = 3,  # Failures before provider cooldown
@@ -1185,7 +1185,7 @@ class PipelineBuilder:
             model_list: List of deployment configs (required)
             routing_strategy: "simple-shuffle", "weighted-pick", "latency-based-routing", etc.
             timeout: Request timeout in seconds (default: 120)
-            num_retries: Retry attempts (default: 0 = let Instructor handle retries)
+            num_retries: Retry attempts with other providers on failure (default: 2)
             redis_url: Redis URL for distributed state (optional)
             allowed_fails: Failures before cooldown (default: 3). Set to 0 to disable.
             cooldown_time: Cooldown duration in seconds (default: 60). Set to 0 to disable.
@@ -1296,7 +1296,11 @@ class PipelineBuilder:
         }
         return self
 
-    def with_structured_output(self, schema: Any) -> "PipelineBuilder":
+    def with_structured_output(
+        self,
+        schema: Any,
+        mode: str = "auto",
+    ) -> "PipelineBuilder":
         """
         Configure structured output using a Pydantic model.
 
@@ -1306,15 +1310,42 @@ class PipelineBuilder:
         Automatically configures JSONParser to handle the structured JSON output,
         unless a custom parser was already configured.
 
+        **Batch Processing Note:**
+        When using with_batch_size() > 1, your Pydantic model should have an
+        'items' field containing a list. Ondine will automatically match items
+        to rows by position. Example:
+
+            class MyBatch(BaseModel):
+                items: list[MyResult]  # Results matched by position
+
         Args:
             schema: Pydantic model class defining the expected output structure
+            mode: Instructor mode for structured output:
+                - "auto" (default): Intelligent detection based on model capabilities
+                  Uses LiteLLM's model info, provider registry, and safe fallbacks
+                - "tools": Function calling mode (most reliable, not all models support)
+                - "json": JSON mode (universal compatibility, works with all models)
+                - "json_schema": OpenAI's native JSON schema mode
 
         Returns:
             Self for chaining
+
+        Example:
+            ```python
+            # Auto-detect best mode (recommended)
+            .with_structured_output(MySchema)
+
+            # Force JSON mode (for models that don't support function calling)
+            .with_structured_output(MySchema, mode="json")
+
+            # Force TOOLS mode (for OpenAI/Anthropic)
+            .with_structured_output(MySchema, mode="tools")
+            ```
         """
         if not hasattr(self, "_custom_metadata"):
             self._custom_metadata = {}
         self._custom_metadata["structured_output_model"] = schema
+        self._custom_metadata["instructor_mode"] = mode
 
         # Auto-inject JSONParser if no parser configured
         # Structured output always returns JSON, so we need a JSON parser

@@ -110,7 +110,9 @@ class PromptBatch:
 class ResponseBatch:
     """Batch of responses from LLM."""
 
-    responses: list[str]
+    responses: (
+        list[str] | list["LLMResponse"]
+    )  # Can be strings or full LLMResponse objects
     metadata: list[RowMetadata]
     tokens_used: int = 0
     cost: Decimal = Decimal("0")
@@ -304,7 +306,7 @@ class ExecutionResult:
 
         if success_rate < 70.0:
             issues.append(
-                f"⚠️  LOW SUCCESS RATE: Only {success_rate:.1f}% of rows have valid data "
+                f"LOW SUCCESS RATE: Only {success_rate:.1f}% of rows have valid data "
                 f"({valid_outputs}/{total_rows} rows with at least one valid column)"
             )
 
@@ -312,7 +314,7 @@ class ExecutionResult:
             total_cells > 0 and null_count > total_cells * 0.3
         ):  # > 30% of all cells are null
             issues.append(
-                f"⚠️  HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
+                f"HIGH NULL RATE: {null_count} null cells out of {total_cells} total "
                 f"({null_count / total_cells * 100:.1f}% of all output cells)"
             )
 
@@ -327,7 +329,7 @@ class ExecutionResult:
         # Check if reported metrics match actual data quality
         if self.metrics.failed_rows == 0 and null_count > 0:
             issues.append(
-                f"⚠️  METRICS MISMATCH: Pipeline reported 0 failures but "
+                f"METRICS MISMATCH: Pipeline reported 0 failures but "
                 f"{null_count} cells have null outputs. This may indicate silent errors."
             )
 

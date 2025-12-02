@@ -7,8 +7,6 @@ batch structure.
 """
 
 from dataclasses import dataclass, field
-from decimal import Decimal
-from typing import Any
 
 from ondine.core.models import LLMResponse, PromptBatch, ResponseBatch, RowMetadata
 
@@ -131,14 +129,12 @@ class BatchProcessor:
             batch_llm_responses = [r for _, r in sorted_responses]
 
             # Calculate batch metrics
-            total_tokens = sum(
-                r.tokens_in + r.tokens_out for r in batch_llm_responses
-            )
+            total_tokens = sum(r.tokens_in + r.tokens_out for r in batch_llm_responses)
             total_cost = sum(r.cost for r in batch_llm_responses)
             latencies = [r.latency_ms for r in batch_llm_responses]
 
             response_batch = ResponseBatch(
-                responses=[r.text for r in batch_llm_responses],
+                responses=batch_llm_responses,  # Keep full LLMResponse objects (preserves structured_result!)
                 metadata=original_batch.metadata,
                 tokens_used=total_tokens,
                 cost=total_cost,
@@ -193,4 +189,3 @@ class BatchProcessor:
         if metadata.custom and metadata.custom.get("is_batch"):
             return metadata.custom.get("batch_size", 1)
         return 1
-
