@@ -37,7 +37,6 @@ The extra_params pattern means:
 
 import asyncio
 import logging
-import os
 import time
 import uuid
 import warnings
@@ -52,28 +51,19 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # Import Ondine Exceptions for mapping
+# Type hint for ObserverDispatcher (avoid circular import)
+from typing import TYPE_CHECKING
+
+from ondine.adapters.llm_client import LLMClient
 from ondine.core.exceptions import (
     InvalidAPIKeyError,
     ModelNotFoundError,
     QuotaExceededError,
 )
-from ondine.utils.retry_handler import NetworkError
-from ondine.utils.retry_handler import RateLimitError as OndineRateLimitError
-
-try:
-    import aiohttp
-    from litellm.llms.custom_httpx.aiohttp_handler import BaseLLMAIOHTTPHandler
-
-    _HAS_AIOHTTP = True
-except ImportError:
-    _HAS_AIOHTTP = False
-
-# Type hint for ObserverDispatcher (avoid circular import)
-from typing import TYPE_CHECKING
-
-from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
 from ondine.core.specifications import LLMSpec
+from ondine.utils.retry_handler import NetworkError
+from ondine.utils.retry_handler import RateLimitError as OndineRateLimitError
 
 if TYPE_CHECKING:
     from ondine.observability.dispatcher import ObserverDispatcher
@@ -215,9 +205,6 @@ class UnifiedLiteLLMClient(LLMClient):
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")
 
-        # Global connection pooling state
-        self._aiohttp_session = None
-
         # Observer dispatcher for emitting LLM call events (set via set_observer_dispatcher)
         self._observer_dispatcher: ObserverDispatcher | None = None
 
@@ -295,149 +282,23 @@ class UnifiedLiteLLMClient(LLMClient):
 
     async def start(self):
         """
-        Initialize global high-performance connection pool (aiohttp).
+        Optional startup hook.
 
-        This enables Proxy-level performance (1000+ concurrent requests) by reusing
-        connections across all LiteLLM calls.
+        Kept as a no-op for compatibility with `LLMInvocationStage`, which calls
+        `await llm_client.start()` for any provider.
+
+        Note: We intentionally do NOT inject custom HTTP transports here.
+        LiteLLM already manages its own async transport + connection pooling.
         """
-        if not _HAS_AIOHTTP:
-            logger.warning("aiohttp not installed. Global connection pooling disabled.")
-            return
-
-        if self._aiohttp_session:
-            return  # Already started
-
-        try:
-            # Load limits from env or default to high performance
-            total_limit = int(os.getenv("LITELLM_POOL_LIMIT", "1000"))
-            host_limit = int(os.getenv("LITELLM_POOL_LIMIT_PER_HOST", "100"))
-
-            # Create high-performance session
-            # Limits match LiteLLM Proxy defaults for high throughput
-            self._aiohttp_session = aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(
-                    limit=total_limit,  # Max total connections
-                    limit_per_host=host_limit,  # Max per provider (e.g. OpenAI)
-                    ttl_dns_cache=600,  # Cache DNS for 10 mins
-                    keepalive_timeout=60,  # Keep idle connections open
-                ),
-                timeout=aiohttp.ClientTimeout(total=600),  # 10 min timeout for batches
-            )
-
-            # Inject into LiteLLM Global Handler
-            # This makes ALL Router/Completion calls use this session
-            litellm.base_llm_aiohttp_handler = BaseLLMAIOHTTPHandler(
-                client_session=self._aiohttp_session
-            )
-            logger.info(
-                f"Initialized global high-performance connection pool (limit={total_limit}, per_host={host_limit})"
-            )
-
-            # Perform connectivity check to prune dead providers
-            await self.verify_connectivity()
-
-        except Exception as e:
-            logger.error(f"Failed to initialize global connection pool: {e}")
-            # Graceful degradation: litellm will create its own sessions
-
-    async def verify_connectivity(self):
-        """
-        Verify connectivity for all configured providers.
-
-        Prunes dead/invalid providers from the Router's model_list to prevent
-        runtime errors during batch processing.
-        """
-        if not self.router:
-            return
-
-        logger.info("Performing Pre-flight Health Check...")
-
-        # Access internal model list (LiteLLM Router stores it here)
-        if not hasattr(self.router, "model_list") or not self.router.model_list:
-            return
-
-        working_models = []
-        failed_models = []
-
-        # We need to iterate a copy because we might modify the list
-        for model in self.router.model_list:
-            # Get model alias for display
-            model_info = model.get("litellm_params", {})
-            model_name = model_info.get("model", "unknown")
-            alias = model.get("model_name", model_name)  # The routing alias
-
-            # Create a friendly display name
-            display_name = f"{model_name} ({alias})"
-
-            # Skip if no API key (unless it's local/no-auth)
-            # Actually, just try pinging it.
-
-            try:
-                # Send minimal ping (1 token)
-                # Use litellm.acompletion directly with specific params
-                # We bypass the router to test the specific deployment
-                logger.info(f"  -> Testing {display_name}...")
-
-                # Construct clean ping args to avoid conflicts
-                # Use a safe prompt "What is 1+1?" to avoid content filters
-                ping_kwargs = {
-                    "model": model_info.get("model"),
-                    "api_key": model_info.get("api_key"),
-                    "api_base": model_info.get("api_base"),
-                    "messages": [{"role": "user", "content": "What is 1+1?"}],
-                    "max_tokens": 1,
-                    "timeout": 10,  # Fast fail
-                }
-                # Filter out None values
-                ping_kwargs = {k: v for k, v in ping_kwargs.items() if v is not None}
-
-                await litellm.acompletion(**ping_kwargs)
-                logger.info("     OK")
-                working_models.append(model)
-
-            except Exception as e:
-                error_str = str(e).lower()
-                # If we get a ContentPolicyViolation or BadRequest, the provider IS reachable
-                # It just didn't like our ping prompt. Treat this as HEALTHY.
-                if (
-                    "content_policy_violation" in error_str
-                    or "badrequest" in error_str
-                    or "400" in error_str
-                ):
-                    logger.info(
-                        f"     OK (connectivity verified despite error: {error_str[:50]}...)"
-                    )
-                    working_models.append(model)
-                else:
-                    error_msg = str(e).split("\n")[0][:100]
-                    logger.warning(f"     ❌ FAILED: {error_msg}")
-                    failed_models.append(model)
-
-        # If we found failures, just warn (User requested to NOT remove them)
-        if failed_models:
-            logger.warning(
-                f"WARNING: Found {len(failed_models)} unhealthy providers, but keeping them in Router as requested."
-            )
-            if not working_models:
-                logger.error(
-                    "❌ ALL providers failed health check! Pipeline will likely fail."
-                )
-
-            # self.router.model_list = working_models # DISABLED: Keep all providers
+        return
 
     async def stop(self):
-        """Cleanup global connection pool."""
-        if self._aiohttp_session:
-            try:
-                # Unset global handler first
-                if getattr(litellm, "base_llm_aiohttp_handler", None):
-                    litellm.base_llm_aiohttp_handler = None
+        """
+        Optional shutdown hook.
 
-                await self._aiohttp_session.close()
-                self._aiohttp_session = None
-                logger.info("🔌 Closed global connection pool")
-            except Exception as e:
-                logger.error(f"Error closing connection pool: {e}")
+        Kept as a no-op for compatibility with `LLMInvocationStage`.
+        """
+        return
 
     def _init_router(self, config: dict):
         """
