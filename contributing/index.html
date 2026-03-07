@@ -2968,6 +2968,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#release-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release Process
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#good-first-issues" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3268,6 +3279,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#release-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release Process
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#good-first-issues" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3432,7 +3454,8 @@
 <li>Update README.md if adding user-facing features</li>
 <li>Add docstrings to all public functions and classes</li>
 <li>Include examples for new features in <code>examples/</code> directory</li>
-<li>Update CHANGELOG.md following <a href="https://keepachangelog.com/">Keep a Changelog</a></li>
+<li>Do not manually bump package versions in <code>pyproject.toml</code> or <code>ondine/__init__.py</code></li>
+<li>Do not manually add release entries unless a maintainer asks; release notes are managed through Release Please</li>
 </ul>
 <h3 id="commits">Commits<a class="headerlink" href="#commits" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3513,7 +3536,7 @@
 <li>Run code quality checks: <code>just check</code></li>
 <li>Update documentation if needed</li>
 <li>
-<p>Add entry to CHANGELOG.md</p>
+<p>Use a Conventional Commit style PR title if possible (<code>feat:</code>, <code>fix:</code>, <code>docs:</code>, etc.)</p>
 </li>
 <li>
 <p><strong>Submit PR:</strong></p>
@@ -3528,8 +3551,16 @@
 <p><strong>After approval:</strong></p>
 </li>
 <li>Maintainers will merge your PR</li>
-<li>Your contribution will be included in the next release!</li>
+<li>Release Please will prepare the next release from merged changes on <code>main</code></li>
 </ol>
+<h2 id="release-process">Release Process<a class="headerlink" href="#release-process" title="Permanent link">&para;</a></h2>
+<p>Ondine uses GitHub Actions plus Release Please for releases:</p>
+<ol>
+<li>PRs merge into <code>main</code></li>
+<li><code>Release Please</code> updates or opens the release PR</li>
+<li>Publishing a GitHub release triggers the PyPI publish workflow</li>
+</ol>
+<p>Maintainers should avoid manual version bumps unless they are intentionally repairing release metadata.</p>
 <h2 id="good-first-issues">Good First Issues<a class="headerlink" href="#good-first-issues" title="Permanent link">&para;</a></h2>
 <p>Look for issues labeled <a href="https://github.com/ptimizeroracle/Ondine/labels/good%20first%20issue"><code>good first issue</code></a> - these are great for newcomers!</p>
 <h2 id="getting-help">Getting Help<a class="headerlink" href="#getting-help" title="Permanent link">&para;</a></h2>
