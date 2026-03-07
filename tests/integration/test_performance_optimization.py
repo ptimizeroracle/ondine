@@ -1,4 +1,8 @@
-"""Integration test for performance optimizations (global connection pooling)."""
+"""Integration test for performance optimizations.
+
+Note: Global connection pooling is now handled internally by LiteLLM (>=1.72).
+We no longer inject custom aiohttp sessions - LiteLLM's native transport handles this.
+"""
 
 from unittest.mock import MagicMock, patch
 
@@ -6,71 +10,6 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
-
-
-@pytest.mark.integration
-def test_global_connection_pool_lifecycle():
-    """
-    Verify that UnifiedLiteLLMClient correctly initializes and cleans up
-    the global aiohttp connection pool during pipeline execution.
-    """
-    df = pd.DataFrame({"text": ["Hello", "World"]})
-
-    # Mock response
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
-    mock_response.usage = MagicMock(prompt_tokens=5, completion_tokens=5)
-
-    # We mock litellm.acompletion to avoid network calls
-    with patch("litellm.acompletion", new_callable=MagicMock) as mock_acompletion:
-        # Make it awaitable
-        async def async_return(*args, **kwargs):
-            return mock_response
-
-        mock_acompletion.side_effect = async_return
-
-        # We also need to mock aiohttp.ClientSession to verify it's created
-        with patch("aiohttp.ClientSession") as mock_session_cls:
-            mock_session = MagicMock()
-            mock_session.close.return_value = async_return()  # close is awaitable
-            mock_session_cls.return_value = mock_session
-
-            # Build pipeline
-            pipeline = (
-                PipelineBuilder.create()
-                .from_dataframe(df, input_columns=["text"], output_columns=["response"])
-                .with_prompt("Echo {text}")
-                .with_llm(model="mock-model", provider="openai")
-                .build()
-            )
-
-            # Execute
-            result = pipeline.execute()
-            df = result.to_pandas()
-
-            # Verify Results
-            assert result.success
-            assert len(df) == 2
-
-            # Verify Lifecycle
-            # 1. Session created
-            assert mock_session_cls.called
-
-            # 2. Session closed
-            assert mock_session.close.called
-
-            # 3. Global handler injection
-            # This is harder to test because we are inside the same process
-            # and we mock aiohttp, but we can verify our client called the logic.
-            # Since we are mocking aiohttp, the import inside start() works.
-
-            # Verify aiohttp.TCPConnector was configured
-            kwargs = mock_session_cls.call_args[1]
-            # We can't easily inspect connector instance attributes if it's real,
-            # but we can check if connector was passed to Session creation.
-            assert "connector" in kwargs, (
-                "TCPConnector should be passed to ClientSession"
-            )
 
 
 @pytest.mark.integration
