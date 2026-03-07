@@ -104,7 +104,8 @@ just check
 - Update README.md if adding user-facing features
 - Add docstrings to all public functions and classes
 - Include examples for new features in `examples/` directory
-- Update CHANGELOG.md following [Keep a Changelog](https://keepachangelog.com/)
+- Do not manually bump package versions in `pyproject.toml` or `ondine/__init__.py`
+- Do not manually add release entries unless a maintainer asks; release notes are managed through Release Please
 
 ### Commits
 
@@ -190,7 +191,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
    - Ensure all tests pass: `just test`
    - Run code quality checks: `just check`
    - Update documentation if needed
-   - Add entry to CHANGELOG.md
+   - Use a Conventional Commit style PR title if possible (`feat:`, `fix:`, `docs:`, etc.)
 
 2. **Submit PR:**
    - Write a clear title and description
@@ -200,7 +201,17 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
 
 3. **After approval:**
    - Maintainers will merge your PR
-   - Your contribution will be included in the next release!
+   - Release Please will prepare the next release from merged changes on `main`
+
+## Release Process
+
+Ondine uses GitHub Actions plus Release Please for releases:
+
+1. PRs merge into `main`
+2. `Release Please` updates or opens the release PR
+3. Publishing a GitHub release triggers the PyPI publish workflow
+
+Maintainers should avoid manual version bumps unless they are intentionally repairing release metadata.
 
 ## Good First Issues
 
