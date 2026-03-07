@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: release-please-main
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pull-requests: write
@@ -25,28 +29,3 @@ jobs:
           # Use PAT if GITHUB_TOKEN doesn't have PR creation permission
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: python
-
-      # Build and publish to PyPI when a release is created
-      - name: Checkout code
-        if: ${{ steps.release.outputs.release_created }}
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        if: ${{ steps.release.outputs.release_created }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        if: ${{ steps.release.outputs.release_created }}
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Build package
-        if: ${{ steps.release.outputs.release_created }}
-        run: uv build
-
-      - name: Publish to PyPI
-        if: ${{ steps.release.outputs.release_created && false }}  # Disabled by default
-        run: uv publish --token ${{ secrets.PYPI_TOKEN }}
