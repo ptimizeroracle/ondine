@@ -30,7 +30,7 @@ class BaconBatch(BaseModel):
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY", None),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY", None),
-        ("anthropic", "claude-3-5-haiku-20241022", "ANTHROPIC_API_KEY", None),
+        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY", None),
     ],
 )
 def test_structured_output_e2e(provider, model, api_key_env, base_url):
