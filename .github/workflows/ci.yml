@@ -76,7 +76,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv sync --extra dev --extra observability
+        uv sync --extra dev --extra observability --extra excel --extra parquet
 
     - name: Run linter
       run: |
@@ -118,7 +118,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv sync --extra dev --extra observability
+        uv sync --extra dev --extra observability --extra excel --extra parquet
 
     - name: Run linter
       run: |

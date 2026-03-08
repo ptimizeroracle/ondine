@@ -13,7 +13,6 @@ _OTEL_IMPORT_ERROR: ImportError | None = None
 
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import (
@@ -24,7 +23,6 @@ try:
     _OTEL_AVAILABLE = True
 except ImportError as exc:
     trace = None  # type: ignore[assignment]
-    JaegerExporter = None  # type: ignore[assignment]
     Resource = None  # type: ignore[assignment]
     TracerProvider = Any  # type: ignore[assignment]
     BatchSpanProcessor = None  # type: ignore[assignment]
@@ -113,6 +111,13 @@ def enable_tracing(
     elif exporter == "jaeger":
         if endpoint is None:
             raise ValueError("endpoint is required for Jaeger exporter")
+        try:
+            from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+        except ImportError as exc:
+            raise ImportError(
+                "Jaeger exporter support is not installed. "
+                "Install with: pip install 'ondine[observability]'"
+            ) from exc
         span_exporter = JaegerExporter(
             collector_endpoint=endpoint,
         )
