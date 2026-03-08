@@ -3240,7 +3240,7 @@ wheels = [
 
 [[package]]
 name = "ondine"
-version = "1.3.4"
+version = "1.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -3248,28 +3248,34 @@ dependencies = [
     { name = "diskcache" },
     { name = "instructor" },
     { name = "jinja2" },
-    { name = "langfuse" },
     { name = "litellm" },
-    { name = "llama-index" },
-    { name = "openpyxl" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-sdk" },
     { name = "pandas" },
     { name = "polars" },
-    { name = "prometheus-client" },
-    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "redis" },
     { name = "rich" },
     { name = "structlog" },
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "tqdm" },
-    { name = "uvloop", marker = "sys_platform != 'win32'" },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "azure-identity" },
+    { name = "langfuse" },
+    { name = "llama-index" },
+    { name = "mlx" },
+    { name = "mlx-lm" },
+    { name = "openpyxl" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-jaeger" },
+    { name = "opentelemetry-sdk" },
+    { name = "prometheus-client" },
+    { name = "pyarrow" },
+    { name = "redis" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
+]
 azure = [
     { name = "azure-identity" },
 ]
@@ -3297,14 +3303,31 @@ docs = [
     { name = "mkdocs-section-index" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
+excel = [
+    { name = "openpyxl" },
+]
+llama-index = [
+    { name = "llama-index" },
+]
 mlx = [
     { name = "mlx" },
     { name = "mlx-lm" },
 ]
 observability = [
+    { name = "langfuse" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-jaeger" },
     { name = "opentelemetry-sdk" },
+    { name = "prometheus-client" },
+]
+parquet = [
+    { name = "pyarrow" },
+]
+performance = [
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
+]
+redis = [
+    { name = "redis" },
 ]
 
 [package.dev-dependencies]
@@ -3315,6 +3338,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
+    { name = "azure-identity", marker = "extra == 'all'", specifier = ">=1.15.0" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.15.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "click", specifier = ">=8.1.0" },
@@ -3324,47 +3348,57 @@ requires-dist = [
     { name = "ipython", marker = "extra == 'dev'", specifier = ">=8.20.0" },
     { name = "jinja2", specifier = ">=3.1.0" },
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "langfuse", specifier = ">=2.0.0" },
+    { name = "langfuse", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=2.0.0" },
     { name = "litellm", specifier = ">=1.80.0" },
-    { name = "llama-index", specifier = ">=0.12.0" },
+    { name = "llama-index", marker = "extra == 'all'", specifier = ">=0.12.0" },
+    { name = "llama-index", marker = "extra == 'llama-index'", specifier = ">=0.12.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.5.0" },
     { name = "mkdocs-gen-files", marker = "extra == 'docs'", specifier = ">=0.5.0" },
     { name = "mkdocs-literate-nav", marker = "extra == 'docs'", specifier = ">=0.6.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocs-section-index", marker = "extra == 'docs'", specifier = ">=0.3.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24.0" },
+    { name = "mlx", marker = "extra == 'all'", specifier = ">=0.29.0" },
     { name = "mlx", marker = "extra == 'mlx'", specifier = ">=0.29.0" },
+    { name = "mlx-lm", marker = "extra == 'all'", specifier = ">=0.28.0" },
     { name = "mlx-lm", marker = "extra == 'mlx'", specifier = ">=0.28.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
-    { name = "openpyxl", specifier = ">=3.1.0" },
-    { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "openpyxl", marker = "extra == 'all'", specifier = ">=3.1.0" },
+    { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1.0" },
+    { name = "opentelemetry-api", marker = "extra == 'all'", specifier = ">=1.20.0" },
     { name = "opentelemetry-api", marker = "extra == 'observability'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-exporter-jaeger", marker = "extra == 'all'", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-jaeger", marker = "extra == 'observability'", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = ">=1.20.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7.0" },
     { name = "pip-licenses", marker = "extra == 'dev'", specifier = ">=4.3.0" },
     { name = "polars", specifier = ">=0.20.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "prometheus-client", specifier = ">=0.20.0" },
-    { name = "pyarrow", specifier = ">=15.0.0" },
+    { name = "prometheus-client", marker = "extra == 'all'", specifier = ">=0.20.0" },
+    { name = "prometheus-client", marker = "extra == 'observability'", specifier = ">=0.20.0" },
+    { name = "pyarrow", marker = "extra == 'all'", specifier = ">=15.0.0" },
+    { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=15.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydocstyle", marker = "extra == 'dev'", specifier = ">=6.3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "redis", specifier = ">=5.0.0" },
+    { name = "redis", marker = "extra == 'all'", specifier = ">=5.0.0" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
-    { name = "structlog", specifier = ">=24.0.0" },
+    { name = "structlog", specifier = ">=23.1.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
-    { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.19.0" },
+    { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'all'", specifier = ">=0.19.0" },
+    { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'performance'", specifier = ">=0.19.0" },
 ]
-provides-extras = ["dev", "mlx", "azure", "observability", "docs"]
+provides-extras = ["dev", "redis", "excel", "parquet", "performance", "llama-index", "mlx", "azure", "observability", "docs", "all"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest-xdist", specifier = ">=3.8.0" }]

@@ -11,6 +11,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  install-profiles:
+    name: Install Profile (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [core, observability, all]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install package profile
+      shell: bash
+      run: |
+        if [ "${{ matrix.profile }}" = "core" ]; then
+          uv pip install --system .
+        elif [ "${{ matrix.profile }}" = "observability" ]; then
+          uv pip install --system ".[observability]"
+        else
+          uv pip install --system ".[all]"
+        fi
+
+    - name: Smoke test profile
+      shell: bash
+      run: |
+        python -c "import ondine; print(ondine.__version__)"
+        if [ "${{ matrix.profile }}" = "observability" ]; then
+          python -c "from ondine.observability import enable_tracing"
+        elif [ "${{ matrix.profile }}" = "all" ]; then
+          python -c "from ondine.observability import enable_tracing; from ondine.utils.metrics_exporter import PrometheusMetrics"
+        fi
+
   # Quick checks for feature branches - runs on every push
   quick-check:
     name: Quick Check (Lint + Unit Tests)
@@ -138,7 +181,7 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [install-profiles, test]
     # Only run on main/develop/PRs
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
 

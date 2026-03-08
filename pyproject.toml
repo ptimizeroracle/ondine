@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.md"
 license = {text = "MIT"}
-keywords = ["llm", "dataset", "batch-processing", "data-engineering", "llama-index", "ai", "machine-learning", "data-transformation"]
+keywords = ["llm", "dataset", "batch-processing", "data-engineering", "ai", "machine-learning", "data-transformation"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -24,12 +25,8 @@ dependencies = [
     # Core LLM integration (using LiteLLM native + Instructor)
     "litellm>=1.80.0",
     "instructor>=1.0.0",
-    "redis>=5.0.0",  # For LiteLLM Redis caching (litellm.cache)
     "diskcache>=5.6.0",  # For LiteLLM Disk caching
     "aiohttp>=3.9.0",  # For high-performance connection pooling
-    "uvloop>=0.19.0; sys_platform != 'win32'",  # Faster event loop (UNIX only)
-    # LlamaIndex (kept ONLY for future RAG features - not used in data pipelines)
-    "llama-index>=0.12.0",
     # Data processing
     "pandas>=2.0.0",
     "polars>=0.20.0",
@@ -37,18 +34,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "tqdm>=4.66.0",
     "tenacity>=8.2.0",
-    "openpyxl>=3.1.0",
-    "pyarrow>=15.0.0",
     "tiktoken>=0.5.0",
-    "structlog>=24.0.0",
+    "structlog>=23.1.0",
     "jinja2>=3.1.0",
-    "prometheus-client>=0.20.0",
     "click>=8.1.0",
     "rich>=13.0.0",
-    # Observability
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "langfuse>=2.0.0",
 ]
 
 [project.urls]
@@ -73,6 +63,21 @@ dev = [
     "pydocstyle>=6.3.0",
     "interrogate>=1.7.0",
 ]
+redis = [
+    "redis>=5.0.0",
+]
+excel = [
+    "openpyxl>=3.1.0",
+]
+parquet = [
+    "pyarrow>=15.0.0",
+]
+performance = [
+    "uvloop>=0.19.0; sys_platform != 'win32'",
+]
+llama-index = [
+    "llama-index>=0.12.0",
+]
 mlx = [
     "mlx>=0.29.0",
     "mlx-lm>=0.28.0",
@@ -84,6 +89,8 @@ observability = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-jaeger>=1.20.0",
+    "langfuse>=2.0.0",
+    "prometheus-client>=0.20.0",
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -92,6 +99,21 @@ docs = [
     "mkdocs-gen-files>=0.5.0",
     "mkdocs-literate-nav>=0.6.0",
     "mkdocs-section-index>=0.3.0",
+]
+all = [
+    "redis>=5.0.0",
+    "openpyxl>=3.1.0",
+    "pyarrow>=15.0.0",
+    "uvloop>=0.19.0; sys_platform != 'win32'",
+    "llama-index>=0.12.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-jaeger>=1.20.0",
+    "langfuse>=2.0.0",
+    "prometheus-client>=0.20.0",
+    "mlx>=0.29.0",
+    "mlx-lm>=0.28.0",
+    "azure-identity>=1.15.0",
 ]
 
 [project.scripts]

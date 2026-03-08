@@ -5,11 +5,32 @@ Provides simple API for enabling/disabling distributed tracing with
 console or Jaeger exporters.
 """
 
-from opentelemetry import trace
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from __future__ import annotations
+
+from typing import Any
+
+_OTEL_IMPORT_ERROR: ImportError | None = None
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import (
+        BatchSpanProcessor,
+        ConsoleSpanExporter,
+    )
+
+    _OTEL_AVAILABLE = True
+except ImportError as exc:
+    trace = None  # type: ignore[assignment]
+    JaegerExporter = None  # type: ignore[assignment]
+    Resource = None  # type: ignore[assignment]
+    TracerProvider = Any  # type: ignore[assignment]
+    BatchSpanProcessor = None  # type: ignore[assignment]
+    ConsoleSpanExporter = None  # type: ignore[assignment]
+    _OTEL_AVAILABLE = False
+    _OTEL_IMPORT_ERROR = exc
 
 # Module-level state (simple global state for opt-in tracing)
 _TRACING_ENABLED = False
@@ -31,6 +52,12 @@ def get_tracer() -> trace.Tracer:
         ...     pass
     """
     global _TRACER
+
+    if not _OTEL_AVAILABLE:
+        raise ImportError(
+            "OpenTelemetry support is not installed. "
+            "Install with: pip install 'ondine[observability]'"
+        ) from _OTEL_IMPORT_ERROR
 
     if not _TRACING_ENABLED or _TRACER is None:
         # Return no-op tracer that does nothing
@@ -63,6 +90,12 @@ def enable_tracing(
         ... )
     """
     global _TRACING_ENABLED, _TRACER_PROVIDER, _TRACER
+
+    if not _OTEL_AVAILABLE:
+        raise ImportError(
+            "OpenTelemetry support is not installed. "
+            "Install with: pip install 'ondine[observability]'"
+        ) from _OTEL_IMPORT_ERROR
 
     # Make idempotent - clean up existing tracing if already enabled
     if _TRACING_ENABLED:

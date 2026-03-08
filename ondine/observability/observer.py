@@ -5,17 +5,29 @@ Implements ExecutionObserver interface to create OpenTelemetry spans
 for pipeline and stage execution.
 """
 
-from typing import Any
+from __future__ import annotations
 
-from opentelemetry import trace  # noqa: TC002
-from opentelemetry.trace import Status, StatusCode
+from typing import TYPE_CHECKING, Any
 
-from ondine.core.models import ExecutionResult
-from ondine.orchestration.execution_context import ExecutionContext
 from ondine.orchestration.observers import ExecutionObserver
-from ondine.stages.pipeline_stage import PipelineStage
 
-from .tracer import get_tracer, is_tracing_enabled
+from .tracer import _OTEL_AVAILABLE, get_tracer, is_tracing_enabled
+
+if TYPE_CHECKING:
+    from ondine.core.models import ExecutionResult
+    from ondine.orchestration.execution_context import ExecutionContext
+    from ondine.stages.pipeline_stage import PipelineStage
+
+_OTEL_IMPORT_ERROR: ImportError | None = None
+
+try:
+    from opentelemetry import trace  # noqa: TC002
+    from opentelemetry.trace import Status, StatusCode
+except ImportError as exc:
+    trace = None  # type: ignore[assignment]
+    Status = None  # type: ignore[assignment]
+    StatusCode = None  # type: ignore[assignment]
+    _OTEL_IMPORT_ERROR = exc
 
 
 class TracingObserver(ExecutionObserver):
@@ -41,6 +53,12 @@ class TracingObserver(ExecutionObserver):
 
     def __init__(self, include_prompts: bool = False):
         """Initialize tracing observer."""
+        if not _OTEL_AVAILABLE:
+            raise ImportError(
+                "OpenTelemetry support is not installed. "
+                "Install with: pip install 'ondine[observability]'"
+            ) from _OTEL_IMPORT_ERROR
+
         self._include_prompts = include_prompts
         self._spans: dict[str, trace.Span] = {}  # Track active spans
 

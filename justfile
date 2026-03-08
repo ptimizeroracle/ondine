@@ -8,7 +8,7 @@ default:
 # Set up the development environment
 setup:
     @echo "🔧 Setting up development environment..."
-    uv sync
+    uv sync --all-extras
     @echo "✅ Environment ready!"
 
 # Run all tests (unit + integration + e2e)

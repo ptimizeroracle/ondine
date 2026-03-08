@@ -96,8 +96,20 @@ print(f"Total cost: ${result.costs.total_cost:.4f}")
 # Basic installation
 uv add ondine
 
+# With observability support
+uv add "ondine[observability]"
+
+# With Excel support
+uv add "ondine[excel]"
+
+# With Parquet support
+uv add "ondine[parquet]"
+
 # With MLX support (Apple Silicon only)
 uv add "ondine[mlx]"
+
+# Everything included
+uv add "ondine[all]"
 ```
 
 ### Using pip
@@ -106,8 +118,20 @@ uv add "ondine[mlx]"
 # Basic installation
 pip install ondine
 
+# With observability support
+pip install "ondine[observability]"
+
+# With Excel support
+pip install "ondine[excel]"
+
+# With Parquet support
+pip install "ondine[parquet]"
+
 # With MLX support (Apple Silicon only)
 pip install "ondine[mlx]"
+
+# Everything included
+pip install "ondine[all]"
 ```
 
 ### Set up API keys
