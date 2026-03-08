@@ -94,26 +94,36 @@ class UnifiedLiteLLMClient(LLMClient):
         # Build model identifier for LiteLLM
         # If model has "/", use as-is (e.g., "moonshot/kimi-k2")
         # Otherwise, prepend provider (e.g., "groq" + "llama-3.3" → "groq/llama-3.3")
+        provider_name = (
+            spec.provider.value
+            if hasattr(spec.provider, "value")
+            else str(spec.provider)
+        )
+        provider_name = (
+            provider_name.replace("litellm_", "").replace("litellm", "").strip()
+        )
+
         if "/" in spec.model:
             self.model = spec.model  # Already has provider prefix
         else:
-            # Get provider name
-            provider_name = (
-                spec.provider.value
-                if hasattr(spec.provider, "value")
-                else str(spec.provider)
-            )
-            provider_name = (
-                provider_name.replace("litellm_", "").replace("litellm", "").strip()
-            )
-
             # Only prepend if we have a non-empty provider
             if provider_name:
                 self.model = f"{provider_name}/{spec.model}"
             else:
                 self.model = spec.model  # No provider, hope model is complete
 
+        self.provider_name = (
+            (provider_name if provider_name else self.model.split("/")[0])
+            if "/" in self.model
+            else provider_name
+        )
+        self.structured_model = (
+            self.model.split("/", 1)[1]
+            if self.provider_name == "anthropic" and "/" in self.model
+            else self.model
+        )
         self.api_key = spec.api_key
+        self._uses_direct_anthropic_instructor = False
 
         # Suppress LiteLLM noise and async cleanup warnings
         litellm.suppress_debug_info = True
@@ -162,6 +172,16 @@ class UnifiedLiteLLMClient(LLMClient):
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
 
+        # Router initialization can rewrite self.model to the shared model group,
+        # so structured_model must be derived after the router is configured.
+        self.structured_model = (
+            self.model.split("/", 1)[1]
+            if self.provider_name == "anthropic"
+            and "/" in self.model
+            and not self.router
+            else self.model
+        )
+
         # Initialize Cache (optional)
         # Supports Redis, Disk, S3, etc. via LiteLLM native caching
         if hasattr(spec, "cache_config") and spec.cache_config:
@@ -176,10 +196,6 @@ class UnifiedLiteLLMClient(LLMClient):
         # Initialize Instructor client ONCE (not per-call!)
         # Use intelligent mode detection (layered approach)
         from ondine.adapters.instructor_mode import detect_instructor_mode
-
-        completion_func = (
-            self.router.acompletion if self.router else litellm.acompletion
-        )
 
         # Get router model list if available
         router_model_list = None
@@ -199,9 +215,26 @@ class UnifiedLiteLLMClient(LLMClient):
             router_model_list=router_model_list,
         )
 
-        self.instructor_client = instructor.from_litellm(
-            completion_func, mode=instructor_mode
-        )
+        # Anthropic structured output currently works more reliably through the
+        # native Instructor adapter than through LiteLLM's OpenAI-style tool shim.
+        if self.provider_name == "anthropic" and not self.router:
+            from anthropic import AsyncAnthropic
+
+            self.instructor_client = instructor.from_anthropic(
+                AsyncAnthropic(
+                    api_key=self.api_key,
+                    base_url=getattr(spec, "base_url", None) or None,
+                ),
+                mode=instructor_mode,
+            )
+            self._uses_direct_anthropic_instructor = True
+        else:
+            completion_func = (
+                self.router.acompletion if self.router else litellm.acompletion
+            )
+            self.instructor_client = instructor.from_litellm(
+                completion_func, mode=instructor_mode
+            )
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")
 
@@ -588,11 +621,19 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # CRITICAL: Only pass api_key if NOT using Router
         # Router has keys embedded in its model_list config!
-        if not self.router and self.api_key:
+        if (
+            not self.router
+            and self.api_key
+            and not self._uses_direct_anthropic_instructor
+        ):
             call_kwargs["api_key"] = self.api_key
 
         # Add api_base if custom endpoint
-        if hasattr(self.spec, "base_url") and self.spec.base_url:
+        if (
+            hasattr(self.spec, "base_url")
+            and self.spec.base_url
+            and not self._uses_direct_anthropic_instructor
+        ):
             call_kwargs["api_base"] = self.spec.base_url
 
         # CRITICAL: Pass through any extra params from spec (streaming, caching, retries, etc.)
@@ -819,16 +860,20 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Build call kwargs
         call_kwargs = {
-            "model": self.model,
+            "model": self.structured_model,
             "messages": messages,
             "response_model": output_cls,
             "temperature": self.spec.temperature,
             "max_tokens": self.spec.max_tokens,
         }
 
-        # CRITICAL: Only pass api_key if NOT using Router
-        # Router has keys embedded in its model_list config!
-        if not self.router and self.api_key:
+        # CRITICAL: Only pass api_key through LiteLLM-backed Instructor clients.
+        # Anthropic's native Instructor adapter gets credentials from AsyncAnthropic.
+        if (
+            not self.router
+            and self.api_key
+            and not self._uses_direct_anthropic_instructor
+        ):
             call_kwargs["api_key"] = self.api_key
 
         # Retry strategy: Default to 1 (Ondine handles retries at pipeline level)
@@ -839,7 +884,11 @@ class UnifiedLiteLLMClient(LLMClient):
             else 1
         )
 
-        if hasattr(self.spec, "base_url") and self.spec.base_url:
+        if (
+            hasattr(self.spec, "base_url")
+            and self.spec.base_url
+            and not self._uses_direct_anthropic_instructor
+        ):
             call_kwargs["api_base"] = self.spec.base_url
 
         # CRITICAL: Pass through extra params (caching, response_format, tools, etc.)
@@ -849,9 +898,17 @@ class UnifiedLiteLLMClient(LLMClient):
         # Call with pre-initialized Instructor client
         raw_response = None
         try:
+            if self._uses_direct_anthropic_instructor:
+                # Anthropic's native Instructor adapter avoids LiteLLM's tool
+                # translation layer, which is currently incompatible with batch
+                # structured output. Use create() and fall back to local token
+                # estimation since raw completion metadata is not returned here.
+                if call_kwargs["max_tokens"] is None:
+                    call_kwargs["max_tokens"] = 1024
+                result = await self.instructor_client.create(**call_kwargs)
             # Try to get raw response for metadata extraction
             # Instructor >= 1.0.0 supports create_with_completion
-            if hasattr(
+            elif hasattr(
                 self.instructor_client.chat.completions, "create_with_completion"
             ):
                 (

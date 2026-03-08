@@ -119,6 +119,8 @@ def detect_instructor_mode(
         The appropriate instructor.Mode for the model
     """
     extra_params = extra_params or {}
+    actual_model = _get_actual_model(model, router_model_list)
+    provider = _extract_provider(actual_model)
 
     # Normalize user_override to enum
     if isinstance(user_override, str):
@@ -128,7 +130,7 @@ def detect_instructor_mode(
     # Layer 1: User Override (highest priority)
     # =========================================================================
     if user_override != InstructorModeStrategy.AUTO:
-        mode = _strategy_to_instructor_mode(user_override)
+        mode = _strategy_to_instructor_mode(user_override, provider=provider)
         logger.debug(f"Using user-specified Instructor mode: {mode}")
         return mode
 
@@ -145,13 +147,11 @@ def detect_instructor_mode(
 
     if has_reasoning_effort:
         logger.debug("Reasoning model detected (reasoning_effort param) -> JSON mode")
-        return instructor.Mode.JSON
+        return _resolve_instructor_mode(provider=provider, prefer_tools=False)
 
     # =========================================================================
     # Layer 3: LiteLLM Model Capabilities Lookup
     # =========================================================================
-    actual_model = _get_actual_model(model, router_model_list)
-
     try:
         model_info = litellm.get_model_info(actual_model)
         supports_function_calling = model_info.get("supports_function_calling", False)
@@ -160,11 +160,11 @@ def detect_instructor_mode(
             logger.debug(
                 f"LiteLLM reports '{actual_model}' supports function calling -> TOOLS mode"
             )
-            return instructor.Mode.TOOLS
+            return _resolve_instructor_mode(provider=provider, prefer_tools=True)
         logger.debug(
             f"LiteLLM reports '{actual_model}' doesn't support function calling -> JSON mode"
         )
-        return instructor.Mode.JSON
+        return _resolve_instructor_mode(provider=provider, prefer_tools=False)
 
     except Exception as e:
         logger.debug(f"LiteLLM model info lookup failed for '{actual_model}': {e}")
@@ -172,43 +172,63 @@ def detect_instructor_mode(
     # =========================================================================
     # Layer 4: Provider Capability Registry (Fallback)
     # =========================================================================
-    provider = _extract_provider(actual_model)
     if provider and provider in PROVIDER_CAPABILITIES:
         caps = PROVIDER_CAPABILITIES[provider]
         if caps.get("tools", False):
             logger.debug(
                 f"Provider registry: '{provider}' supports TOOLS -> TOOLS mode"
             )
-            return instructor.Mode.TOOLS
+            return _resolve_instructor_mode(provider=provider, prefer_tools=True)
         logger.debug(
             f"Provider registry: '{provider}' doesn't support TOOLS -> JSON mode"
         )
-        return instructor.Mode.JSON
+        return _resolve_instructor_mode(provider=provider, prefer_tools=False)
 
     # Known provider patterns (legacy fallback)
     model_lower = actual_model.lower()
     if "groq" in model_lower:
         logger.debug("Known provider pattern: Groq -> JSON mode (avoids XML issues)")
-        return instructor.Mode.JSON
+        return _resolve_instructor_mode(provider="groq", prefer_tools=False)
     if any(p in model_lower for p in ["gpt-4", "gpt-3.5", "claude"]):
         logger.debug("Known provider pattern: GPT/Claude -> TOOLS mode")
-        return instructor.Mode.TOOLS
+        return _resolve_instructor_mode(provider=provider, prefer_tools=True)
 
     # =========================================================================
     # Layer 5: Safe Default
     # =========================================================================
     logger.debug(f"Unknown model '{actual_model}', defaulting to JSON mode (safest)")
-    return instructor.Mode.JSON
+    return _resolve_instructor_mode(provider=provider, prefer_tools=False)
 
 
-def _strategy_to_instructor_mode(strategy: InstructorModeStrategy) -> instructor.Mode:
+def _strategy_to_instructor_mode(
+    strategy: InstructorModeStrategy, provider: str | None = None
+) -> instructor.Mode:
     """Convert user strategy to instructor.Mode."""
     mapping = {
-        InstructorModeStrategy.TOOLS: instructor.Mode.TOOLS,
-        InstructorModeStrategy.JSON: instructor.Mode.JSON,
+        InstructorModeStrategy.TOOLS: _resolve_instructor_mode(
+            provider=provider, prefer_tools=True
+        ),
+        InstructorModeStrategy.JSON: _resolve_instructor_mode(
+            provider=provider, prefer_tools=False
+        ),
         InstructorModeStrategy.JSON_SCHEMA: instructor.Mode.JSON_SCHEMA,
     }
-    return mapping.get(strategy, instructor.Mode.JSON)
+    return mapping.get(
+        strategy, _resolve_instructor_mode(provider=provider, prefer_tools=False)
+    )
+
+
+def _resolve_instructor_mode(
+    provider: str | None, prefer_tools: bool
+) -> instructor.Mode:
+    """Return the best Instructor mode for a provider."""
+    if provider == "anthropic":
+        if prefer_tools and hasattr(instructor.Mode, "ANTHROPIC_TOOLS"):
+            return instructor.Mode.ANTHROPIC_TOOLS
+        if not prefer_tools and hasattr(instructor.Mode, "ANTHROPIC_JSON"):
+            return instructor.Mode.ANTHROPIC_JSON
+
+    return instructor.Mode.TOOLS if prefer_tools else instructor.Mode.JSON
 
 
 def _get_actual_model(model: str, router_model_list: list | None) -> str:
