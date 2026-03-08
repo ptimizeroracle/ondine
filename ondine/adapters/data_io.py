@@ -291,7 +291,7 @@ class ExcelWriter(DataWriter):
 
     def atomic_write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
         """Write to Excel atomically."""
-        temp_path = path.with_suffix(".tmp")
+        temp_path = path.with_name(f"{path.stem}.tmp{path.suffix}")
 
         try:
             data.to_excel(temp_path, index=False)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 
 def _matches_missing_dependency(
     exc: Exception, dependency_names: tuple[str, ...]
@@ -12,7 +14,17 @@ def _matches_missing_dependency(
         return True
 
     exc_text = str(exc).lower()
-    return any(name in exc_text for name in dependency_names)
+    if "no module named" not in exc_text and "cannot import name" not in exc_text:
+        return False
+
+    for name in dependency_names:
+        patterns = (
+            rf"no module named ['\"]?{re.escape(name)}['\"]?",
+            rf"cannot import name ['\"]?{re.escape(name)}['\"]?",
+        )
+        if any(re.search(pattern, exc_text) for pattern in patterns):
+            return True
+    return False
 
 
 def raise_excel_extra_error(operation: str, exc: Exception) -> None:
