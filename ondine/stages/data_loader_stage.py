@@ -8,6 +8,7 @@ from ondine.core.data_container import DataContainer
 from ondine.core.models import CostEstimate, ValidationResult
 from ondine.core.specifications import DatasetSpec
 from ondine.stages.pipeline_stage import PipelineStage
+from ondine.utils.optional_dependencies import raise_excel_extra_error
 
 
 def create_container(spec: DatasetSpec, dataframe: Any = None) -> DataContainer:
@@ -89,11 +90,16 @@ def create_container(spec: DatasetSpec, dataframe: Any = None) -> DataContainer:
         # Excel requires Pandas
         try:
             import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "Pandas is required for Excel files. Install with: pip install pandas"
+            ) from exc
 
+        try:
             df = pd.read_excel(path, sheet_name=spec.sheet_name)
             return PandasContainer(df)
-        except ImportError:
-            raise ImportError("Pandas required for Excel files")
+        except ImportError as exc:
+            raise_excel_extra_error("Reading Excel files", exc)
     else:
         raise ValueError(f"Unsupported file format: {suffix}")
 

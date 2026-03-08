@@ -14,6 +14,10 @@ import polars as pl
 
 from ondine.core.models import WriteConfirmation
 from ondine.core.specifications import DataSourceType
+from ondine.utils.optional_dependencies import (
+    raise_excel_extra_error,
+    raise_parquet_extra_error,
+)
 
 
 class DataReader(ABC):
@@ -103,7 +107,10 @@ class ExcelReader(DataReader):
 
     def read(self) -> pd.DataFrame:
         """Read entire Excel file."""
-        return pd.read_excel(self.file_path, sheet_name=self.sheet_name)
+        try:
+            return pd.read_excel(self.file_path, sheet_name=self.sheet_name)
+        except ImportError as exc:
+            raise_excel_extra_error("Reading Excel files", exc)
 
     def read_chunked(self, chunk_size: int) -> Iterator[pd.DataFrame]:
         """
@@ -131,21 +138,27 @@ class ParquetReader(DataReader):
 
     def read(self) -> pd.DataFrame:
         """Read entire Parquet file."""
-        return pd.read_parquet(self.file_path)
+        try:
+            return pd.read_parquet(self.file_path)
+        except ImportError as exc:
+            raise_parquet_extra_error("Reading Parquet files", exc)
 
     def read_chunked(self, chunk_size: int) -> Iterator[pd.DataFrame]:
         """
         Read Parquet in chunks using Polars for efficiency.
         """
-        # Use Polars for efficient chunked reading
-        lf = pl.scan_parquet(self.file_path)
+        try:
+            # Use Polars for efficient chunked reading
+            lf = pl.scan_parquet(self.file_path)
 
-        # Read in batches
-        total_rows = lf.select(pl.len()).collect().item()
+            # Read in batches
+            total_rows = lf.select(pl.len()).collect().item()
 
-        for i in range(0, total_rows, chunk_size):
-            chunk = lf.slice(i, chunk_size).collect().to_pandas()
-            yield chunk
+            for i in range(0, total_rows, chunk_size):
+                chunk = lf.slice(i, chunk_size).collect().to_pandas()
+                yield chunk
+        except ImportError as exc:
+            raise_parquet_extra_error("Reading Parquet files", exc)
 
 
 class DataFrameReader(DataReader):
@@ -266,7 +279,10 @@ class ExcelWriter(DataWriter):
 
     def write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
         """Write to Excel file."""
-        data.to_excel(path, index=False)
+        try:
+            data.to_excel(path, index=False)
+        except ImportError as exc:
+            raise_excel_extra_error("Writing Excel files", exc)
 
         return WriteConfirmation(
             path=str(path),
@@ -285,6 +301,10 @@ class ExcelWriter(DataWriter):
                 path=str(path),
                 rows_written=len(data),
             )
+        except ImportError as exc:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise_excel_extra_error("Writing Excel files", exc)
         except Exception as e:
             if temp_path.exists():
                 temp_path.unlink()
@@ -296,7 +316,10 @@ class ParquetWriter(DataWriter):
 
     def write(self, data: pd.DataFrame, path: Path) -> WriteConfirmation:
         """Write to Parquet file."""
-        data.to_parquet(path, index=False)
+        try:
+            data.to_parquet(path, index=False)
+        except ImportError as exc:
+            raise_parquet_extra_error("Writing Parquet files", exc)
 
         return WriteConfirmation(
             path=str(path),
@@ -315,6 +338,10 @@ class ParquetWriter(DataWriter):
                 path=str(path),
                 rows_written=len(data),
             )
+        except ImportError as exc:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise_parquet_extra_error("Writing Parquet files", exc)
         except Exception as e:
             if temp_path.exists():
                 temp_path.unlink()

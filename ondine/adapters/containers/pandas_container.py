@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from ondine.core.data_container import BaseDataContainer, Row
+from ondine.utils.optional_dependencies import (
+    raise_excel_extra_error,
+    raise_parquet_extra_error,
+)
 
 
 class PandasContainer(BaseDataContainer):
@@ -218,7 +222,10 @@ class PandasContainer(BaseDataContainer):
         """
         import pandas as pd
 
-        df = pd.read_parquet(path, columns=columns, **kwargs)
+        try:
+            df = pd.read_parquet(path, columns=columns, **kwargs)
+        except ImportError as exc:
+            raise_parquet_extra_error("Reading Parquet files", exc)
         return cls(df)
 
     @classmethod
@@ -280,7 +287,10 @@ class PandasContainer(BaseDataContainer):
 
     def to_parquet(self, path: str | Path, **kwargs: Any) -> None:
         """Write to Parquet file."""
-        self._df.to_parquet(path, index=False, **kwargs)
+        try:
+            self._df.to_parquet(path, index=False, **kwargs)
+        except ImportError as exc:
+            raise_parquet_extra_error("Writing Parquet files", exc)
 
     def to_json(self, path: str | Path, orient: str = "records") -> None:
         """Write to JSON file."""
@@ -288,7 +298,10 @@ class PandasContainer(BaseDataContainer):
 
     def to_excel(self, path: str | Path, **kwargs: Any) -> None:
         """Write to Excel file."""
-        self._df.to_excel(path, index=False, **kwargs)
+        try:
+            self._df.to_excel(path, index=False, **kwargs)
+        except ImportError as exc:
+            raise_excel_extra_error("Writing Excel files", exc)
 
     def __repr__(self) -> str:
         return f"PandasContainer(rows={len(self)}, columns={self.columns})"

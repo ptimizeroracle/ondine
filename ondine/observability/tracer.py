@@ -134,6 +134,7 @@ def enable_tracing(
 
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to setup span processor: {e}. Tracing will be disabled")
+        logger.debug("Span processor setup failure details:", exc_info=True)
         return
 
     # Set global provider

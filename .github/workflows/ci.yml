@@ -49,9 +49,9 @@ jobs:
       run: |
         python -c "import ondine; print(ondine.__version__)"
         if [ "${{ matrix.profile }}" = "observability" ]; then
-          python -c "from ondine.observability import enable_tracing"
+          python -c "from ondine.observability import disable_tracing, enable_tracing; enable_tracing(exporter='console'); disable_tracing()"
         elif [ "${{ matrix.profile }}" = "all" ]; then
-          python -c "from ondine.observability import enable_tracing; from ondine.utils.metrics_exporter import PrometheusMetrics"
+          python -c "from ondine.observability import disable_tracing, enable_tracing; from ondine.utils.metrics_exporter import PrometheusMetrics; enable_tracing(exporter='console'); disable_tracing(); PrometheusMetrics(port=0)"
         fi
 
   # Quick checks for feature branches - runs on every push

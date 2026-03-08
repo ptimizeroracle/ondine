@@ -21,6 +21,10 @@ import pandas as pd
 from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.stages.parser_factory import JSONParser
+from ondine.utils.optional_dependencies import (
+    raise_excel_extra_error,
+    raise_parquet_extra_error,
+)
 
 
 class QuickPipeline:
@@ -238,9 +242,15 @@ class QuickPipeline:
         if suffix == ".csv":
             return pd.read_csv(path)
         if suffix in [".xlsx", ".xls"]:
-            return pd.read_excel(path)
+            try:
+                return pd.read_excel(path)
+            except ImportError as exc:
+                raise_excel_extra_error("Loading Excel data", exc)
         if suffix == ".parquet":
-            return pd.read_parquet(path)
+            try:
+                return pd.read_parquet(path)
+            except ImportError as exc:
+                raise_parquet_extra_error("Loading Parquet data", exc)
         if suffix == ".json":
             return pd.read_json(path)
         raise ValueError(

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ondine.core.data_container import BaseDataContainer, Row
+from ondine.utils.optional_dependencies import raise_excel_extra_error
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,10 @@ class ResultContainerImpl(BaseDataContainer):
             sheet_name: Name of the worksheet
         """
         df = self.to_pandas()
-        df.to_excel(path, sheet_name=sheet_name, index=False)
+        try:
+            df.to_excel(path, sheet_name=sheet_name, index=False)
+        except ImportError as exc:
+            raise_excel_extra_error("Writing Excel files", exc)
         logger.info(f"Wrote {len(self)} rows to {path}")
 
     def head(self, n: int = 5) -> list[Row]:

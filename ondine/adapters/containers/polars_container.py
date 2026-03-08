@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ondine.core.data_container import BaseDataContainer, Row
+from ondine.utils.optional_dependencies import raise_parquet_extra_error
 
 
 class PolarsContainer(BaseDataContainer):
@@ -253,7 +254,10 @@ class PolarsContainer(BaseDataContainer):
 
     def to_pandas(self) -> Any:
         """Convert to Pandas DataFrame."""
-        return self._df.to_pandas()
+        try:
+            return self._df.to_pandas()
+        except ImportError as exc:
+            raise_parquet_extra_error("Converting Polars data to pandas", exc)
 
     def to_polars(self) -> Any:
         """Return underlying Polars DataFrame."""
