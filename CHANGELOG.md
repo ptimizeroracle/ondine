@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2](https://github.com/ptimizeroracle/ondine/compare/v1.4.1...v1.4.2) (2026-03-08)
+
+
+### Bug Fixes
+
+* restore structured output compatibility for Anthropic ([#64](https://github.com/ptimizeroracle/ondine/issues/64)) ([f09d8b2](https://github.com/ptimizeroracle/ondine/commit/f09d8b21755c2ae76526968c8204d3845e6a43d1))
+
 ## [1.4.1](https://github.com/ptimizeroracle/ondine/compare/v1.4.0...v1.4.1) (2026-03-08)
 
 
