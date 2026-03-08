@@ -41,9 +41,18 @@ class FakeChoice:
 class FakeResponse:
     """Fake LiteLLM response object."""
 
-    def __init__(self, content="hello", prompt_tokens=10, completion_tokens=5):
+    def __init__(
+        self,
+        content="hello",
+        prompt_tokens=10,
+        completion_tokens=5,
+        model=None,
+        hidden_params=None,
+    ):
         self.choices = [FakeChoice(FakeMessage(content))]
         self.usage = FakeUsage(prompt_tokens, completion_tokens)
+        self.model = model
+        self._hidden_params = hidden_params or {}
 
 
 class TestUnifiedLiteLLMClient:
@@ -170,6 +179,103 @@ class TestUnifiedLiteLLMClient:
             mock_router_instance.acompletion.assert_called_once()
             assert client.router is not None
 
+    @pytest.mark.asyncio
+    async def test_router_response_preserves_actual_deployment_metadata(self):
+        """Test router responses preserve the actual deployment id used."""
+        router_config = {
+            "model_list": [
+                {"model_name": "fast-model", "litellm_params": {"model": "groq/llama"}},
+                {
+                    "model_name": "fast-model",
+                    "litellm_params": {"model": "openai/gpt-4o-mini"},
+                },
+            ]
+        }
+        spec = LLMSpec(model="fast-model", api_key="sk-test")
+        spec.router_config = router_config
+        fake_response = FakeResponse(
+            "fallback response",
+            model="mixed-llm",
+            hidden_params={"model_id": "openai-fallback"},
+        )
+
+        with patch("litellm.Router") as mock_router:
+            mock_router_instance = Mock()
+            mock_router_instance.acompletion = AsyncMock(return_value=fake_response)
+            mock_router_instance.model_list = router_config["model_list"]
+            mock_router.return_value = mock_router_instance
+
+            client = UnifiedLiteLLMClient(spec)
+            result = await client.ainvoke("test")
+
+            assert result.text == "fallback response"
+            assert result.metadata["model_id"] == "openai-fallback"
+
+    def test_router_init_disables_invalid_mixed_model_names(self):
+        """Test router init safely disables invalid load-balancing config."""
+        spec = LLMSpec(model="router", api_key="sk-test")
+        spec.router_config = {
+            "model_list": [
+                {"model_name": "primary", "litellm_params": {"model": "groq/llama"}},
+                {
+                    "model_name": "secondary",
+                    "litellm_params": {"model": "openai/gpt-4o-mini"},
+                },
+            ]
+        }
+
+        with patch("litellm.Router") as mock_router:
+            client = UnifiedLiteLLMClient(spec)
+
+            mock_router.assert_not_called()
+            assert client.router is None
+
+    def test_router_cooldown_callback_emits_observer_event(self):
+        """Test router cooldown hook emits Ondine observer events."""
+        spec = LLMSpec(model="fast-model", api_key="sk-test")
+        spec.router_config = {
+            "model_list": [
+                {
+                    "model_name": "fast-model",
+                    "litellm_params": {"model": "groq/llama-3.3-70b"},
+                }
+            ]
+        }
+
+        with patch("litellm.Router") as mock_router:
+            mock_router_instance = Mock()
+            mock_router_instance.acompletion = AsyncMock()
+            mock_router_instance.model_list = spec.router_config["model_list"]
+            mock_router_instance.deployment_callback_on_failure = Mock(
+                return_value=True
+            )
+            mock_router.return_value = mock_router_instance
+
+            client = UnifiedLiteLLMClient(spec)
+            dispatcher = Mock()
+            client.set_observer_dispatcher(dispatcher)
+
+            client.router.deployment_callback_on_failure(
+                {
+                    "model": "fast-model",
+                    "exception": RuntimeError("rate limited"),
+                    "litellm_params": {
+                        "model": "groq/llama-3.3-70b",
+                        "model_info": {"id": "groq-primary"},
+                    },
+                },
+                None,
+                None,
+                None,
+            )
+
+            dispatcher.dispatch.assert_called_once()
+            event = dispatcher.dispatch.call_args.args[1]
+            assert dispatcher.dispatch.call_args.args[0] == "provider_cooldown"
+            assert event.provider == "groq/llama-3.3-70b"
+            assert event.deployment_id == "groq-primary"
+            assert "rate limited" in event.reason
+
     def test_invoke_script_mode(self):
         """Test invoke() works in script mode (no running loop)."""
         spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-test")
@@ -282,6 +388,51 @@ class TestUnifiedLiteLLMClient:
             # Verify response is serialized JSON
             assert '"result"' in result.text
             assert "structured output" in result.text
+
+    @pytest.mark.asyncio
+    async def test_structured_router_preserves_deployment_metadata(self):
+        """Test structured router responses preserve fallback deployment metadata."""
+
+        class TestModel(BaseModel):
+            result: str
+
+        spec = LLMSpec(model="fast-model", api_key="sk-test")
+        spec.router_config = {
+            "model_list": [
+                {"model_name": "fast-model", "litellm_params": {"model": "groq/llama"}}
+            ]
+        }
+
+        mock_instructor_client = Mock()
+        mock_completions = Mock()
+        mock_result = TestModel(result="structured output")
+        mock_raw_response = Mock()
+        mock_raw_response.usage = Mock(prompt_tokens=10, completion_tokens=5)
+        mock_raw_response._hidden_params = {"model_region": "groq-region-a"}
+
+        mock_completions.create_with_completion = AsyncMock(
+            return_value=(mock_result, mock_raw_response)
+        )
+        mock_completions.create = AsyncMock(return_value=mock_result)
+        mock_instructor_client.chat = Mock()
+        mock_instructor_client.chat.completions = mock_completions
+
+        with (
+            patch("litellm.Router") as mock_router,
+            patch(
+                "ondine.adapters.unified_litellm_client.instructor.from_litellm",
+                return_value=mock_instructor_client,
+            ),
+        ):
+            mock_router_instance = Mock()
+            mock_router_instance.acompletion = AsyncMock()
+            mock_router_instance.model_list = spec.router_config["model_list"]
+            mock_router.return_value = mock_router_instance
+
+            client = UnifiedLiteLLMClient(spec)
+            result = await client.structured_invoke_async("test", TestModel)
+
+            assert result.metadata["model_id"] == "groq-region-a"
 
     def test_calc_cost_with_litellm(self):
         """Test cost calculation uses LiteLLM's pricing DB."""

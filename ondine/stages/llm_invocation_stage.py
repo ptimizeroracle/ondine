@@ -32,6 +32,7 @@ from ondine.utils import (
     RateLimitError,
     RetryHandler,
 )
+from ondine.utils.budget_controller import BudgetExceededError
 
 
 class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
@@ -60,6 +61,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         error_policy: ErrorPolicy = ErrorPolicy.SKIP,
         max_retries: int = 3,
         output_cls: type[BaseModel] | None = None,
+        budget_controller: Any | None = None,
     ):
         """
         Initialize LLM invocation stage.
@@ -72,6 +74,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             error_policy: Policy for handling errors
             max_retries: Maximum retry attempts
             output_cls: Optional Pydantic model for structured output
+            budget_controller: Optional budget controller for mid-run enforcement
         """
         super().__init__("LLMInvocation")
         self.llm_client = llm_client
@@ -79,6 +82,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         self.rate_limiter = rate_limiter
         self.retry_handler = retry_handler or RetryHandler()
         self.output_cls = output_cls
+        self.budget_controller = budget_controller
         self.error_handler = ErrorHandler(
             policy=error_policy,
             max_retries=max_retries,
@@ -108,7 +112,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # Execute async processing
         try:
             return asyncio.run(self._process_async(batches, context))
-        except RuntimeError:
+        except RuntimeError as exc:
+            if "asyncio.run() cannot be called from a running event loop" not in str(
+                exc
+            ):
+                raise
             # Loop already running (e.g. Jupyter)
             import nest_asyncio
 
@@ -181,13 +189,45 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             async with semaphore:
                 return await self._process_single_item(idx, item, context)
 
-        tasks = [_process_one(idx, item) for idx, item in enumerate(items)]
-        responses = await asyncio.gather(*tasks)
+        if self.concurrency <= 1:
+            responses = []
+            for idx, item in enumerate(items):
+                responses.append(await _process_one(idx, item))
+
+            self._log_distribution_summary()
+            return responses
+
+        task_map = {
+            asyncio.create_task(_process_one(idx, item)): idx
+            for idx, item in enumerate(items)
+        }
+        pending = set(task_map)
+        responses: list[LLMResponse | None] = [None] * len(items)
+
+        while pending:
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_EXCEPTION
+            )
+
+            first_error = None
+            for task in done:
+                idx = task_map[task]
+                exc = task.exception()
+                if exc is not None and first_error is None:
+                    first_error = exc
+                    continue
+                responses[idx] = task.result()
+
+            if first_error is not None:
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+                raise first_error
 
         # Log distribution summary
         self._log_distribution_summary()
 
-        return list(responses)
+        return [response for response in responses if response is not None]
 
     async def _process_single_item(self, idx: int, item, context: Any) -> LLMResponse:
         """Process a single prompt item with error handling."""
@@ -215,8 +255,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             return response
 
+        except BudgetExceededError:
+            raise
         except Exception as e:
-            return self._handle_error(e, idx, self._total_rows)
+            response = self._handle_error(e, idx, self._total_rows)
+
+            batch_size = BatchProcessor.get_batch_size(item.metadata)
+            self._progress_reporter.update(
+                rows_completed=batch_size, cost=response.cost
+            )
+            self._update_context(context, idx, item.metadata, response)
+
+            return response
 
     def _invoke_with_retry_and_ratelimit(
         self,
@@ -309,6 +359,31 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             context.intermediate_data["token_tracking"]["output_tokens"] += (
                 response.tokens_out
             )
+
+            # Persist completed responses incrementally so checkpoints can resume
+            # without redoing already finished LLM calls.
+            completed_responses = context.intermediate_data.setdefault(
+                "completed_responses", []
+            )
+            completed_responses.append(
+                {
+                    "text": response.text,
+                    "tokens_in": response.tokens_in,
+                    "tokens_out": response.tokens_out,
+                    "model": response.model,
+                    "cost": str(response.cost),
+                    "latency_ms": response.latency_ms,
+                    "metadata": response.metadata or {},
+                    "row_metadata": {
+                        "row_index": metadata.row_index,
+                        "row_id": metadata.row_id,
+                        "custom": metadata.custom or {},
+                    },
+                }
+            )
+
+            if self.budget_controller:
+                self.budget_controller.check_budget(context.accumulated_cost)
 
     def _handle_error(self, error: Exception, idx: int, total: int) -> LLMResponse:
         """Handle processing error according to error policy."""

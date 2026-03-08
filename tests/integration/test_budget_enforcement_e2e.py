@@ -1,108 +1,120 @@
-"""
-E2E test for budget enforcement.
+"""Integration tests for budget enforcement behavior."""
 
-Validates that BudgetController correctly stops pipeline execution
-when cost limits are exceeded, preventing runaway expenses.
-"""
-
-import os
 from decimal import Decimal
+from tempfile import TemporaryDirectory
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from ondine.core.models import LLMResponse
+from ondine.utils.budget_controller import BudgetExceededError
+
+
+def _row_from_prompt(prompt: str) -> int:
+    for i in range(10):
+        if f"Item {i}" in prompt:
+            return i
+    raise AssertionError(f"Unknown prompt: {prompt}")
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    ("provider", "model", "api_key_env"),
-    [
-        ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-    ],
-)
-def test_budget_enforcement_stops_execution(provider, model, api_key_env):
+@patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+def test_budget_enforcement_stops_mid_run(mock_get):
     """
-    Test that pipeline stops when budget limit is exceeded.
-
-    This is a critical financial safety feature.
+    Regression this catches:
+    the pipeline must stop as soon as accumulated cost crosses the budget,
+    not after finishing the whole dataset.
     """
-    api_key = os.getenv(api_key_env)
-    if not api_key:
-        pytest.skip(f"{api_key_env} not set")
+    df = pd.DataFrame({"text": [f"Item {i}" for i in range(5)]})
+    processed_rows: list[int] = []
 
-    # Create large dataset that would exceed budget
-    df = pd.DataFrame({"text": [f"Long text {i} " * 50 for i in range(100)]})
+    async def mock_invoke(prompt, **kwargs):
+        row_num = _row_from_prompt(prompt)
+        processed_rows.append(row_num)
+        return LLMResponse(
+            text=f"summary_{row_num}",
+            tokens_in=10,
+            tokens_out=10,
+            model="test-model",
+            cost=Decimal("0.40"),
+            latency_ms=5.0,
+        )
 
-    # Set very low budget (should stop after a few rows)
+    mock_client = Mock()
+    mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+    mock_client.start = AsyncMock()
+    mock_client.stop = AsyncMock()
+    mock_client.router = None
+    mock_client.model = "test-model"
+    mock_client.spec = Mock(model="test-model")
+    mock_get.return_value = Mock(return_value=mock_client)
+
+    with TemporaryDirectory() as tmpdir:
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(df, input_columns=["text"], output_columns=["summary"])
+            .with_prompt("Summarize: {text}")
+            .with_llm(provider="openai", model="test-model", temperature=0.0)
+            .with_processing_batch_size(1)
+            .with_concurrency(1)
+            .with_max_budget(0.75)
+            .with_checkpoint_dir(tmpdir)
+            .build()
+        )
+
+        with pytest.raises(BudgetExceededError, match="Budget exceeded"):
+            pipeline.execute()
+
+        assert processed_rows == [0, 1]
+
+
+@pytest.mark.integration
+@patch("ondine.utils.budget_controller.logger.warning")
+@patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+def test_budget_warning_threshold_emits_warning(mock_get, mock_warning):
+    """
+    Regression this catches:
+    warning thresholds must be emitted before the hard budget limit is reached.
+    """
+    df = pd.DataFrame({"text": [f"Item {i}" for i in range(3)]})
+
+    async def mock_invoke(prompt, **kwargs):
+        row_num = _row_from_prompt(prompt)
+        return LLMResponse(
+            text=f"summary_{row_num}",
+            tokens_in=10,
+            tokens_out=10,
+            model="test-model",
+            cost=Decimal("0.16"),
+            latency_ms=5.0,
+        )
+
+    mock_client = Mock()
+    mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+    mock_client.start = AsyncMock()
+    mock_client.stop = AsyncMock()
+    mock_client.router = None
+    mock_client.model = "test-model"
+    mock_client.spec = Mock(model="test-model")
+    mock_get.return_value = Mock(return_value=mock_client)
+
     pipeline = (
         PipelineBuilder.create()
         .from_dataframe(df, input_columns=["text"], output_columns=["summary"])
-        .with_prompt("Summarize: {{text}}")
-        .with_llm(
-            provider=provider,
-            model=model,
-            api_key=api_key,
-            temperature=0.0,
-            input_cost_per_1k_tokens=Decimal("0.00015"),  # gpt-4o-mini pricing
-            output_cost_per_1k_tokens=Decimal("0.0006"),
-        )
-        .with_batch_size(100)
-        .with_processing_batch_size(10)  # 10 API calls total
-        .with_max_budget(0.001)  # Very low budget ($0.001 = 1 cent)
-        .build()
-    )
-
-    # Execute (should raise BudgetExceededError)
-    from ondine.utils.budget_controller import BudgetExceededError
-
-    with pytest.raises(BudgetExceededError) as exc_info:
-        pipeline.execute()
-
-    # Verify budget was exceeded
-    assert "Budget exceeded" in str(exc_info.value)
-    assert "$0.001" in str(exc_info.value) or "$0.00" in str(exc_info.value)
-
-    print(f"\n{provider.upper()} Budget Enforcement Results:")
-    print("  Budget: $0.001")
-    print(f"  Error: {exc_info.value}")
-    print("  ✅ Budget enforcement working correctly (raised exception)")
-
-
-@pytest.mark.integration
-def test_budget_warning_threshold():
-    """
-    Test that budget warnings are logged at threshold.
-
-    Validates the warning system alerts users before hitting hard limit.
-    """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
-
-    df = pd.DataFrame({"text": [f"Text {i}" for i in range(20)]})
-
-    # Set budget with warning threshold
-    pipeline = (
-        PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["text"], output_columns=["result"])
-        .with_prompt("Echo: {{text}}")
-        .with_llm(provider="groq", model="llama-3.3-70b-versatile", api_key=api_key)
-        .with_batch_size(20)
-        .with_processing_batch_size(5)  # 4 API calls
-        .with_max_budget(0.10)  # Should complete within budget
+        .with_prompt("Summarize: {text}")
+        .with_llm(provider="openai", model="test-model", temperature=0.0)
+        .with_processing_batch_size(1)
+        .with_concurrency(1)
+        .with_max_budget(0.50)
         .build()
     )
 
     result = pipeline.execute()
 
-    # Should succeed (budget sufficient)
-    assert result.success, "Pipeline should complete within budget"
-    assert result.costs.total_cost < 0.10, (
-        f"Cost ${result.costs.total_cost:.4f} exceeded budget"
-    )
-
-    print("\nBudget Warning Test Results:")
-    print("  Budget: $0.10")
-    print(f"  Actual cost: ${result.costs.total_cost:.4f}")
-    print("  ✅ Completed within budget")
+    assert result.success
+    assert result.costs.total_cost == Decimal("0.48")
+    warning_messages = [call.args[0] for call in mock_warning.call_args_list]
+    assert any("75% used" in message for message in warning_messages)
+    assert any("90% used" in message for message in warning_messages)

@@ -6,6 +6,7 @@ lazy evaluation and streaming capabilities. Memory usage is O(chunk_size),
 not O(total_rows).
 """
 
+import json
 import logging
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -122,6 +123,17 @@ class StreamingDataLoader:
         Yields:
             Polars DataFrame chunks of size chunk_size
         """
+        suffix = self.path.suffix.lower()
+        if suffix == ".csv":
+            yield from self._iter_csv_chunks()
+            return
+        if suffix == ".parquet":
+            yield from self._iter_parquet_chunks()
+            return
+        if suffix in (".json", ".ndjson"):
+            yield from self._iter_ndjson_chunks()
+            return
+
         # Collect with streaming=True for memory efficiency
         # Then slice into chunks
         try:
@@ -141,6 +153,63 @@ class StreamingDataLoader:
             df = self._lazy_frame.collect()
             for i in range(0, len(df), self.chunk_size):
                 yield df.slice(i, self.chunk_size)
+
+    def _iter_csv_chunks(self) -> Iterator[pl.DataFrame]:
+        """Stream CSV chunks without materializing the full dataset."""
+        import pandas as pd
+
+        read_options = dict(self.read_options)
+        separator = read_options.pop("separator", None)
+        if separator is not None:
+            read_options["sep"] = separator
+        if self.columns is not None:
+            read_options["usecols"] = self.columns
+
+        for idx, chunk in enumerate(
+            pd.read_csv(self.path, chunksize=self.chunk_size, **read_options), start=1
+        ):
+            chunk_pl = pl.from_pandas(chunk)
+            logger.debug(
+                f"Yielding CSV chunk {idx}: {len(chunk_pl)} rows from {self.path.name}"
+            )
+            yield chunk_pl
+
+    def _iter_parquet_chunks(self) -> Iterator[pl.DataFrame]:
+        """Stream Parquet chunks via Arrow batches when available."""
+        import pyarrow.parquet as pq
+
+        parquet_file = pq.ParquetFile(self.path)
+        for idx, batch in enumerate(
+            parquet_file.iter_batches(
+                batch_size=self.chunk_size,
+                columns=self.columns,
+            ),
+            start=1,
+        ):
+            chunk = pl.from_arrow(batch)
+            logger.debug(
+                f"Yielding Parquet chunk {idx}: {len(chunk)} rows from {self.path.name}"
+            )
+            yield chunk
+
+    def _iter_ndjson_chunks(self) -> Iterator[pl.DataFrame]:
+        """Stream NDJSON chunks line-by-line without full materialization."""
+        rows: list[dict[str, Any]] = []
+        with self.path.open(encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                row = json.loads(stripped)
+                if self.columns is not None:
+                    row = {column: row.get(column) for column in self.columns}
+                rows.append(row)
+                if len(rows) >= self.chunk_size:
+                    yield pl.DataFrame(rows)
+                    rows = []
+
+        if rows:
+            yield pl.DataFrame(rows)
 
     async def stream_chunks(self) -> AsyncIterator[pl.DataFrame]:
         """

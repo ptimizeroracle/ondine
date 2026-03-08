@@ -335,6 +335,7 @@ class UnifiedLiteLLMClient(LLMClient):
             # Store resilience config for observability
             self._allowed_fails = config.get("allowed_fails", 3)
             self._cooldown_time = config.get("cooldown_time", 60)
+            self._wrap_router_failure_callbacks()
 
             # Display Router info using Rich utilities
             strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
@@ -373,6 +374,39 @@ class UnifiedLiteLLMClient(LLMClient):
         except Exception as e:
             logger.error(f"Router init failed: {e}")
             self.router = None
+
+    def _wrap_router_failure_callbacks(self) -> None:
+        """Attach Ondine cooldown observability to LiteLLM Router failure hooks."""
+        if self.router is None:
+            return
+
+        original_failure_callback = getattr(
+            self.router, "deployment_callback_on_failure", None
+        )
+        if callable(original_failure_callback):
+
+            def wrapped_failure_callback(*args, **kwargs):
+                result = original_failure_callback(*args, **kwargs)
+                if result:
+                    callback_kwargs = args[0] if args else kwargs.get("kwargs", {})
+                    litellm_params = callback_kwargs.get("litellm_params", {}) or {}
+                    model_info = litellm_params.get("model_info", {}) or {}
+                    deployment = {
+                        "model_id": str(model_info.get("id"))
+                        if model_info.get("id") is not None
+                        else None,
+                        "model_name": callback_kwargs.get("model", self.model),
+                        "litellm_params": {
+                            "model": litellm_params.get("model", self.model)
+                        },
+                    }
+                    exception = callback_kwargs.get(
+                        "exception", Exception("Router deployment failure")
+                    )
+                    self._emit_cooldown_event(deployment, exception)
+                return result
+
+            self.router.deployment_callback_on_failure = wrapped_failure_callback
 
     def _emit_cooldown_event(
         self,

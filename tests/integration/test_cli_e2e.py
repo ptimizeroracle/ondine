@@ -6,13 +6,18 @@ Tests the full CLI workflow with real providers to catch regressions.
 
 import os
 import tempfile
+from decimal import Decimal
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
 import pytest
 from click.testing import CliRunner
 
+from ondine.api import Pipeline
 from ondine.cli.main import cli
+from ondine.config import ConfigLoader
+from ondine.core.models import LLMResponse
 
 
 @pytest.mark.integration
@@ -306,10 +311,104 @@ def test_cli_resume_invalid_session_id():
     result = runner.invoke(cli, ["resume", "--session-id", "invalid-uuid-123"])
 
     assert result.exit_code != 0
-    # Should show some error (format, not found, or implementation error)
-    assert "error" in result.output.lower()
+    assert "invalid session id" in result.output.lower()
 
     print("\n✅ CLI resume handles invalid session ID (fails gracefully)")
+
+
+@pytest.mark.integration
+@patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+def test_cli_resume_executes_from_checkpoint(mock_get):
+    """
+    Regression test for real CLI resume execution.
+
+    This catches the old placeholder behavior where the CLI could discover a
+    checkpoint but could not actually resume the pipeline.
+    """
+    runner = CliRunner()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        data_file = Path(tmpdir) / "input.csv"
+        output_file = Path(tmpdir) / "output.csv"
+        checkpoint_dir = Path(tmpdir) / "checkpoints"
+        checkpoint_dir.mkdir()
+        pd.DataFrame({"text": ["Item 0", "Item 1", "Item 2"]}).to_csv(
+            data_file, index=False
+        )
+
+        config_file = Path(tmpdir) / "config.yaml"
+        config_file.write_text(f"""
+data:
+  source:
+    type: csv
+    path: {data_file}
+  input_columns: [text]
+  output_columns: [result]
+prompt:
+  template: "Process: {{{{ text }}}}"
+llm:
+  provider: groq
+  model: test-model
+  temperature: 0.0
+processing:
+  batch_size: 1
+  concurrency: 1
+  checkpoint_dir: {checkpoint_dir}
+  error_policy: fail
+output:
+  format: csv
+  destination_path: {output_file}
+""")
+
+        seen = {"Item 1": 0}
+
+        async def mock_invoke(prompt, **kwargs):
+            text = prompt.split(": ", 1)[1]
+            if text == "Item 1" and seen["Item 1"] == 0:
+                seen["Item 1"] += 1
+                raise RuntimeError("simulated cli crash")
+
+            return LLMResponse(
+                text=f"done::{text}",
+                tokens_in=10,
+                tokens_out=5,
+                model="test-model",
+                cost=Decimal("0.01"),
+                latency_ms=5.0,
+            )
+
+        mock_client = Mock()
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+        mock_client.router = None
+        mock_client.model = "test-model"
+        mock_client.spec = Mock(model="test-model")
+        mock_get.return_value = Mock(return_value=mock_client)
+
+        specs = ConfigLoader.from_yaml(config_file)
+        pipeline = Pipeline(specs)
+        with pytest.raises(RuntimeError, match="simulated cli crash"):
+            pipeline.execute()
+
+        checkpoint_file = next(checkpoint_dir.glob("*.json"))
+        session_id = checkpoint_file.stem.replace("checkpoint_", "")
+
+        result = runner.invoke(
+            cli,
+            ["resume", "-s", session_id, "-c", str(config_file)],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "resume complete" in result.output.lower()
+        assert output_file.exists()
+
+        output_df = pd.read_csv(output_file)
+        assert output_df["result"].tolist() == [
+            "done::Item 0",
+            "done::Item 1",
+            "done::Item 2",
+        ]
 
 
 @pytest.mark.integration

@@ -23,7 +23,9 @@ from ondine.adapters.streaming_writer import StreamingResultWriter
 from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
-    ProcessingStats,
+    LLMResponse,
+    ResponseBatch,
+    RowMetadata,
     ValidationResult,
 )
 from ondine.core.specifications import (
@@ -290,6 +292,9 @@ class Pipeline:
             # Create new context
             context = ExecutionContext(pipeline_id=self.id)
 
+        context.intermediate_data.setdefault("completed_responses", [])
+        context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
+
         # Add default observers if none specified
         if not self.observers:
             self.observers = [
@@ -486,6 +491,7 @@ class Pipeline:
     ) -> pd.DataFrame:
         """Execute stages with progress tracking enabled."""
         specs = self.specifications
+        resume_mode = bool(context.intermediate_data.get("resumed_from_checkpoint"))
 
         # Create budget controller if max_budget specified
         budget_controller = None
@@ -503,14 +509,15 @@ class Pipeline:
         loader = DataLoaderStage(self.dataframe)
         df = self._execute_stage(loader, specs.dataset, context)
         context.intermediate_data["loaded_data"] = df
+        working_df = df
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
             from ondine.utils.input_preprocessing import preprocess_container
 
             self.logger.info("Preprocessing loaded data...")
-            df, stats = preprocess_container(
-                df,
+            working_df, stats = preprocess_container(
+                working_df,
                 input_columns=specs.dataset.input_columns,
                 max_length=specs.processing.preprocessing_max_length,
             )
@@ -520,13 +527,22 @@ class Pipeline:
                 f"{stats.truncated_count} truncated"
             )
             # Store preprocessed data for retry
-            context.intermediate_data["preprocessed_data"] = df
+            context.intermediate_data["preprocessed_data"] = working_df
+
+        if resume_mode:
+            working_df = self._filter_container_for_resume(
+                working_df, context.last_processed_row
+            )
+            self.logger.info(
+                f"Resume mode: skipping first {context.last_processed_row + 1} rows, "
+                f"processing {len(working_df)} remaining rows"
+            )
 
         # Stage 2: Format prompts
         formatter = PromptFormatterStage(
             specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2
         )
-        batches = self._execute_stage(formatter, (df, specs.prompt), context)
+        batches = self._execute_stage(formatter, (working_df, specs.prompt), context)
         context.intermediate_data["prompt_batches"] = batches
 
         # Stage 2.5: Aggregate into batch prompts (if batch_size > 1)
@@ -594,14 +610,14 @@ class Pipeline:
             output_cls=specs.metadata.get("structured_output_model")
             if specs.metadata
             else None,
+            budget_controller=budget_controller,
         )
         # Stage 3: Execute LLM invocation
-        response_batches = self._execute_stage(llm_stage, batches, context)
+        response_batches = (
+            self._execute_stage(llm_stage, batches, context) if batches else []
+        )
         context.intermediate_data["response_batches"] = response_batches
-
-        # Check budget after LLM invocation
-        if budget_controller:
-            budget_controller.check_budget(context.accumulated_cost)
+        response_batches = self._restore_completed_response_batches(context)
 
         # Save checkpoint after expensive LLM stage
         if state_manager.should_checkpoint(context.last_processed_row):
@@ -681,6 +697,61 @@ class Pipeline:
 
         return ResultContainerImpl(data=merged_rows, columns=merged_columns)
 
+    def _filter_container_for_resume(
+        self, container: Any, last_processed_row: int
+    ) -> Any:
+        """Return only rows that still need processing, preserving original indices."""
+        from ondine.adapters.containers import DictListContainer
+
+        filtered_rows = []
+        for idx, row in enumerate(container):
+            if idx <= last_processed_row:
+                continue
+            resumed_row = dict(row)
+            resumed_row["_index"] = idx
+            filtered_rows.append(resumed_row)
+
+        columns = list(container.columns)
+        if "_index" not in columns:
+            columns.append("_index")
+        return DictListContainer(data=filtered_rows, columns=columns)
+
+    def _restore_completed_response_batches(
+        self, context: ExecutionContext
+    ) -> list[ResponseBatch]:
+        """Rebuild response batches from checkpoint-safe completed response records."""
+        restored_batches: list[ResponseBatch] = []
+        for idx, record in enumerate(
+            context.intermediate_data.get("completed_responses", [])
+        ):
+            row_metadata = record.get("row_metadata", {})
+            response = LLMResponse(
+                text=record.get("text", ""),
+                tokens_in=record.get("tokens_in", 0),
+                tokens_out=record.get("tokens_out", 0),
+                model=record.get("model", self.specifications.llm.model),
+                cost=Decimal(str(record.get("cost", "0"))),
+                latency_ms=record.get("latency_ms", 0.0),
+                metadata=record.get("metadata", {}) or {},
+            )
+            metadata = RowMetadata(
+                row_index=row_metadata.get("row_index", idx),
+                row_id=row_metadata.get("row_id"),
+                custom=row_metadata.get("custom", {}) or {},
+            )
+            restored_batches.append(
+                ResponseBatch(
+                    responses=[response],
+                    metadata=[metadata],
+                    tokens_used=response.tokens_in + response.tokens_out,
+                    cost=response.cost,
+                    batch_id=idx,
+                    latencies_ms=[response.latency_ms],
+                )
+            )
+
+        return restored_batches
+
     async def execute_async(self, resume_from: UUID | None = None) -> ExecutionResult:
         """
         Execute pipeline asynchronously.
@@ -740,51 +811,68 @@ class Pipeline:
         elif chunk_size is None:
             chunk_size = 1000  # Default fallback
 
-        # For now, execute the full pipeline and split result into chunks
-        # TODO: Implement proper streaming execution that processes chunks independently
-        result = self.execute()
+        streaming_config = {}
+        if isinstance(self.specifications.metadata, dict):
+            streaming_config = self.specifications.metadata.get("streaming", {}) or {}
+        max_pending_chunks = streaming_config.get("max_pending_chunks", 3)
 
-        # Split the result data into chunks and yield as separate ExecutionResults
-        total_rows = len(result.data)
-        for start_idx in range(0, total_rows, chunk_size):
-            end_idx = min(start_idx + chunk_size, total_rows)
-            chunk_data = result.data.iloc[start_idx:end_idx].copy()
+        import asyncio
+        import queue
+        import threading
 
-            # Create a chunk result with proportional metrics
-            chunk_rows = len(chunk_data)
-            chunk_result = ExecutionResult(
-                data=chunk_data,
-                metrics=ProcessingStats(
-                    total_rows=chunk_rows,
-                    processed_rows=chunk_rows,
-                    failed_rows=0,
-                    skipped_rows=0,
-                    rows_per_second=result.metrics.rows_per_second,
-                    total_duration_seconds=result.metrics.total_duration_seconds
-                    * (chunk_rows / total_rows),
-                    stage_durations=result.metrics.stage_durations,
-                ),
-                costs=CostEstimate(
-                    total_cost=result.costs.total_cost
-                    * Decimal(chunk_rows / total_rows),
-                    total_tokens=int(
-                        result.costs.total_tokens * (chunk_rows / total_rows)
-                    ),
-                    input_tokens=int(
-                        result.costs.input_tokens * (chunk_rows / total_rows)
-                    ),
-                    output_tokens=int(
-                        result.costs.output_tokens * (chunk_rows / total_rows)
-                    ),
-                    rows=chunk_rows,
-                    confidence=result.costs.confidence,
-                ),
-                execution_id=result.execution_id,
-                start_time=result.start_time,
-                end_time=result.end_time,
-                success=True,
-            )
-            yield chunk_result
+        result_queue: queue.Queue[tuple[str, ExecutionResult | Exception | None]] = (
+            queue.Queue(maxsize=max_pending_chunks)
+        )
+        stop_requested = threading.Event()
+
+        def publish(kind: str, payload: ExecutionResult | Exception | None) -> None:
+            while True:
+                if stop_requested.is_set():
+                    return
+                try:
+                    result_queue.put((kind, payload), timeout=0.1)
+                    return
+                except queue.Full:
+                    continue
+
+        def runner() -> None:
+            async def stream_results() -> None:
+                try:
+                    async for chunk_result in self.execute_stream_async(
+                        chunk_size=chunk_size,
+                        max_pending_chunks=max_pending_chunks,
+                    ):
+                        if stop_requested.is_set():
+                            break
+                        publish("item", chunk_result)
+                    publish("done", None)
+                except Exception as exc:
+                    publish("error", exc)
+
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(stream_results())
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+        thread = threading.Thread(target=runner, daemon=True)
+        thread.start()
+
+        try:
+            while True:
+                kind, payload = result_queue.get()
+                if kind == "item":
+                    yield payload  # type: ignore[misc]
+                elif kind == "error":
+                    raise payload  # type: ignore[misc]
+                else:
+                    break
+        finally:
+            stop_requested.set()
+            thread.join(timeout=1)
 
     async def execute_stream_async(
         self,
@@ -827,6 +915,14 @@ class Pipeline:
         # Setup streaming components
         specs = self.specifications
         source_path = specs.dataset.source_path
+        budget_controller = None
+        if specs.processing.max_budget:
+            from ondine.utils.budget_controller import BudgetController
+
+            budget_controller = BudgetController(
+                max_budget=specs.processing.max_budget,
+                fail_on_exceed=True,
+            )
 
         if source_path is None and self.dataframe is None:
             raise ValueError(
@@ -848,6 +944,9 @@ class Pipeline:
         total_tokens = 0
         chunk_index = 0
 
+        producer_task = None
+        producer_error = None
+
         try:
             # Create data source
             if source_path:
@@ -861,8 +960,28 @@ class Pipeline:
                 # Stream from in-memory dataframe
                 data_source = self._stream_dataframe_chunks(self.dataframe, chunk_size)
 
+            queue: asyncio.Queue[pl.DataFrame | None] = asyncio.Queue(
+                maxsize=max_pending_chunks
+            )
+
+            async def producer() -> None:
+                nonlocal producer_error
+                try:
+                    async for chunk_pl in data_source:
+                        await queue.put(chunk_pl)
+                except Exception as exc:
+                    producer_error = exc
+                finally:
+                    await queue.put(None)
+
+            producer_task = asyncio.create_task(producer())
+
             # Process each chunk through the pipeline
-            async for chunk_pl in data_source:
+            while True:
+                chunk_pl = await queue.get()
+                if chunk_pl is None:
+                    break
+
                 # Convert Polars to Pandas for compatibility with existing stages
                 chunk_df = chunk_pl.to_pandas()
 
@@ -878,16 +997,30 @@ class Pipeline:
 
                 # Write incrementally if writer configured
                 if writer and chunk_result.data is not None:
-                    result_pl = pl.from_pandas(chunk_result.data)
+                    result_pl = chunk_result.to_polars()
                     await writer.append_async(result_pl)
 
                 chunk_index += 1
                 yield chunk_result
 
+                # Enforce streaming budgets across chunk boundaries using cumulative cost.
+                if budget_controller is not None:
+                    budget_controller.check_budget(total_cost)
+
                 # Yield control to event loop
                 await asyncio.sleep(0)
 
+            if producer_error is not None:
+                raise producer_error
+
         finally:
+            if producer_task and not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except asyncio.CancelledError:
+                    pass
+
             # Finalize writer
             if writer:
                 write_stats = writer.finalize()
