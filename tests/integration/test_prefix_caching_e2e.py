@@ -1,11 +1,8 @@
-"""
-E2E integration tests for prefix caching (prompt caching).
+"""Integration tests for the prefix-caching request path."""
 
-Tests that system messages are properly separated and cached by providers.
-OpenAI and Anthropic automatically cache system messages to reduce costs.
-"""
-
-import os
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -13,200 +10,109 @@ import pytest
 from ondine import PipelineBuilder
 
 
-@pytest.mark.integration
-def test_prefix_caching_groq_e2e():
-    """
-    E2E test for prefix caching with Groq.
-
-    Tests that:
-    - System messages are sent separately from user prompts
-    - Multiple requests with same system message reuse cached prefix
-    - This reduces input token costs significantly
-
-    Note: Groq may not have explicit prompt caching like OpenAI/Anthropic,
-    but proper message structure is still important for future support.
-    """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
-
-    # Create test data with multiple rows (same system message, different prompts)
-    df = pd.DataFrame(
-        {
-            "question": [
-                "What is 2+2?",
-                "What is 3+3?",
-                "What is 5+5?",
-                "What is 10+10?",
-                "What is 20+20?",
-            ]
-        }
+def _fake_completion_response(text: str, cost: Decimal, cached_tokens: int):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=text))],
+        usage=SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=20,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=cached_tokens),
+            cache_read_input_tokens=cached_tokens,
+        ),
+        model="gpt-4o-mini",
+        _hidden_params={"response_cost": float(cost)},
     )
-
-    # Long system message (perfect candidate for caching!)
-    system_message = """You are an expert mathematics tutor with 20 years of experience.
-You specialize in explaining concepts clearly and concisely.
-Always provide the answer first, then a brief explanation.
-Use simple language suitable for high school students.
-Be encouraging and positive in your responses.
-Focus on building confidence in mathematical reasoning."""
-
-    # Build pipeline with system message (should be cached across calls)
-    pipeline = (
-        PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["question"], output_columns=["answer"])
-        .with_prompt(
-            template="{question}",  # User prompt (varies)
-            system_message=system_message,  # System prompt (same for all - cached!)
-        )
-        .with_llm(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
-            api_key=api_key,
-            temperature=0.0,
-            enable_prefix_caching=True,  # Enable caching
-        )
-        .with_rate_limit(9)  # Groq rate limit
-        .build()
-    )
-
-    # Execute
-    result = pipeline.execute()
-
-    # Verify
-    df = result.to_pandas()
-    assert result.success, "Pipeline failed"
-    assert len(df) == 5, "Wrong number of rows"
-    assert df["answer"].notnull().all(), "Some answers are null"
-
-    # Verify cost tracking
-    assert result.costs.total_cost > 0, "Cost not tracked"
-    assert result.costs.input_tokens > 0, "Input tokens not tracked"
-
-    # Print results
-    print("\nPrefix Caching E2E (Groq):")
-    print(f"Rows processed: {len(df)}")
-    print(f"Total cost: ${result.costs.total_cost:.4f}")
-    print(f"Input tokens: {result.costs.input_tokens}")
-    print(f"Output tokens: {result.costs.output_tokens}")
-    print(f"Cost per row: ${result.costs.total_cost / len(df):.6f}")
-
-    # Sample answers
-    print("\nSample answers:")
-    for i, row in df.head(3).iterrows():
-        print(f"Q: {row['question']} → A: {row['answer'][:50]}...")
-
-    # Verify message structure was correct
-    # System message should be sent separately for each call
-    # (This is what enables caching at the provider level)
-    print("\n✓ System messages sent separately (enables provider-level caching)")
 
 
 @pytest.mark.integration
-def test_prefix_caching_openai_e2e():
+@patch("ondine.adapters.unified_litellm_client.logger.debug")
+@patch("ondine.adapters.unified_litellm_client.litellm.acompletion")
+def test_prefix_caching_separates_system_message_and_detects_cache_hits(
+    mock_acompletion, mock_debug
+):
     """
-    E2E test for prefix caching with OpenAI.
-
-    OpenAI has explicit prompt caching support that caches system messages
-    automatically, reducing costs significantly for repeated system prompts.
-
-    See: https://platform.openai.com/docs/guides/prompt-caching
+    Regression this catches:
+    system prompts must be sent separately and provider-reported cache hits
+    must flow through the unified client path.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        pytest.skip("OPENAI_API_KEY not set")
+    captured_messages = []
 
-    # Create test data
-    df = pd.DataFrame({"text": ["Hello", "World", "Test", "Data", "Sample"]})
+    async def fake_acompletion(**kwargs):
+        captured_messages.append(kwargs["messages"])
+        if len(captured_messages) == 1:
+            return _fake_completion_response("positive", Decimal("0.010"), 0)
+        return _fake_completion_response("neutral", Decimal("0.005"), 80)
 
-    # Long system message (will be cached by OpenAI)
-    system_prompt = """You are a professional text analyzer specializing in sentiment analysis.
-Your task is to analyze the emotional tone and sentiment of the provided text.
-Consider context, word choice, and implicit meanings.
-Provide your analysis in a single concise sentence.
-Be objective and evidence-based in your assessments.
-Focus on the primary emotional tone conveyed."""
+    mock_acompletion.side_effect = fake_acompletion
 
-    # Build pipeline
+    system_message = "Classify sentiment. Return one short label only."
+    df = pd.DataFrame({"text": ["I love this", "It is okay"]})
     pipeline = (
         PipelineBuilder.create()
         .from_dataframe(df, input_columns=["text"], output_columns=["sentiment"])
-        .with_prompt(
-            template="Analyze: {text}",
-            system_message=system_prompt,  # OpenAI caches this!
-        )
+        .with_prompt("Analyze: {text}", system_message=system_message)
         .with_llm(
-            provider="openai",
-            model="gpt-4o-mini",
-            api_key=api_key,
-            temperature=0.0,
-            enable_prefix_caching=True,
+            model="openai/gpt-4o-mini", temperature=0.0, enable_prefix_caching=True
         )
-        .with_rate_limit(500)  # OpenAI rate limit
+        .with_processing_batch_size(1)
+        .with_concurrency(1)
         .build()
     )
 
-    # Execute
     result = pipeline.execute()
+    output = result.to_pandas()
 
-    # Verify
-    df = result.to_pandas()
     assert result.success
-    assert len(df) == 5
-    assert df["sentiment"].notnull().all()
-
-    print("\nPrefix Caching E2E (OpenAI):")
-    print(f"Rows: {len(df)}")
-    print(f"Cost: ${result.costs.total_cost:.4f}")
-    print(f"Input tokens: {result.costs.input_tokens}")
-    print("Note: OpenAI automatically cached the system message!")
-    print("      (Repeat calls with same system message = 50% cost reduction)")
+    assert output["sentiment"].tolist() == ["positive", "neutral"]
+    assert result.costs.total_cost == Decimal("0.015")
+    assert result.costs.input_tokens == 200
+    assert len(captured_messages) == 2
+    assert all(messages[0]["role"] == "system" for messages in captured_messages)
+    assert all(
+        messages[0]["content"] == system_message for messages in captured_messages
+    )
+    assert all(messages[1]["role"] == "user" for messages in captured_messages)
+    assert any("Cache hit!" in call.args[0] for call in mock_debug.call_args_list)
 
 
 @pytest.mark.integration
-def test_prefix_caching_anthropic_e2e():
+@patch("ondine.adapters.unified_litellm_client.litellm.acompletion")
+def test_prefix_caching_cost_reduction_is_reflected_in_pipeline_totals(
+    mock_acompletion,
+):
     """
-    E2E test for prefix caching with Anthropic.
-
-    Anthropic has explicit prompt caching that caches system messages
-    and long contexts automatically.
-
-    See: https://docs.anthropic.com/claude/docs/prompt-caching
+    Regression this catches:
+    provider-reported lower cached-call cost must be reflected in final totals.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        pytest.skip("ANTHROPIC_API_KEY not set")
+    costs = [Decimal("0.012"), Decimal("0.004")]
 
-    df = pd.DataFrame({"task": ["Summarize", "Analyze", "Review"]})
+    async def fake_acompletion(**kwargs):
+        idx = fake_acompletion.call_index
+        fake_acompletion.call_index += 1
+        cached_tokens = 0 if idx == 0 else 90
+        return _fake_completion_response(f"answer_{idx}", costs[idx], cached_tokens)
 
-    # Long system message (Anthropic caches this automatically)
-    system_prompt = """You are Claude, an AI assistant created by Anthropic.
-You are helpful, harmless, and honest in all your responses.
-Your goal is to provide accurate, thoughtful, and nuanced answers.
-You should be direct and concise while still being thorough.
-You should acknowledge uncertainty when appropriate.
-You should avoid speculation and stick to factual information."""
+    fake_acompletion.call_index = 0
+    mock_acompletion.side_effect = fake_acompletion
 
     pipeline = (
         PipelineBuilder.create()
-        .from_dataframe(df, input_columns=["task"], output_columns=["result"])
-        .with_prompt(template="{task} this text", system_message=system_prompt)
-        .with_llm(
-            provider="anthropic",
-            model="claude-3-5-haiku-20241022",
-            api_key=api_key,
-            temperature=0.0,
-            enable_prefix_caching=True,
+        .from_dataframe(
+            pd.DataFrame({"question": ["Q1", "Q2"]}),
+            input_columns=["question"],
+            output_columns=["answer"],
         )
+        .with_prompt("{question}", system_message="Answer succinctly.")
+        .with_llm(
+            model="openai/gpt-4o-mini", temperature=0.0, enable_prefix_caching=True
+        )
+        .with_processing_batch_size(1)
+        .with_concurrency(1)
         .build()
     )
 
     result = pipeline.execute()
-    df = result.to_pandas()
 
     assert result.success
-    assert len(df) == 3
-
-    print("\nPrefix Caching E2E (Anthropic):")
-    print(f"Cost: ${result.costs.total_cost:.4f}")
-    print("Note: Anthropic cached the system message automatically!")
+    assert result.costs.total_cost == sum(costs, Decimal("0"))
+    assert result.to_pandas()["answer"].tolist() == ["answer_0", "answer_1"]

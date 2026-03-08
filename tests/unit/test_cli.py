@@ -2,10 +2,12 @@
 
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 from click.testing import CliRunner
 
+from ondine.adapters import LocalFileCheckpointStorage
 from ondine.cli.main import cli
 
 
@@ -115,3 +117,71 @@ class TestCLI:
 
         assert result.exit_code != 0
         assert "Invalid session ID" in result.output or "Error" in result.output
+
+    def test_resume_requires_config_for_existing_checkpoint(self):
+        """Test resume reports missing config for real checkpoints."""
+        checkpoint_dir = Path(self.temp_dir) / "checkpoints"
+        checkpoint_dir.mkdir()
+        session_id = uuid4()
+        storage = LocalFileCheckpointStorage(checkpoint_dir)
+        storage.save(
+            session_id,
+            {
+                "session_id": str(session_id),
+                "pipeline_id": str(uuid4()),
+                "start_time": "2026-03-08T00:00:00",
+                "end_time": None,
+                "current_stage_index": 2,
+                "last_processed_row": 1,
+                "total_rows": 3,
+                "accumulated_cost": "0.20",
+                "accumulated_tokens": 10,
+                "intermediate_data": {},
+                "failed_rows": 0,
+                "skipped_rows": 0,
+            },
+        )
+
+        result = self.runner.invoke(
+            cli,
+            ["resume", "-s", str(session_id), "--checkpoint-dir", str(checkpoint_dir)],
+        )
+
+        assert result.exit_code != 0
+        assert "requires the original pipeline config" in result.output.lower()
+
+    def test_list_checkpoints_shows_current_checkpoint_fields(self):
+        """Test list-checkpoints renders current CheckpointInfo fields."""
+        checkpoint_dir = Path(self.temp_dir) / "checkpoints"
+        checkpoint_dir.mkdir()
+
+        session_id = uuid4()
+        storage = LocalFileCheckpointStorage(checkpoint_dir)
+        storage.save(
+            session_id,
+            {
+                "session_id": str(session_id),
+                "pipeline_id": str(uuid4()),
+                "start_time": "2026-03-07T00:00:00",
+                "end_time": None,
+                "current_stage_index": 3,
+                "last_processed_row": 4,
+                "total_rows": 10,
+                "accumulated_cost": "1.23",
+                "accumulated_tokens": 100,
+                "intermediate_data": {},
+                "failed_rows": 0,
+                "skipped_rows": 0,
+            },
+        )
+
+        result = self.runner.invoke(
+            cli, ["list-checkpoints", "--checkpoint-dir", str(checkpoint_dir)]
+        )
+
+        assert result.exit_code == 0
+        assert str(session_id)[:8] in result.output
+        assert "4" in result.output
+        assert "10" in result.output
+        assert "1.23" in result.output
+        assert "3" in result.output

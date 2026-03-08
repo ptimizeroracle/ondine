@@ -8,12 +8,14 @@ import os
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
 import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from ondine.core.models import LLMResponse
 from ondine.stages import JSONParser
 
 
@@ -344,6 +346,144 @@ class TestEndToEndWithMock:
         validation = pipeline.validate()
         assert validation.is_valid is False
         assert len(validation.errors) > 0
+
+    @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+    def test_error_policy_skip_marks_failed_rows_and_continues(self, mock_get):
+        """
+        Regression this catches:
+        SKIP must preserve successful rows while marking only the failed row.
+        """
+        df = pd.DataFrame({"text": ["good-1", "bad-row", "good-2"]})
+
+        async def mock_invoke(prompt, **kwargs):
+            value = prompt.split(": ", 1)[1]
+            if value == "bad-row":
+                raise RuntimeError("boom")
+            return LLMResponse(
+                text=f"ok::{value}",
+                tokens_in=10,
+                tokens_out=5,
+                model="test-model",
+                cost=Decimal("0.01"),
+                latency_ms=5.0,
+            )
+
+        mock_client = Mock()
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+        mock_client.router = None
+        mock_client.model = "test-model"
+        mock_client.spec = Mock(model="test-model")
+        mock_get.return_value = Mock(return_value=mock_client)
+
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(df, input_columns=["text"], output_columns=["result"])
+            .with_prompt("Process: {text}")
+            .with_llm(provider="groq", model="test-model")
+            .with_processing_batch_size(1)
+            .with_concurrency(1)
+            .with_error_policy("skip")
+            .build()
+        )
+
+        result = pipeline.execute()
+        output = result.to_pandas()
+
+        assert result.success
+        assert output["result"].tolist() == ["ok::good-1", "[SKIPPED]", "ok::good-2"]
+
+    @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+    def test_error_policy_fail_raises_immediately(self, mock_get):
+        """
+        Regression this catches:
+        FAIL must stop execution and propagate the underlying error.
+        """
+        df = pd.DataFrame({"text": ["good-1", "bad-row", "good-2"]})
+
+        async def mock_invoke(prompt, **kwargs):
+            value = prompt.split(": ", 1)[1]
+            if value == "bad-row":
+                raise RuntimeError("boom")
+            return LLMResponse(
+                text=f"ok::{value}",
+                tokens_in=10,
+                tokens_out=5,
+                model="test-model",
+                cost=Decimal("0.01"),
+                latency_ms=5.0,
+            )
+
+        mock_client = Mock()
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+        mock_client.router = None
+        mock_client.model = "test-model"
+        mock_client.spec = Mock(model="test-model")
+        mock_get.return_value = Mock(return_value=mock_client)
+
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(df, input_columns=["text"], output_columns=["result"])
+            .with_prompt("Process: {text}")
+            .with_llm(provider="groq", model="test-model")
+            .with_processing_batch_size(1)
+            .with_concurrency(1)
+            .with_error_policy("fail")
+            .build()
+        )
+
+        with pytest.raises(RuntimeError, match="boom"):
+            pipeline.execute()
+
+    @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
+    def test_error_policy_use_default_inserts_default_response(self, mock_get):
+        """
+        Regression this catches:
+        USE_DEFAULT must keep pipeline execution alive with a deterministic fallback.
+        """
+        df = pd.DataFrame({"text": ["good-1", "bad-row", "good-2"]})
+
+        async def mock_invoke(prompt, **kwargs):
+            value = prompt.split(": ", 1)[1]
+            if value == "bad-row":
+                raise RuntimeError("boom")
+            return LLMResponse(
+                text=f"ok::{value}",
+                tokens_in=10,
+                tokens_out=5,
+                model="test-model",
+                cost=Decimal("0.01"),
+                latency_ms=5.0,
+            )
+
+        mock_client = Mock()
+        mock_client.ainvoke = AsyncMock(side_effect=mock_invoke)
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+        mock_client.router = None
+        mock_client.model = "test-model"
+        mock_client.spec = Mock(model="test-model")
+        mock_get.return_value = Mock(return_value=mock_client)
+
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(df, input_columns=["text"], output_columns=["result"])
+            .with_prompt("Process: {text}")
+            .with_llm(provider="groq", model="test-model")
+            .with_processing_batch_size(1)
+            .with_concurrency(1)
+            .with_error_policy("use_default")
+            .build()
+        )
+
+        result = pipeline.execute()
+        output = result.to_pandas()
+
+        assert result.success
+        assert output["result"].tolist() == ["ok::good-1", "", "ok::good-2"]
 
 
 class TestExecutionResultContract:

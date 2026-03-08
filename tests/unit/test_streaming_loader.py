@@ -1,6 +1,7 @@
 """Unit tests for StreamingDataLoader."""
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import polars as pl
 import pytest
@@ -100,6 +101,19 @@ class TestStreamingDataLoader:
         # Verify data integrity
         total_rows = sum(len(c) for c in chunks)
         assert total_rows == 100
+
+    def test_iter_chunks_csv_does_not_collect_full_dataset(self, sample_csv: Path):
+        """Test CSV chunking avoids LazyFrame.collect full materialization."""
+        loader = StreamingDataLoader(sample_csv, chunk_size=30)
+        loader._lazy_frame.collect = Mock(
+            side_effect=AssertionError("should not collect")
+        )
+
+        chunks = list(loader.iter_chunks())
+
+        assert len(chunks) == 4
+        assert sum(len(chunk) for chunk in chunks) == 100
+        loader._lazy_frame.collect.assert_not_called()
 
     def test_iter_chunks_exact_multiple(self, tmp_path: Path):
         """Test chunking when rows are exact multiple of chunk_size."""

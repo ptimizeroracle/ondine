@@ -183,7 +183,15 @@ class LocalFileCheckpointStorage(CheckpointStorage):
                 # Try to load checkpoint for additional info
                 data = self.load(session_id)
                 rows_processed = data.get("last_processed_row", 0) if data else 0
-                stage = data.get("current_stage", "unknown") if data else "unknown"
+                stage = (
+                    str(
+                        data.get(
+                            "current_stage_index", data.get("current_stage", "unknown")
+                        )
+                    )
+                    if data
+                    else "unknown"
+                )
                 total_rows = data.get("total_rows", 0) if data else 0
                 cost_so_far = (
                     Decimal(str(data.get("accumulated_cost", 0)))

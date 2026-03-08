@@ -78,6 +78,40 @@ PROVIDER_METADATA = {
     },
 }
 
+
+def _load_specs_from_config(config: Path):
+    """Load pipeline specifications from YAML or JSON."""
+    suffix = config.suffix.lower()
+    if suffix == ".json":
+        return ConfigLoader.from_json(str(config))
+    return ConfigLoader.from_yaml(str(config))
+
+
+def _apply_output_override(specs, output: Path) -> None:
+    """Apply CLI output override to pipeline specifications."""
+    if specs.output:
+        specs.output.destination_path = output
+        return
+
+    from ondine.core.specifications import MergeStrategy, OutputSpec
+
+    output_suffix = output.suffix.lower()
+    if output_suffix == ".csv":
+        output_type = DataSourceType.CSV
+    elif output_suffix in [".xlsx", ".xls"]:
+        output_type = DataSourceType.EXCEL
+    elif output_suffix == ".parquet":
+        output_type = DataSourceType.PARQUET
+    else:
+        output_type = DataSourceType.CSV
+
+    specs.output = OutputSpec(
+        destination_type=output_type,
+        destination_path=output,
+        merge_strategy=MergeStrategy.REPLACE,
+    )
+
+
 # Validate metadata completeness at module load
 assert set(LLMProvider) == set(PROVIDER_METADATA.keys()), (
     "PROVIDER_METADATA must include all LLMProvider values"
@@ -260,7 +294,7 @@ def process(
     try:
         # Load configuration
         console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
-        specs = ConfigLoader.from_yaml(str(config))
+        specs = _load_specs_from_config(config)
 
         # Override with CLI arguments (if provided)
         if input:
@@ -268,28 +302,7 @@ def process(
 
         # Set output configuration (if provided)
         if output:
-            if specs.output:
-                specs.output.destination_path = output
-            else:
-                # Create output spec if not in config
-                from ondine.core.specifications import MergeStrategy, OutputSpec
-
-                # Detect output type from extension
-                output_suffix = output.suffix.lower()
-                if output_suffix == ".csv":
-                    output_type = DataSourceType.CSV
-                elif output_suffix in [".xlsx", ".xls"]:
-                    output_type = DataSourceType.EXCEL
-                elif output_suffix == ".parquet":
-                    output_type = DataSourceType.PARQUET
-                else:
-                    output_type = DataSourceType.CSV  # Default
-
-                specs.output = OutputSpec(
-                    destination_type=output_type,
-                    destination_path=output,
-                    merge_strategy=MergeStrategy.REPLACE,
-                )
+            _apply_output_override(specs, output)
 
         if provider:
             specs.llm.provider = LLMProvider(provider)
@@ -486,7 +499,7 @@ def estimate(
     try:
         # Load configuration
         console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
-        specs = ConfigLoader.from_yaml(str(config))
+        specs = _load_specs_from_config(config)
 
         # Override
         specs.dataset.source_path = input
@@ -552,9 +565,9 @@ def estimate(
 )
 @click.option(
     "--checkpoint-dir",
-    type=click.Path(exists=True, path_type=Path),
-    default=".checkpoints",
-    help="Checkpoint directory (default: .checkpoints)",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Checkpoint directory (defaults to config value or .checkpoints)",
 )
 @click.option(
     "--output",
@@ -562,10 +575,33 @@ def estimate(
     type=click.Path(path_type=Path),
     help="Override output path",
 )
+@click.option(
+    "--config",
+    "-c",
+    required=False,
+    type=click.Path(exists=True, path_type=Path),
+    help="Original YAML/JSON configuration file used for the run",
+)
+@click.option(
+    "--input",
+    "-i",
+    required=False,
+    type=click.Path(exists=True, path_type=Path),
+    help="Override input data source from config",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show traceback on resume errors",
+)
 def resume(
     session_id: str,
-    checkpoint_dir: Path,
+    checkpoint_dir: Path | None,
     output: Path | None,
+    config: Path | None,
+    input: Path | None,
+    verbose: bool,
 ):
     """
     Resume pipeline execution from checkpoint.
@@ -584,38 +620,72 @@ def resume(
         from ondine.adapters import LocalFileCheckpointStorage
         from ondine.orchestration import StateManager
 
-        # Load checkpoint
-        console.print(f"[cyan]Looking for checkpoint in {checkpoint_dir}...[/cyan]")
-
-        storage = LocalFileCheckpointStorage(str(checkpoint_dir))
-        state_manager = StateManager(storage)
-
         session_uuid = UUID(session_id)
+        specs = _load_specs_from_config(config) if config is not None else None
+        effective_checkpoint_dir = checkpoint_dir or (
+            specs.processing.checkpoint_dir
+            if specs is not None
+            else Path(".checkpoints")
+        )
+
+        console.print(
+            f"[cyan]Looking for checkpoint in {effective_checkpoint_dir}...[/cyan]"
+        )
+
+        storage = LocalFileCheckpointStorage(effective_checkpoint_dir)
+        state_manager = StateManager(storage)
 
         if not state_manager.can_resume(session_uuid):
             console.print(f"[red]❌ No checkpoint found for session {session_id}[/red]")
             console.print(
-                f"[yellow]Check checkpoint directory: {checkpoint_dir}[/yellow]"
+                f"[yellow]Check checkpoint directory: {effective_checkpoint_dir}[/yellow]"
             )
             sys.exit(1)
 
-        # Load checkpoint
-        checkpoint_info = state_manager.get_latest_checkpoint(session_uuid)
+        checkpoint_info = next(
+            (
+                cp
+                for cp in state_manager.list_checkpoints()
+                if cp.session_id == session_uuid
+            ),
+            None,
+        )
+        if checkpoint_info is None:
+            console.print(
+                f"[red]❌ Checkpoint exists but metadata could not be loaded for {session_id}[/red]"
+            )
+            sys.exit(1)
+
         console.print(
-            f"[green]Found checkpoint at row {checkpoint_info.row_index}[/green]"
+            f"[green]Found checkpoint at row {checkpoint_info.rows_processed}[/green]"
         )
 
-        # Resume execution
+        if config is None:
+            console.print(
+                "[red]❌ Resume requires the original pipeline config via --config[/red]"
+            )
+            sys.exit(1)
+
+        console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
+        specs.processing.checkpoint_dir = effective_checkpoint_dir
+
+        if input is not None:
+            specs.dataset.source_path = input
+
+        if output is not None:
+            _apply_output_override(specs, output)
+
+        console.print("[cyan]Creating pipeline...[/cyan]")
+        pipeline = Pipeline(specs)
+        validation = pipeline.validate()
+        if not validation.is_valid:
+            console.print("[red]❌ Validation failed:[/red]")
+            for error in validation.errors:
+                console.print(f"  [red]• {error}[/red]")
+            sys.exit(1)
+
         console.print("[cyan]Resuming execution...[/cyan]")
-
-        # Note: Full resume implementation would load the original pipeline
-        # and continue from checkpoint. For now, we show the checkpoint info.
-        console.print(
-            "\n[yellow]Full resume functionality requires the original pipeline configuration[/yellow]"
-        )
-        console.print(
-            "[yellow]Please use Pipeline.execute(resume_from=session_id) in Python code[/yellow]"
-        )
+        result = pipeline.execute(resume_from=session_uuid)
 
         # Display checkpoint info
         table = Table(title="Checkpoint Information")
@@ -623,13 +693,31 @@ def resume(
         table.add_column("Value", style="green")
 
         table.add_row("Session ID", str(checkpoint_info.session_id))
-        table.add_row("Checkpoint Path", checkpoint_info.checkpoint_path)
-        table.add_row("Last Row", str(checkpoint_info.row_index))
-        table.add_row("Last Stage", str(checkpoint_info.stage_index))
+        table.add_row("Checkpoint Path", checkpoint_info.path or "unknown")
+        table.add_row("Rows Processed", str(checkpoint_info.rows_processed))
+        table.add_row("Total Rows", str(checkpoint_info.total_rows))
+        table.add_row("Last Stage", str(checkpoint_info.stage))
         table.add_row("Timestamp", str(checkpoint_info.timestamp))
-        table.add_row("Size", f"{checkpoint_info.size_bytes:,} bytes")
+        table.add_row("Cost So Far", f"${checkpoint_info.cost_so_far}")
 
         console.print(table)
+        console.print("\n[green]Resume complete![/green]")
+
+        results_table = Table(title="Execution Results")
+        results_table.add_column("Metric", style="cyan")
+        results_table.add_column("Value", style="green")
+        results_table.add_row("Total Rows", str(result.metrics.total_rows))
+        results_table.add_row("Processed", str(result.metrics.processed_rows))
+        results_table.add_row("Failed", str(result.metrics.failed_rows))
+        results_table.add_row("Skipped", str(result.metrics.skipped_rows))
+        results_table.add_row("Duration", f"{result.duration:.2f}s")
+        results_table.add_row("Total Cost", f"${result.costs.total_cost}")
+        console.print(results_table)
+
+        if specs.output and specs.output.destination_path:
+            console.print(
+                f"\n[green]Output written to: {specs.output.destination_path}[/green]"
+            )
 
     except ValueError:
         console.print(f"[red]❌ Invalid session ID format: {session_id}[/red]")
@@ -639,6 +727,8 @@ def resume(
         sys.exit(1)
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
+        if verbose:
+            console.print_exception()
         sys.exit(1)
 
 
@@ -674,7 +764,7 @@ def validate(config: Path, verbose: bool):
     try:
         # Load configuration
         console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
-        specs = ConfigLoader.from_yaml(str(config))
+        specs = _load_specs_from_config(config)
 
         console.print("[green]Configuration loaded successfully[/green]")
 
@@ -764,18 +854,22 @@ def list_checkpoints(checkpoint_dir: Path):
         # Display checkpoints
         table = Table(title=f"Checkpoints in {checkpoint_dir}")
         table.add_column("Session ID", style="cyan")
-        table.add_column("Row", style="green")
+        table.add_column("Rows", style="green")
+        table.add_column("Total", style="green")
         table.add_column("Stage", style="green")
+        table.add_column("Cost", style="magenta")
         table.add_column("Timestamp", style="yellow")
-        table.add_column("Size", style="magenta")
+        table.add_column("Path", style="white")
 
         for cp in checkpoints:
             table.add_row(
                 str(cp.session_id)[:8] + "...",
-                str(cp.row_index),
-                str(cp.stage_index),
+                str(cp.rows_processed),
+                str(cp.total_rows),
+                str(cp.stage),
+                f"${cp.cost_so_far}",
                 cp.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                f"{cp.size_bytes:,} bytes",
+                cp.path or "unknown",
             )
 
         console.print("\n")
