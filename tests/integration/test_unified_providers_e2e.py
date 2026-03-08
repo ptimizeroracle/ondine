@@ -32,24 +32,11 @@ class PriceResult(BaseModel):
     price_category: str = Field(description="Price category")
 
 
-class BatchItem(BaseModel):
-    """Single item in batch."""
-
-    id: int
-    result: SimpleResult
-
-
 class PriceBatchItem(BaseModel):
     """Single item in price batch."""
 
     id: int
     result: PriceResult
-
-
-class SimpleBatch(BaseModel):
-    """Batch of results."""
-
-    items: list[BatchItem]
 
 
 class PriceBatch(BaseModel):
@@ -64,7 +51,7 @@ class PriceBatch(BaseModel):
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
-        ("anthropic", "claude-3-5-haiku-20241022", "ANTHROPIC_API_KEY"),
+        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
     ],
 )
 def test_providers_single_row_per_api(provider, model, api_key_env):
@@ -105,8 +92,8 @@ Review: {{ text }}"""
         )
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
         .with_batch_size(2)  # Small batch for structure
-        .with_processing_batch_size(1)  # But process 1 at a time = 2 API calls
-        .with_structured_output(SimpleBatch)
+        .with_processing_batch_size(1)  # Process 1 row per API call
+        .with_structured_output(SimpleResult)
         .build()
     )
 
