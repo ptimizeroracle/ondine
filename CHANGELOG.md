@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1](https://github.com/ptimizeroracle/ondine/compare/v1.4.0...v1.4.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* harden streaming, checkpoint, and router regressions ([#61](https://github.com/ptimizeroracle/ondine/issues/61)) ([dee5f3c](https://github.com/ptimizeroracle/ondine/commit/dee5f3cb1f00c369b5a36833dfeb51a74e52b503))
+
 ## [1.4.0](https://github.com/ptimizeroracle/ondine/compare/v1.3.4...v1.4.0) (2025-12-02)
 
 
