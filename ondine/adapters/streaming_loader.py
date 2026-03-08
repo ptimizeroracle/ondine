@@ -14,6 +14,11 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
+from ondine.utils.optional_dependencies import (
+    raise_excel_extra_error,
+    raise_parquet_extra_error,
+)
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -83,7 +88,10 @@ class StreamingDataLoader:
             lf = pl.scan_ndjson(self.path, **self.read_options)
         elif suffix in (".xlsx", ".xls"):
             # Excel doesn't support lazy loading, read eagerly then convert
-            df = pl.read_excel(self.path, **self.read_options)
+            try:
+                df = pl.read_excel(self.path, **self.read_options)
+            except ImportError as exc:
+                raise_excel_extra_error("Reading Excel files", exc)
             lf = df.lazy()
         else:
             raise ValueError(f"Unsupported file format: {suffix}")
@@ -176,7 +184,10 @@ class StreamingDataLoader:
 
     def _iter_parquet_chunks(self) -> Iterator[pl.DataFrame]:
         """Stream Parquet chunks via Arrow batches when available."""
-        import pyarrow.parquet as pq
+        try:
+            import pyarrow.parquet as pq
+        except ImportError as exc:
+            raise_parquet_extra_error("Streaming Parquet files", exc)
 
         parquet_file = pq.ParquetFile(self.path)
         for idx, batch in enumerate(
@@ -238,7 +249,10 @@ class StreamingDataLoader:
             Pandas DataFrame chunks
         """
         for chunk in self.iter_chunks():
-            yield chunk.to_pandas()
+            try:
+                yield chunk.to_pandas()
+            except ImportError as exc:
+                raise_parquet_extra_error("Converting streamed data to pandas", exc)
 
     async def stream_pandas_chunks(self) -> AsyncIterator["pd.DataFrame"]:
         """
@@ -248,7 +262,10 @@ class StreamingDataLoader:
             Pandas DataFrame chunks
         """
         async for chunk in self.stream_chunks():
-            yield chunk.to_pandas()
+            try:
+                yield chunk.to_pandas()
+            except ImportError as exc:
+                raise_parquet_extra_error("Converting streamed data to pandas", exc)
 
     def head(self, n: int = 5) -> pl.DataFrame:
         """Preview first n rows without loading full dataset."""

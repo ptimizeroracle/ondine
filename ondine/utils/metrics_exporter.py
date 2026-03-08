@@ -4,7 +4,16 @@ Prometheus metrics export for monitoring.
 Provides instrumentation for external monitoring systems.
 """
 
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+_PROMETHEUS_IMPORT_ERROR: ImportError | None = None
+
+try:
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
+
+    _PROMETHEUS_AVAILABLE = True
+except ImportError as exc:
+    Counter = Gauge = Histogram = start_http_server = None  # type: ignore[assignment]
+    _PROMETHEUS_AVAILABLE = False
+    _PROMETHEUS_IMPORT_ERROR = exc
 
 from ondine.utils import get_logger
 
@@ -25,6 +34,12 @@ class PrometheusMetrics:
         Args:
             port: Port for metrics HTTP server
         """
+        if not _PROMETHEUS_AVAILABLE:
+            raise ImportError(
+                "Prometheus metrics support is not installed. "
+                "Install with: pip install 'ondine[observability]'"
+            ) from _PROMETHEUS_IMPORT_ERROR
+
         self.port = port
         self._server_started = False
 

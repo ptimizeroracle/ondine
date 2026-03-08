@@ -54,6 +54,7 @@ from ondine.stages import (
     create_response_parser,
 )
 from ondine.utils import RateLimiter, RetryHandler, get_logger
+from ondine.utils.optional_dependencies import raise_parquet_extra_error
 
 logger = get_logger(__name__)
 
@@ -983,7 +984,12 @@ class Pipeline:
                     break
 
                 # Convert Polars to Pandas for compatibility with existing stages
-                chunk_df = chunk_pl.to_pandas()
+                try:
+                    chunk_df = chunk_pl.to_pandas()
+                except ImportError as exc:
+                    raise_parquet_extra_error(
+                        "Converting streamed pipeline chunks to pandas", exc
+                    )
 
                 # Process this chunk through the pipeline
                 chunk_result = await self._process_chunk_async(

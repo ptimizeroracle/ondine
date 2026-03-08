@@ -21,6 +21,10 @@ from ondine.core.specifications import (
     DataSourceType,
     LLMProvider,
 )
+from ondine.utils.optional_dependencies import (
+    raise_excel_extra_error,
+    raise_parquet_extra_error,
+)
 
 console = Console()
 
@@ -920,9 +924,15 @@ def inspect(input: Path, head: int):
         if suffix == ".csv":
             df = pd.read_csv(input)
         elif suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(input)
+            try:
+                df = pd.read_excel(input)
+            except ImportError as exc:
+                raise_excel_extra_error("Inspecting Excel files", exc)
         elif suffix == ".parquet":
-            df = pd.read_parquet(input)
+            try:
+                df = pd.read_parquet(input)
+            except ImportError as exc:
+                raise_parquet_extra_error("Inspecting Parquet files", exc)
         else:
             console.print(f"[red]❌ Unsupported file type: {suffix}[/red]")
             sys.exit(1)
