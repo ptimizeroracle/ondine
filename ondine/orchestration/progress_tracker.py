@@ -7,6 +7,7 @@ code to specific implementations.
 """
 
 import collections
+import contextlib
 import re
 import sys
 from abc import ABC, abstractmethod
@@ -381,6 +382,237 @@ class RichProgressTracker(ProgressTracker):
             self._live = None
 
 
+class TextualProgressTracker(ProgressTracker):
+    """
+    Progress tracker using Textual for a full TUI with interactive scrolling.
+
+    Layout:
+    - Top: fixed progress bars (same Rich Progress columns as RichProgressTracker)
+    - Bottom: RichLog widget with native scrollbar for log inspection
+
+    Requires ``textual`` (install with ``pip install ondine[tui]``).
+
+    Threading model: Textual owns its own event loop in a daemon thread.
+    All UI mutations go through ``App.call_from_thread()`` for thread safety.
+    """
+
+    def __init__(self) -> None:
+        from rich.progress import (
+            BarColumn,
+            MofNCompleteColumn,
+            Progress,
+            SpinnerColumn,
+            TaskProgressColumn,
+            TextColumn,
+            TimeElapsedColumn,
+            TimeRemainingColumn,
+        )
+
+        self.progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            TimeElapsedColumn(),
+            TextColumn("[bold green]${task.fields[cost]:.4f}"),
+            expand=True,
+            auto_refresh=False,
+        )
+        self.tasks: dict[str, Any] = {}
+        self.deployment_tasks: dict[str, dict[str, Any]] = {}
+        self.deployment_stats: dict[str, dict[str, int]] = {}
+
+        self._app: Any = None
+        self._app_thread: Any = None
+        self._ready_event: Any = None
+
+    # -- lifecycle ------------------------------------------------------------
+
+    def __enter__(self) -> "TextualProgressTracker":
+        import threading
+
+        from ondine.orchestration._pipeline_tui import PipelineApp
+
+        self._ready_event = threading.Event()
+        self._app = PipelineApp(self.progress, self._ready_event)
+
+        self._original_stdout = sys.stdout
+
+        is_tty = (
+            hasattr(self._original_stdout, "isatty") and self._original_stdout.isatty()
+        )
+        run_kwargs: dict[str, Any] = {}
+        if not is_tty:
+            run_kwargs["headless"] = True
+            run_kwargs["size"] = (120, 40)
+
+        def _run() -> None:
+            self._app.run(**run_kwargs)
+
+        self._app_thread = threading.Thread(target=_run, daemon=True)
+        self._app_thread.start()
+
+        self._ready_event.wait(timeout=10)
+
+        sys.stdout = _TextualStdoutCapture(self._app, self._original_stdout)
+
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        sys.stdout = getattr(self, "_original_stdout", sys.__stdout__)
+
+        if self._app is not None:
+            with contextlib.suppress(Exception):
+                if self._app.is_running:
+                    self._app.call_from_thread(self._app.exit)
+        if self._app_thread is not None:
+            self._app_thread.join(timeout=5)
+        self._app = None
+        self._app_thread = None
+
+    # -- interface ------------------------------------------------------------
+
+    def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
+        task_id = self.progress.add_task(
+            f"{stage_name}",
+            total=total_rows,
+            cost=metadata.get("cost", 0.0),
+        )
+        self.tasks[stage_name] = task_id
+
+        deployments = metadata.get("deployments", [])
+        if deployments:
+            self.deployment_tasks[stage_name] = {}
+            self.deployment_stats[stage_name] = {}
+            for deployment in deployments:
+                dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
+                label = self._deployment_label(deployment, dep_id)
+                dep_task_id = self.progress.add_task(label, total=total_rows, cost=0.0)
+                self.deployment_tasks[stage_name][dep_id] = dep_task_id
+                self.deployment_stats[stage_name][dep_id] = 0
+
+        self._refresh_progress()
+        return stage_name
+
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
+        if stage_name not in self.deployment_tasks:
+            self.deployment_tasks[stage_name] = {}
+            self.deployment_stats[stage_name] = {}
+
+        if deployment_id not in self.deployment_tasks[stage_name]:
+            if label_info:
+                label = f"   ├─ {label_info}"
+            else:
+                if len(deployment_id) > 30 and " " not in deployment_id:
+                    label = f"   ├─ Deployment ({deployment_id[:8]}...)"
+                else:
+                    label = (
+                        f"   ├─ {deployment_id[:30]}..."
+                        if len(deployment_id) > 33
+                        else f"   ├─ {deployment_id}"
+                    )
+
+            dep_task_id = self.progress.add_task(label, total=total_rows, cost=0.0)
+            self.deployment_tasks[stage_name][deployment_id] = dep_task_id
+            self.deployment_stats[stage_name][deployment_id] = 0
+            self._refresh_progress()
+
+    def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
+        if task_id not in self.tasks:
+            return
+
+        rich_task_id = self.tasks[task_id]
+        update_kwargs: dict[str, Any] = {"advance": advance}
+        if "cost" in metadata:
+            task = self.progress.tasks[rich_task_id]
+            current_cost = task.fields.get("cost", 0.0)
+            update_kwargs["cost"] = float(current_cost) + float(metadata["cost"])
+        self.progress.update(rich_task_id, **update_kwargs)
+
+        deployment_id = metadata.get("deployment_id")
+        if deployment_id and task_id in self.deployment_tasks:
+            if deployment_id in self.deployment_tasks[task_id]:
+                dep_task_id = self.deployment_tasks[task_id][deployment_id]
+                self.deployment_stats[task_id][deployment_id] += advance
+                new_count = self.deployment_stats[task_id][deployment_id]
+                dep_kwargs: dict[str, Any] = {"completed": new_count}
+                if "cost" in metadata:
+                    dep_task = self.progress.tasks[dep_task_id]
+                    dep_kwargs["cost"] = float(
+                        dep_task.fields.get("cost", 0.0)
+                    ) + float(metadata["cost"])
+                self.progress.update(dep_task_id, **dep_kwargs)
+
+        self._refresh_progress()
+
+    def finish(self, task_id: str) -> None:
+        if task_id in self.tasks:
+            rich_task_id = self.tasks[task_id]
+            task = self.progress.tasks[rich_task_id]
+            self.progress.update(rich_task_id, completed=task.total or 0)
+
+            if task_id in self.deployment_tasks:
+                for dep_id, dep_task_id in self.deployment_tasks[task_id].items():
+                    actual = self.deployment_stats.get(task_id, {}).get(dep_id, 0)
+                    self.progress.update(dep_task_id, completed=actual)
+
+        self._refresh_progress()
+
+    # -- helpers --------------------------------------------------------------
+
+    @staticmethod
+    def _deployment_label(deployment: dict, dep_id: str) -> str:
+        if "label" in deployment:
+            return f"   ├─ {deployment['label']}"
+        model = deployment.get("model", "")
+        if model:
+            provider = model.split("/")[0] if "/" in model else ""
+            model_short = model.split("/")[1] if "/" in model else model
+            if len(model_short) > 25:
+                model_short = model_short[:22] + "..."
+            return f"   ├─ {dep_id} ({provider}/{model_short})"
+        return f"   ├─ {dep_id}"
+
+    def _refresh_progress(self) -> None:
+        if self._app is not None and self._app.is_running:
+            with contextlib.suppress(Exception):
+                self._app.call_from_thread(self._app.refresh_progress_widget)
+
+
+class _TextualStdoutCapture:
+    """Redirects stdout writes into the Textual RichLog widget."""
+
+    def __init__(self, app: Any, original: Any) -> None:
+        self._app = app
+        self._original = original
+
+    def write(self, text: str) -> int:
+        if text.strip():
+            for line in text.strip().splitlines():
+                clean = _ANSI_RE.sub("", line).strip()
+                if clean and self._app.is_running:
+                    with contextlib.suppress(Exception):
+                        self._app.call_from_thread(self._app.add_log_line, clean)
+        return len(text)
+
+    def flush(self) -> None:
+        pass
+
+    @property
+    def encoding(self) -> str:
+        return getattr(self._original, "encoding", "utf-8")
+
+    def isatty(self) -> bool:
+        return False
+
+    def fileno(self) -> int:
+        return self._original.fileno()
+
+
 class LoggingProgressTracker(ProgressTracker):
     """
     Fallback progress tracker using standard logging.
@@ -463,7 +695,8 @@ def create_progress_tracker(mode: str = "auto") -> ProgressTracker:
     Args:
         mode: Progress tracker mode
             - "auto": Auto-detect (rich if TTY, else logging)
-            - "rich": Use rich.progress (beautiful UI)
+            - "rich": Use rich.progress (split-panel UI)
+            - "textual": Use Textual TUI (interactive scrollable logs)
             - "tqdm": Use tqdm (simple, compatible)
             - "logging": Use standard logging (fallback)
             - "none": Disable progress tracking
@@ -485,6 +718,17 @@ def create_progress_tracker(mode: str = "auto") -> ProgressTracker:
     elif mode == "rich":
         return RichProgressTracker()
 
+    elif mode == "textual":
+        try:
+            from textual.app import App  # noqa: F401
+
+            return TextualProgressTracker()
+        except ImportError:
+            raise ImportError(
+                "textual is required for mode='textual'. "
+                "Install with: pip install ondine[tui]"
+            )
+
     elif mode == "tqdm":
         raise NotImplementedError(
             "tqdm tracker not yet implemented, use 'rich' or 'logging'"
@@ -496,7 +740,7 @@ def create_progress_tracker(mode: str = "auto") -> ProgressTracker:
     else:
         raise ValueError(
             f"Invalid progress mode: {mode}. "
-            f"Use 'auto', 'rich', 'tqdm', 'logging', or 'none'"
+            f"Use 'auto', 'rich', 'textual', 'tqdm', 'logging', or 'none'"
         )
 
 
