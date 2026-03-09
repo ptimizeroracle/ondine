@@ -91,8 +91,8 @@ def test_providers_single_row_per_api(provider, model, api_key_env):
 Review: {{ text }}"""
         )
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
-        .with_batch_size(2)  # Small batch for structure
-        .with_processing_batch_size(1)  # Process 1 row per API call
+        .with_batch_size(1)  # 1 row per API call (flat schema, no mega-prompt)
+        .with_processing_batch_size(1)
         .with_structured_output(SimpleResult)
         .build()
     )

@@ -239,12 +239,31 @@ class ResponseParserStage(
                             row_data[output_cols[0]] = parsed
                     else:
                         # Multiple output columns
+                        source = parsed if isinstance(parsed, dict) else {}
+
+                        # Unwrap nested structures when output columns
+                        # aren't found at the top level. Two patterns:
+                        # 1. Batch wrapper: {"items": [{"id":1, "result":{…}}]}
+                        #    (batch_size=1 skips the disaggregator)
+                        # 2. Single-item wrapper: {"id":1, "result":{…}}
+                        #    (disaggregated item still carrying id/result)
+                        if not any(col in source for col in output_cols):
+                            if "items" in source and isinstance(source["items"], list):
+                                item = source["items"][0] if source["items"] else {}
+                                if isinstance(item, dict):
+                                    source = item.get("result", item)
+                            elif "result" in source and isinstance(
+                                source["result"], dict
+                            ):
+                                source = source["result"]
+
+                            if hasattr(source, "model_dump"):
+                                source = source.model_dump()
+                            elif not isinstance(source, dict):
+                                source = {}
+
                         for col in output_cols:
-                            row_data[col] = (
-                                parsed.get(col, None)
-                                if isinstance(parsed, dict)
-                                else None
-                            )
+                            row_data[col] = source.get(col)
 
                     results[metadata.row_index] = row_data
 
