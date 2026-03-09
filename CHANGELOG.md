@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/ptimizeroracle/ondine/compare/v1.4.3...v1.5.0) (2026-03-09)
+
+
+### Features
+
+* add generic pipeline summary report and polish Textual TUI ([f91ad34](https://github.com/ptimizeroracle/ondine/commit/f91ad3404ea71349a1f91af6496f27bc3069591a))
+* add Textual-based progress tracker with interactive scrollable logs ([5d7017d](https://github.com/ptimizeroracle/ondine/commit/5d7017d3ed5df8ee70a7cf54cf853d6262e210af))
+* split-panel Rich progress UI with scrolling log capture ([22075b9](https://github.com/ptimizeroracle/ondine/commit/22075b9652e1a096bf30bbec7a92c96148e40dd2))
+* Textual-based progress tracker with interactive TUI and generic summary report ([26cfde7](https://github.com/ptimizeroracle/ondine/commit/26cfde70aad98daa71433b5df9a478ac1e27abb9))
+
+
+### Bug Fixes
+
+* preserve structured_result through checkpoint restore and handle batch item count mismatch ([5e0e087](https://github.com/ptimizeroracle/ondine/commit/5e0e087d56d8adad2a957a4eca6a7a78b29e5ae7))
+* reduce batch retry amplification by preserving structured_result and handling item count mismatch ([854540d](https://github.com/ptimizeroracle/ondine/commit/854540dd11cb763c761a9fd82f348116c401f7a6))
+* skip textual tests when optional dependency is not installed ([07c53eb](https://github.com/ptimizeroracle/ondine/commit/07c53eb97131830391820b9c9d7a8c7913f3f806))
+
 ## [1.4.3](https://github.com/ptimizeroracle/ondine/compare/v1.4.2...v1.4.3) (2026-03-09)
 
 
