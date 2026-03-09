@@ -121,40 +121,42 @@ class BatchDisaggregatorStage(PipelineStage):
                                 f"result type: {type(getattr(first_item, 'result', None))}, "
                                 f"result value: {getattr(first_item, 'result', None)}"
                             )
-                        # Log if item count doesn't match expected
-                        if len(items) != batch_metadata.original_count:
+                        has_mismatch = len(items) != batch_metadata.original_count
+                        if has_mismatch:
                             self.logger.warning(
                                 f"Pydantic batch has {len(items)} items, expected {batch_metadata.original_count}. "
                                 f"Batch ID: {batch.batch_id}"
                             )
-                        # Set response_text for error handling (serialize Pydantic for debugging)
                         response_text = str(pydantic_batch)
-                        # Serialize each item's result to JSON string
-                        individual_results = []
+
+                        # Build a mapping from 1-based item ID to serialized result.
+                        # Items may arrive out of order or with gaps; map by ID
+                        # so we can pad missing positions with "null".
+                        id_to_json: dict[int, str] = {}
                         for item in items:
+                            item_id = getattr(item, "id", None)
                             if hasattr(item, "result") and item.result is not None:
-                                # Architecture A: {id, result} structure
                                 if hasattr(item.result, "model_dump"):
-                                    # Pydantic model - serialize properly
                                     result_dict = item.result.model_dump()
                                 elif isinstance(item.result, dict):
                                     result_dict = item.result
                                 elif isinstance(item.result, str):
-                                    # String result (error or simple response)
                                     result_dict = {"_raw": item.result}
                                 else:
                                     result_dict = {"_raw": str(item.result)}
-                                individual_results.append(json.dumps(result_dict))
+                                id_to_json[item_id] = json.dumps(result_dict)
                             elif hasattr(item, "result"):
-                                # result is None - serialize as empty dict
-                                individual_results.append(json.dumps({}))
+                                id_to_json[item_id] = json.dumps({})
                             else:
-                                # Architecture B: Flat structure (serialize entire item except id)
                                 item_dict = item.model_dump()
-                                item_dict.pop(
-                                    "id", None
-                                )  # Remove id, will be tracked separately
-                                individual_results.append(json.dumps(item_dict))
+                                item_dict.pop("id", None)
+                                id_to_json[item_id] = json.dumps(item_dict)
+
+                        # Produce one response per expected row, preserving
+                        # parsed items and marking missing positions as "null".
+                        individual_results = []
+                        for pos in range(1, batch_metadata.original_count + 1):
+                            individual_results.append(id_to_json.get(pos, "null"))
                     else:
                         raise ValueError(
                             f"Pydantic batch has no 'items' field: {type(pydantic_batch)}"

@@ -379,6 +379,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                         "row_id": metadata.row_id,
                         "custom": metadata.custom or {},
                     },
+                    # Keep in-memory reference so the disaggregator can use the
+                    # fast Pydantic path instead of fragile JSON text parsing.
+                    # This field is NOT serialized to disk checkpoints.
+                    "_structured_result": response.structured_result,
                 }
             )
 
