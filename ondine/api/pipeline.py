@@ -734,6 +734,7 @@ class Pipeline:
                 cost=Decimal(str(record.get("cost", "0"))),
                 latency_ms=record.get("latency_ms", 0.0),
                 metadata=record.get("metadata", {}) or {},
+                structured_result=record.get("_structured_result"),
             )
             metadata = RowMetadata(
                 row_index=row_metadata.get("row_index", idx),

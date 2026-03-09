@@ -6,10 +6,14 @@ using different libraries (rich, tqdm, logging) without coupling pipeline
 code to specific implementations.
 """
 
+import collections
+import re
 import sys
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class ProgressTracker(ABC):
@@ -87,38 +91,54 @@ class ProgressTracker(ABC):
         pass
 
 
+class _StdoutCapture:
+    """Intercepts stdout writes (from structlog's PrintLoggerFactory) and
+    feeds them into the log panel buffer while the Rich Live display is active."""
+
+    def __init__(self, buffer: collections.deque, original: Any):
+        self._buffer = buffer
+        self._original = original
+
+    def write(self, text: str) -> int:
+        if text.strip():
+            for line in text.strip().splitlines():
+                clean = _ANSI_RE.sub("", line).strip()
+                if clean:
+                    self._buffer.append(clean)
+        return len(text)
+
+    def flush(self) -> None:
+        pass
+
+    @property
+    def encoding(self) -> str:
+        return getattr(self._original, "encoding", "utf-8")
+
+    def isatty(self) -> bool:
+        return False
+
+    def fileno(self) -> int:
+        return self._original.fileno()
+
+
 class RichProgressTracker(ProgressTracker):
     """
-    Progress tracker using rich.progress for beautiful terminal UI.
+    Progress tracker using Rich for a split-panel terminal UI.
+
+    Layout:
+    - Top panel: progress bars (fixed, always visible)
+    - Bottom panel: scrolling log messages (fills remaining height)
 
     Features:
-    - Multiple progress bars (one per stage)
+    - Contribution-based deployment sub-bars (visually add up to main bar)
     - Automatic ETA and throughput calculation
-    - Color-coded output
-    - Cost tracking per stage
+    - Cost tracking per stage and per deployment
     - Router deployment tracking (sub-progress per deployment)
     - Thread-safe for concurrent execution
-
-    Requires:
-        rich library (already a dependency)
-
-    Example:
-        ```python
-        tracker = RichProgressTracker()
-
-        with tracker:
-            task = tracker.start_stage("Stage 1: Classification", total_rows=1000)
-
-            for i in range(1000):
-                process_row(i)
-                tracker.update(task, advance=1, cost=0.001, deployment_id="groq-key-1")
-
-            tracker.finish(task)
-        ```
     """
 
     def __init__(self):
-        """Initialize rich progress tracker."""
+        """Initialize rich progress tracker with split layout."""
         from rich.progress import (
             BarColumn,
             MofNCompleteColumn,
@@ -134,28 +154,76 @@ class RichProgressTracker(ProgressTracker):
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
             BarColumn(),
-            MofNCompleteColumn(),  # Shows "completed/total" (e.g., "120/1200")
-            TaskProgressColumn(),  # Shows percentage
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
             TimeRemainingColumn(),
             TimeElapsedColumn(),
             TextColumn("[bold green]${task.fields[cost]:.4f}"),
             expand=True,
-            auto_refresh=True,  # Enable auto-refresh for smooth animation (spinners, timers)
-            refresh_per_second=10,
+            auto_refresh=False,
         )
         self.tasks: dict[str, Any] = {}
 
-        # Router deployment tracking
-        self.deployment_tasks: dict[
-            str, dict[str, Any]
-        ] = {}  # stage -> {deployment_id: task_id}
-        self.deployment_stats: dict[
-            str, dict[str, int]
-        ] = {}  # stage -> {deployment_id: count}
+        self.deployment_tasks: dict[str, dict[str, Any]] = {}
+        self.deployment_stats: dict[str, dict[str, int]] = {}
+
+        self._log_buffer: collections.deque[str] = collections.deque(maxlen=500)
+        self._live: Any = None
+
+    def _build_layout(self) -> Any:
+        """Build a Rich Layout with progress on top and logs below."""
+        import shutil
+
+        from rich.layout import Layout
+        from rich.panel import Panel
+
+        term_height = shutil.get_terminal_size().lines
+
+        n_tasks = len(self.progress.tasks)
+        progress_height = max(n_tasks + 4, 6)
+
+        log_height = max(term_height - progress_height - 2, 5)
+
+        layout = Layout()
+        layout.split_column(
+            Layout(
+                Panel(self.progress, title="[bold]Progress", border_style="blue"),
+                name="progress",
+                size=progress_height,
+            ),
+            Layout(
+                Panel(
+                    self._render_logs(log_height - 2),
+                    title="[bold]Logs",
+                    border_style="dim",
+                ),
+                name="logs",
+            ),
+        )
+        return layout
+
+    def _render_logs(self, max_lines: int) -> Any:
+        """Render the last N log lines as a Rich Text object."""
+        from rich.text import Text
+
+        lines = list(self._log_buffer)
+        visible = lines[-max_lines:] if len(lines) > max_lines else lines
+
+        if not visible:
+            return Text("  Waiting for log output...", style="dim italic")
+
+        text = Text()
+        for i, line in enumerate(visible):
+            style = "dim" if "info" in line.lower() else "yellow"
+            if "error" in line.lower():
+                style = "red"
+            elif "warning" in line.lower() or "skipping" in line.lower():
+                style = "yellow"
+            text.append(line + "\n", style=style)
+        return text
 
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
         """Start tracking a stage with rich progress bar."""
-        # Add main task
         task_id = self.progress.add_task(
             f"{stage_name}",
             total=total_rows,
@@ -163,76 +231,54 @@ class RichProgressTracker(ProgressTracker):
         )
         self.tasks[stage_name] = task_id
 
-        # Initialize deployment tracking for this stage
         deployments = metadata.get("deployments", [])
         if deployments:
             self.deployment_tasks[stage_name] = {}
             self.deployment_stats[stage_name] = {}
 
-            # Calculate rows per deployment (weighted distribution)
-            weights = [d.get("weight", 1.0) for d in deployments]
-            total_weight = sum(weights)
-
-            # Add ALL deployment bars
             for deployment in deployments:
                 dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
-                weight = deployment.get("weight", 1.0)
-                dep_rows = int(total_rows * (weight / total_weight))
 
-                # Use provided label if available
                 if "label" in deployment:
                     label = f"   ├─ {deployment['label']}"
                 else:
-                    # Build label: "key-id (provider/model)"
                     model = deployment.get("model", "")
                     if model:
-                        # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
                         provider = model.split("/")[0] if "/" in model else ""
                         model_short = model.split("/")[1] if "/" in model else model
-                        # Truncate long model names
                         if len(model_short) > 25:
                             model_short = model_short[:22] + "..."
                         label = f"   ├─ {dep_id} ({provider}/{model_short})"
                     else:
                         label = f"   ├─ {dep_id}"
 
-                # Create sub-task for this deployment
                 dep_task_id = self.progress.add_task(
                     label,
-                    total=dep_rows,
+                    total=total_rows,
                     cost=0.0,
                 )
                 self.deployment_tasks[stage_name][dep_id] = dep_task_id
                 self.deployment_stats[stage_name][dep_id] = 0
 
-        # Manual refresh to show all bars at once
-        self.progress.refresh()
-
+        self._refresh()
         return stage_name
 
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
         """Dynamically add a deployment task if it doesn't exist."""
-        # Initialize dictionary if needed
         if stage_name not in self.deployment_tasks:
             self.deployment_tasks[stage_name] = {}
             self.deployment_stats[stage_name] = {}
 
-        # If task doesn't exist, create it
         if deployment_id not in self.deployment_tasks[stage_name]:
-            # Use provided label info (e.g. "groq/llama-3...") or format the ID
             if label_info:
-                # Use full label without truncation
                 label = f"   ├─ {label_info}"
             else:
-                # Create clean label from ID
                 if len(deployment_id) > 30 and " " not in deployment_id:
-                    # Likely a hash - show shortened version
                     short_id = deployment_id[:8]
                     label = f"   ├─ Deployment ({short_id}...)"
                 else:
-                    # Friendly name or short ID
                     label = (
                         f"   ├─ {deployment_id[:30]}..."
                         if len(deployment_id) > 33
@@ -247,8 +293,7 @@ class RichProgressTracker(ProgressTracker):
             self.deployment_tasks[stage_name][deployment_id] = dep_task_id
             self.deployment_stats[stage_name][deployment_id] = 0
 
-            # Refresh to show new bar
-            self.progress.refresh()
+            self._refresh()
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         """Update progress bar, including deployment-specific tracking."""
@@ -257,8 +302,7 @@ class RichProgressTracker(ProgressTracker):
 
         rich_task_id = self.tasks[task_id]
 
-        # Update cost if provided
-        update_kwargs = {"advance": advance}
+        update_kwargs: dict[str, Any] = {"advance": advance}
         if "cost" in metadata:
             task = self.progress.tasks[rich_task_id]
             current_cost = task.fields.get("cost", 0.0)
@@ -267,19 +311,15 @@ class RichProgressTracker(ProgressTracker):
 
         self.progress.update(rich_task_id, **update_kwargs)
 
-        # Update deployment-specific progress if provided
         deployment_id = metadata.get("deployment_id")
         if deployment_id and task_id in self.deployment_tasks:
             if deployment_id in self.deployment_tasks[task_id]:
                 dep_task_id = self.deployment_tasks[task_id][deployment_id]
 
-                # Update deployment stats first
                 self.deployment_stats[task_id][deployment_id] += advance
                 new_count = self.deployment_stats[task_id][deployment_id]
 
-                # Update deployment progress - show rows THIS deployment processed
-                # Set total = completed so bar always shows 100% (X/X format)
-                dep_kwargs = {"completed": new_count, "total": new_count}
+                dep_kwargs: dict[str, Any] = {"completed": new_count}
                 if "cost" in metadata:
                     dep_task = self.progress.tasks[dep_task_id]
                     current_dep_cost = dep_task.fields.get("cost", 0.0)
@@ -289,36 +329,56 @@ class RichProgressTracker(ProgressTracker):
 
                 self.progress.update(dep_task_id, **dep_kwargs)
 
+        self._refresh()
+
     def finish(self, task_id: str) -> None:
         """Mark task as complete."""
         if task_id in self.tasks:
             rich_task_id = self.tasks[task_id]
 
-            # Get total to ensure bar fills up completely
             task = self.progress.tasks[rich_task_id]
             total = task.total or 0
-
             self.progress.update(rich_task_id, completed=total)
 
-            # Update deployment sub-tasks to show ACTUAL distribution
-            # Don't force to 100% - show real counts
             if task_id in self.deployment_tasks:
                 for dep_id, dep_task_id in self.deployment_tasks[task_id].items():
-                    # Get actual count from stats
                     actual_count = self.deployment_stats.get(task_id, {}).get(dep_id, 0)
-                    # Update total to match actual count (so bar shows 100% of actual)
-                    self.progress.update(
-                        dep_task_id, completed=actual_count, total=actual_count
-                    )
+                    self.progress.update(dep_task_id, completed=actual_count)
+
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """Refresh the live layout display."""
+        if self._live is not None:
+            self._live.update(self._build_layout())
 
     def __enter__(self) -> "RichProgressTracker":
-        """Start progress display."""
-        self.progress.start()
+        """Start split-panel display and capture stdout for the log panel."""
+        from rich.console import Console
+        from rich.live import Live
+
+        self._original_stdout = sys.stdout
+
+        console = Console(file=self._original_stdout)
+        self._live = Live(
+            self._build_layout(),
+            refresh_per_second=8,
+            screen=False,
+            console=console,
+        )
+        self._live.start()
+
+        sys.stdout = _StdoutCapture(self._log_buffer, self._original_stdout)
+
         return self
 
     def __exit__(self, *args: Any) -> None:
-        """Stop progress display."""
-        self.progress.stop()
+        """Restore stdout and stop display."""
+        sys.stdout = getattr(self, "_original_stdout", sys.__stdout__)
+
+        if self._live is not None:
+            self._live.stop()
+            self._live = None
 
 
 class LoggingProgressTracker(ProgressTracker):
@@ -329,24 +389,6 @@ class LoggingProgressTracker(ProgressTracker):
     - Not running in a TTY (CI, logs to file)
     - rich library not available
     - User explicitly requests logging mode
-
-    Provides basic progress updates via log messages without fancy UI.
-
-    Example:
-        ```python
-        tracker = LoggingProgressTracker()
-
-        with tracker:
-            task = tracker.start_stage("Classification", total_rows=1000)
-            # Logs: "Starting Classification (1000 rows)"
-
-            for i in range(1000):
-                tracker.update(task, advance=1)
-                # Logs periodically: "Classification: 250/1000 (25%)"
-
-            tracker.finish(task)
-            # Logs: "Completed Classification"
-        ```
     """
 
     def __init__(self):
@@ -370,7 +412,7 @@ class LoggingProgressTracker(ProgressTracker):
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
-        """LoggingTracker has no deployment sub-tasks, so we ignore this request."""
+        """LoggingTracker has no deployment sub-tasks."""
         pass
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
@@ -384,7 +426,6 @@ class LoggingProgressTracker(ProgressTracker):
         if "cost" in metadata:
             task["cost"] += Decimal(str(metadata["cost"]))
 
-        # Log at 25%, 50%, 75%, 100%
         percent = (task["current"] / task["total"]) * 100
         milestones = [25, 50, 75, 100]
 
@@ -419,9 +460,6 @@ def create_progress_tracker(mode: str = "auto") -> ProgressTracker:
     """
     Factory function to create appropriate progress tracker.
 
-    Automatically detects the best progress tracker based on environment
-    and available libraries, or uses explicit mode if specified.
-
     Args:
         mode: Progress tracker mode
             - "auto": Auto-detect (rich if TTY, else logging)
@@ -429,45 +467,25 @@ def create_progress_tracker(mode: str = "auto") -> ProgressTracker:
             - "tqdm": Use tqdm (simple, compatible)
             - "logging": Use standard logging (fallback)
             - "none": Disable progress tracking
-
-    Returns:
-        ProgressTracker implementation
-
-    Example:
-        ```python
-        # Auto-detect best option
-        tracker = create_progress_tracker(mode="auto")
-
-        # Force rich (will fail if not available)
-        tracker = create_progress_tracker(mode="rich")
-
-        # Force logging (always works)
-        tracker = create_progress_tracker(mode="logging")
-        ```
     """
     if mode == "none":
         return NoOpProgressTracker()
 
     if mode == "auto":
-        # Auto-detect best option
         if sys.stdout.isatty():
-            # Running in terminal - try rich first
             try:
                 from rich.progress import Progress  # noqa: F401
 
                 return RichProgressTracker()
             except ImportError:
-                # rich not available, fall back to logging
                 return LoggingProgressTracker()
         else:
-            # Non-TTY environment (CI, logs to file) - use logging
             return LoggingProgressTracker()
 
     elif mode == "rich":
         return RichProgressTracker()
 
     elif mode == "tqdm":
-        # Future: implement TqdmProgressTracker
         raise NotImplementedError(
             "tqdm tracker not yet implemented, use 'rich' or 'logging'"
         )
