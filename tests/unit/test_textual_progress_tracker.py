@@ -10,10 +10,22 @@ from ondine.orchestration.progress_tracker import (
     create_progress_tracker,
 )
 
+try:
+    import textual  # noqa: F401
+
+    _has_textual = True
+except ModuleNotFoundError:
+    _has_textual = False
+
+_skip_no_textual = pytest.mark.skipif(
+    not _has_textual, reason="textual not installed (optional dependency)"
+)
+
 
 class TestTextualProgressTrackerFactory:
     """Factory returns TextualProgressTracker for mode='textual'."""
 
+    @_skip_no_textual
     def test_factory_returns_textual_tracker(self):
         tracker = create_progress_tracker("textual")
         assert isinstance(tracker, TextualProgressTracker)
@@ -116,6 +128,7 @@ class TestTextualProgressTrackerLifecycle:
         tracker.finish("nonexistent")
 
 
+@_skip_no_textual
 class TestTextualProgressTrackerContextManager:
     """Test __enter__ / __exit__ with the Textual app (headless in CI)."""
 
@@ -155,6 +168,7 @@ class TestTextualProgressTrackerContextManager:
         tracker.__exit__(None, None, None)
 
 
+@_skip_no_textual
 class TestPipelineApp:
     """Test the Textual App widget interface."""
 
