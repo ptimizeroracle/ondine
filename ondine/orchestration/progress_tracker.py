@@ -17,6 +17,46 @@ from typing import Any
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
+def _build_summary_panel(result: Any) -> Any:
+    """Build a Rich Panel containing a pipeline execution summary table."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    t = Table(show_header=False, box=None, padding=(0, 2))
+    t.add_column("Key", style="bold cyan", no_wrap=True)
+    t.add_column("Value", style="white")
+
+    duration = getattr(result, "duration", 0.0)
+    minutes, secs = divmod(duration, 60)
+    time_str = f"{int(minutes)}m {secs:.1f}s" if minutes else f"{secs:.1f}s"
+
+    metrics = result.metrics
+    costs = result.costs
+
+    status = "[bold green]COMPLETE" if result.success else "[bold red]FAILED"
+    t.add_row("Status", status)
+    t.add_row("Rows processed", f"{metrics.processed_rows:,} / {metrics.total_rows:,}")
+    if metrics.failed_rows:
+        t.add_row("Failed rows", f"[red]{metrics.failed_rows:,}[/red]")
+    if metrics.skipped_rows:
+        t.add_row("Skipped rows", f"{metrics.skipped_rows:,}")
+    t.add_row("Duration", time_str)
+    if metrics.rows_per_second:
+        t.add_row("Throughput", f"{metrics.rows_per_second:.1f} rows/sec")
+    t.add_row("", "")
+    t.add_row("Total cost", f"${costs.total_cost:.4f}")
+    if metrics.processed_rows:
+        t.add_row(
+            "Cost per row",
+            f"${float(costs.total_cost) / metrics.processed_rows:.6f}",
+        )
+    t.add_row("Input tokens", f"{costs.input_tokens:,}")
+    t.add_row("Output tokens", f"{costs.output_tokens:,}")
+    t.add_row("Total tokens", f"{costs.total_tokens:,}")
+
+    return Panel(t, title="[bold]Pipeline Report", border_style="green", padding=(1, 2))
+
+
 class ProgressTracker(ABC):
     """
     Abstract interface for progress tracking.
@@ -80,6 +120,17 @@ class ProgressTracker(ABC):
             task_id: Task identifier
         """
         pass
+
+    def show_summary(self, result: Any) -> None:
+        """Display a final pipeline summary report.
+
+        Called automatically after pipeline execution completes.
+        Default implementation does nothing; rich/textual trackers
+        render a formatted table.
+
+        Args:
+            result: ExecutionResult with metrics, costs, duration, etc.
+        """
 
     @abstractmethod
     def __enter__(self) -> "ProgressTracker":
@@ -353,6 +404,13 @@ class RichProgressTracker(ProgressTracker):
         if self._live is not None:
             self._live.update(self._build_layout())
 
+    def show_summary(self, result: Any) -> None:
+        """Print a Rich summary panel to the terminal."""
+        from rich.console import Console
+
+        Console().print()
+        Console().print(_build_summary_panel(result))
+
     def __enter__(self) -> "RichProgressTracker":
         """Start split-panel display and capture stdout for the log panel."""
         from rich.console import Console
@@ -433,16 +491,23 @@ class TextualProgressTracker(ProgressTracker):
     def __enter__(self) -> "TextualProgressTracker":
         import threading
 
-        from ondine.orchestration._pipeline_tui import PipelineApp
+        from ondine.orchestration._pipeline_tui import (
+            PipelineApp,
+            _install_thread_safe_signal_patch,
+        )
 
         self._ready_event = threading.Event()
-        self._app = PipelineApp(self.progress, self._ready_event)
-
         self._original_stdout = sys.stdout
 
         is_tty = (
             hasattr(self._original_stdout, "isatty") and self._original_stdout.isatty()
         )
+
+        if is_tty:
+            _install_thread_safe_signal_patch()
+
+        self._app = PipelineApp(self.progress, self._ready_event)
+
         run_kwargs: dict[str, Any] = {}
         if not is_tty:
             run_kwargs["headless"] = True
@@ -459,6 +524,13 @@ class TextualProgressTracker(ProgressTracker):
         sys.stdout = _TextualStdoutCapture(self._app, self._original_stdout)
 
         return self
+
+    def show_summary(self, result: Any) -> None:
+        """Print a Rich summary panel to the terminal (after TUI has closed)."""
+        from rich.console import Console
+
+        Console().print()
+        Console().print(_build_summary_panel(result))
 
     def __exit__(self, *args: Any) -> None:
         sys.stdout = getattr(self, "_original_stdout", sys.__stdout__)
@@ -678,6 +750,22 @@ class LoggingProgressTracker(ProgressTracker):
                 f"Completed {task_id}: {task['current']}/{task['total']} rows, "
                 f"${task['cost']:.4f}"
             )
+
+    def show_summary(self, result: Any) -> None:
+        """Log a plain-text summary of the pipeline result."""
+        metrics = result.metrics
+        costs = result.costs
+        duration = getattr(result, "duration", 0.0)
+        self.logger.info(
+            f"Pipeline Report:\n"
+            f"  Rows: {metrics.processed_rows:,}/{metrics.total_rows:,} "
+            f"(failed={metrics.failed_rows:,}, skipped={metrics.skipped_rows:,})\n"
+            f"  Duration: {duration:.1f}s | {metrics.rows_per_second:.1f} rows/sec\n"
+            f"  Cost: ${costs.total_cost:.4f} "
+            f"(${float(costs.total_cost) / max(metrics.processed_rows, 1):.6f}/row)\n"
+            f"  Tokens: {costs.input_tokens:,} in + {costs.output_tokens:,} out "
+            f"= {costs.total_tokens:,} total"
+        )
 
     def __enter__(self) -> "LoggingProgressTracker":
         """Context manager entry."""
