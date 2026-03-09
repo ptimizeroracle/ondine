@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3](https://github.com/ptimizeroracle/ondine/compare/v1.4.2...v1.4.3) (2026-03-09)
+
+
+### Bug Fixes
+
+* prefer JSON_SCHEMA mode for structured output and disable parallel tool calls ([#66](https://github.com/ptimizeroracle/ondine/issues/66)) ([faa2b2f](https://github.com/ptimizeroracle/ondine/commit/faa2b2f77a96e2f91f74c39d35b21365e97f7cf5))
+
 ## [1.4.2](https://github.com/ptimizeroracle/ondine/compare/v1.4.1...v1.4.2) (2026-03-08)
 
 
