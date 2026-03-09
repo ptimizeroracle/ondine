@@ -154,13 +154,38 @@ def detect_instructor_mode(
     # =========================================================================
     try:
         model_info = litellm.get_model_info(actual_model)
+        supports_response_schema = model_info.get("supports_response_schema", False)
         supports_function_calling = model_info.get("supports_function_calling", False)
+
+        # Prefer JSON_SCHEMA when the model natively supports it.
+        # This avoids tool-call parsing entirely, which prevents Instructor's
+        # parse_tools() assertion from firing when models return parallel tool
+        # calls (common with temperature > 0 and complex prompts).
+        # Exception: Anthropic requires its own Instructor modes
+        # (ANTHROPIC_TOOLS/ANTHROPIC_JSON) and rejects JSON_SCHEMA.
+        if supports_response_schema and provider != "anthropic":
+            logger.debug(
+                f"LiteLLM reports '{actual_model}' supports response_schema -> JSON_SCHEMA mode"
+            )
+            return instructor.Mode.JSON_SCHEMA
+
+        # Check provider registry before falling back to TOOLS — some providers
+        # report supports_function_calling=True in LiteLLM but have known issues
+        # with tool calling (e.g. Groq generates XML instead of valid tool calls).
+        if provider and provider in PROVIDER_CAPABILITIES:
+            caps = PROVIDER_CAPABILITIES[provider]
+            if not caps.get("tools", True):
+                logger.debug(
+                    f"Provider registry overrides LiteLLM: '{provider}' tools disabled -> JSON mode"
+                )
+                return _resolve_instructor_mode(provider=provider, prefer_tools=False)
 
         if supports_function_calling:
             logger.debug(
                 f"LiteLLM reports '{actual_model}' supports function calling -> TOOLS mode"
             )
             return _resolve_instructor_mode(provider=provider, prefer_tools=True)
+
         logger.debug(
             f"LiteLLM reports '{actual_model}' doesn't support function calling -> JSON mode"
         )
