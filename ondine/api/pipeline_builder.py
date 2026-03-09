@@ -966,7 +966,8 @@ class PipelineBuilder:
         Args:
             mode: Progress tracking mode
                 - "auto": Auto-detect (rich if TTY, else logging) [default]
-                - "rich": Beautiful progress bars with ETA
+                - "rich": Split-panel progress bars with ETA
+                - "textual": Full TUI with interactive scrollable logs
                 - "logging": Simple log messages
                 - "none": Disable progress tracking
 

@@ -427,6 +427,11 @@ class Pipeline:
                 context.observer_dispatcher.flush_all()
                 context.observer_dispatcher.close_all()
 
+            # Show final summary via the progress tracker (if it supports it)
+            tracker_ref = getattr(context, "_progress_tracker_ref", None)
+            if tracker_ref is not None:
+                tracker_ref.show_summary(result)
+
             return result
 
         except KeyboardInterrupt:
@@ -479,12 +484,13 @@ class Pipeline:
         """Execute all pipeline stages with checkpointing."""
         specs = self.specifications
 
-        # Create progress tracker
+        # Create progress tracker (stored on context for show_summary later)
         progress_tracker = create_progress_tracker(specs.processing.progress_mode)
+        context._progress_tracker_ref = progress_tracker
 
         # Execute with progress tracking
         with progress_tracker:
-            context.progress_tracker = progress_tracker  # Store in context for stages
+            context.progress_tracker = progress_tracker
             return self._execute_stages_with_tracking(context, state_manager)
 
     def _execute_stages_with_tracking(
