@@ -4071,7 +4071,12 @@ use resume_from to continue from the last checkpoint.</p>
 <span class="normal"><a href="#__codelineno-0-471">471</a></span>
 <span class="normal"><a href="#__codelineno-0-472">472</a></span>
 <span class="normal"><a href="#__codelineno-0-473">473</a></span>
-<span class="normal"><a href="#__codelineno-0-474">474</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-220"><a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">:</span> <span class="n">UUID</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExecutionResult</span><span class="p">:</span>
+<span class="normal"><a href="#__codelineno-0-474">474</a></span>
+<span class="normal"><a href="#__codelineno-0-475">475</a></span>
+<span class="normal"><a href="#__codelineno-0-476">476</a></span>
+<span class="normal"><a href="#__codelineno-0-477">477</a></span>
+<span class="normal"><a href="#__codelineno-0-478">478</a></span>
+<span class="normal"><a href="#__codelineno-0-479">479</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-220"><a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">:</span> <span class="n">UUID</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExecutionResult</span><span class="p">:</span>
 </span><span id="__span-0-221"><a id="__codelineno-0-221" name="__codelineno-0-221"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="__span-0-222"><a id="__codelineno-0-222" name="__codelineno-0-222"></a><span class="sd">    Execute pipeline end-to-end.</span>
 </span><span id="__span-0-223"><a id="__codelineno-0-223" name="__codelineno-0-223"></a>
@@ -4281,51 +4286,56 @@ use resume_from to continue from the last checkpoint.</p>
 </span><span id="__span-0-427"><a id="__codelineno-0-427" name="__codelineno-0-427"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">flush_all</span><span class="p">()</span>
 </span><span id="__span-0-428"><a id="__codelineno-0-428" name="__codelineno-0-428"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">close_all</span><span class="p">()</span>
 </span><span id="__span-0-429"><a id="__codelineno-0-429" name="__codelineno-0-429"></a>
-</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a>        <span class="k">return</span> <span class="n">result</span>
-</span><span id="__span-0-431"><a id="__codelineno-0-431" name="__codelineno-0-431"></a>
-</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a>    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
-</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">🛑 Pipeline interrupted by user.&quot;</span><span class="p">)</span>
-</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a>        <span class="c1"># Save checkpoint on interrupt</span>
-</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="n">state_manager</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-</span><span id="__span-0-437"><a id="__codelineno-0-437" name="__codelineno-0-437"></a>            <span class="sa">f</span><span class="s2">&quot;Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID(&#39;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="si">}</span><span class="s2">&#39;))&quot;</span>
-</span><span id="__span-0-438"><a id="__codelineno-0-438" name="__codelineno-0-438"></a>        <span class="p">)</span>
-</span><span id="__span-0-439"><a id="__codelineno-0-439" name="__codelineno-0-439"></a>        <span class="k">raise</span>
-</span><span id="__span-0-440"><a id="__codelineno-0-440" name="__codelineno-0-440"></a>
-</span><span id="__span-0-441"><a id="__codelineno-0-441" name="__codelineno-0-441"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="__span-0-442"><a id="__codelineno-0-442" name="__codelineno-0-442"></a>        <span class="c1"># Save checkpoint on error</span>
-</span><span id="__span-0-443"><a id="__codelineno-0-443" name="__codelineno-0-443"></a>        <span class="n">state_manager</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-</span><span id="__span-0-444"><a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-</span><span id="__span-0-445"><a id="__codelineno-0-445" name="__codelineno-0-445"></a>            <span class="sa">f</span><span class="s2">&quot;Pipeline failed. Checkpoint saved. &quot;</span>
-</span><span id="__span-0-446"><a id="__codelineno-0-446" name="__codelineno-0-446"></a>            <span class="sa">f</span><span class="s2">&quot;Resume with: pipeline.execute(resume_from=UUID(&#39;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="si">}</span><span class="s2">&#39;))&quot;</span>
-</span><span id="__span-0-447"><a id="__codelineno-0-447" name="__codelineno-0-447"></a>        <span class="p">)</span>
-</span><span id="__span-0-448"><a id="__codelineno-0-448" name="__codelineno-0-448"></a>
-</span><span id="__span-0-449"><a id="__codelineno-0-449" name="__codelineno-0-449"></a>        <span class="c1"># Notify legacy observers of error</span>
-</span><span id="__span-0-450"><a id="__codelineno-0-450" name="__codelineno-0-450"></a>        <span class="k">for</span> <span class="n">observer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">observers</span><span class="p">:</span>
-</span><span id="__span-0-451"><a id="__codelineno-0-451" name="__codelineno-0-451"></a>            <span class="n">observer</span><span class="o">.</span><span class="n">on_pipeline_error</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
-</span><span id="__span-0-452"><a id="__codelineno-0-452" name="__codelineno-0-452"></a>
-</span><span id="__span-0-453"><a id="__codelineno-0-453" name="__codelineno-0-453"></a>        <span class="c1"># Emit error event for new observability system</span>
-</span><span id="__span-0-454"><a id="__codelineno-0-454" name="__codelineno-0-454"></a>        <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="p">:</span>
-</span><span id="__span-0-455"><a id="__codelineno-0-455" name="__codelineno-0-455"></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">ondine.observability.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">ErrorEvent</span>
-</span><span id="__span-0-456"><a id="__codelineno-0-456" name="__codelineno-0-456"></a>
-</span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a>            <span class="n">error_event</span> <span class="o">=</span> <span class="n">ErrorEvent</span><span class="p">(</span>
-</span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a>                <span class="n">pipeline_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
-</span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a>                <span class="n">run_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
-</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a>                <span class="n">timestamp</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span>
-</span><span id="__span-0-461"><a id="__codelineno-0-461" name="__codelineno-0-461"></a>                <span class="n">trace_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">trace_id</span><span class="p">,</span>
-</span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a>                <span class="n">span_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">span_id</span><span class="p">,</span>
-</span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a>                <span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
-</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a>                <span class="n">error_type</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
-</span><span id="__span-0-465"><a id="__codelineno-0-465" name="__codelineno-0-465"></a>                <span class="n">error_message</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
-</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a>                <span class="n">stack_trace</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>  <span class="c1"># Could add full traceback if needed</span>
-</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a>            <span class="p">)</span>
-</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">dispatch</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="n">error_event</span><span class="p">)</span>
-</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a>
-</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="c1"># Flush and close observers even on error</span>
-</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">flush_all</span><span class="p">()</span>
-</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">close_all</span><span class="p">()</span>
-</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>
-</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>        <span class="k">raise</span>
+</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a>        <span class="c1"># Show final summary via the progress tracker (if it supports it)</span>
+</span><span id="__span-0-431"><a id="__codelineno-0-431" name="__codelineno-0-431"></a>        <span class="n">tracker_ref</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;_progress_tracker_ref&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a>        <span class="k">if</span> <span class="n">tracker_ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a>            <span class="n">tracker_ref</span><span class="o">.</span><span class="n">show_summary</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a>
+</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="k">return</span> <span class="n">result</span>
+</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a>
+</span><span id="__span-0-437"><a id="__codelineno-0-437" name="__codelineno-0-437"></a>    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+</span><span id="__span-0-438"><a id="__codelineno-0-438" name="__codelineno-0-438"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">🛑 Pipeline interrupted by user.&quot;</span><span class="p">)</span>
+</span><span id="__span-0-439"><a id="__codelineno-0-439" name="__codelineno-0-439"></a>        <span class="c1"># Save checkpoint on interrupt</span>
+</span><span id="__span-0-440"><a id="__codelineno-0-440" name="__codelineno-0-440"></a>        <span class="n">state_manager</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span id="__span-0-441"><a id="__codelineno-0-441" name="__codelineno-0-441"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+</span><span id="__span-0-442"><a id="__codelineno-0-442" name="__codelineno-0-442"></a>            <span class="sa">f</span><span class="s2">&quot;Checkpoint saved. Resume with: pipeline.execute(resume_from=UUID(&#39;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="si">}</span><span class="s2">&#39;))&quot;</span>
+</span><span id="__span-0-443"><a id="__codelineno-0-443" name="__codelineno-0-443"></a>        <span class="p">)</span>
+</span><span id="__span-0-444"><a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="k">raise</span>
+</span><span id="__span-0-445"><a id="__codelineno-0-445" name="__codelineno-0-445"></a>
+</span><span id="__span-0-446"><a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="__span-0-447"><a id="__codelineno-0-447" name="__codelineno-0-447"></a>        <span class="c1"># Save checkpoint on error</span>
+</span><span id="__span-0-448"><a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="n">state_manager</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+</span><span id="__span-0-449"><a id="__codelineno-0-449" name="__codelineno-0-449"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+</span><span id="__span-0-450"><a id="__codelineno-0-450" name="__codelineno-0-450"></a>            <span class="sa">f</span><span class="s2">&quot;Pipeline failed. Checkpoint saved. &quot;</span>
+</span><span id="__span-0-451"><a id="__codelineno-0-451" name="__codelineno-0-451"></a>            <span class="sa">f</span><span class="s2">&quot;Resume with: pipeline.execute(resume_from=UUID(&#39;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="si">}</span><span class="s2">&#39;))&quot;</span>
+</span><span id="__span-0-452"><a id="__codelineno-0-452" name="__codelineno-0-452"></a>        <span class="p">)</span>
+</span><span id="__span-0-453"><a id="__codelineno-0-453" name="__codelineno-0-453"></a>
+</span><span id="__span-0-454"><a id="__codelineno-0-454" name="__codelineno-0-454"></a>        <span class="c1"># Notify legacy observers of error</span>
+</span><span id="__span-0-455"><a id="__codelineno-0-455" name="__codelineno-0-455"></a>        <span class="k">for</span> <span class="n">observer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">observers</span><span class="p">:</span>
+</span><span id="__span-0-456"><a id="__codelineno-0-456" name="__codelineno-0-456"></a>            <span class="n">observer</span><span class="o">.</span><span class="n">on_pipeline_error</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a>
+</span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a>        <span class="c1"># Emit error event for new observability system</span>
+</span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a>        <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="p">:</span>
+</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">ondine.observability.events</span><span class="w"> </span><span class="kn">import</span> <span class="n">ErrorEvent</span>
+</span><span id="__span-0-461"><a id="__codelineno-0-461" name="__codelineno-0-461"></a>
+</span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a>            <span class="n">error_event</span> <span class="o">=</span> <span class="n">ErrorEvent</span><span class="p">(</span>
+</span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a>                <span class="n">pipeline_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a>                <span class="n">run_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
+</span><span id="__span-0-465"><a id="__codelineno-0-465" name="__codelineno-0-465"></a>                <span class="n">timestamp</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span>
+</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a>                <span class="n">trace_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">trace_id</span><span class="p">,</span>
+</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a>                <span class="n">span_id</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">span_id</span><span class="p">,</span>
+</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a>                <span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a>                <span class="n">error_type</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>                <span class="n">error_message</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>                <span class="n">stack_trace</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>  <span class="c1"># Could add full traceback if needed</span>
+</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>            <span class="p">)</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">dispatch</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="n">error_event</span><span class="p">)</span>
+</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>
+</span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>            <span class="c1"># Flush and close observers even on error</span>
+</span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">flush_all</span><span class="p">()</span>
+</span><span id="__span-0-477"><a id="__codelineno-0-477" name="__codelineno-0-477"></a>            <span class="n">context</span><span class="o">.</span><span class="n">observer_dispatcher</span><span class="o">.</span><span class="n">close_all</span><span class="p">()</span>
+</span><span id="__span-0-478"><a id="__codelineno-0-478" name="__codelineno-0-478"></a>
+</span><span id="__span-0-479"><a id="__codelineno-0-479" name="__codelineno-0-479"></a>        <span class="k">raise</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4433,13 +4443,7 @@ with FastAPI, aiohttp, and other async frameworks.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/api/pipeline.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-757">757</a></span>
-<span class="normal"><a href="#__codelineno-0-758">758</a></span>
-<span class="normal"><a href="#__codelineno-0-759">759</a></span>
-<span class="normal"><a href="#__codelineno-0-760">760</a></span>
-<span class="normal"><a href="#__codelineno-0-761">761</a></span>
-<span class="normal"><a href="#__codelineno-0-762">762</a></span>
-<span class="normal"><a href="#__codelineno-0-763">763</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-763">763</a></span>
 <span class="normal"><a href="#__codelineno-0-764">764</a></span>
 <span class="normal"><a href="#__codelineno-0-765">765</a></span>
 <span class="normal"><a href="#__codelineno-0-766">766</a></span>
@@ -4460,34 +4464,40 @@ with FastAPI, aiohttp, and other async frameworks.</p>
 <span class="normal"><a href="#__codelineno-0-781">781</a></span>
 <span class="normal"><a href="#__codelineno-0-782">782</a></span>
 <span class="normal"><a href="#__codelineno-0-783">783</a></span>
-<span class="normal"><a href="#__codelineno-0-784">784</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-757"><a id="__codelineno-0-757" name="__codelineno-0-757"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">:</span> <span class="n">UUID</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExecutionResult</span><span class="p">:</span>
-</span><span id="__span-0-758"><a id="__codelineno-0-758" name="__codelineno-0-758"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-759"><a id="__codelineno-0-759" name="__codelineno-0-759"></a><span class="sd">    Execute pipeline asynchronously.</span>
-</span><span id="__span-0-760"><a id="__codelineno-0-760" name="__codelineno-0-760"></a>
-</span><span id="__span-0-761"><a id="__codelineno-0-761" name="__codelineno-0-761"></a><span class="sd">    Uses AsyncExecutor for non-blocking execution. Ideal for integration</span>
-</span><span id="__span-0-762"><a id="__codelineno-0-762" name="__codelineno-0-762"></a><span class="sd">    with FastAPI, aiohttp, and other async frameworks.</span>
-</span><span id="__span-0-763"><a id="__codelineno-0-763" name="__codelineno-0-763"></a>
-</span><span id="__span-0-764"><a id="__codelineno-0-764" name="__codelineno-0-764"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-765"><a id="__codelineno-0-765" name="__codelineno-0-765"></a><span class="sd">        resume_from: Optional session ID to resume from checkpoint</span>
+<span class="normal"><a href="#__codelineno-0-784">784</a></span>
+<span class="normal"><a href="#__codelineno-0-785">785</a></span>
+<span class="normal"><a href="#__codelineno-0-786">786</a></span>
+<span class="normal"><a href="#__codelineno-0-787">787</a></span>
+<span class="normal"><a href="#__codelineno-0-788">788</a></span>
+<span class="normal"><a href="#__codelineno-0-789">789</a></span>
+<span class="normal"><a href="#__codelineno-0-790">790</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-763"><a id="__codelineno-0-763" name="__codelineno-0-763"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">:</span> <span class="n">UUID</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExecutionResult</span><span class="p">:</span>
+</span><span id="__span-0-764"><a id="__codelineno-0-764" name="__codelineno-0-764"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="__span-0-765"><a id="__codelineno-0-765" name="__codelineno-0-765"></a><span class="sd">    Execute pipeline asynchronously.</span>
 </span><span id="__span-0-766"><a id="__codelineno-0-766" name="__codelineno-0-766"></a>
-</span><span id="__span-0-767"><a id="__codelineno-0-767" name="__codelineno-0-767"></a><span class="sd">    Returns:</span>
-</span><span id="__span-0-768"><a id="__codelineno-0-768" name="__codelineno-0-768"></a><span class="sd">        ExecutionResult with data and metrics</span>
+</span><span id="__span-0-767"><a id="__codelineno-0-767" name="__codelineno-0-767"></a><span class="sd">    Uses AsyncExecutor for non-blocking execution. Ideal for integration</span>
+</span><span id="__span-0-768"><a id="__codelineno-0-768" name="__codelineno-0-768"></a><span class="sd">    with FastAPI, aiohttp, and other async frameworks.</span>
 </span><span id="__span-0-769"><a id="__codelineno-0-769" name="__codelineno-0-769"></a>
-</span><span id="__span-0-770"><a id="__codelineno-0-770" name="__codelineno-0-770"></a><span class="sd">    Raises:</span>
-</span><span id="__span-0-771"><a id="__codelineno-0-771" name="__codelineno-0-771"></a><span class="sd">        ValueError: If executor doesn&#39;t support async</span>
-</span><span id="__span-0-772"><a id="__codelineno-0-772" name="__codelineno-0-772"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-773"><a id="__codelineno-0-773" name="__codelineno-0-773"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">supports_async</span><span class="p">():</span>
-</span><span id="__span-0-774"><a id="__codelineno-0-774" name="__codelineno-0-774"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-</span><span id="__span-0-775"><a id="__codelineno-0-775" name="__codelineno-0-775"></a>            <span class="s2">&quot;Current executor doesn&#39;t support async. &quot;</span>
-</span><span id="__span-0-776"><a id="__codelineno-0-776" name="__codelineno-0-776"></a>            <span class="s2">&quot;Use AsyncExecutor: Pipeline(specs, executor=AsyncExecutor())&quot;</span>
-</span><span id="__span-0-777"><a id="__codelineno-0-777" name="__codelineno-0-777"></a>        <span class="p">)</span>
-</span><span id="__span-0-778"><a id="__codelineno-0-778" name="__codelineno-0-778"></a>
-</span><span id="__span-0-779"><a id="__codelineno-0-779" name="__codelineno-0-779"></a>    <span class="c1"># For now, wrap synchronous execution in async</span>
-</span><span id="__span-0-780"><a id="__codelineno-0-780" name="__codelineno-0-780"></a>    <span class="c1"># TODO: Implement fully async execution pipeline</span>
-</span><span id="__span-0-781"><a id="__codelineno-0-781" name="__codelineno-0-781"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-782"><a id="__codelineno-0-782" name="__codelineno-0-782"></a>
-</span><span id="__span-0-783"><a id="__codelineno-0-783" name="__codelineno-0-783"></a>    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
-</span><span id="__span-0-784"><a id="__codelineno-0-784" name="__codelineno-0-784"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">execute</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">)</span>
+</span><span id="__span-0-770"><a id="__codelineno-0-770" name="__codelineno-0-770"></a><span class="sd">    Args:</span>
+</span><span id="__span-0-771"><a id="__codelineno-0-771" name="__codelineno-0-771"></a><span class="sd">        resume_from: Optional session ID to resume from checkpoint</span>
+</span><span id="__span-0-772"><a id="__codelineno-0-772" name="__codelineno-0-772"></a>
+</span><span id="__span-0-773"><a id="__codelineno-0-773" name="__codelineno-0-773"></a><span class="sd">    Returns:</span>
+</span><span id="__span-0-774"><a id="__codelineno-0-774" name="__codelineno-0-774"></a><span class="sd">        ExecutionResult with data and metrics</span>
+</span><span id="__span-0-775"><a id="__codelineno-0-775" name="__codelineno-0-775"></a>
+</span><span id="__span-0-776"><a id="__codelineno-0-776" name="__codelineno-0-776"></a><span class="sd">    Raises:</span>
+</span><span id="__span-0-777"><a id="__codelineno-0-777" name="__codelineno-0-777"></a><span class="sd">        ValueError: If executor doesn&#39;t support async</span>
+</span><span id="__span-0-778"><a id="__codelineno-0-778" name="__codelineno-0-778"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-779"><a id="__codelineno-0-779" name="__codelineno-0-779"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">supports_async</span><span class="p">():</span>
+</span><span id="__span-0-780"><a id="__codelineno-0-780" name="__codelineno-0-780"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+</span><span id="__span-0-781"><a id="__codelineno-0-781" name="__codelineno-0-781"></a>            <span class="s2">&quot;Current executor doesn&#39;t support async. &quot;</span>
+</span><span id="__span-0-782"><a id="__codelineno-0-782" name="__codelineno-0-782"></a>            <span class="s2">&quot;Use AsyncExecutor: Pipeline(specs, executor=AsyncExecutor())&quot;</span>
+</span><span id="__span-0-783"><a id="__codelineno-0-783" name="__codelineno-0-783"></a>        <span class="p">)</span>
+</span><span id="__span-0-784"><a id="__codelineno-0-784" name="__codelineno-0-784"></a>
+</span><span id="__span-0-785"><a id="__codelineno-0-785" name="__codelineno-0-785"></a>    <span class="c1"># For now, wrap synchronous execution in async</span>
+</span><span id="__span-0-786"><a id="__codelineno-0-786" name="__codelineno-0-786"></a>    <span class="c1"># TODO: Implement fully async execution pipeline</span>
+</span><span id="__span-0-787"><a id="__codelineno-0-787" name="__codelineno-0-787"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-788"><a id="__codelineno-0-788" name="__codelineno-0-788"></a>
+</span><span id="__span-0-789"><a id="__codelineno-0-789" name="__codelineno-0-789"></a>    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+</span><span id="__span-0-790"><a id="__codelineno-0-790" name="__codelineno-0-790"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">execute</span><span class="p">,</span> <span class="n">resume_from</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4591,13 +4601,7 @@ Ideal for datasets that don't fit in memory.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/api/pipeline.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-786">786</a></span>
-<span class="normal"><a href="#__codelineno-0-787">787</a></span>
-<span class="normal"><a href="#__codelineno-0-788">788</a></span>
-<span class="normal"><a href="#__codelineno-0-789">789</a></span>
-<span class="normal"><a href="#__codelineno-0-790">790</a></span>
-<span class="normal"><a href="#__codelineno-0-791">791</a></span>
-<span class="normal"><a href="#__codelineno-0-792">792</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-792">792</a></span>
 <span class="normal"><a href="#__codelineno-0-793">793</a></span>
 <span class="normal"><a href="#__codelineno-0-794">794</a></span>
 <span class="normal"><a href="#__codelineno-0-795">795</a></span>
@@ -4682,98 +4686,104 @@ Ideal for datasets that don't fit in memory.</p>
 <span class="normal"><a href="#__codelineno-0-874">874</a></span>
 <span class="normal"><a href="#__codelineno-0-875">875</a></span>
 <span class="normal"><a href="#__codelineno-0-876">876</a></span>
-<span class="normal"><a href="#__codelineno-0-877">877</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-786"><a id="__codelineno-0-786" name="__codelineno-0-786"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_stream</span><span class="p">(</span>
-</span><span id="__span-0-787"><a id="__codelineno-0-787" name="__codelineno-0-787"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-788"><a id="__codelineno-0-788" name="__codelineno-0-788"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ExecutionResult</span><span class="p">]:</span>
-</span><span id="__span-0-789"><a id="__codelineno-0-789" name="__codelineno-0-789"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-790"><a id="__codelineno-0-790" name="__codelineno-0-790"></a><span class="sd">    Execute pipeline in streaming mode.</span>
-</span><span id="__span-0-791"><a id="__codelineno-0-791" name="__codelineno-0-791"></a>
-</span><span id="__span-0-792"><a id="__codelineno-0-792" name="__codelineno-0-792"></a><span class="sd">    Processes data in chunks for memory-efficient handling of large datasets.</span>
-</span><span id="__span-0-793"><a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="sd">    Ideal for datasets that don&#39;t fit in memory.</span>
-</span><span id="__span-0-794"><a id="__codelineno-0-794" name="__codelineno-0-794"></a>
-</span><span id="__span-0-795"><a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">        chunk_size: Number of rows per chunk (uses executor&#39;s chunk_size if None)</span>
+<span class="normal"><a href="#__codelineno-0-877">877</a></span>
+<span class="normal"><a href="#__codelineno-0-878">878</a></span>
+<span class="normal"><a href="#__codelineno-0-879">879</a></span>
+<span class="normal"><a href="#__codelineno-0-880">880</a></span>
+<span class="normal"><a href="#__codelineno-0-881">881</a></span>
+<span class="normal"><a href="#__codelineno-0-882">882</a></span>
+<span class="normal"><a href="#__codelineno-0-883">883</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-792"><a id="__codelineno-0-792" name="__codelineno-0-792"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_stream</span><span class="p">(</span>
+</span><span id="__span-0-793"><a id="__codelineno-0-793" name="__codelineno-0-793"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-794"><a id="__codelineno-0-794" name="__codelineno-0-794"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ExecutionResult</span><span class="p">]:</span>
+</span><span id="__span-0-795"><a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="__span-0-796"><a id="__codelineno-0-796" name="__codelineno-0-796"></a><span class="sd">    Execute pipeline in streaming mode.</span>
 </span><span id="__span-0-797"><a id="__codelineno-0-797" name="__codelineno-0-797"></a>
-</span><span id="__span-0-798"><a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">    Yields:</span>
-</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">        ExecutionResult objects for each processed chunk</span>
+</span><span id="__span-0-798"><a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">    Processes data in chunks for memory-efficient handling of large datasets.</span>
+</span><span id="__span-0-799"><a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">    Ideal for datasets that don&#39;t fit in memory.</span>
 </span><span id="__span-0-800"><a id="__codelineno-0-800" name="__codelineno-0-800"></a>
-</span><span id="__span-0-801"><a id="__codelineno-0-801" name="__codelineno-0-801"></a><span class="sd">    Raises:</span>
-</span><span id="__span-0-802"><a id="__codelineno-0-802" name="__codelineno-0-802"></a><span class="sd">        ValueError: If executor doesn&#39;t support streaming</span>
-</span><span id="__span-0-803"><a id="__codelineno-0-803" name="__codelineno-0-803"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-804"><a id="__codelineno-0-804" name="__codelineno-0-804"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">supports_streaming</span><span class="p">():</span>
-</span><span id="__span-0-805"><a id="__codelineno-0-805" name="__codelineno-0-805"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-</span><span id="__span-0-806"><a id="__codelineno-0-806" name="__codelineno-0-806"></a>            <span class="s2">&quot;Current executor doesn&#39;t support streaming. &quot;</span>
-</span><span id="__span-0-807"><a id="__codelineno-0-807" name="__codelineno-0-807"></a>            <span class="s2">&quot;Use StreamingExecutor: Pipeline(specs, executor=StreamingExecutor())&quot;</span>
-</span><span id="__span-0-808"><a id="__codelineno-0-808" name="__codelineno-0-808"></a>        <span class="p">)</span>
-</span><span id="__span-0-809"><a id="__codelineno-0-809" name="__codelineno-0-809"></a>
-</span><span id="__span-0-810"><a id="__codelineno-0-810" name="__codelineno-0-810"></a>    <span class="c1"># Use executor&#39;s chunk_size if not provided</span>
-</span><span id="__span-0-811"><a id="__codelineno-0-811" name="__codelineno-0-811"></a>    <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="p">,</span> <span class="n">StreamingExecutor</span><span class="p">):</span>
-</span><span id="__span-0-812"><a id="__codelineno-0-812" name="__codelineno-0-812"></a>        <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">chunk_size</span>
-</span><span id="__span-0-813"><a id="__codelineno-0-813" name="__codelineno-0-813"></a>    <span class="k">elif</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-814"><a id="__codelineno-0-814" name="__codelineno-0-814"></a>        <span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">1000</span>  <span class="c1"># Default fallback</span>
+</span><span id="__span-0-801"><a id="__codelineno-0-801" name="__codelineno-0-801"></a><span class="sd">    Args:</span>
+</span><span id="__span-0-802"><a id="__codelineno-0-802" name="__codelineno-0-802"></a><span class="sd">        chunk_size: Number of rows per chunk (uses executor&#39;s chunk_size if None)</span>
+</span><span id="__span-0-803"><a id="__codelineno-0-803" name="__codelineno-0-803"></a>
+</span><span id="__span-0-804"><a id="__codelineno-0-804" name="__codelineno-0-804"></a><span class="sd">    Yields:</span>
+</span><span id="__span-0-805"><a id="__codelineno-0-805" name="__codelineno-0-805"></a><span class="sd">        ExecutionResult objects for each processed chunk</span>
+</span><span id="__span-0-806"><a id="__codelineno-0-806" name="__codelineno-0-806"></a>
+</span><span id="__span-0-807"><a id="__codelineno-0-807" name="__codelineno-0-807"></a><span class="sd">    Raises:</span>
+</span><span id="__span-0-808"><a id="__codelineno-0-808" name="__codelineno-0-808"></a><span class="sd">        ValueError: If executor doesn&#39;t support streaming</span>
+</span><span id="__span-0-809"><a id="__codelineno-0-809" name="__codelineno-0-809"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-810"><a id="__codelineno-0-810" name="__codelineno-0-810"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">supports_streaming</span><span class="p">():</span>
+</span><span id="__span-0-811"><a id="__codelineno-0-811" name="__codelineno-0-811"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+</span><span id="__span-0-812"><a id="__codelineno-0-812" name="__codelineno-0-812"></a>            <span class="s2">&quot;Current executor doesn&#39;t support streaming. &quot;</span>
+</span><span id="__span-0-813"><a id="__codelineno-0-813" name="__codelineno-0-813"></a>            <span class="s2">&quot;Use StreamingExecutor: Pipeline(specs, executor=StreamingExecutor())&quot;</span>
+</span><span id="__span-0-814"><a id="__codelineno-0-814" name="__codelineno-0-814"></a>        <span class="p">)</span>
 </span><span id="__span-0-815"><a id="__codelineno-0-815" name="__codelineno-0-815"></a>
-</span><span id="__span-0-816"><a id="__codelineno-0-816" name="__codelineno-0-816"></a>    <span class="n">streaming_config</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span id="__span-0-817"><a id="__codelineno-0-817" name="__codelineno-0-817"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-</span><span id="__span-0-818"><a id="__codelineno-0-818" name="__codelineno-0-818"></a>        <span class="n">streaming_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;streaming&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
-</span><span id="__span-0-819"><a id="__codelineno-0-819" name="__codelineno-0-819"></a>    <span class="n">max_pending_chunks</span> <span class="o">=</span> <span class="n">streaming_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_pending_chunks&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-</span><span id="__span-0-820"><a id="__codelineno-0-820" name="__codelineno-0-820"></a>
-</span><span id="__span-0-821"><a id="__codelineno-0-821" name="__codelineno-0-821"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-822"><a id="__codelineno-0-822" name="__codelineno-0-822"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
-</span><span id="__span-0-823"><a id="__codelineno-0-823" name="__codelineno-0-823"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
-</span><span id="__span-0-824"><a id="__codelineno-0-824" name="__codelineno-0-824"></a>
-</span><span id="__span-0-825"><a id="__codelineno-0-825" name="__codelineno-0-825"></a>    <span class="n">result_queue</span><span class="p">:</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ExecutionResult</span> <span class="o">|</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-826"><a id="__codelineno-0-826" name="__codelineno-0-826"></a>        <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="n">max_pending_chunks</span><span class="p">)</span>
-</span><span id="__span-0-827"><a id="__codelineno-0-827" name="__codelineno-0-827"></a>    <span class="p">)</span>
-</span><span id="__span-0-828"><a id="__codelineno-0-828" name="__codelineno-0-828"></a>    <span class="n">stop_requested</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
-</span><span id="__span-0-829"><a id="__codelineno-0-829" name="__codelineno-0-829"></a>
-</span><span id="__span-0-830"><a id="__codelineno-0-830" name="__codelineno-0-830"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="n">ExecutionResult</span> <span class="o">|</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-831"><a id="__codelineno-0-831" name="__codelineno-0-831"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-</span><span id="__span-0-832"><a id="__codelineno-0-832" name="__codelineno-0-832"></a>            <span class="k">if</span> <span class="n">stop_requested</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
-</span><span id="__span-0-833"><a id="__codelineno-0-833" name="__codelineno-0-833"></a>                <span class="k">return</span>
-</span><span id="__span-0-834"><a id="__codelineno-0-834" name="__codelineno-0-834"></a>            <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-835"><a id="__codelineno-0-835" name="__codelineno-0-835"></a>                <span class="n">result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">kind</span><span class="p">,</span> <span class="n">payload</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
-</span><span id="__span-0-836"><a id="__codelineno-0-836" name="__codelineno-0-836"></a>                <span class="k">return</span>
-</span><span id="__span-0-837"><a id="__codelineno-0-837" name="__codelineno-0-837"></a>            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
-</span><span id="__span-0-838"><a id="__codelineno-0-838" name="__codelineno-0-838"></a>                <span class="k">continue</span>
-</span><span id="__span-0-839"><a id="__codelineno-0-839" name="__codelineno-0-839"></a>
-</span><span id="__span-0-840"><a id="__codelineno-0-840" name="__codelineno-0-840"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">runner</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-841"><a id="__codelineno-0-841" name="__codelineno-0-841"></a>        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream_results</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-842"><a id="__codelineno-0-842" name="__codelineno-0-842"></a>            <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-843"><a id="__codelineno-0-843" name="__codelineno-0-843"></a>                <span class="k">async</span> <span class="k">for</span> <span class="n">chunk_result</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">execute_stream_async</span><span class="p">(</span>
-</span><span id="__span-0-844"><a id="__codelineno-0-844" name="__codelineno-0-844"></a>                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
-</span><span id="__span-0-845"><a id="__codelineno-0-845" name="__codelineno-0-845"></a>                    <span class="n">max_pending_chunks</span><span class="o">=</span><span class="n">max_pending_chunks</span><span class="p">,</span>
-</span><span id="__span-0-846"><a id="__codelineno-0-846" name="__codelineno-0-846"></a>                <span class="p">):</span>
-</span><span id="__span-0-847"><a id="__codelineno-0-847" name="__codelineno-0-847"></a>                    <span class="k">if</span> <span class="n">stop_requested</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
-</span><span id="__span-0-848"><a id="__codelineno-0-848" name="__codelineno-0-848"></a>                        <span class="k">break</span>
-</span><span id="__span-0-849"><a id="__codelineno-0-849" name="__codelineno-0-849"></a>                    <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;item&quot;</span><span class="p">,</span> <span class="n">chunk_result</span><span class="p">)</span>
-</span><span id="__span-0-850"><a id="__codelineno-0-850" name="__codelineno-0-850"></a>                <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-</span><span id="__span-0-851"><a id="__codelineno-0-851" name="__codelineno-0-851"></a>            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="__span-0-852"><a id="__codelineno-0-852" name="__codelineno-0-852"></a>                <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
-</span><span id="__span-0-853"><a id="__codelineno-0-853" name="__codelineno-0-853"></a>
-</span><span id="__span-0-854"><a id="__codelineno-0-854" name="__codelineno-0-854"></a>        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
-</span><span id="__span-0-855"><a id="__codelineno-0-855" name="__codelineno-0-855"></a>        <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-856"><a id="__codelineno-0-856" name="__codelineno-0-856"></a>            <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
-</span><span id="__span-0-857"><a id="__codelineno-0-857" name="__codelineno-0-857"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">stream_results</span><span class="p">())</span>
-</span><span id="__span-0-858"><a id="__codelineno-0-858" name="__codelineno-0-858"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">shutdown_asyncgens</span><span class="p">())</span>
-</span><span id="__span-0-859"><a id="__codelineno-0-859" name="__codelineno-0-859"></a>        <span class="k">finally</span><span class="p">:</span>
-</span><span id="__span-0-860"><a id="__codelineno-0-860" name="__codelineno-0-860"></a>            <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-</span><span id="__span-0-861"><a id="__codelineno-0-861" name="__codelineno-0-861"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-</span><span id="__span-0-862"><a id="__codelineno-0-862" name="__codelineno-0-862"></a>
-</span><span id="__span-0-863"><a id="__codelineno-0-863" name="__codelineno-0-863"></a>    <span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">runner</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-0-864"><a id="__codelineno-0-864" name="__codelineno-0-864"></a>    <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-</span><span id="__span-0-865"><a id="__codelineno-0-865" name="__codelineno-0-865"></a>
-</span><span id="__span-0-866"><a id="__codelineno-0-866" name="__codelineno-0-866"></a>    <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-867"><a id="__codelineno-0-867" name="__codelineno-0-867"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-</span><span id="__span-0-868"><a id="__codelineno-0-868" name="__codelineno-0-868"></a>            <span class="n">kind</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="n">result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-</span><span id="__span-0-869"><a id="__codelineno-0-869" name="__codelineno-0-869"></a>            <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;item&quot;</span><span class="p">:</span>
-</span><span id="__span-0-870"><a id="__codelineno-0-870" name="__codelineno-0-870"></a>                <span class="k">yield</span> <span class="n">payload</span>  <span class="c1"># type: ignore[misc]</span>
-</span><span id="__span-0-871"><a id="__codelineno-0-871" name="__codelineno-0-871"></a>            <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span>
-</span><span id="__span-0-872"><a id="__codelineno-0-872" name="__codelineno-0-872"></a>                <span class="k">raise</span> <span class="n">payload</span>  <span class="c1"># type: ignore[misc]</span>
-</span><span id="__span-0-873"><a id="__codelineno-0-873" name="__codelineno-0-873"></a>            <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-874"><a id="__codelineno-0-874" name="__codelineno-0-874"></a>                <span class="k">break</span>
-</span><span id="__span-0-875"><a id="__codelineno-0-875" name="__codelineno-0-875"></a>    <span class="k">finally</span><span class="p">:</span>
-</span><span id="__span-0-876"><a id="__codelineno-0-876" name="__codelineno-0-876"></a>        <span class="n">stop_requested</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-</span><span id="__span-0-877"><a id="__codelineno-0-877" name="__codelineno-0-877"></a>        <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-0-816"><a id="__codelineno-0-816" name="__codelineno-0-816"></a>    <span class="c1"># Use executor&#39;s chunk_size if not provided</span>
+</span><span id="__span-0-817"><a id="__codelineno-0-817" name="__codelineno-0-817"></a>    <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="p">,</span> <span class="n">StreamingExecutor</span><span class="p">):</span>
+</span><span id="__span-0-818"><a id="__codelineno-0-818" name="__codelineno-0-818"></a>        <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="o">.</span><span class="n">chunk_size</span>
+</span><span id="__span-0-819"><a id="__codelineno-0-819" name="__codelineno-0-819"></a>    <span class="k">elif</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-820"><a id="__codelineno-0-820" name="__codelineno-0-820"></a>        <span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">1000</span>  <span class="c1"># Default fallback</span>
+</span><span id="__span-0-821"><a id="__codelineno-0-821" name="__codelineno-0-821"></a>
+</span><span id="__span-0-822"><a id="__codelineno-0-822" name="__codelineno-0-822"></a>    <span class="n">streaming_config</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-0-823"><a id="__codelineno-0-823" name="__codelineno-0-823"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+</span><span id="__span-0-824"><a id="__codelineno-0-824" name="__codelineno-0-824"></a>        <span class="n">streaming_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;streaming&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
+</span><span id="__span-0-825"><a id="__codelineno-0-825" name="__codelineno-0-825"></a>    <span class="n">max_pending_chunks</span> <span class="o">=</span> <span class="n">streaming_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_pending_chunks&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+</span><span id="__span-0-826"><a id="__codelineno-0-826" name="__codelineno-0-826"></a>
+</span><span id="__span-0-827"><a id="__codelineno-0-827" name="__codelineno-0-827"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-828"><a id="__codelineno-0-828" name="__codelineno-0-828"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
+</span><span id="__span-0-829"><a id="__codelineno-0-829" name="__codelineno-0-829"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+</span><span id="__span-0-830"><a id="__codelineno-0-830" name="__codelineno-0-830"></a>
+</span><span id="__span-0-831"><a id="__codelineno-0-831" name="__codelineno-0-831"></a>    <span class="n">result_queue</span><span class="p">:</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ExecutionResult</span> <span class="o">|</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-832"><a id="__codelineno-0-832" name="__codelineno-0-832"></a>        <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="n">max_pending_chunks</span><span class="p">)</span>
+</span><span id="__span-0-833"><a id="__codelineno-0-833" name="__codelineno-0-833"></a>    <span class="p">)</span>
+</span><span id="__span-0-834"><a id="__codelineno-0-834" name="__codelineno-0-834"></a>    <span class="n">stop_requested</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+</span><span id="__span-0-835"><a id="__codelineno-0-835" name="__codelineno-0-835"></a>
+</span><span id="__span-0-836"><a id="__codelineno-0-836" name="__codelineno-0-836"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="n">ExecutionResult</span> <span class="o">|</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-837"><a id="__codelineno-0-837" name="__codelineno-0-837"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="__span-0-838"><a id="__codelineno-0-838" name="__codelineno-0-838"></a>            <span class="k">if</span> <span class="n">stop_requested</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+</span><span id="__span-0-839"><a id="__codelineno-0-839" name="__codelineno-0-839"></a>                <span class="k">return</span>
+</span><span id="__span-0-840"><a id="__codelineno-0-840" name="__codelineno-0-840"></a>            <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-841"><a id="__codelineno-0-841" name="__codelineno-0-841"></a>                <span class="n">result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">kind</span><span class="p">,</span> <span class="n">payload</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+</span><span id="__span-0-842"><a id="__codelineno-0-842" name="__codelineno-0-842"></a>                <span class="k">return</span>
+</span><span id="__span-0-843"><a id="__codelineno-0-843" name="__codelineno-0-843"></a>            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+</span><span id="__span-0-844"><a id="__codelineno-0-844" name="__codelineno-0-844"></a>                <span class="k">continue</span>
+</span><span id="__span-0-845"><a id="__codelineno-0-845" name="__codelineno-0-845"></a>
+</span><span id="__span-0-846"><a id="__codelineno-0-846" name="__codelineno-0-846"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">runner</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-847"><a id="__codelineno-0-847" name="__codelineno-0-847"></a>        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stream_results</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-848"><a id="__codelineno-0-848" name="__codelineno-0-848"></a>            <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-849"><a id="__codelineno-0-849" name="__codelineno-0-849"></a>                <span class="k">async</span> <span class="k">for</span> <span class="n">chunk_result</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">execute_stream_async</span><span class="p">(</span>
+</span><span id="__span-0-850"><a id="__codelineno-0-850" name="__codelineno-0-850"></a>                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+</span><span id="__span-0-851"><a id="__codelineno-0-851" name="__codelineno-0-851"></a>                    <span class="n">max_pending_chunks</span><span class="o">=</span><span class="n">max_pending_chunks</span><span class="p">,</span>
+</span><span id="__span-0-852"><a id="__codelineno-0-852" name="__codelineno-0-852"></a>                <span class="p">):</span>
+</span><span id="__span-0-853"><a id="__codelineno-0-853" name="__codelineno-0-853"></a>                    <span class="k">if</span> <span class="n">stop_requested</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+</span><span id="__span-0-854"><a id="__codelineno-0-854" name="__codelineno-0-854"></a>                        <span class="k">break</span>
+</span><span id="__span-0-855"><a id="__codelineno-0-855" name="__codelineno-0-855"></a>                    <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;item&quot;</span><span class="p">,</span> <span class="n">chunk_result</span><span class="p">)</span>
+</span><span id="__span-0-856"><a id="__codelineno-0-856" name="__codelineno-0-856"></a>                <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-857"><a id="__codelineno-0-857" name="__codelineno-0-857"></a>            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-0-858"><a id="__codelineno-0-858" name="__codelineno-0-858"></a>                <span class="n">publish</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+</span><span id="__span-0-859"><a id="__codelineno-0-859" name="__codelineno-0-859"></a>
+</span><span id="__span-0-860"><a id="__codelineno-0-860" name="__codelineno-0-860"></a>        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
+</span><span id="__span-0-861"><a id="__codelineno-0-861" name="__codelineno-0-861"></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-862"><a id="__codelineno-0-862" name="__codelineno-0-862"></a>            <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
+</span><span id="__span-0-863"><a id="__codelineno-0-863" name="__codelineno-0-863"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">stream_results</span><span class="p">())</span>
+</span><span id="__span-0-864"><a id="__codelineno-0-864" name="__codelineno-0-864"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">shutdown_asyncgens</span><span class="p">())</span>
+</span><span id="__span-0-865"><a id="__codelineno-0-865" name="__codelineno-0-865"></a>        <span class="k">finally</span><span class="p">:</span>
+</span><span id="__span-0-866"><a id="__codelineno-0-866" name="__codelineno-0-866"></a>            <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-867"><a id="__codelineno-0-867" name="__codelineno-0-867"></a>            <span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</span><span id="__span-0-868"><a id="__codelineno-0-868" name="__codelineno-0-868"></a>
+</span><span id="__span-0-869"><a id="__codelineno-0-869" name="__codelineno-0-869"></a>    <span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">runner</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-870"><a id="__codelineno-0-870" name="__codelineno-0-870"></a>    <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</span><span id="__span-0-871"><a id="__codelineno-0-871" name="__codelineno-0-871"></a>
+</span><span id="__span-0-872"><a id="__codelineno-0-872" name="__codelineno-0-872"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-873"><a id="__codelineno-0-873" name="__codelineno-0-873"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="__span-0-874"><a id="__codelineno-0-874" name="__codelineno-0-874"></a>            <span class="n">kind</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="n">result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+</span><span id="__span-0-875"><a id="__codelineno-0-875" name="__codelineno-0-875"></a>            <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;item&quot;</span><span class="p">:</span>
+</span><span id="__span-0-876"><a id="__codelineno-0-876" name="__codelineno-0-876"></a>                <span class="k">yield</span> <span class="n">payload</span>  <span class="c1"># type: ignore[misc]</span>
+</span><span id="__span-0-877"><a id="__codelineno-0-877" name="__codelineno-0-877"></a>            <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span>
+</span><span id="__span-0-878"><a id="__codelineno-0-878" name="__codelineno-0-878"></a>                <span class="k">raise</span> <span class="n">payload</span>  <span class="c1"># type: ignore[misc]</span>
+</span><span id="__span-0-879"><a id="__codelineno-0-879" name="__codelineno-0-879"></a>            <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-880"><a id="__codelineno-0-880" name="__codelineno-0-880"></a>                <span class="k">break</span>
+</span><span id="__span-0-881"><a id="__codelineno-0-881" name="__codelineno-0-881"></a>    <span class="k">finally</span><span class="p">:</span>
+</span><span id="__span-0-882"><a id="__codelineno-0-882" name="__codelineno-0-882"></a>        <span class="n">stop_requested</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+</span><span id="__span-0-883"><a id="__codelineno-0-883" name="__codelineno-0-883"></a>        <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4906,13 +4916,7 @@ Independent of total dataset size.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ondine/api/pipeline.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-879"> 879</a></span>
-<span class="normal"><a href="#__codelineno-0-880"> 880</a></span>
-<span class="normal"><a href="#__codelineno-0-881"> 881</a></span>
-<span class="normal"><a href="#__codelineno-0-882"> 882</a></span>
-<span class="normal"><a href="#__codelineno-0-883"> 883</a></span>
-<span class="normal"><a href="#__codelineno-0-884"> 884</a></span>
-<span class="normal"><a href="#__codelineno-0-885"> 885</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-885"> 885</a></span>
 <span class="normal"><a href="#__codelineno-0-886"> 886</a></span>
 <span class="normal"><a href="#__codelineno-0-887"> 887</a></span>
 <span class="normal"><a href="#__codelineno-0-888"> 888</a></span>
@@ -5070,171 +5074,177 @@ Independent of total dataset size.</p>
 <span class="normal"><a href="#__codelineno-0-1040">1040</a></span>
 <span class="normal"><a href="#__codelineno-0-1041">1041</a></span>
 <span class="normal"><a href="#__codelineno-0-1042">1042</a></span>
-<span class="normal"><a href="#__codelineno-0-1043">1043</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-879"><a id="__codelineno-0-879" name="__codelineno-0-879"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute_stream_async</span><span class="p">(</span>
-</span><span id="__span-0-880"><a id="__codelineno-0-880" name="__codelineno-0-880"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-0-881"><a id="__codelineno-0-881" name="__codelineno-0-881"></a>    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
-</span><span id="__span-0-882"><a id="__codelineno-0-882" name="__codelineno-0-882"></a>    <span class="n">max_pending_chunks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
-</span><span id="__span-0-883"><a id="__codelineno-0-883" name="__codelineno-0-883"></a>    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-884"><a id="__codelineno-0-884" name="__codelineno-0-884"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ExecutionResult</span><span class="p">]:</span>
-</span><span id="__span-0-885"><a id="__codelineno-0-885" name="__codelineno-0-885"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-0-886"><a id="__codelineno-0-886" name="__codelineno-0-886"></a><span class="sd">    Execute pipeline in true streaming mode with bounded memory.</span>
-</span><span id="__span-0-887"><a id="__codelineno-0-887" name="__codelineno-0-887"></a>
-</span><span id="__span-0-888"><a id="__codelineno-0-888" name="__codelineno-0-888"></a><span class="sd">    This is the recommended method for processing large datasets (100K+ rows).</span>
-</span><span id="__span-0-889"><a id="__codelineno-0-889" name="__codelineno-0-889"></a><span class="sd">    Memory usage is O(chunk_size), not O(total_rows).</span>
-</span><span id="__span-0-890"><a id="__codelineno-0-890" name="__codelineno-0-890"></a>
-</span><span id="__span-0-891"><a id="__codelineno-0-891" name="__codelineno-0-891"></a><span class="sd">    Uses:</span>
-</span><span id="__span-0-892"><a id="__codelineno-0-892" name="__codelineno-0-892"></a><span class="sd">    - Polars LazyFrame for memory-efficient data loading</span>
-</span><span id="__span-0-893"><a id="__codelineno-0-893" name="__codelineno-0-893"></a><span class="sd">    - Bounded async queue for backpressure</span>
-</span><span id="__span-0-894"><a id="__codelineno-0-894" name="__codelineno-0-894"></a><span class="sd">    - Incremental result writing</span>
-</span><span id="__span-0-895"><a id="__codelineno-0-895" name="__codelineno-0-895"></a>
-</span><span id="__span-0-896"><a id="__codelineno-0-896" name="__codelineno-0-896"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-897"><a id="__codelineno-0-897" name="__codelineno-0-897"></a><span class="sd">        chunk_size: Number of rows per chunk (default: 10000)</span>
-</span><span id="__span-0-898"><a id="__codelineno-0-898" name="__codelineno-0-898"></a><span class="sd">        max_pending_chunks: Max chunks in processing queue (default: 3)</span>
-</span><span id="__span-0-899"><a id="__codelineno-0-899" name="__codelineno-0-899"></a><span class="sd">        output_path: Optional path to write results incrementally</span>
-</span><span id="__span-0-900"><a id="__codelineno-0-900" name="__codelineno-0-900"></a>
-</span><span id="__span-0-901"><a id="__codelineno-0-901" name="__codelineno-0-901"></a><span class="sd">    Yields:</span>
-</span><span id="__span-0-902"><a id="__codelineno-0-902" name="__codelineno-0-902"></a><span class="sd">        ExecutionResult for each processed chunk</span>
-</span><span id="__span-0-903"><a id="__codelineno-0-903" name="__codelineno-0-903"></a>
-</span><span id="__span-0-904"><a id="__codelineno-0-904" name="__codelineno-0-904"></a><span class="sd">    Example:</span>
-</span><span id="__span-0-905"><a id="__codelineno-0-905" name="__codelineno-0-905"></a><span class="sd">        async for chunk_result in pipeline.execute_stream_async(chunk_size=5000):</span>
-</span><span id="__span-0-906"><a id="__codelineno-0-906" name="__codelineno-0-906"></a><span class="sd">            print(f&quot;Processed {chunk_result.metrics.processed_rows} rows&quot;)</span>
-</span><span id="__span-0-907"><a id="__codelineno-0-907" name="__codelineno-0-907"></a>
-</span><span id="__span-0-908"><a id="__codelineno-0-908" name="__codelineno-0-908"></a><span class="sd">    Memory Guarantee:</span>
-</span><span id="__span-0-909"><a id="__codelineno-0-909" name="__codelineno-0-909"></a><span class="sd">        Peak memory ≈ chunk_size * max_pending_chunks * avg_row_size</span>
-</span><span id="__span-0-910"><a id="__codelineno-0-910" name="__codelineno-0-910"></a><span class="sd">        Independent of total dataset size.</span>
-</span><span id="__span-0-911"><a id="__codelineno-0-911" name="__codelineno-0-911"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-912"><a id="__codelineno-0-912" name="__codelineno-0-912"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="normal"><a href="#__codelineno-0-1043">1043</a></span>
+<span class="normal"><a href="#__codelineno-0-1044">1044</a></span>
+<span class="normal"><a href="#__codelineno-0-1045">1045</a></span>
+<span class="normal"><a href="#__codelineno-0-1046">1046</a></span>
+<span class="normal"><a href="#__codelineno-0-1047">1047</a></span>
+<span class="normal"><a href="#__codelineno-0-1048">1048</a></span>
+<span class="normal"><a href="#__codelineno-0-1049">1049</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-885"><a id="__codelineno-0-885" name="__codelineno-0-885"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute_stream_async</span><span class="p">(</span>
+</span><span id="__span-0-886"><a id="__codelineno-0-886" name="__codelineno-0-886"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-0-887"><a id="__codelineno-0-887" name="__codelineno-0-887"></a>    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+</span><span id="__span-0-888"><a id="__codelineno-0-888" name="__codelineno-0-888"></a>    <span class="n">max_pending_chunks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+</span><span id="__span-0-889"><a id="__codelineno-0-889" name="__codelineno-0-889"></a>    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-890"><a id="__codelineno-0-890" name="__codelineno-0-890"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ExecutionResult</span><span class="p">]:</span>
+</span><span id="__span-0-891"><a id="__codelineno-0-891" name="__codelineno-0-891"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="__span-0-892"><a id="__codelineno-0-892" name="__codelineno-0-892"></a><span class="sd">    Execute pipeline in true streaming mode with bounded memory.</span>
+</span><span id="__span-0-893"><a id="__codelineno-0-893" name="__codelineno-0-893"></a>
+</span><span id="__span-0-894"><a id="__codelineno-0-894" name="__codelineno-0-894"></a><span class="sd">    This is the recommended method for processing large datasets (100K+ rows).</span>
+</span><span id="__span-0-895"><a id="__codelineno-0-895" name="__codelineno-0-895"></a><span class="sd">    Memory usage is O(chunk_size), not O(total_rows).</span>
+</span><span id="__span-0-896"><a id="__codelineno-0-896" name="__codelineno-0-896"></a>
+</span><span id="__span-0-897"><a id="__codelineno-0-897" name="__codelineno-0-897"></a><span class="sd">    Uses:</span>
+</span><span id="__span-0-898"><a id="__codelineno-0-898" name="__codelineno-0-898"></a><span class="sd">    - Polars LazyFrame for memory-efficient data loading</span>
+</span><span id="__span-0-899"><a id="__codelineno-0-899" name="__codelineno-0-899"></a><span class="sd">    - Bounded async queue for backpressure</span>
+</span><span id="__span-0-900"><a id="__codelineno-0-900" name="__codelineno-0-900"></a><span class="sd">    - Incremental result writing</span>
+</span><span id="__span-0-901"><a id="__codelineno-0-901" name="__codelineno-0-901"></a>
+</span><span id="__span-0-902"><a id="__codelineno-0-902" name="__codelineno-0-902"></a><span class="sd">    Args:</span>
+</span><span id="__span-0-903"><a id="__codelineno-0-903" name="__codelineno-0-903"></a><span class="sd">        chunk_size: Number of rows per chunk (default: 10000)</span>
+</span><span id="__span-0-904"><a id="__codelineno-0-904" name="__codelineno-0-904"></a><span class="sd">        max_pending_chunks: Max chunks in processing queue (default: 3)</span>
+</span><span id="__span-0-905"><a id="__codelineno-0-905" name="__codelineno-0-905"></a><span class="sd">        output_path: Optional path to write results incrementally</span>
+</span><span id="__span-0-906"><a id="__codelineno-0-906" name="__codelineno-0-906"></a>
+</span><span id="__span-0-907"><a id="__codelineno-0-907" name="__codelineno-0-907"></a><span class="sd">    Yields:</span>
+</span><span id="__span-0-908"><a id="__codelineno-0-908" name="__codelineno-0-908"></a><span class="sd">        ExecutionResult for each processed chunk</span>
+</span><span id="__span-0-909"><a id="__codelineno-0-909" name="__codelineno-0-909"></a>
+</span><span id="__span-0-910"><a id="__codelineno-0-910" name="__codelineno-0-910"></a><span class="sd">    Example:</span>
+</span><span id="__span-0-911"><a id="__codelineno-0-911" name="__codelineno-0-911"></a><span class="sd">        async for chunk_result in pipeline.execute_stream_async(chunk_size=5000):</span>
+</span><span id="__span-0-912"><a id="__codelineno-0-912" name="__codelineno-0-912"></a><span class="sd">            print(f&quot;Processed {chunk_result.metrics.processed_rows} rows&quot;)</span>
 </span><span id="__span-0-913"><a id="__codelineno-0-913" name="__codelineno-0-913"></a>
-</span><span id="__span-0-914"><a id="__codelineno-0-914" name="__codelineno-0-914"></a>    <span class="n">start_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-</span><span id="__span-0-915"><a id="__codelineno-0-915" name="__codelineno-0-915"></a>    <span class="n">execution_id</span> <span class="o">=</span> <span class="n">uuid4</span><span class="p">()</span>
-</span><span id="__span-0-916"><a id="__codelineno-0-916" name="__codelineno-0-916"></a>
-</span><span id="__span-0-917"><a id="__codelineno-0-917" name="__codelineno-0-917"></a>    <span class="c1"># Setup streaming components</span>
-</span><span id="__span-0-918"><a id="__codelineno-0-918" name="__codelineno-0-918"></a>    <span class="n">specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span>
-</span><span id="__span-0-919"><a id="__codelineno-0-919" name="__codelineno-0-919"></a>    <span class="n">source_path</span> <span class="o">=</span> <span class="n">specs</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">source_path</span>
-</span><span id="__span-0-920"><a id="__codelineno-0-920" name="__codelineno-0-920"></a>    <span class="n">budget_controller</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-921"><a id="__codelineno-0-921" name="__codelineno-0-921"></a>    <span class="k">if</span> <span class="n">specs</span><span class="o">.</span><span class="n">processing</span><span class="o">.</span><span class="n">max_budget</span><span class="p">:</span>
-</span><span id="__span-0-922"><a id="__codelineno-0-922" name="__codelineno-0-922"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">ondine.utils.budget_controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">BudgetController</span>
-</span><span id="__span-0-923"><a id="__codelineno-0-923" name="__codelineno-0-923"></a>
-</span><span id="__span-0-924"><a id="__codelineno-0-924" name="__codelineno-0-924"></a>        <span class="n">budget_controller</span> <span class="o">=</span> <span class="n">BudgetController</span><span class="p">(</span>
-</span><span id="__span-0-925"><a id="__codelineno-0-925" name="__codelineno-0-925"></a>            <span class="n">max_budget</span><span class="o">=</span><span class="n">specs</span><span class="o">.</span><span class="n">processing</span><span class="o">.</span><span class="n">max_budget</span><span class="p">,</span>
-</span><span id="__span-0-926"><a id="__codelineno-0-926" name="__codelineno-0-926"></a>            <span class="n">fail_on_exceed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-0-927"><a id="__codelineno-0-927" name="__codelineno-0-927"></a>        <span class="p">)</span>
-</span><span id="__span-0-928"><a id="__codelineno-0-928" name="__codelineno-0-928"></a>
-</span><span id="__span-0-929"><a id="__codelineno-0-929" name="__codelineno-0-929"></a>    <span class="k">if</span> <span class="n">source_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataframe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-930"><a id="__codelineno-0-930" name="__codelineno-0-930"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-</span><span id="__span-0-931"><a id="__codelineno-0-931" name="__codelineno-0-931"></a>            <span class="s2">&quot;Streaming mode requires a file path or dataframe. &quot;</span>
-</span><span id="__span-0-932"><a id="__codelineno-0-932" name="__codelineno-0-932"></a>            <span class="s2">&quot;Set source_path in DatasetSpec or provide a dataframe.&quot;</span>
+</span><span id="__span-0-914"><a id="__codelineno-0-914" name="__codelineno-0-914"></a><span class="sd">    Memory Guarantee:</span>
+</span><span id="__span-0-915"><a id="__codelineno-0-915" name="__codelineno-0-915"></a><span class="sd">        Peak memory ≈ chunk_size * max_pending_chunks * avg_row_size</span>
+</span><span id="__span-0-916"><a id="__codelineno-0-916" name="__codelineno-0-916"></a><span class="sd">        Independent of total dataset size.</span>
+</span><span id="__span-0-917"><a id="__codelineno-0-917" name="__codelineno-0-917"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-918"><a id="__codelineno-0-918" name="__codelineno-0-918"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-919"><a id="__codelineno-0-919" name="__codelineno-0-919"></a>
+</span><span id="__span-0-920"><a id="__codelineno-0-920" name="__codelineno-0-920"></a>    <span class="n">start_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+</span><span id="__span-0-921"><a id="__codelineno-0-921" name="__codelineno-0-921"></a>    <span class="n">execution_id</span> <span class="o">=</span> <span class="n">uuid4</span><span class="p">()</span>
+</span><span id="__span-0-922"><a id="__codelineno-0-922" name="__codelineno-0-922"></a>
+</span><span id="__span-0-923"><a id="__codelineno-0-923" name="__codelineno-0-923"></a>    <span class="c1"># Setup streaming components</span>
+</span><span id="__span-0-924"><a id="__codelineno-0-924" name="__codelineno-0-924"></a>    <span class="n">specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">specifications</span>
+</span><span id="__span-0-925"><a id="__codelineno-0-925" name="__codelineno-0-925"></a>    <span class="n">source_path</span> <span class="o">=</span> <span class="n">specs</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">source_path</span>
+</span><span id="__span-0-926"><a id="__codelineno-0-926" name="__codelineno-0-926"></a>    <span class="n">budget_controller</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-927"><a id="__codelineno-0-927" name="__codelineno-0-927"></a>    <span class="k">if</span> <span class="n">specs</span><span class="o">.</span><span class="n">processing</span><span class="o">.</span><span class="n">max_budget</span><span class="p">:</span>
+</span><span id="__span-0-928"><a id="__codelineno-0-928" name="__codelineno-0-928"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">ondine.utils.budget_controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">BudgetController</span>
+</span><span id="__span-0-929"><a id="__codelineno-0-929" name="__codelineno-0-929"></a>
+</span><span id="__span-0-930"><a id="__codelineno-0-930" name="__codelineno-0-930"></a>        <span class="n">budget_controller</span> <span class="o">=</span> <span class="n">BudgetController</span><span class="p">(</span>
+</span><span id="__span-0-931"><a id="__codelineno-0-931" name="__codelineno-0-931"></a>            <span class="n">max_budget</span><span class="o">=</span><span class="n">specs</span><span class="o">.</span><span class="n">processing</span><span class="o">.</span><span class="n">max_budget</span><span class="p">,</span>
+</span><span id="__span-0-932"><a id="__codelineno-0-932" name="__codelineno-0-932"></a>            <span class="n">fail_on_exceed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-933"><a id="__codelineno-0-933" name="__codelineno-0-933"></a>        <span class="p">)</span>
 </span><span id="__span-0-934"><a id="__codelineno-0-934" name="__codelineno-0-934"></a>
-</span><span id="__span-0-935"><a id="__codelineno-0-935" name="__codelineno-0-935"></a>    <span class="c1"># Initialize writer if output path provided</span>
-</span><span id="__span-0-936"><a id="__codelineno-0-936" name="__codelineno-0-936"></a>    <span class="n">writer</span><span class="p">:</span> <span class="n">StreamingResultWriter</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-937"><a id="__codelineno-0-937" name="__codelineno-0-937"></a>    <span class="k">if</span> <span class="n">output_path</span><span class="p">:</span>
-</span><span id="__span-0-938"><a id="__codelineno-0-938" name="__codelineno-0-938"></a>        <span class="n">writer</span> <span class="o">=</span> <span class="n">StreamingResultWriter</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span>
-</span><span id="__span-0-939"><a id="__codelineno-0-939" name="__codelineno-0-939"></a>
-</span><span id="__span-0-940"><a id="__codelineno-0-940" name="__codelineno-0-940"></a>    <span class="c1"># Note: StreamingProcessor is available for advanced use cases</span>
-</span><span id="__span-0-941"><a id="__codelineno-0-941" name="__codelineno-0-941"></a>    <span class="c1"># but current implementation processes chunks directly</span>
-</span><span id="__span-0-942"><a id="__codelineno-0-942" name="__codelineno-0-942"></a>
-</span><span id="__span-0-943"><a id="__codelineno-0-943" name="__codelineno-0-943"></a>    <span class="c1"># Track aggregate metrics</span>
-</span><span id="__span-0-944"><a id="__codelineno-0-944" name="__codelineno-0-944"></a>    <span class="n">total_rows</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="__span-0-945"><a id="__codelineno-0-945" name="__codelineno-0-945"></a>    <span class="n">total_cost</span> <span class="o">=</span> <span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">)</span>
-</span><span id="__span-0-946"><a id="__codelineno-0-946" name="__codelineno-0-946"></a>    <span class="n">total_tokens</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="__span-0-947"><a id="__codelineno-0-947" name="__codelineno-0-947"></a>    <span class="n">chunk_index</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-0-935"><a id="__codelineno-0-935" name="__codelineno-0-935"></a>    <span class="k">if</span> <span class="n">source_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataframe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-936"><a id="__codelineno-0-936" name="__codelineno-0-936"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+</span><span id="__span-0-937"><a id="__codelineno-0-937" name="__codelineno-0-937"></a>            <span class="s2">&quot;Streaming mode requires a file path or dataframe. &quot;</span>
+</span><span id="__span-0-938"><a id="__codelineno-0-938" name="__codelineno-0-938"></a>            <span class="s2">&quot;Set source_path in DatasetSpec or provide a dataframe.&quot;</span>
+</span><span id="__span-0-939"><a id="__codelineno-0-939" name="__codelineno-0-939"></a>        <span class="p">)</span>
+</span><span id="__span-0-940"><a id="__codelineno-0-940" name="__codelineno-0-940"></a>
+</span><span id="__span-0-941"><a id="__codelineno-0-941" name="__codelineno-0-941"></a>    <span class="c1"># Initialize writer if output path provided</span>
+</span><span id="__span-0-942"><a id="__codelineno-0-942" name="__codelineno-0-942"></a>    <span class="n">writer</span><span class="p">:</span> <span class="n">StreamingResultWriter</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-943"><a id="__codelineno-0-943" name="__codelineno-0-943"></a>    <span class="k">if</span> <span class="n">output_path</span><span class="p">:</span>
+</span><span id="__span-0-944"><a id="__codelineno-0-944" name="__codelineno-0-944"></a>        <span class="n">writer</span> <span class="o">=</span> <span class="n">StreamingResultWriter</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span>
+</span><span id="__span-0-945"><a id="__codelineno-0-945" name="__codelineno-0-945"></a>
+</span><span id="__span-0-946"><a id="__codelineno-0-946" name="__codelineno-0-946"></a>    <span class="c1"># Note: StreamingProcessor is available for advanced use cases</span>
+</span><span id="__span-0-947"><a id="__codelineno-0-947" name="__codelineno-0-947"></a>    <span class="c1"># but current implementation processes chunks directly</span>
 </span><span id="__span-0-948"><a id="__codelineno-0-948" name="__codelineno-0-948"></a>
-</span><span id="__span-0-949"><a id="__codelineno-0-949" name="__codelineno-0-949"></a>    <span class="n">producer_task</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-950"><a id="__codelineno-0-950" name="__codelineno-0-950"></a>    <span class="n">producer_error</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-951"><a id="__codelineno-0-951" name="__codelineno-0-951"></a>
-</span><span id="__span-0-952"><a id="__codelineno-0-952" name="__codelineno-0-952"></a>    <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-953"><a id="__codelineno-0-953" name="__codelineno-0-953"></a>        <span class="c1"># Create data source</span>
-</span><span id="__span-0-954"><a id="__codelineno-0-954" name="__codelineno-0-954"></a>        <span class="k">if</span> <span class="n">source_path</span><span class="p">:</span>
-</span><span id="__span-0-955"><a id="__codelineno-0-955" name="__codelineno-0-955"></a>            <span class="n">loader</span> <span class="o">=</span> <span class="n">StreamingDataLoader</span><span class="p">(</span>
-</span><span id="__span-0-956"><a id="__codelineno-0-956" name="__codelineno-0-956"></a>                <span class="n">path</span><span class="o">=</span><span class="n">source_path</span><span class="p">,</span>
-</span><span id="__span-0-957"><a id="__codelineno-0-957" name="__codelineno-0-957"></a>                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
-</span><span id="__span-0-958"><a id="__codelineno-0-958" name="__codelineno-0-958"></a>                <span class="n">columns</span><span class="o">=</span><span class="n">specs</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">input_columns</span><span class="p">,</span>
-</span><span id="__span-0-959"><a id="__codelineno-0-959" name="__codelineno-0-959"></a>            <span class="p">)</span>
-</span><span id="__span-0-960"><a id="__codelineno-0-960" name="__codelineno-0-960"></a>            <span class="n">data_source</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">stream_chunks</span><span class="p">()</span>
-</span><span id="__span-0-961"><a id="__codelineno-0-961" name="__codelineno-0-961"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-962"><a id="__codelineno-0-962" name="__codelineno-0-962"></a>            <span class="c1"># Stream from in-memory dataframe</span>
-</span><span id="__span-0-963"><a id="__codelineno-0-963" name="__codelineno-0-963"></a>            <span class="n">data_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_dataframe_chunks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataframe</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
-</span><span id="__span-0-964"><a id="__codelineno-0-964" name="__codelineno-0-964"></a>
-</span><span id="__span-0-965"><a id="__codelineno-0-965" name="__codelineno-0-965"></a>        <span class="n">queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span>
-</span><span id="__span-0-966"><a id="__codelineno-0-966" name="__codelineno-0-966"></a>            <span class="n">maxsize</span><span class="o">=</span><span class="n">max_pending_chunks</span>
-</span><span id="__span-0-967"><a id="__codelineno-0-967" name="__codelineno-0-967"></a>        <span class="p">)</span>
-</span><span id="__span-0-968"><a id="__codelineno-0-968" name="__codelineno-0-968"></a>
-</span><span id="__span-0-969"><a id="__codelineno-0-969" name="__codelineno-0-969"></a>        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">producer</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-970"><a id="__codelineno-0-970" name="__codelineno-0-970"></a>            <span class="k">nonlocal</span> <span class="n">producer_error</span>
-</span><span id="__span-0-971"><a id="__codelineno-0-971" name="__codelineno-0-971"></a>            <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-972"><a id="__codelineno-0-972" name="__codelineno-0-972"></a>                <span class="k">async</span> <span class="k">for</span> <span class="n">chunk_pl</span> <span class="ow">in</span> <span class="n">data_source</span><span class="p">:</span>
-</span><span id="__span-0-973"><a id="__codelineno-0-973" name="__codelineno-0-973"></a>                    <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">chunk_pl</span><span class="p">)</span>
-</span><span id="__span-0-974"><a id="__codelineno-0-974" name="__codelineno-0-974"></a>            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="__span-0-975"><a id="__codelineno-0-975" name="__codelineno-0-975"></a>                <span class="n">producer_error</span> <span class="o">=</span> <span class="n">exc</span>
-</span><span id="__span-0-976"><a id="__codelineno-0-976" name="__codelineno-0-976"></a>            <span class="k">finally</span><span class="p">:</span>
-</span><span id="__span-0-977"><a id="__codelineno-0-977" name="__codelineno-0-977"></a>                <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-</span><span id="__span-0-978"><a id="__codelineno-0-978" name="__codelineno-0-978"></a>
-</span><span id="__span-0-979"><a id="__codelineno-0-979" name="__codelineno-0-979"></a>        <span class="n">producer_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">producer</span><span class="p">())</span>
-</span><span id="__span-0-980"><a id="__codelineno-0-980" name="__codelineno-0-980"></a>
-</span><span id="__span-0-981"><a id="__codelineno-0-981" name="__codelineno-0-981"></a>        <span class="c1"># Process each chunk through the pipeline</span>
-</span><span id="__span-0-982"><a id="__codelineno-0-982" name="__codelineno-0-982"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-</span><span id="__span-0-983"><a id="__codelineno-0-983" name="__codelineno-0-983"></a>            <span class="n">chunk_pl</span> <span class="o">=</span> <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-</span><span id="__span-0-984"><a id="__codelineno-0-984" name="__codelineno-0-984"></a>            <span class="k">if</span> <span class="n">chunk_pl</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-985"><a id="__codelineno-0-985" name="__codelineno-0-985"></a>                <span class="k">break</span>
+</span><span id="__span-0-949"><a id="__codelineno-0-949" name="__codelineno-0-949"></a>    <span class="c1"># Track aggregate metrics</span>
+</span><span id="__span-0-950"><a id="__codelineno-0-950" name="__codelineno-0-950"></a>    <span class="n">total_rows</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-0-951"><a id="__codelineno-0-951" name="__codelineno-0-951"></a>    <span class="n">total_cost</span> <span class="o">=</span> <span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">)</span>
+</span><span id="__span-0-952"><a id="__codelineno-0-952" name="__codelineno-0-952"></a>    <span class="n">total_tokens</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-0-953"><a id="__codelineno-0-953" name="__codelineno-0-953"></a>    <span class="n">chunk_index</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-0-954"><a id="__codelineno-0-954" name="__codelineno-0-954"></a>
+</span><span id="__span-0-955"><a id="__codelineno-0-955" name="__codelineno-0-955"></a>    <span class="n">producer_task</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-956"><a id="__codelineno-0-956" name="__codelineno-0-956"></a>    <span class="n">producer_error</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-957"><a id="__codelineno-0-957" name="__codelineno-0-957"></a>
+</span><span id="__span-0-958"><a id="__codelineno-0-958" name="__codelineno-0-958"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-959"><a id="__codelineno-0-959" name="__codelineno-0-959"></a>        <span class="c1"># Create data source</span>
+</span><span id="__span-0-960"><a id="__codelineno-0-960" name="__codelineno-0-960"></a>        <span class="k">if</span> <span class="n">source_path</span><span class="p">:</span>
+</span><span id="__span-0-961"><a id="__codelineno-0-961" name="__codelineno-0-961"></a>            <span class="n">loader</span> <span class="o">=</span> <span class="n">StreamingDataLoader</span><span class="p">(</span>
+</span><span id="__span-0-962"><a id="__codelineno-0-962" name="__codelineno-0-962"></a>                <span class="n">path</span><span class="o">=</span><span class="n">source_path</span><span class="p">,</span>
+</span><span id="__span-0-963"><a id="__codelineno-0-963" name="__codelineno-0-963"></a>                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+</span><span id="__span-0-964"><a id="__codelineno-0-964" name="__codelineno-0-964"></a>                <span class="n">columns</span><span class="o">=</span><span class="n">specs</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">input_columns</span><span class="p">,</span>
+</span><span id="__span-0-965"><a id="__codelineno-0-965" name="__codelineno-0-965"></a>            <span class="p">)</span>
+</span><span id="__span-0-966"><a id="__codelineno-0-966" name="__codelineno-0-966"></a>            <span class="n">data_source</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">stream_chunks</span><span class="p">()</span>
+</span><span id="__span-0-967"><a id="__codelineno-0-967" name="__codelineno-0-967"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-968"><a id="__codelineno-0-968" name="__codelineno-0-968"></a>            <span class="c1"># Stream from in-memory dataframe</span>
+</span><span id="__span-0-969"><a id="__codelineno-0-969" name="__codelineno-0-969"></a>            <span class="n">data_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_dataframe_chunks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataframe</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+</span><span id="__span-0-970"><a id="__codelineno-0-970" name="__codelineno-0-970"></a>
+</span><span id="__span-0-971"><a id="__codelineno-0-971" name="__codelineno-0-971"></a>        <span class="n">queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span>
+</span><span id="__span-0-972"><a id="__codelineno-0-972" name="__codelineno-0-972"></a>            <span class="n">maxsize</span><span class="o">=</span><span class="n">max_pending_chunks</span>
+</span><span id="__span-0-973"><a id="__codelineno-0-973" name="__codelineno-0-973"></a>        <span class="p">)</span>
+</span><span id="__span-0-974"><a id="__codelineno-0-974" name="__codelineno-0-974"></a>
+</span><span id="__span-0-975"><a id="__codelineno-0-975" name="__codelineno-0-975"></a>        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">producer</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-976"><a id="__codelineno-0-976" name="__codelineno-0-976"></a>            <span class="k">nonlocal</span> <span class="n">producer_error</span>
+</span><span id="__span-0-977"><a id="__codelineno-0-977" name="__codelineno-0-977"></a>            <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-978"><a id="__codelineno-0-978" name="__codelineno-0-978"></a>                <span class="k">async</span> <span class="k">for</span> <span class="n">chunk_pl</span> <span class="ow">in</span> <span class="n">data_source</span><span class="p">:</span>
+</span><span id="__span-0-979"><a id="__codelineno-0-979" name="__codelineno-0-979"></a>                    <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">chunk_pl</span><span class="p">)</span>
+</span><span id="__span-0-980"><a id="__codelineno-0-980" name="__codelineno-0-980"></a>            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-0-981"><a id="__codelineno-0-981" name="__codelineno-0-981"></a>                <span class="n">producer_error</span> <span class="o">=</span> <span class="n">exc</span>
+</span><span id="__span-0-982"><a id="__codelineno-0-982" name="__codelineno-0-982"></a>            <span class="k">finally</span><span class="p">:</span>
+</span><span id="__span-0-983"><a id="__codelineno-0-983" name="__codelineno-0-983"></a>                <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-984"><a id="__codelineno-0-984" name="__codelineno-0-984"></a>
+</span><span id="__span-0-985"><a id="__codelineno-0-985" name="__codelineno-0-985"></a>        <span class="n">producer_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">producer</span><span class="p">())</span>
 </span><span id="__span-0-986"><a id="__codelineno-0-986" name="__codelineno-0-986"></a>
-</span><span id="__span-0-987"><a id="__codelineno-0-987" name="__codelineno-0-987"></a>            <span class="c1"># Convert Polars to Pandas for compatibility with existing stages</span>
-</span><span id="__span-0-988"><a id="__codelineno-0-988" name="__codelineno-0-988"></a>            <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-989"><a id="__codelineno-0-989" name="__codelineno-0-989"></a>                <span class="n">chunk_df</span> <span class="o">=</span> <span class="n">chunk_pl</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-</span><span id="__span-0-990"><a id="__codelineno-0-990" name="__codelineno-0-990"></a>            <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="__span-0-991"><a id="__codelineno-0-991" name="__codelineno-0-991"></a>                <span class="n">raise_parquet_extra_error</span><span class="p">(</span>
-</span><span id="__span-0-992"><a id="__codelineno-0-992" name="__codelineno-0-992"></a>                    <span class="s2">&quot;Converting streamed pipeline chunks to pandas&quot;</span><span class="p">,</span> <span class="n">exc</span>
-</span><span id="__span-0-993"><a id="__codelineno-0-993" name="__codelineno-0-993"></a>                <span class="p">)</span>
-</span><span id="__span-0-994"><a id="__codelineno-0-994" name="__codelineno-0-994"></a>
-</span><span id="__span-0-995"><a id="__codelineno-0-995" name="__codelineno-0-995"></a>            <span class="c1"># Process this chunk through the pipeline</span>
-</span><span id="__span-0-996"><a id="__codelineno-0-996" name="__codelineno-0-996"></a>            <span class="n">chunk_result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_chunk_async</span><span class="p">(</span>
-</span><span id="__span-0-997"><a id="__codelineno-0-997" name="__codelineno-0-997"></a>                <span class="n">chunk_df</span><span class="p">,</span> <span class="n">execution_id</span><span class="p">,</span> <span class="n">chunk_index</span>
-</span><span id="__span-0-998"><a id="__codelineno-0-998" name="__codelineno-0-998"></a>            <span class="p">)</span>
-</span><span id="__span-0-999"><a id="__codelineno-0-999" name="__codelineno-0-999"></a>
-</span><span id="__span-0-1000"><a id="__codelineno-0-1000" name="__codelineno-0-1000"></a>            <span class="c1"># Update aggregates</span>
-</span><span id="__span-0-1001"><a id="__codelineno-0-1001" name="__codelineno-0-1001"></a>            <span class="n">total_rows</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">metrics</span><span class="o">.</span><span class="n">processed_rows</span>
-</span><span id="__span-0-1002"><a id="__codelineno-0-1002" name="__codelineno-0-1002"></a>            <span class="n">total_cost</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span>
-</span><span id="__span-0-1003"><a id="__codelineno-0-1003" name="__codelineno-0-1003"></a>            <span class="n">total_tokens</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_tokens</span>
-</span><span id="__span-0-1004"><a id="__codelineno-0-1004" name="__codelineno-0-1004"></a>
-</span><span id="__span-0-1005"><a id="__codelineno-0-1005" name="__codelineno-0-1005"></a>            <span class="c1"># Write incrementally if writer configured</span>
-</span><span id="__span-0-1006"><a id="__codelineno-0-1006" name="__codelineno-0-1006"></a>            <span class="k">if</span> <span class="n">writer</span> <span class="ow">and</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-1007"><a id="__codelineno-0-1007" name="__codelineno-0-1007"></a>                <span class="n">result_pl</span> <span class="o">=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">to_polars</span><span class="p">()</span>
-</span><span id="__span-0-1008"><a id="__codelineno-0-1008" name="__codelineno-0-1008"></a>                <span class="k">await</span> <span class="n">writer</span><span class="o">.</span><span class="n">append_async</span><span class="p">(</span><span class="n">result_pl</span><span class="p">)</span>
-</span><span id="__span-0-1009"><a id="__codelineno-0-1009" name="__codelineno-0-1009"></a>
-</span><span id="__span-0-1010"><a id="__codelineno-0-1010" name="__codelineno-0-1010"></a>            <span class="n">chunk_index</span> <span class="o">+=</span> <span class="mi">1</span>
-</span><span id="__span-0-1011"><a id="__codelineno-0-1011" name="__codelineno-0-1011"></a>            <span class="k">yield</span> <span class="n">chunk_result</span>
-</span><span id="__span-0-1012"><a id="__codelineno-0-1012" name="__codelineno-0-1012"></a>
-</span><span id="__span-0-1013"><a id="__codelineno-0-1013" name="__codelineno-0-1013"></a>            <span class="c1"># Enforce streaming budgets across chunk boundaries using cumulative cost.</span>
-</span><span id="__span-0-1014"><a id="__codelineno-0-1014" name="__codelineno-0-1014"></a>            <span class="k">if</span> <span class="n">budget_controller</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-1015"><a id="__codelineno-0-1015" name="__codelineno-0-1015"></a>                <span class="n">budget_controller</span><span class="o">.</span><span class="n">check_budget</span><span class="p">(</span><span class="n">total_cost</span><span class="p">)</span>
-</span><span id="__span-0-1016"><a id="__codelineno-0-1016" name="__codelineno-0-1016"></a>
-</span><span id="__span-0-1017"><a id="__codelineno-0-1017" name="__codelineno-0-1017"></a>            <span class="c1"># Yield control to event loop</span>
-</span><span id="__span-0-1018"><a id="__codelineno-0-1018" name="__codelineno-0-1018"></a>            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="__span-0-1019"><a id="__codelineno-0-1019" name="__codelineno-0-1019"></a>
-</span><span id="__span-0-1020"><a id="__codelineno-0-1020" name="__codelineno-0-1020"></a>        <span class="k">if</span> <span class="n">producer_error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-1021"><a id="__codelineno-0-1021" name="__codelineno-0-1021"></a>            <span class="k">raise</span> <span class="n">producer_error</span>
+</span><span id="__span-0-987"><a id="__codelineno-0-987" name="__codelineno-0-987"></a>        <span class="c1"># Process each chunk through the pipeline</span>
+</span><span id="__span-0-988"><a id="__codelineno-0-988" name="__codelineno-0-988"></a>        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="__span-0-989"><a id="__codelineno-0-989" name="__codelineno-0-989"></a>            <span class="n">chunk_pl</span> <span class="o">=</span> <span class="k">await</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+</span><span id="__span-0-990"><a id="__codelineno-0-990" name="__codelineno-0-990"></a>            <span class="k">if</span> <span class="n">chunk_pl</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-991"><a id="__codelineno-0-991" name="__codelineno-0-991"></a>                <span class="k">break</span>
+</span><span id="__span-0-992"><a id="__codelineno-0-992" name="__codelineno-0-992"></a>
+</span><span id="__span-0-993"><a id="__codelineno-0-993" name="__codelineno-0-993"></a>            <span class="c1"># Convert Polars to Pandas for compatibility with existing stages</span>
+</span><span id="__span-0-994"><a id="__codelineno-0-994" name="__codelineno-0-994"></a>            <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-995"><a id="__codelineno-0-995" name="__codelineno-0-995"></a>                <span class="n">chunk_df</span> <span class="o">=</span> <span class="n">chunk_pl</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+</span><span id="__span-0-996"><a id="__codelineno-0-996" name="__codelineno-0-996"></a>            <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-0-997"><a id="__codelineno-0-997" name="__codelineno-0-997"></a>                <span class="n">raise_parquet_extra_error</span><span class="p">(</span>
+</span><span id="__span-0-998"><a id="__codelineno-0-998" name="__codelineno-0-998"></a>                    <span class="s2">&quot;Converting streamed pipeline chunks to pandas&quot;</span><span class="p">,</span> <span class="n">exc</span>
+</span><span id="__span-0-999"><a id="__codelineno-0-999" name="__codelineno-0-999"></a>                <span class="p">)</span>
+</span><span id="__span-0-1000"><a id="__codelineno-0-1000" name="__codelineno-0-1000"></a>
+</span><span id="__span-0-1001"><a id="__codelineno-0-1001" name="__codelineno-0-1001"></a>            <span class="c1"># Process this chunk through the pipeline</span>
+</span><span id="__span-0-1002"><a id="__codelineno-0-1002" name="__codelineno-0-1002"></a>            <span class="n">chunk_result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_chunk_async</span><span class="p">(</span>
+</span><span id="__span-0-1003"><a id="__codelineno-0-1003" name="__codelineno-0-1003"></a>                <span class="n">chunk_df</span><span class="p">,</span> <span class="n">execution_id</span><span class="p">,</span> <span class="n">chunk_index</span>
+</span><span id="__span-0-1004"><a id="__codelineno-0-1004" name="__codelineno-0-1004"></a>            <span class="p">)</span>
+</span><span id="__span-0-1005"><a id="__codelineno-0-1005" name="__codelineno-0-1005"></a>
+</span><span id="__span-0-1006"><a id="__codelineno-0-1006" name="__codelineno-0-1006"></a>            <span class="c1"># Update aggregates</span>
+</span><span id="__span-0-1007"><a id="__codelineno-0-1007" name="__codelineno-0-1007"></a>            <span class="n">total_rows</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">metrics</span><span class="o">.</span><span class="n">processed_rows</span>
+</span><span id="__span-0-1008"><a id="__codelineno-0-1008" name="__codelineno-0-1008"></a>            <span class="n">total_cost</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span>
+</span><span id="__span-0-1009"><a id="__codelineno-0-1009" name="__codelineno-0-1009"></a>            <span class="n">total_tokens</span> <span class="o">+=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_tokens</span>
+</span><span id="__span-0-1010"><a id="__codelineno-0-1010" name="__codelineno-0-1010"></a>
+</span><span id="__span-0-1011"><a id="__codelineno-0-1011" name="__codelineno-0-1011"></a>            <span class="c1"># Write incrementally if writer configured</span>
+</span><span id="__span-0-1012"><a id="__codelineno-0-1012" name="__codelineno-0-1012"></a>            <span class="k">if</span> <span class="n">writer</span> <span class="ow">and</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-1013"><a id="__codelineno-0-1013" name="__codelineno-0-1013"></a>                <span class="n">result_pl</span> <span class="o">=</span> <span class="n">chunk_result</span><span class="o">.</span><span class="n">to_polars</span><span class="p">()</span>
+</span><span id="__span-0-1014"><a id="__codelineno-0-1014" name="__codelineno-0-1014"></a>                <span class="k">await</span> <span class="n">writer</span><span class="o">.</span><span class="n">append_async</span><span class="p">(</span><span class="n">result_pl</span><span class="p">)</span>
+</span><span id="__span-0-1015"><a id="__codelineno-0-1015" name="__codelineno-0-1015"></a>
+</span><span id="__span-0-1016"><a id="__codelineno-0-1016" name="__codelineno-0-1016"></a>            <span class="n">chunk_index</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="__span-0-1017"><a id="__codelineno-0-1017" name="__codelineno-0-1017"></a>            <span class="k">yield</span> <span class="n">chunk_result</span>
+</span><span id="__span-0-1018"><a id="__codelineno-0-1018" name="__codelineno-0-1018"></a>
+</span><span id="__span-0-1019"><a id="__codelineno-0-1019" name="__codelineno-0-1019"></a>            <span class="c1"># Enforce streaming budgets across chunk boundaries using cumulative cost.</span>
+</span><span id="__span-0-1020"><a id="__codelineno-0-1020" name="__codelineno-0-1020"></a>            <span class="k">if</span> <span class="n">budget_controller</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-1021"><a id="__codelineno-0-1021" name="__codelineno-0-1021"></a>                <span class="n">budget_controller</span><span class="o">.</span><span class="n">check_budget</span><span class="p">(</span><span class="n">total_cost</span><span class="p">)</span>
 </span><span id="__span-0-1022"><a id="__codelineno-0-1022" name="__codelineno-0-1022"></a>
-</span><span id="__span-0-1023"><a id="__codelineno-0-1023" name="__codelineno-0-1023"></a>    <span class="k">finally</span><span class="p">:</span>
-</span><span id="__span-0-1024"><a id="__codelineno-0-1024" name="__codelineno-0-1024"></a>        <span class="k">if</span> <span class="n">producer_task</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">producer_task</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
-</span><span id="__span-0-1025"><a id="__codelineno-0-1025" name="__codelineno-0-1025"></a>            <span class="n">producer_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-</span><span id="__span-0-1026"><a id="__codelineno-0-1026" name="__codelineno-0-1026"></a>            <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-0-1027"><a id="__codelineno-0-1027" name="__codelineno-0-1027"></a>                <span class="k">await</span> <span class="n">producer_task</span>
-</span><span id="__span-0-1028"><a id="__codelineno-0-1028" name="__codelineno-0-1028"></a>            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
-</span><span id="__span-0-1029"><a id="__codelineno-0-1029" name="__codelineno-0-1029"></a>                <span class="k">pass</span>
-</span><span id="__span-0-1030"><a id="__codelineno-0-1030" name="__codelineno-0-1030"></a>
-</span><span id="__span-0-1031"><a id="__codelineno-0-1031" name="__codelineno-0-1031"></a>        <span class="c1"># Finalize writer</span>
-</span><span id="__span-0-1032"><a id="__codelineno-0-1032" name="__codelineno-0-1032"></a>        <span class="k">if</span> <span class="n">writer</span><span class="p">:</span>
-</span><span id="__span-0-1033"><a id="__codelineno-0-1033" name="__codelineno-0-1033"></a>            <span class="n">write_stats</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">finalize</span><span class="p">()</span>
-</span><span id="__span-0-1034"><a id="__codelineno-0-1034" name="__codelineno-0-1034"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Streaming output: </span><span class="si">{</span><span class="n">write_stats</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-1035"><a id="__codelineno-0-1035" name="__codelineno-0-1035"></a>
-</span><span id="__span-0-1036"><a id="__codelineno-0-1036" name="__codelineno-0-1036"></a>    <span class="n">end_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-</span><span id="__span-0-1037"><a id="__codelineno-0-1037" name="__codelineno-0-1037"></a>    <span class="n">duration</span> <span class="o">=</span> <span class="p">(</span><span class="n">end_time</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
-</span><span id="__span-0-1038"><a id="__codelineno-0-1038" name="__codelineno-0-1038"></a>
-</span><span id="__span-0-1039"><a id="__codelineno-0-1039" name="__codelineno-0-1039"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-</span><span id="__span-0-1040"><a id="__codelineno-0-1040" name="__codelineno-0-1040"></a>        <span class="sa">f</span><span class="s2">&quot;Streaming complete: </span><span class="si">{</span><span class="n">total_rows</span><span class="si">}</span><span class="s2"> rows in </span><span class="si">{</span><span class="n">duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s &quot;</span>
-</span><span id="__span-0-1041"><a id="__codelineno-0-1041" name="__codelineno-0-1041"></a>        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">total_rows</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> rows/sec), &quot;</span>
-</span><span id="__span-0-1042"><a id="__codelineno-0-1042" name="__codelineno-0-1042"></a>        <span class="sa">f</span><span class="s2">&quot;cost: $</span><span class="si">{</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span>
-</span><span id="__span-0-1043"><a id="__codelineno-0-1043" name="__codelineno-0-1043"></a>    <span class="p">)</span>
+</span><span id="__span-0-1023"><a id="__codelineno-0-1023" name="__codelineno-0-1023"></a>            <span class="c1"># Yield control to event loop</span>
+</span><span id="__span-0-1024"><a id="__codelineno-0-1024" name="__codelineno-0-1024"></a>            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-0-1025"><a id="__codelineno-0-1025" name="__codelineno-0-1025"></a>
+</span><span id="__span-0-1026"><a id="__codelineno-0-1026" name="__codelineno-0-1026"></a>        <span class="k">if</span> <span class="n">producer_error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-1027"><a id="__codelineno-0-1027" name="__codelineno-0-1027"></a>            <span class="k">raise</span> <span class="n">producer_error</span>
+</span><span id="__span-0-1028"><a id="__codelineno-0-1028" name="__codelineno-0-1028"></a>
+</span><span id="__span-0-1029"><a id="__codelineno-0-1029" name="__codelineno-0-1029"></a>    <span class="k">finally</span><span class="p">:</span>
+</span><span id="__span-0-1030"><a id="__codelineno-0-1030" name="__codelineno-0-1030"></a>        <span class="k">if</span> <span class="n">producer_task</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">producer_task</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
+</span><span id="__span-0-1031"><a id="__codelineno-0-1031" name="__codelineno-0-1031"></a>            <span class="n">producer_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+</span><span id="__span-0-1032"><a id="__codelineno-0-1032" name="__codelineno-0-1032"></a>            <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-1033"><a id="__codelineno-0-1033" name="__codelineno-0-1033"></a>                <span class="k">await</span> <span class="n">producer_task</span>
+</span><span id="__span-0-1034"><a id="__codelineno-0-1034" name="__codelineno-0-1034"></a>            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+</span><span id="__span-0-1035"><a id="__codelineno-0-1035" name="__codelineno-0-1035"></a>                <span class="k">pass</span>
+</span><span id="__span-0-1036"><a id="__codelineno-0-1036" name="__codelineno-0-1036"></a>
+</span><span id="__span-0-1037"><a id="__codelineno-0-1037" name="__codelineno-0-1037"></a>        <span class="c1"># Finalize writer</span>
+</span><span id="__span-0-1038"><a id="__codelineno-0-1038" name="__codelineno-0-1038"></a>        <span class="k">if</span> <span class="n">writer</span><span class="p">:</span>
+</span><span id="__span-0-1039"><a id="__codelineno-0-1039" name="__codelineno-0-1039"></a>            <span class="n">write_stats</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">finalize</span><span class="p">()</span>
+</span><span id="__span-0-1040"><a id="__codelineno-0-1040" name="__codelineno-0-1040"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Streaming output: </span><span class="si">{</span><span class="n">write_stats</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-0-1041"><a id="__codelineno-0-1041" name="__codelineno-0-1041"></a>
+</span><span id="__span-0-1042"><a id="__codelineno-0-1042" name="__codelineno-0-1042"></a>    <span class="n">end_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+</span><span id="__span-0-1043"><a id="__codelineno-0-1043" name="__codelineno-0-1043"></a>    <span class="n">duration</span> <span class="o">=</span> <span class="p">(</span><span class="n">end_time</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
+</span><span id="__span-0-1044"><a id="__codelineno-0-1044" name="__codelineno-0-1044"></a>
+</span><span id="__span-0-1045"><a id="__codelineno-0-1045" name="__codelineno-0-1045"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+</span><span id="__span-0-1046"><a id="__codelineno-0-1046" name="__codelineno-0-1046"></a>        <span class="sa">f</span><span class="s2">&quot;Streaming complete: </span><span class="si">{</span><span class="n">total_rows</span><span class="si">}</span><span class="s2"> rows in </span><span class="si">{</span><span class="n">duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s &quot;</span>
+</span><span id="__span-0-1047"><a id="__codelineno-0-1047" name="__codelineno-0-1047"></a>        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">total_rows</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> rows/sec), &quot;</span>
+</span><span id="__span-0-1048"><a id="__codelineno-0-1048" name="__codelineno-0-1048"></a>        <span class="sa">f</span><span class="s2">&quot;cost: $</span><span class="si">{</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span id="__span-0-1049"><a id="__codelineno-0-1049" name="__codelineno-0-1049"></a>    <span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
