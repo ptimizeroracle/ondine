@@ -54,7 +54,6 @@ def test_prefix_caching_separates_system_message_and_detects_cache_hits(
         .with_llm(
             model="openai/gpt-4o-mini", temperature=0.0, enable_prefix_caching=True
         )
-        .with_processing_batch_size(1)
         .with_concurrency(1)
         .build()
     )
@@ -106,7 +105,6 @@ def test_prefix_caching_cost_reduction_is_reflected_in_pipeline_totals(
         .with_llm(
             model="openai/gpt-4o-mini", temperature=0.0, enable_prefix_caching=True
         )
-        .with_processing_batch_size(1)
         .with_concurrency(1)
         .build()
     )

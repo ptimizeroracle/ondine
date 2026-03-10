@@ -631,27 +631,6 @@ class PipelineBuilder:
         self._custom_llm_client = client
         return self
 
-    def with_processing_batch_size(self, size: int) -> "PipelineBuilder":
-        """
-        Configure internal batch size for PromptFormatterStage.
-
-        This is different from with_batch_size() which enables multi-row batching.
-        This method controls how many prompts are grouped together internally
-        for processing efficiency.
-
-        Args:
-            size: Rows per internal batch
-
-        Returns:
-            Self for chaining
-
-        Note:
-            This is an internal optimization parameter. Most users should use
-            with_batch_size() for multi-row batching instead.
-        """
-        self._processing_spec.batch_size = size
-        return self
-
     def with_concurrency(self, threads: int) -> "PipelineBuilder":
         """
         Configure concurrent requests.

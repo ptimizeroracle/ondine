@@ -4,10 +4,13 @@ Execution context for carrying runtime state between stages.
 Implements Memento pattern for checkpoint serialization.
 """
 
+from __future__ import annotations
+
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from ondine.core.models import ProcessingStats
@@ -15,6 +18,94 @@ from ondine.core.models import ProcessingStats
 if TYPE_CHECKING:
     from ondine.observability.dispatcher import ObserverDispatcher
     from ondine.orchestration.observers import ExecutionObserver
+
+
+# ---------------------------------------------------------------------------
+# Shared live-progress state  (single source of truth for cost & progress)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StageProgressSnapshot:
+    """Per-stage progress counters, readable by any tracker or observer."""
+
+    stage_name: str
+    total_rows: int = 0
+    rows_completed: int = 0
+    cost: Decimal = field(default_factory=lambda: Decimal("0"))
+    deployment_rows: dict[str, int] = field(default_factory=dict)
+    deployment_costs: dict[str, Decimal] = field(default_factory=dict)
+
+
+@dataclass
+class RunProgressState:
+    """Thread-safe, shared live-progress state owned by the execution context.
+
+    Every tracker implementation (Rich, Textual, Logging) and every observer
+    reads from this object instead of maintaining its own cost accumulator.
+    """
+
+    total_cost: Decimal = field(default_factory=lambda: Decimal("0"))
+    total_tokens: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    _stages: dict[str, StageProgressSnapshot] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def init_stage(self, stage_name: str, total_rows: int) -> None:
+        with self._lock:
+            self._stages[stage_name] = StageProgressSnapshot(
+                stage_name=stage_name, total_rows=total_rows
+            )
+
+    def apply_delta(
+        self,
+        stage_name: str,
+        rows_completed: int = 0,
+        cost: Decimal | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        deployment_id: str | None = None,
+    ) -> None:
+        """Atomically apply a progress delta from a single LLM response."""
+        with self._lock:
+            snap = self._stages.get(stage_name)
+            if snap is None:
+                return
+            snap.rows_completed += rows_completed
+            if cost is not None:
+                snap.cost += cost
+                self.total_cost += cost
+            self.total_tokens += tokens_in + tokens_out
+            self.input_tokens += tokens_in
+            self.output_tokens += tokens_out
+            if deployment_id is not None:
+                snap.deployment_rows[deployment_id] = (
+                    snap.deployment_rows.get(deployment_id, 0) + rows_completed
+                )
+                if cost is not None:
+                    snap.deployment_costs[deployment_id] = (
+                        snap.deployment_costs.get(deployment_id, Decimal("0")) + cost
+                    )
+
+    def get_stage(self, stage_name: str) -> StageProgressSnapshot | None:
+        with self._lock:
+            snap = self._stages.get(stage_name)
+            if snap is None:
+                return None
+            return StageProgressSnapshot(
+                stage_name=snap.stage_name,
+                total_rows=snap.total_rows,
+                rows_completed=snap.rows_completed,
+                cost=snap.cost,
+                deployment_rows=dict(snap.deployment_rows),
+                deployment_costs=dict(snap.deployment_costs),
+            )
+
+    @property
+    def snapshot_cost(self) -> Decimal:
+        with self._lock:
+            return self.total_cost
 
 
 @dataclass
@@ -75,10 +166,13 @@ class ExecutionContext:
     skipped_rows: int = 0
 
     # Observers for progress notifications (backward compatibility)
-    observers: list["ExecutionObserver"] = field(default_factory=list)
+    observers: list[ExecutionObserver] = field(default_factory=list)
 
     # New observability system
-    observer_dispatcher: Optional["ObserverDispatcher"] = None
+    observer_dispatcher: ObserverDispatcher | None = None
+
+    # Shared live-progress state (single source of truth for cost/progress)
+    run_progress: RunProgressState = field(default_factory=RunProgressState)
 
     # Distributed tracing
     trace_id: str = field(default_factory=lambda: str(uuid4()))
@@ -93,7 +187,12 @@ class ExecutionContext:
         self.last_processed_row = row_index
 
     def add_cost(self, cost: Decimal, tokens: int) -> None:
-        """Add cost and token usage."""
+        """Add cost and token usage.
+
+        Updates both the legacy ``accumulated_cost`` field and the shared
+        ``run_progress`` state so that all consumers (trackers, observers,
+        final report) read consistent numbers.
+        """
         self.accumulated_cost += cost
         self.accumulated_tokens += tokens
 
@@ -160,7 +259,7 @@ class ExecutionContext:
         }
 
     @classmethod
-    def from_checkpoint(cls, data: dict[str, Any]) -> "ExecutionContext":
+    def from_checkpoint(cls, data: dict[str, Any]) -> ExecutionContext:
         """
         Deserialize from checkpoint dictionary.
 
@@ -195,6 +294,6 @@ class ExecutionContext:
         return self.to_checkpoint()
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExecutionContext":
+    def from_dict(cls, data: dict[str, Any]) -> ExecutionContext:
         """Alias for from_checkpoint()."""
         return cls.from_checkpoint(data)

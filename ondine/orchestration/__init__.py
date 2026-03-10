@@ -3,7 +3,11 @@
 from ondine.orchestration.async_executor import AsyncExecutor
 from ondine.orchestration.concurrency_controller import ConcurrencyController
 from ondine.orchestration.deployment_tracker import DeploymentTracker
-from ondine.orchestration.execution_context import ExecutionContext
+from ondine.orchestration.execution_context import (
+    ExecutionContext,
+    RunProgressState,
+    StageProgressSnapshot,
+)
 from ondine.orchestration.execution_strategy import ExecutionStrategy
 from ondine.orchestration.observers import (
     CostTrackingObserver,
@@ -32,6 +36,8 @@ from ondine.orchestration.sync_executor import SyncExecutor
 
 __all__ = [
     "ExecutionContext",
+    "RunProgressState",
+    "StageProgressSnapshot",
     "StateManager",
     "ExecutionObserver",
     "ProgressBarObserver",

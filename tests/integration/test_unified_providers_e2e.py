@@ -92,7 +92,6 @@ Review: {{ text }}"""
         )
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
         .with_batch_size(1)  # 1 row per API call (flat schema, no mega-prompt)
-        .with_processing_batch_size(1)
         .with_structured_output(SimpleResult)
         .build()
     )
@@ -188,7 +187,6 @@ Return:
 - price_category: "cheap" if under $20, "medium" if $20-$99, "expensive" if $100+""")
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
         .with_batch_size(6)  # Aggregate all 6 rows
-        .with_processing_batch_size(3)  # Process 3 at a time = 2 API calls
         .with_structured_output(PriceBatch)
         .build()
     )

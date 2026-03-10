@@ -57,8 +57,8 @@ class TestTextualProgressTrackerLifecycle:
             {"model_id": "france", "model": "azure/gpt-5-nano"},
         ]
         task_id = tracker.start_stage("Stage", total_rows=200, deployments=deployments)
-        assert "sweden" in tracker.deployment_tasks[task_id]
-        assert "france" in tracker.deployment_tasks[task_id]
+        assert "sweden" in tracker.deployment_stats[task_id]
+        assert "france" in tracker.deployment_stats[task_id]
         assert tracker.deployment_stats[task_id]["sweden"] == 0
 
     def test_update_advances_progress(self):
@@ -84,7 +84,7 @@ class TestTextualProgressTrackerLifecycle:
         task_id = tracker.start_stage("Stage", total_rows=100)
         tracker.ensure_deployment_task(task_id, "dep-1", total_rows=100)
         tracker.ensure_deployment_task(task_id, "dep-1", total_rows=100)
-        assert len(tracker.deployment_tasks[task_id]) == 1
+        assert len(tracker.deployment_stats[task_id]) == 1
 
     def test_ensure_deployment_task_with_label(self):
         tracker = self._make_tracker()
@@ -92,7 +92,7 @@ class TestTextualProgressTrackerLifecycle:
         tracker.ensure_deployment_task(
             task_id, "dep-1", total_rows=100, label_info="Sweden (gpt-5-nano)"
         )
-        assert "dep-1" in tracker.deployment_tasks[task_id]
+        assert "dep-1" in tracker.deployment_stats[task_id]
 
     def test_finish_completes_task(self):
         tracker = self._make_tracker()
@@ -114,10 +114,12 @@ class TestTextualProgressTrackerLifecycle:
         tracker.update(task_id, advance=70, deployment_id="d2")
         tracker.finish(task_id)
 
-        d1_task = tracker.progress.tasks[tracker.deployment_tasks[task_id]["d1"]]
-        d2_task = tracker.progress.tasks[tracker.deployment_tasks[task_id]["d2"]]
-        assert d1_task.completed == 30
-        assert d2_task.completed == 70
+        assert tracker.deployment_stats[task_id]["d1"] == 30
+        assert tracker.deployment_stats[task_id]["d2"] == 70
+
+        dep_text = tracker._build_deployment_text(task_id)
+        assert "30 rows" in dep_text
+        assert "70 rows" in dep_text
 
     def test_update_noop_for_unknown_task(self):
         tracker = self._make_tracker()

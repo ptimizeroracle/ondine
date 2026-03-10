@@ -64,7 +64,6 @@ llm:
 
 processing:
   batch_size: 10
-  processing_batch_size: 5
   concurrency: 2
   rate_limit: 30
   error_policy: skip
@@ -94,7 +93,6 @@ output:
         # Verify settings were applied (check via specs)
         specs = pipeline.specifications
         assert specs.processing.batch_size == 10
-        # Note: processing_batch_size is a builder-only param, not in ProcessingSpec
         assert specs.processing.concurrency == 2
         assert specs.processing.rate_limit_rpm == 30
 
@@ -149,7 +147,6 @@ llm:
 
 processing:
   batch_size: 3
-  processing_batch_size: 3
 
 parser:
   type: json

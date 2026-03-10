@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Footer, Header, RichLog, Static
 
 if TYPE_CHECKING:
@@ -30,17 +30,10 @@ Screen {
 
 #progress-container {
     height: auto;
-    max-height: 45%;
+    max-height: 40%;
     border: round $primary;
     padding: 1 2;
-    margin: 0 1;
-    background: $surface;
-}
-
-#progress-title {
-    text-style: bold;
-    color: $text;
-    padding-bottom: 1;
+    margin: 1 1 0 1;
 }
 
 #progress-bars {
@@ -50,15 +43,7 @@ Screen {
 #log-container {
     height: 1fr;
     border: round $accent;
-    margin: 0 1;
-}
-
-#log-title {
-    text-style: bold;
-    color: $accent;
-    dock: top;
-    padding: 0 1;
-    background: $surface;
+    margin: 1 1 0 1;
 }
 
 #log-panel {
@@ -120,8 +105,9 @@ class PipelineApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
-        yield Static("Progress", id="progress-title")
-        yield Static(self._progress, id="progress-bars")
+        with Vertical(id="progress-container"):
+            yield Static(self._progress, id="progress-bars")
+            yield Static("", id="deployment-info")
 
         with VerticalScroll(id="log-container"):
             yield RichLog(
@@ -144,10 +130,13 @@ class PipelineApp(App[None]):
         state = "ON" if self._auto_scroll else "OFF"
         self.notify(f"Auto-scroll: {state}", timeout=2)
 
-    def refresh_progress_widget(self) -> None:
+    def refresh_progress_widget(self, deployment_text: str = "") -> None:
         with contextlib.suppress(Exception):
             widget = self.query_one("#progress-bars", Static)
             widget.update(self._progress)
+        with contextlib.suppress(Exception):
+            dep_widget = self.query_one("#deployment-info", Static)
+            dep_widget.update(deployment_text)
 
     def add_log_line(self, line: str) -> None:
         with contextlib.suppress(Exception):

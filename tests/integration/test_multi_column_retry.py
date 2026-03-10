@@ -110,7 +110,6 @@ class TestMultiColumnRetry:
             .with_prompt(template="Process: {text}")
             .with_llm(provider="groq", model="test", temperature=0.0)
             .with_parser(JSONParser(strict=False))
-            .with_processing_batch_size(10)  # Internal batching only, not multi-row
             .with_concurrency(1)
             .with_executor(AsyncExecutor())
             .build()
@@ -223,7 +222,6 @@ class TestMultiColumnRetry:
             .with_prompt(template="{text}")
             .with_llm(provider="groq", model="test", temperature=0.0)
             .with_parser(JSONParser(strict=False))
-            .with_processing_batch_size(3)  # Internal batching only, not multi-row
             .with_concurrency(1)
             .with_executor(AsyncExecutor())
             .build()
