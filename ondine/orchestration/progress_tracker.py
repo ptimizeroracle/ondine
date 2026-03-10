@@ -39,7 +39,15 @@ def _build_summary_panel(result: Any) -> Any:
     if metrics.failed_rows:
         t.add_row("Failed rows", f"[red]{metrics.failed_rows:,}[/red]")
     if metrics.skipped_rows:
-        t.add_row("Skipped rows", f"{metrics.skipped_rows:,}")
+        t.add_row("Skipped rows", f"[yellow]{metrics.skipped_rows:,}[/yellow]")
+    unaccounted = (
+        metrics.total_rows
+        - metrics.processed_rows
+        - metrics.failed_rows
+        - metrics.skipped_rows
+    )
+    if unaccounted > 0:
+        t.add_row("Dropped rows", f"[red]{unaccounted:,}[/red]")
     t.add_row("Duration", time_str)
     if metrics.rows_per_second:
         t.add_row("Throughput", f"{metrics.rows_per_second:.1f} rows/sec")
