@@ -3088,7 +3088,7 @@ class BatchFormattingStrategy(ABC):
     def format_batch(self, prompts: list[str], metadata: dict) -> str:
         """Format N prompts into 1 batch prompt."""
         pass
-    
+
     @abstractmethod
     def parse_batch_response(self, response: str, expected_count: int) -> list[str]:
         """Parse 1 batch response into N individual results."""
@@ -3229,16 +3229,7 @@ def with_batch_strategy(self, strategy: str) -> "PipelineBuilder":
     """Set batch formatting strategy ('json' or 'csv')."""
     self._prompt_spec.batch_strategy = strategy
     return self
-
-def with_processing_batch_size(self, size: int) -> "PipelineBuilder":
-    """Set internal batch size for PromptFormatterStage (internal optimization)."""
-    self._processing_spec.batch_size = size
-    return self
 ```
-
-**Naming Clarification**:
-- `with_batch_size()` - Multi-row batching (NEW, 100× speedup)
-- `with_processing_batch_size()` - Internal batching (OLD, renamed)
 
 ### Specifications
 

@@ -238,7 +238,7 @@ def cli(ctx):
 @click.option(
     "--batch-size",
     type=int,
-    help="Override batch size from config",
+    help="Override internal processing batch size (rows per prompt batch)",
 )
 @click.option(
     "--concurrency",

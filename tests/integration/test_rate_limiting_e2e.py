@@ -43,7 +43,6 @@ def test_rate_limiting_enforces_rpm(provider, model, api_key_env):
         .with_prompt("Echo: {{text}}")
         .with_llm(provider=provider, model=model, api_key=api_key, temperature=0.0)
         .with_batch_size(1)  # No mega-prompts (1 row = 1 API call)
-        .with_processing_batch_size(1)  # 6 API calls total
         .with_rate_limit(60)  # 60 RPM = 1 request per second
         .with_concurrency(3)  # High concurrency to test throttling
         .build()
@@ -105,7 +104,6 @@ def test_rate_limiting_with_burst_control():
         .with_prompt("Echo: {{text}}")
         .with_llm(provider="groq", model="llama-3.3-70b-versatile", api_key=api_key)
         .with_batch_size(1)  # No mega-prompts (1 row = 1 API call)
-        .with_processing_batch_size(1)  # 5 API calls total
         .with_rate_limit(30)  # 30 RPM = 1 request per 2 seconds
         .with_concurrency(5)  # All 5 could fire at once without rate limiting
         .build()

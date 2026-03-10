@@ -107,8 +107,6 @@ class ConfigLoader:
 
         # Map processing field names
         if "processing" in config and isinstance(config["processing"], dict):
-            # processing_batch_size is a builder-only concept, not in ProcessingSpec
-            config["processing"].pop("processing_batch_size", None)
             # Map rate_limit to rate_limit_rpm
             if "rate_limit" in config["processing"]:
                 config["processing"]["rate_limit_rpm"] = config["processing"].pop(

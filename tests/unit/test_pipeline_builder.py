@@ -67,14 +67,13 @@ class TestPipelineBuilder:
         """Test configuring processing parameters."""
         builder = (
             PipelineBuilder.create()
-            .with_processing_batch_size(50)  # Internal batching (renamed)
             .with_concurrency(10)
             .with_checkpoint_interval(250)
             .with_rate_limit(30)
             .with_max_budget(5.0)
         )
 
-        assert builder._processing_spec.batch_size == 50
+        assert builder._processing_spec.batch_size == 100  # default
         assert builder._processing_spec.concurrency == 10
         assert builder._processing_spec.checkpoint_interval == 250
         assert builder._processing_spec.rate_limit_rpm == 30

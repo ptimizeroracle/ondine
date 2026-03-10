@@ -131,7 +131,6 @@ Extract:
         )
         .with_jinja2(True)
         .with_batch_size(10)  # Aggregate up to 10 rows per mega-prompt
-        .with_processing_batch_size(5)  # Process in batches of 5 = 2 API calls
         .with_structured_output(ProductBatch)  # Auto-adds JSONParser
         .with_concurrency(2)
         .build()
@@ -178,7 +177,7 @@ Extract:
 
     print(f"\n{provider.upper()} Mega-Prompt Batching Test Results:")
     print(f"  Rows processed: {len(df)}/10")
-    print("  API calls: 2 (5 rows per batch)")
+    print("  API calls: 1 (10 rows per mega-prompt)")
     print(f"  Cost: ${result.costs.total_cost:.4f}")
     print("  ✅ Batching working correctly")
     print("\nSample extractions:")
@@ -223,7 +222,6 @@ def test_mega_prompt_preserves_order():
         )
         .with_jinja2(True)
         .with_batch_size(20)  # Aggregate up to 20 rows per mega-prompt
-        .with_processing_batch_size(10)  # Process in batches of 10 = 2 API calls
         .build()
     )
 
@@ -246,7 +244,7 @@ def test_mega_prompt_preserves_order():
 
     print("\nOrder Preservation Test Results:")
     print("  ✅ All 20 rows in correct order")
-    print("  Batch size: 20 rows → 2 API calls (10 each)")
+    print("  Batch size: 20 rows per mega-prompt")
 
 
 @pytest.mark.integration
@@ -290,7 +288,6 @@ def test_mega_prompt_handles_null_values():
         )
         .with_jinja2(True)
         .with_batch_size(5)  # All in one batch
-        .with_processing_batch_size(5)
         .build()
     )
 
