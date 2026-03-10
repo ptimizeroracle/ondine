@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1](https://github.com/ptimizeroracle/ondine/compare/v1.5.0...v1.5.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* improve Textual TUI layout and show dropped rows in summary ([cc92f9d](https://github.com/ptimizeroracle/ondine/commit/cc92f9d9c22f5dc71b45476e3aa206dd057ac872))
+* unify live progress state and simplify deployment reporting ([38369b9](https://github.com/ptimizeroracle/ondine/commit/38369b924d056f44305fdf60736148dbb1c7c8b3))
+
 ## [1.5.0](https://github.com/ptimizeroracle/ondine/compare/v1.4.3...v1.5.0) (2026-03-09)
 
 
