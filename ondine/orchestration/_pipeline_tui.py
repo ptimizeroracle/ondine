@@ -107,6 +107,7 @@ class PipelineApp(App[None]):
 
         with Vertical(id="progress-container"):
             yield Static(self._progress, id="progress-bars")
+            yield Static("", id="deployment-info")
 
         with VerticalScroll(id="log-container"):
             yield RichLog(
@@ -129,10 +130,13 @@ class PipelineApp(App[None]):
         state = "ON" if self._auto_scroll else "OFF"
         self.notify(f"Auto-scroll: {state}", timeout=2)
 
-    def refresh_progress_widget(self) -> None:
+    def refresh_progress_widget(self, deployment_text: str = "") -> None:
         with contextlib.suppress(Exception):
             widget = self.query_one("#progress-bars", Static)
             widget.update(self._progress)
+        with contextlib.suppress(Exception):
+            dep_widget = self.query_one("#deployment-info", Static)
+            dep_widget.update(deployment_text)
 
     def add_log_line(self, line: str) -> None:
         with contextlib.suppress(Exception):

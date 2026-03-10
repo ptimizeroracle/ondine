@@ -1,9 +1,10 @@
-"""Tests for ProgressReporter."""
+"""Tests for ProgressReporter and shared RunProgressState."""
 
 from decimal import Decimal
 from unittest.mock import MagicMock
 
 from ondine.orchestration.deployment_tracker import DeploymentTracker
+from ondine.orchestration.execution_context import RunProgressState
 from ondine.orchestration.progress_reporter import ProgressReporter
 
 
@@ -123,3 +124,169 @@ class TestProgressReporter:
         repr_str = repr(reporter_active)
         assert "active=True" in repr_str
         assert "total_rows=50" in repr_str
+
+
+class TestRunProgressState:
+    """Verify RunProgressState as single source of truth for live cost."""
+
+    def test_init_defaults(self):
+        state = RunProgressState()
+        assert state.total_cost == Decimal("0")
+        assert state.total_tokens == 0
+        assert state.input_tokens == 0
+        assert state.output_tokens == 0
+
+    def test_init_stage_and_apply_delta(self):
+        state = RunProgressState()
+        state.init_stage("LLMInvocation", total_rows=100)
+
+        state.apply_delta(
+            "LLMInvocation",
+            rows_completed=10,
+            cost=Decimal("0.05"),
+            tokens_in=500,
+            tokens_out=200,
+        )
+
+        assert state.total_cost == Decimal("0.05")
+        assert state.total_tokens == 700
+        assert state.input_tokens == 500
+        assert state.output_tokens == 200
+
+        snap = state.get_stage("LLMInvocation")
+        assert snap is not None
+        assert snap.rows_completed == 10
+        assert snap.cost == Decimal("0.05")
+
+    def test_multiple_deltas_accumulate(self):
+        state = RunProgressState()
+        state.init_stage("LLMInvocation", total_rows=100)
+
+        for _ in range(5):
+            state.apply_delta(
+                "LLMInvocation",
+                rows_completed=2,
+                cost=Decimal("0.01"),
+                tokens_in=100,
+                tokens_out=50,
+            )
+
+        assert state.total_cost == Decimal("0.05")
+        assert state.total_tokens == 750
+        snap = state.get_stage("LLMInvocation")
+        assert snap.rows_completed == 10
+
+    def test_deployment_tracking(self):
+        state = RunProgressState()
+        state.init_stage("LLM", total_rows=50)
+
+        state.apply_delta(
+            "LLM", rows_completed=5, cost=Decimal("0.02"), deployment_id="dep-a"
+        )
+        state.apply_delta(
+            "LLM", rows_completed=3, cost=Decimal("0.01"), deployment_id="dep-b"
+        )
+        state.apply_delta(
+            "LLM", rows_completed=2, cost=Decimal("0.01"), deployment_id="dep-a"
+        )
+
+        snap = state.get_stage("LLM")
+        assert snap.deployment_rows == {"dep-a": 7, "dep-b": 3}
+        assert snap.deployment_costs["dep-a"] == Decimal("0.03")
+        assert snap.deployment_costs["dep-b"] == Decimal("0.01")
+        assert state.total_cost == Decimal("0.04")
+
+    def test_snapshot_cost_property(self):
+        state = RunProgressState()
+        state.init_stage("S", total_rows=10)
+        state.apply_delta("S", cost=Decimal("0.1"))
+        assert state.snapshot_cost == Decimal("0.1")
+
+    def test_get_stage_returns_copy(self):
+        state = RunProgressState()
+        state.init_stage("S", total_rows=10)
+        state.apply_delta("S", rows_completed=5)
+
+        snap = state.get_stage("S")
+        snap.rows_completed = 999
+        real = state.get_stage("S")
+        assert real.rows_completed == 5
+
+    def test_get_stage_nonexistent_returns_none(self):
+        state = RunProgressState()
+        assert state.get_stage("missing") is None
+
+    def test_apply_delta_to_nonexistent_stage_is_noop(self):
+        state = RunProgressState()
+        state.apply_delta("missing", rows_completed=5, cost=Decimal("1"))
+        assert state.total_cost == Decimal("0")
+
+    def test_none_cost_does_not_add(self):
+        state = RunProgressState()
+        state.init_stage("S", total_rows=10)
+        state.apply_delta("S", rows_completed=1, cost=None)
+        assert state.total_cost == Decimal("0")
+
+
+class TestReporterWithSharedState:
+    """Integration: ProgressReporter writes to RunProgressState before tracker."""
+
+    def test_update_writes_to_shared_state_and_tracker(self):
+        mock_tracker = MagicMock()
+        mock_tracker.start_stage.return_value = "task-1"
+
+        run_progress = RunProgressState()
+
+        reporter = ProgressReporter(tracker=mock_tracker, run_progress=run_progress)
+        reporter.start("LLMInvocation", total_rows=100)
+        reporter.update(
+            rows_completed=10,
+            cost=Decimal("0.05"),
+            tokens_in=500,
+            tokens_out=200,
+        )
+
+        assert run_progress.total_cost == Decimal("0.05")
+        assert run_progress.total_tokens == 700
+        snap = run_progress.get_stage("LLMInvocation")
+        assert snap.rows_completed == 10
+
+        mock_tracker.update.assert_called_once()
+
+    def test_start_inits_stage_in_shared_state(self):
+        mock_tracker = MagicMock()
+        mock_tracker.start_stage.return_value = "task-1"
+        run_progress = RunProgressState()
+
+        reporter = ProgressReporter(tracker=mock_tracker, run_progress=run_progress)
+        reporter.start("LLMInvocation", total_rows=200)
+
+        snap = run_progress.get_stage("LLMInvocation")
+        assert snap is not None
+        assert snap.total_rows == 200
+
+    def test_reporter_without_shared_state_still_works(self):
+        mock_tracker = MagicMock()
+        mock_tracker.start_stage.return_value = "task-1"
+
+        reporter = ProgressReporter(tracker=mock_tracker)
+        reporter.start("Test", total_rows=50)
+        reporter.update(rows_completed=5, cost=Decimal("0.01"))
+
+        mock_tracker.update.assert_called_once()
+
+    def test_logging_tracker_reads_shared_cost(self):
+        from ondine.orchestration.progress_tracker import LoggingProgressTracker
+
+        run_progress = RunProgressState()
+        tracker = LoggingProgressTracker()
+        tracker.set_run_progress(run_progress)
+
+        task_id = tracker.start_stage("LLM: 100 rows", total_rows=100)
+
+        run_progress.init_stage("LLM", total_rows=100)
+        run_progress.apply_delta("LLM", rows_completed=100, cost=Decimal("0.08"))
+
+        tracker.update(task_id, advance=100, cost=Decimal("0.08"))
+
+        assert run_progress.snapshot_cost == Decimal("0.08")

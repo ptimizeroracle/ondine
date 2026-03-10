@@ -3,6 +3,10 @@ Progress reporter for pipeline stage execution.
 
 Provides a clean interface for reporting progress to the UI tracker,
 handling deployment-aware updates and lifecycle management.
+
+All cost / progress deltas flow through :class:`RunProgressState` first
+(the single source of truth) and are then forwarded to the visual tracker
+for rendering.
 """
 
 from decimal import Decimal
@@ -10,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ondine.orchestration.deployment_tracker import DeploymentTracker
+    from ondine.orchestration.execution_context import RunProgressState
     from ondine.orchestration.progress_tracker import ProgressTracker
 
 
@@ -21,11 +26,12 @@ class ProgressReporter:
     throughout LLMInvocationStage, providing a clean lifecycle:
 
     1. start() - Initialize progress bar with total rows
-    2. update() - Increment progress, optionally with deployment info
+    2. update() - Apply delta to shared state, then refresh tracker
     3. finish() - Mark stage complete
 
     Example:
-        reporter = ProgressReporter(context.progress_tracker)
+        reporter = ProgressReporter(context.progress_tracker,
+                                    run_progress=context.run_progress)
         reporter.start("LLMInvocation", total_rows=1000, deployments=[...])
 
         for response in process_items():
@@ -42,17 +48,13 @@ class ProgressReporter:
         self,
         tracker: "ProgressTracker | None",
         deployment_tracker: "DeploymentTracker | None" = None,
+        run_progress: "RunProgressState | None" = None,
     ):
-        """
-        Initialize progress reporter.
-
-        Args:
-            tracker: Progress tracker instance (RichProgressTracker or LoggingProgressTracker)
-            deployment_tracker: Optional deployment tracker for Router distribution
-        """
         self._tracker = tracker
         self._deployment_tracker = deployment_tracker
+        self._run_progress = run_progress
         self._task_id: Any = None
+        self._stage_name: str = ""
         self._total_rows: int = 0
         self._started = False
 
@@ -62,18 +64,15 @@ class ProgressReporter:
         total_rows: int,
         deployments: list[dict[str, Any]] | None = None,
     ) -> None:
-        """
-        Start progress tracking for a stage.
-
-        Args:
-            stage_name: Name of the stage (e.g., "LLMInvocation")
-            total_rows: Total number of rows to process
-            deployments: Optional list of deployment info for Router visualization
-        """
         if not self._tracker:
             return
 
+        self._stage_name = stage_name
         self._total_rows = total_rows
+
+        if self._run_progress is not None:
+            self._run_progress.init_stage(stage_name, total_rows)
+
         self._task_id = self._tracker.start_stage(
             f"{stage_name}: {total_rows:,} rows",
             total_rows=total_rows,
@@ -85,33 +84,27 @@ class ProgressReporter:
         self,
         rows_completed: int = 1,
         cost: Decimal | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
         deployment_id: str | None = None,
     ) -> None:
-        """
-        Update progress with completed rows.
+        """Apply a progress delta.
 
-        Args:
-            rows_completed: Number of rows just completed (default: 1)
-            cost: Optional cost for this batch
-            deployment_id: Optional deployment ID for Router tracking
+        The delta is written to ``RunProgressState`` first, then
+        the tracker is asked to render the updated snapshot.
         """
         if not self._tracker or not self._task_id:
             return
 
-        # Handle deployment registration if we have a tracker
+        # --- resolve deployment display id ---------------------------------
         display_id = None
         label_info = ""
 
         if deployment_id and self._deployment_tracker:
-            # Register deployment (First-Seen-First-Assigned)
             display_id = self._deployment_tracker.register_deployment(deployment_id)
             label_info = self._deployment_tracker.get_label(deployment_id)
-
-            # Record the request for distribution tracking
             self._deployment_tracker.record_request(deployment_id)
 
-            # Ensure deployment task exists in progress tracker
-            # Use full total - actual count will be shown at finish()
             self._tracker.ensure_deployment_task(
                 self._task_id,
                 display_id,
@@ -119,7 +112,18 @@ class ProgressReporter:
                 label_info=label_info,
             )
 
-        # Update progress (updates both main bar and deployment bar)
+        # --- write to shared state FIRST -----------------------------------
+        if self._run_progress is not None:
+            self._run_progress.apply_delta(
+                stage_name=self._stage_name,
+                rows_completed=rows_completed,
+                cost=cost,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                deployment_id=display_id,
+            )
+
+        # --- forward to tracker for rendering ------------------------------
         self._tracker.update(
             self._task_id,
             advance=rows_completed,

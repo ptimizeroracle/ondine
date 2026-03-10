@@ -147,10 +147,9 @@ class LoggingObserver(ExecutionObserver):
     def on_stage_complete(
         self, stage: PipelineStage, context: ExecutionContext, result: Any
     ) -> None:
-        """Log stage completion."""
-        self.logger.info(
-            f"Completed stage: {stage.name} (cost: ${context.accumulated_cost:.4f})"
-        )
+        """Log stage completion using shared run-progress cost."""
+        live_cost = context.run_progress.snapshot_cost
+        self.logger.info(f"Completed stage: {stage.name} (cost: ${live_cost:.4f})")
 
     def on_stage_error(
         self, stage: PipelineStage, context: ExecutionContext, error: Exception
@@ -175,11 +174,11 @@ class LoggingObserver(ExecutionObserver):
         self.logger.error(f"Pipeline execution failed: {error}")
 
     def on_progress_update(self, context: ExecutionContext) -> None:
-        """Log progress update."""
-        # Make progress very visible with separators
+        """Log progress update using shared run-progress cost."""
+        live_cost = context.run_progress.snapshot_cost
         self.logger.info(
             f"━━━━━━ PROGRESS: {context.last_processed_row}/{context.total_rows} rows "
-            f"({context.get_progress():.1f}%) | Cost: ${context.accumulated_cost:.4f} ━━━━━━"
+            f"({context.get_progress():.1f}%) | Cost: ${live_cost:.4f} ━━━━━━"
         )
 
 
@@ -209,14 +208,15 @@ class CostTrackingObserver(ExecutionObserver):
     def on_stage_complete(
         self, stage: PipelineStage, context: ExecutionContext, result: Any
     ) -> None:
-        """Check cost after stage completion."""
+        """Check cost after stage completion using shared run-progress cost."""
         if self.max_budget:
-            usage_ratio = float(context.accumulated_cost) / self.max_budget
+            live_cost = context.run_progress.snapshot_cost
+            usage_ratio = float(live_cost) / self.max_budget
 
             if usage_ratio >= self.warning_threshold:
                 self.logger.warning(
                     f"Cost warning: {usage_ratio * 100:.1f}% of budget used "
-                    f"(${context.accumulated_cost:.4f} / ${self.max_budget:.2f})"
+                    f"(${live_cost:.4f} / ${self.max_budget:.2f})"
                 )
 
     def on_stage_error(
@@ -239,7 +239,8 @@ class CostTrackingObserver(ExecutionObserver):
 
     def on_pipeline_error(self, context: ExecutionContext, error: Exception) -> None:
         """Log cost at failure."""
-        self.logger.info(f"Cost at failure: ${context.accumulated_cost:.4f}")
+        live_cost = context.run_progress.snapshot_cost
+        self.logger.info(f"Cost at failure: ${live_cost:.4f}")
 
     def on_progress_update(self, context: ExecutionContext) -> None:
         """No action on progress update for cost tracking."""

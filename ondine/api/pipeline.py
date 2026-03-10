@@ -486,6 +486,7 @@ class Pipeline:
 
         # Create progress tracker (stored on context for show_summary later)
         progress_tracker = create_progress_tracker(specs.processing.progress_mode)
+        progress_tracker.set_run_progress(context.run_progress)
         context._progress_tracker_ref = progress_tracker
 
         # Execute with progress tracking

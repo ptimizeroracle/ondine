@@ -77,6 +77,12 @@ class ProgressTracker(ABC):
     - Concrete implementations (RichProgressTracker, TqdmProgressTracker) are interchangeable
     - Follows Dependency Inversion Principle (SOLID)
 
+    All tracker implementations receive the same cost deltas from
+    :class:`ProgressReporter`, which first writes to the shared
+    :class:`RunProgressState`.  Trackers are *renderers* — they may keep
+    rendering-local state (e.g. Rich ``task.fields``) but the authoritative
+    numbers live in ``RunProgressState``.
+
     Example:
         ```python
         tracker = create_progress_tracker(mode="auto")
@@ -91,6 +97,12 @@ class ProgressTracker(ABC):
             tracker.finish(task_id)
         ```
     """
+
+    _run_progress: Any = None
+
+    def set_run_progress(self, run_progress: Any) -> None:
+        """Attach the shared RunProgressState for live cost reads."""
+        self._run_progress = run_progress
 
     @abstractmethod
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
@@ -224,8 +236,9 @@ class RichProgressTracker(ProgressTracker):
         )
         self.tasks: dict[str, Any] = {}
 
-        self.deployment_tasks: dict[str, dict[str, Any]] = {}
         self.deployment_stats: dict[str, dict[str, int]] = {}
+        self._deployment_labels: dict[str, dict[str, str]] = {}
+        self._deployment_costs: dict[str, dict[str, float]] = {}
 
         self._log_buffer: collections.deque[str] = collections.deque(maxlen=500)
         self._live: Any = None
@@ -234,20 +247,38 @@ class RichProgressTracker(ProgressTracker):
         """Build a Rich Layout with progress on top and logs below."""
         import shutil
 
+        from rich.console import Group
         from rich.layout import Layout
         from rich.panel import Panel
+        from rich.text import Text
 
         term_height = shutil.get_terminal_size().lines
 
+        dep_lines: list[str] = []
+        for stage_name in self.deployment_stats:
+            text = self._build_deployment_text(stage_name)
+            if text:
+                dep_lines.extend(text.split("\n"))
+
         n_tasks = len(self.progress.tasks)
-        progress_height = max(n_tasks + 4, 6)
+        n_dep_lines = len(dep_lines)
+        progress_height = max(n_tasks + n_dep_lines + 4, 6)
 
         log_height = max(term_height - progress_height - 2, 5)
+
+        progress_content: Any
+        if dep_lines:
+            dep_text = Text()
+            for line in dep_lines:
+                dep_text.append(line + "\n", style="dim")
+            progress_content = Group(self.progress, dep_text)
+        else:
+            progress_content = self.progress
 
         layout = Layout()
         layout.split_column(
             Layout(
-                Panel(self.progress, title="[bold]Progress", border_style="blue"),
+                Panel(progress_content, title="[bold]Progress", border_style="blue"),
                 name="progress",
                 size=progress_height,
             ),
@@ -293,14 +324,15 @@ class RichProgressTracker(ProgressTracker):
 
         deployments = metadata.get("deployments", [])
         if deployments:
-            self.deployment_tasks[stage_name] = {}
             self.deployment_stats[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            self._deployment_costs[stage_name] = {}
 
             for deployment in deployments:
                 dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
 
                 if "label" in deployment:
-                    label = f"   ├─ {deployment['label']}"
+                    base_label = deployment["label"]
                 else:
                     model = deployment.get("model", "")
                     if model:
@@ -308,17 +340,13 @@ class RichProgressTracker(ProgressTracker):
                         model_short = model.split("/")[1] if "/" in model else model
                         if len(model_short) > 25:
                             model_short = model_short[:22] + "..."
-                        label = f"   ├─ {dep_id} ({provider}/{model_short})"
+                        base_label = f"{dep_id} ({provider}/{model_short})"
                     else:
-                        label = f"   ├─ {dep_id}"
+                        base_label = dep_id
 
-                dep_task_id = self.progress.add_task(
-                    label,
-                    total=total_rows,
-                    cost=0.0,
-                )
-                self.deployment_tasks[stage_name][dep_id] = dep_task_id
                 self.deployment_stats[stage_name][dep_id] = 0
+                self._deployment_labels[stage_name][dep_id] = base_label
+                self._deployment_costs[stage_name][dep_id] = 0.0
 
         self._refresh()
         return stage_name
@@ -326,34 +354,40 @@ class RichProgressTracker(ProgressTracker):
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
-        """Dynamically add a deployment task if it doesn't exist."""
-        if stage_name not in self.deployment_tasks:
-            self.deployment_tasks[stage_name] = {}
+        """Register a deployment for text-only sub-row tracking."""
+        if stage_name not in self.deployment_stats:
             self.deployment_stats[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            self._deployment_costs[stage_name] = {}
 
-        if deployment_id not in self.deployment_tasks[stage_name]:
+        if deployment_id not in self.deployment_stats[stage_name]:
             if label_info:
-                label = f"   ├─ {label_info}"
+                base_label = label_info
+            elif len(deployment_id) > 30 and " " not in deployment_id:
+                base_label = f"Deployment ({deployment_id[:8]}...)"
+            elif len(deployment_id) > 33:
+                base_label = f"{deployment_id[:30]}..."
             else:
-                if len(deployment_id) > 30 and " " not in deployment_id:
-                    short_id = deployment_id[:8]
-                    label = f"   ├─ Deployment ({short_id}...)"
-                else:
-                    label = (
-                        f"   ├─ {deployment_id[:30]}..."
-                        if len(deployment_id) > 33
-                        else f"   ├─ {deployment_id}"
-                    )
+                base_label = deployment_id
 
-            dep_task_id = self.progress.add_task(
-                label,
-                total=total_rows,
-                cost=0.0,
-            )
-            self.deployment_tasks[stage_name][deployment_id] = dep_task_id
             self.deployment_stats[stage_name][deployment_id] = 0
+            self._deployment_labels[stage_name][deployment_id] = base_label
+            self._deployment_costs[stage_name][deployment_id] = 0.0
 
             self._refresh()
+
+    def _build_deployment_text(self, stage_name: str) -> str:
+        """Build text lines for deployment sub-rows of a given stage."""
+        if stage_name not in self.deployment_stats:
+            return ""
+        lines: list[str] = []
+        for dep_id in self.deployment_stats[stage_name]:
+            label = self._deployment_labels.get(stage_name, {}).get(dep_id, dep_id)
+            count = self.deployment_stats[stage_name][dep_id]
+            cost = self._deployment_costs.get(stage_name, {}).get(dep_id, 0.0)
+            cost_str = f"  ${cost:.4f}" if cost > 0 else ""
+            lines.append(f"   ├─ {label}  {count:,} rows{cost_str}")
+        return "\n".join(lines)
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         """Update progress bar, including deployment-specific tracking."""
@@ -363,7 +397,7 @@ class RichProgressTracker(ProgressTracker):
         rich_task_id = self.tasks[task_id]
 
         update_kwargs: dict[str, Any] = {"advance": advance}
-        if "cost" in metadata:
+        if "cost" in metadata and metadata["cost"] is not None:
             task = self.progress.tasks[rich_task_id]
             current_cost = task.fields.get("cost", 0.0)
             new_cost = float(current_cost) + float(metadata["cost"])
@@ -372,22 +406,15 @@ class RichProgressTracker(ProgressTracker):
         self.progress.update(rich_task_id, **update_kwargs)
 
         deployment_id = metadata.get("deployment_id")
-        if deployment_id and task_id in self.deployment_tasks:
-            if deployment_id in self.deployment_tasks[task_id]:
-                dep_task_id = self.deployment_tasks[task_id][deployment_id]
-
+        if deployment_id and task_id in self.deployment_stats:
+            if deployment_id in self.deployment_stats[task_id]:
                 self.deployment_stats[task_id][deployment_id] += advance
-                new_count = self.deployment_stats[task_id][deployment_id]
 
-                dep_kwargs: dict[str, Any] = {"completed": new_count}
-                if "cost" in metadata:
-                    dep_task = self.progress.tasks[dep_task_id]
-                    current_dep_cost = dep_task.fields.get("cost", 0.0)
-                    dep_kwargs["cost"] = float(current_dep_cost) + float(
-                        metadata["cost"]
+                if "cost" in metadata and metadata["cost"] is not None:
+                    self._deployment_costs.setdefault(task_id, {})[deployment_id] = (
+                        self._deployment_costs.get(task_id, {}).get(deployment_id, 0.0)
+                        + float(metadata["cost"])
                     )
-
-                self.progress.update(dep_task_id, **dep_kwargs)
 
         self._refresh()
 
@@ -399,11 +426,6 @@ class RichProgressTracker(ProgressTracker):
             task = self.progress.tasks[rich_task_id]
             total = task.total or 0
             self.progress.update(rich_task_id, completed=total)
-
-            if task_id in self.deployment_tasks:
-                for dep_id, dep_task_id in self.deployment_tasks[task_id].items():
-                    actual_count = self.deployment_stats.get(task_id, {}).get(dep_id, 0)
-                    self.progress.update(dep_task_id, completed=actual_count)
 
         self._refresh()
 
@@ -487,8 +509,9 @@ class TextualProgressTracker(ProgressTracker):
             auto_refresh=False,
         )
         self.tasks: dict[str, Any] = {}
-        self.deployment_tasks: dict[str, dict[str, Any]] = {}
         self.deployment_stats: dict[str, dict[str, int]] = {}
+        self._deployment_labels: dict[str, dict[str, str]] = {}
+        self._deployment_costs: dict[str, dict[str, float]] = {}
 
         self._app: Any = None
         self._app_thread: Any = None
@@ -564,14 +587,15 @@ class TextualProgressTracker(ProgressTracker):
 
         deployments = metadata.get("deployments", [])
         if deployments:
-            self.deployment_tasks[stage_name] = {}
             self.deployment_stats[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            self._deployment_costs[stage_name] = {}
             for deployment in deployments:
                 dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
-                label = self._deployment_label(deployment, dep_id)
-                dep_task_id = self.progress.add_task(label, total=total_rows, cost=0.0)
-                self.deployment_tasks[stage_name][dep_id] = dep_task_id
+                base_label = self._base_label(deployment, dep_id)
                 self.deployment_stats[stage_name][dep_id] = 0
+                self._deployment_labels[stage_name][dep_id] = base_label
+                self._deployment_costs[stage_name][dep_id] = 0.0
 
         self._refresh_progress()
         return stage_name
@@ -579,27 +603,38 @@ class TextualProgressTracker(ProgressTracker):
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
-        if stage_name not in self.deployment_tasks:
-            self.deployment_tasks[stage_name] = {}
+        if stage_name not in self.deployment_stats:
             self.deployment_stats[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            self._deployment_costs[stage_name] = {}
 
-        if deployment_id not in self.deployment_tasks[stage_name]:
+        if deployment_id not in self.deployment_stats[stage_name]:
             if label_info:
-                label = f"   ├─ {label_info}"
+                base_label = label_info
+            elif len(deployment_id) > 30 and " " not in deployment_id:
+                base_label = f"Deployment ({deployment_id[:8]}...)"
+            elif len(deployment_id) > 33:
+                base_label = f"{deployment_id[:30]}..."
             else:
-                if len(deployment_id) > 30 and " " not in deployment_id:
-                    label = f"   ├─ Deployment ({deployment_id[:8]}...)"
-                else:
-                    label = (
-                        f"   ├─ {deployment_id[:30]}..."
-                        if len(deployment_id) > 33
-                        else f"   ├─ {deployment_id}"
-                    )
+                base_label = deployment_id
 
-            dep_task_id = self.progress.add_task(label, total=total_rows, cost=0.0)
-            self.deployment_tasks[stage_name][deployment_id] = dep_task_id
             self.deployment_stats[stage_name][deployment_id] = 0
+            self._deployment_labels[stage_name][deployment_id] = base_label
+            self._deployment_costs[stage_name][deployment_id] = 0.0
             self._refresh_progress()
+
+    def _build_deployment_text(self, stage_name: str) -> str:
+        """Build text lines for deployment sub-rows of a given stage."""
+        if stage_name not in self.deployment_stats:
+            return ""
+        lines: list[str] = []
+        for dep_id in self.deployment_stats[stage_name]:
+            label = self._deployment_labels.get(stage_name, {}).get(dep_id, dep_id)
+            count = self.deployment_stats[stage_name][dep_id]
+            cost = self._deployment_costs.get(stage_name, {}).get(dep_id, 0.0)
+            cost_str = f"  ${cost:.4f}" if cost > 0 else ""
+            lines.append(f"   ├─ {label}  {count:,} rows{cost_str}")
+        return "\n".join(lines)
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
         if task_id not in self.tasks:
@@ -607,25 +642,22 @@ class TextualProgressTracker(ProgressTracker):
 
         rich_task_id = self.tasks[task_id]
         update_kwargs: dict[str, Any] = {"advance": advance}
-        if "cost" in metadata:
+        if "cost" in metadata and metadata["cost"] is not None:
             task = self.progress.tasks[rich_task_id]
             current_cost = task.fields.get("cost", 0.0)
             update_kwargs["cost"] = float(current_cost) + float(metadata["cost"])
         self.progress.update(rich_task_id, **update_kwargs)
 
         deployment_id = metadata.get("deployment_id")
-        if deployment_id and task_id in self.deployment_tasks:
-            if deployment_id in self.deployment_tasks[task_id]:
-                dep_task_id = self.deployment_tasks[task_id][deployment_id]
+        if deployment_id and task_id in self.deployment_stats:
+            if deployment_id in self.deployment_stats[task_id]:
                 self.deployment_stats[task_id][deployment_id] += advance
-                new_count = self.deployment_stats[task_id][deployment_id]
-                dep_kwargs: dict[str, Any] = {"completed": new_count}
-                if "cost" in metadata:
-                    dep_task = self.progress.tasks[dep_task_id]
-                    dep_kwargs["cost"] = float(
-                        dep_task.fields.get("cost", 0.0)
-                    ) + float(metadata["cost"])
-                self.progress.update(dep_task_id, **dep_kwargs)
+
+                if "cost" in metadata and metadata["cost"] is not None:
+                    self._deployment_costs.setdefault(task_id, {})[deployment_id] = (
+                        self._deployment_costs.get(task_id, {}).get(deployment_id, 0.0)
+                        + float(metadata["cost"])
+                    )
 
         self._refresh_progress()
 
@@ -635,32 +667,34 @@ class TextualProgressTracker(ProgressTracker):
             task = self.progress.tasks[rich_task_id]
             self.progress.update(rich_task_id, completed=task.total or 0)
 
-            if task_id in self.deployment_tasks:
-                for dep_id, dep_task_id in self.deployment_tasks[task_id].items():
-                    actual = self.deployment_stats.get(task_id, {}).get(dep_id, 0)
-                    self.progress.update(dep_task_id, completed=actual)
-
         self._refresh_progress()
 
     # -- helpers --------------------------------------------------------------
 
     @staticmethod
-    def _deployment_label(deployment: dict, dep_id: str) -> str:
+    def _base_label(deployment: dict, dep_id: str) -> str:
+        """Extract a clean base label from deployment config."""
         if "label" in deployment:
-            return f"   ├─ {deployment['label']}"
+            return deployment["label"]
         model = deployment.get("model", "")
         if model:
             provider = model.split("/")[0] if "/" in model else ""
             model_short = model.split("/")[1] if "/" in model else model
             if len(model_short) > 25:
                 model_short = model_short[:22] + "..."
-            return f"   ├─ {dep_id} ({provider}/{model_short})"
-        return f"   ├─ {dep_id}"
+            return f"{dep_id} ({provider}/{model_short})"
+        return dep_id
 
     def _refresh_progress(self) -> None:
         if self._app is not None and self._app.is_running:
+            dep_lines: list[str] = []
+            for stage_name in self.deployment_stats:
+                text = self._build_deployment_text(stage_name)
+                if text:
+                    dep_lines.append(text)
+            dep_text = "\n".join(dep_lines)
             with contextlib.suppress(Exception):
-                self._app.call_from_thread(self._app.refresh_progress_widget)
+                self._app.call_from_thread(self._app.refresh_progress_widget, dep_text)
 
 
 class _TextualStdoutCapture:
@@ -735,17 +769,24 @@ class LoggingProgressTracker(ProgressTracker):
         task = self.tasks[task_id]
         task["current"] += advance
 
-        if "cost" in metadata:
+        if "cost" in metadata and metadata["cost"] is not None:
             task["cost"] += Decimal(str(metadata["cost"]))
 
         percent = (task["current"] / task["total"]) * 100
         milestones = [25, 50, 75, 100]
 
+        # Use shared run-level cost when available (single source of truth)
+        live_cost = (
+            self._run_progress.snapshot_cost
+            if self._run_progress is not None
+            else task["cost"]
+        )
+
         for milestone in milestones:
             if percent >= milestone and task["last_log_percent"] < milestone:
                 self.logger.info(
                     f"{task_id}: {task['current']}/{task['total']} "
-                    f"({percent:.1f}%) | Cost: ${task['cost']:.4f}"
+                    f"({percent:.1f}%) | Cost: ${live_cost:.4f}"
                 )
                 task["last_log_percent"] = milestone
                 break
@@ -754,9 +795,14 @@ class LoggingProgressTracker(ProgressTracker):
         """Log completion."""
         if task_id in self.tasks:
             task = self.tasks[task_id]
+            live_cost = (
+                self._run_progress.snapshot_cost
+                if self._run_progress is not None
+                else task["cost"]
+            )
             self.logger.info(
                 f"Completed {task_id}: {task['current']}/{task['total']} rows, "
-                f"${task['cost']:.4f}"
+                f"${live_cost:.4f}"
             )
 
     def show_summary(self, result: Any) -> None:

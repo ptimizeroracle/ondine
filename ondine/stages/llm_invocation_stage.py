@@ -135,9 +135,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             model_list = self._get_router_model_list()
             deployment_tracker = DeploymentTracker(model_list)
 
-            # Setup progress reporter
+            # Setup progress reporter (backed by shared RunProgressState)
             progress_tracker = getattr(context, "progress_tracker", None)
-            progress_reporter = ProgressReporter(progress_tracker, deployment_tracker)
+            run_progress = getattr(context, "run_progress", None)
+            progress_reporter = ProgressReporter(
+                progress_tracker, deployment_tracker, run_progress=run_progress
+            )
 
             # Calculate total rows and start progress
             # Note: We don't pre-create deployment bars anymore - they're created
@@ -242,15 +245,17 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             if deployment_id:
                 self._deployment_tracker.record_request(deployment_id)
 
-            # Update progress
+            # Update shared progress state + tracker rendering
             batch_size = BatchProcessor.get_batch_size(item.metadata)
             self._progress_reporter.update(
                 rows_completed=batch_size,
                 cost=response.cost,
+                tokens_in=response.tokens_in,
+                tokens_out=response.tokens_out,
                 deployment_id=deployment_id,
             )
 
-            # Update context
+            # Update context (legacy accumulated_cost kept in sync)
             self._update_context(context, idx, item.metadata, response)
 
             return response
@@ -262,7 +267,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             batch_size = BatchProcessor.get_batch_size(item.metadata)
             self._progress_reporter.update(
-                rows_completed=batch_size, cost=response.cost
+                rows_completed=batch_size,
+                cost=response.cost,
+                tokens_in=response.tokens_in,
+                tokens_out=response.tokens_out,
             )
             self._update_context(context, idx, item.metadata, response)
 
