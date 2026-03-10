@@ -5841,15 +5841,7 @@
 </span><span id="__span-121-7"><a id="__codelineno-121-7" name="__codelineno-121-7" href="#__codelineno-121-7"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Set batch formatting strategy (&#39;json&#39; or &#39;csv&#39;).&quot;&quot;&quot;</span>
 </span><span id="__span-121-8"><a id="__codelineno-121-8" name="__codelineno-121-8" href="#__codelineno-121-8"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_prompt_spec</span><span class="o">.</span><span class="n">batch_strategy</span> <span class="o">=</span> <span class="n">strategy</span>
 </span><span id="__span-121-9"><a id="__codelineno-121-9" name="__codelineno-121-9" href="#__codelineno-121-9"></a>    <span class="k">return</span> <span class="bp">self</span>
-</span><span id="__span-121-10"><a id="__codelineno-121-10" name="__codelineno-121-10" href="#__codelineno-121-10"></a>
-</span><span id="__span-121-11"><a id="__codelineno-121-11" name="__codelineno-121-11" href="#__codelineno-121-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_processing_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;PipelineBuilder&quot;</span><span class="p">:</span>
-</span><span id="__span-121-12"><a id="__codelineno-121-12" name="__codelineno-121-12" href="#__codelineno-121-12"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Set internal batch size for PromptFormatterStage (internal optimization).&quot;&quot;&quot;</span>
-</span><span id="__span-121-13"><a id="__codelineno-121-13" name="__codelineno-121-13" href="#__codelineno-121-13"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_processing_spec</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">size</span>
-</span><span id="__span-121-14"><a id="__codelineno-121-14" name="__codelineno-121-14" href="#__codelineno-121-14"></a>    <span class="k">return</span> <span class="bp">self</span>
 </span></code></pre></div></p>
-<p><strong>Naming Clarification</strong>:
-- <code>with_batch_size()</code> - Multi-row batching (NEW, 100× speedup)
-- <code>with_processing_batch_size()</code> - Internal batching (OLD, renamed)</p>
 <h3 id="specifications">Specifications<a class="headerlink" href="#specifications" title="Permanent link">&para;</a></h3>
 <p><strong>PromptSpec</strong> (added fields):
 <div class="language-python highlight"><pre><span></span><code><span id="__span-122-1"><a id="__codelineno-122-1" name="__codelineno-122-1" href="#__codelineno-122-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">PromptSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
