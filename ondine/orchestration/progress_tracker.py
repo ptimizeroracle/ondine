@@ -898,6 +898,11 @@ class NoOpProgressTracker(ProgressTracker):
     def finish(self, task_id: str) -> None:
         pass
 
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
+        pass
+
     def __enter__(self) -> "NoOpProgressTracker":
         return self
 
