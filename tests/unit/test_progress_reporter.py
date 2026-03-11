@@ -327,7 +327,7 @@ class TestLoggingProgressTracker:
         assert any(
             "[progress] LLMInvocation: 100 rows | 50.0%" in msg for msg in messages
         )
-        scoreboard = [m for m in messages if "East US" in m and "█" in m]
+        scoreboard = [m for m in messages if "East US" in m and "►" in m]
         assert len(scoreboard) == 1
         assert "France" in scoreboard[0]
         assert "0%" in scoreboard[0]
@@ -353,4 +353,4 @@ class TestLoggingProgressTracker:
         assert any(
             "[progress] LLMInvocation: 100 rows | 10.0%" in msg for msg in messages
         )
-        assert any("[api] France" in msg and "█" in msg for msg in messages)
+        assert any("► France" in msg for msg in messages)
