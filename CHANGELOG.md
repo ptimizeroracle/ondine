@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3](https://github.com/ptimizeroracle/ondine/compare/v1.5.2...v1.5.3) (2026-03-11)
+
+
+### Documentation
+
+* rewrite changelog for v1.5.0, v1.5.1, v1.5.2 with detailed release notes ([729d742](https://github.com/ptimizeroracle/ondine/commit/729d742eaaf083befb4c0e56bd4243695096f7d0))
+* rewrite changelog for v1.5.0, v1.5.1, v1.5.2 with detailed release notes ([36068b9](https://github.com/ptimizeroracle/ondine/commit/36068b93140c872870d0801cdba85fa9bc4750d8))
+
 ## [1.5.2](https://github.com/ptimizeroracle/ondine/compare/v1.5.1...v1.5.2) (2026-03-11)
 
 Scalene/cProfile profiling revealed per-API-call overhead in the structured output path. This release caches Pydantic schema generation and Instructor model preparation, cutting CPU waste and speeding up pipeline execution for large datasets.
