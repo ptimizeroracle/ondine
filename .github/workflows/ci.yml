@@ -180,11 +180,11 @@ jobs:
 
     - name: Verify pandas version
       run: |
-        uv run python -c "import pandas; print(f'pandas {pandas.__version__}'); assert pandas.__version__.startswith('1.5'), f'Expected pandas 1.5.x, got {pandas.__version__}'"
+        uv run --no-sync python -c "import pandas; print(f'pandas {pandas.__version__}'); assert pandas.__version__.startswith('1.5'), f'Expected pandas 1.5.x, got {pandas.__version__}'"
 
     - name: Run unit tests
       run: |
-        uv run pytest tests/unit/ -v --tb=short -o addopts=""
+        uv run --no-sync pytest tests/unit/ -v --tb=short -o addopts=""
 
   security:
     name: Security Scan
