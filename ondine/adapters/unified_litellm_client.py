@@ -1082,9 +1082,6 @@ class UnifiedLiteLLMClient(LLMClient):
 
         If cached tokens are found, logs a DEBUG message.
         """
-        if not logger.isEnabledFor(logging.DEBUG):
-            return
-
         try:
             usage = getattr(response, "usage", None)
             if not usage:
