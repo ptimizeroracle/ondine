@@ -7,42 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.2](https://github.com/ptimizeroracle/ondine/compare/v1.5.1...v1.5.2) (2026-03-11)
 
-
-### Bug Fixes
-
-* address CodeRabbit findings — thread-safe schema patching and defensive copy ([953ef4f](https://github.com/ptimizeroracle/ondine/commit/953ef4f2e570271fef7c84bfa321b420da8a2602))
-* remove debug-level early exit in _check_cache_hit to fix CI test ([b4d5076](https://github.com/ptimizeroracle/ondine/commit/b4d5076ed40bf4572afb347af7e5c3e5041835b8))
-
+Scalene/cProfile profiling revealed per-API-call overhead in the structured output path. This release caches Pydantic schema generation and Instructor model preparation, cutting CPU waste and speeding up pipeline execution for large datasets.
 
 ### Performance Improvements
 
-* cache Instructor schema generation and lazy-load UnifiedLiteLLMClient ([5ab8921](https://github.com/ptimizeroracle/ondine/commit/5ab892168bb79651c723365330e5271239c927ae))
-* cache Instructor schema generation and lazy-load UnifiedLiteLLMClient ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+* **Pydantic JSON Schema Caching**: `BaseModel.model_json_schema()` is now cached by class identity. Previously called twice per API call by Instructor, this alone saved ~1.2ms × 2 × N calls of pure CPU time ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+* **Instructor `prepare_response_model` Caching**: The wrapper class created by `openai_schema()` on every call is now cached, avoiding repeated class construction. Benchmark (mock LLM, 5000 rows): `handle_response_model` dropped from 1.65s to 0.21s (**-87%**), pipeline p50 from 3.3s to 2.5s (**-25%**) ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+* **Lazy-Load `UnifiedLiteLLMClient`**: The heavy `litellm`/`instructor` import tree is now deferred via `__getattr__` in `ondine.adapters`, making `import ondine` **87% faster** for scripts that don't immediately invoke LLM calls ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+* **Optimized `_calc_cost_from_response`**: Replaced `hasattr()` chains with `getattr()` defaults for cleaner and faster attribute access on LLM response objects ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+
+### Bug Fixes
+
+* **Thread-Safe Schema Patching** (CodeRabbit): The `_install_json_schema_cache()` monkey-patch was not atomic — under high concurrency, multiple coroutines could race to patch `BaseModel.model_json_schema`, potentially wrapping an already-patched function recursively. Fixed with a `threading.Lock` and double-checked locking pattern ([953ef4f](https://github.com/ptimizeroracle/ondine/commit/953ef4f2e570271fef7c84bfa321b420da8a2602))
+* **Defensive Schema Copy** (CodeRabbit): The cached schema dict was returned by reference, allowing downstream consumers (e.g. Instructor) to mutate it in-place and corrupt the cache for subsequent calls. Now returns `cached.copy()` ([953ef4f](https://github.com/ptimizeroracle/ondine/commit/953ef4f2e570271fef7c84bfa321b420da8a2602))
+* **CI Fix — Cache Hit Detection**: Removed a `logger.isEnabledFor(logging.DEBUG)` early-exit guard in `_check_cache_hit` that prevented cache-hit detection from running when the test mocked `logger.debug` without setting the log level to DEBUG, causing `test_prefix_caching_e2e` to fail on Python 3.11 ([b4d5076](https://github.com/ptimizeroracle/ondine/commit/b4d5076ed40bf4572afb347af7e5c3e5041835b8))
+
+### Added
+
+* **`perf` dependency group**: New optional dependency group for profiling tools — `memray`, `py-spy`, `pytest-benchmark`, `scalene`. Install with `uv sync --group perf`
 
 ## [1.5.1](https://github.com/ptimizeroracle/ondine/compare/v1.5.0...v1.5.1) (2026-03-10)
 
+Stabilizes the Textual TUI introduced in v1.5.0, unifies progress state across trackers, and removes a confusing public API method.
 
 ### Bug Fixes
 
-* improve Textual TUI layout and show dropped rows in summary ([cc92f9d](https://github.com/ptimizeroracle/ondine/commit/cc92f9d9c22f5dc71b45476e3aa206dd057ac872))
-* unify live progress state and simplify deployment reporting ([38369b9](https://github.com/ptimizeroracle/ondine/commit/38369b924d056f44305fdf60736148dbb1c7c8b3))
+* **TUI Layout Overlap**: Wrapped progress widgets in a `Vertical` container to prevent the progress bar panel from overlapping the log panel. Simplified CSS by removing unused selectors and tightening margins ([cc92f9d](https://github.com/ptimizeroracle/ondine/commit/cc92f9d9c22f5dc71b45476e3aa206dd057ac872))
+* **Dropped Row Visibility**: The pipeline summary report now shows a "Dropped rows" line when `processed + failed + skipped < total`, making silent row loss always visible ([cc92f9d](https://github.com/ptimizeroracle/ondine/commit/cc92f9d9c22f5dc71b45476e3aa206dd057ac872))
+* **Unified Progress State**: Cost and progress totals are now routed through shared `ExecutionContext` state so all tracker implementations (Rich, Textual, Logging) stay consistent. Previously, each tracker maintained independent counters that could drift ([38369b9](https://github.com/ptimizeroracle/ondine/commit/38369b924d056f44305fdf60736148dbb1c7c8b3))
+* **Simplified Deployment Bars**: Replaced deployment sub-bars with lightweight text labels so the TUI stays readable and responsive under high-concurrency runs with many deployments ([38369b9](https://github.com/ptimizeroracle/ondine/commit/38369b924d056f44305fdf60736148dbb1c7c8b3))
+
+### Removed
+
+* **`with_processing_batch_size()` from public API**: This builder method only controlled internal prompt grouping in `PromptFormatterStage` with no effect on API calls, cost, or throughput. It confused users by having a nearly identical name to `with_batch_size()` (which controls actual multi-row batching). The internal `ProcessingSpec.batch_size` default (100) remains for internal use ([90f8c81](https://github.com/ptimizeroracle/ondine/commit/90f8c81))
 
 ## [1.5.0](https://github.com/ptimizeroracle/ondine/compare/v1.4.3...v1.5.0) (2026-03-09)
 
+Adds a Textual-based TUI for interactive progress monitoring, a generic pipeline summary report, and fixes a critical bug where Pydantic structured results were lost during checkpoint restore and batch retry.
 
 ### Features
 
-* add generic pipeline summary report and polish Textual TUI ([f91ad34](https://github.com/ptimizeroracle/ondine/commit/f91ad3404ea71349a1f91af6496f27bc3069591a))
-* add Textual-based progress tracker with interactive scrollable logs ([5d7017d](https://github.com/ptimizeroracle/ondine/commit/5d7017d3ed5df8ee70a7cf54cf853d6262e210af))
-* split-panel Rich progress UI with scrolling log capture ([22075b9](https://github.com/ptimizeroracle/ondine/commit/22075b9652e1a096bf30bbec7a92c96148e40dd2))
-* Textual-based progress tracker with interactive TUI and generic summary report ([26cfde7](https://github.com/ptimizeroracle/ondine/commit/26cfde70aad98daa71433b5df9a478ac1e27abb9))
-
+* **Textual TUI Progress Tracker**: New pluggable progress mode (`"textual"`) providing a full terminal UI with fixed progress bars at top and a scrollable `RichLog` widget at bottom for real-time log inspection. Runs Textual in a daemon thread with `call_from_thread()` communication. Supports headless mode for CI. Install with `pip install ondine[tui]` ([5d7017d](https://github.com/ptimizeroracle/ondine/commit/5d7017d3ed5df8ee70a7cf54cf853d6262e210af))
+* **Split-Panel Rich Progress**: The existing Rich progress tracker now uses a `Layout`-based split panel — progress bars pinned at top, scrolling log messages at bottom. Deployment sub-bars show actual contribution percentage instead of always displaying 100% ([22075b9](https://github.com/ptimizeroracle/ondine/commit/22075b9652e1a096bf30bbec7a92c96148e40dd2))
+* **Generic Pipeline Summary Report**: `ProgressTracker` ABC now has a `show_summary()` method so every progress mode (Rich, Textual, Logging) prints a final report with rows processed, duration, cost, and token usage at pipeline completion ([f91ad34](https://github.com/ptimizeroracle/ondine/commit/f91ad3404ea71349a1f91af6496f27bc3069591a))
+* **Enhanced Textual TUI**: Header/footer, bordered panels, keybindings (Q to quit, S to toggle auto-scroll), and thread-safe signal patching for daemon-thread execution ([f91ad34](https://github.com/ptimizeroracle/ondine/commit/f91ad3404ea71349a1f91af6496f27bc3069591a))
 
 ### Bug Fixes
 
-* preserve structured_result through checkpoint restore and handle batch item count mismatch ([5e0e087](https://github.com/ptimizeroracle/ondine/commit/5e0e087d56d8adad2a957a4eca6a7a78b29e5ae7))
-* reduce batch retry amplification by preserving structured_result and handling item count mismatch ([854540d](https://github.com/ptimizeroracle/ondine/commit/854540dd11cb763c761a9fd82f348116c401f7a6))
-* skip textual tests when optional dependency is not installed ([07c53eb](https://github.com/ptimizeroracle/ondine/commit/07c53eb97131830391820b9c9d7a8c7913f3f806))
+* **Critical — Structured Result Lost on Restore**: `_structured_result` Pydantic objects were not carried through `completed_responses` checkpoint records, causing `_restore_completed_response_batches` to lose them. The disaggregator then fell back to fragile JSON text parsing instead of using the fast path. Now stores the `_structured_result` reference in checkpoint data ([5e0e087](https://github.com/ptimizeroracle/ondine/commit/5e0e087d56d8adad2a957a4eca6a7a78b29e5ae7))
+* **Batch Retry Amplification**: When a batch had fewer response items than input rows, the disaggregator silently dropped positions and marked everything as failed, triggering unnecessary retries. Now maps items by ID and pads missing positions with `"null"` instead of dropping them ([5e0e087](https://github.com/ptimizeroracle/ondine/commit/5e0e087d56d8adad2a957a4eca6a7a78b29e5ae7))
+* **Textual Test Compatibility**: Tests requiring the `textual` package now use `pytest.mark.skipif` to gracefully skip in CI environments that don't install the `[tui]` extra ([07c53eb](https://github.com/ptimizeroracle/ondine/commit/07c53eb97131830391820b9c9d7a8c7913f3f806))
+
+### Testing
+
+* Tightened unit tests per TDD Enterprise skill audit: removed tautological roundtrip test, strengthened fast-path assertions, added test exercising `Pipeline._restore_completed_response_batches`, consolidated test setup into shared `_make_batch` builder
+* 17 new unit tests for Textual TUI covering factory, lifecycle, context manager, and app interface
+
+### Added
+
+* `textual>=1.0.0` as optional `[tui]` dependency
 
 ## [1.4.3](https://github.com/ptimizeroracle/ondine/compare/v1.4.2...v1.4.3) (2026-03-09)
 
