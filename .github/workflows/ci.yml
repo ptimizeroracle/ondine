@@ -176,15 +176,15 @@ jobs:
     - name: Install with pandas 1.5
       run: |
         uv sync --extra dev --extra excel --extra parquet
-        uv pip install --system "pandas==1.5.3" --force-reinstall
+        uv pip install "pandas==1.5.3" "numpy<1.24" --force-reinstall
 
     - name: Verify pandas version
       run: |
-        python -c "import pandas; print(f'pandas {pandas.__version__}'); assert pandas.__version__.startswith('1.5'), f'Expected pandas 1.5.x, got {pandas.__version__}'"
+        uv run python -c "import pandas; print(f'pandas {pandas.__version__}'); assert pandas.__version__.startswith('1.5'), f'Expected pandas 1.5.x, got {pandas.__version__}'"
 
     - name: Run unit tests
       run: |
-        uv run pytest tests/unit/ -v --tb=short
+        uv run pytest tests/unit/ -v --tb=short -o addopts=""
 
   security:
     name: Security Scan
