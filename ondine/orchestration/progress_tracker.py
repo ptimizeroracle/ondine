@@ -737,12 +737,20 @@ class LoggingProgressTracker(ProgressTracker):
     - User explicitly requests logging mode
     """
 
+    _LOG_INTERVAL_PCT = 5
+    _LOG_INTERVAL_SECONDS = 10.0
+
     def __init__(self):
         """Initialize logging tracker."""
+        import time
+
         from ondine.utils import get_logger
 
         self.logger = get_logger(__name__)
         self.tasks: dict[str, dict[str, Any]] = {}
+        self._deployments: dict[str, dict[str, int]] = {}
+        self._deployment_labels: dict[str, dict[str, str]] = {}
+        self._time = time
 
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
         """Start tracking via logging."""
@@ -751,18 +759,40 @@ class LoggingProgressTracker(ProgressTracker):
             "current": 0,
             "cost": Decimal("0.0"),
             "last_log_percent": 0,
+            "start_time": self._time.monotonic(),
+            "last_log_time": 0.0,
         }
-        self.logger.info(f"Starting {stage_name} ({total_rows} rows)")
+
+        deployments = metadata.get("deployments", [])
+        if deployments:
+            self._deployments[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            for deployment in deployments:
+                dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
+                self._deployments[stage_name][dep_id] = 0
+                self._deployment_labels[stage_name][dep_id] = self._base_label(
+                    deployment, dep_id
+                )
+
+        self.logger.info(f"Starting stage: {stage_name}")
         return stage_name
 
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
-        """LoggingTracker has no deployment sub-tasks."""
-        pass
+        """Register a deployment for router-aware log snapshots."""
+        if stage_name not in self._deployments:
+            self._deployments[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+
+        if deployment_id not in self._deployments[stage_name]:
+            self._deployments[stage_name][deployment_id] = 0
+            self._deployment_labels[stage_name][deployment_id] = (
+                label_info or deployment_id
+            )
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
-        """Update progress via periodic logging."""
+        """Update progress with milestone or heartbeat logging."""
         if task_id not in self.tasks:
             return
 
@@ -772,8 +802,30 @@ class LoggingProgressTracker(ProgressTracker):
         if "cost" in metadata and metadata["cost"] is not None:
             task["cost"] += Decimal(str(metadata["cost"]))
 
-        percent = (task["current"] / task["total"]) * 100
-        milestones = [25, 50, 75, 100]
+        deployment_id = metadata.get("deployment_id")
+        if deployment_id and task_id in self._deployments:
+            self._deployments[task_id].setdefault(deployment_id, 0)
+            self._deployments[task_id][deployment_id] += advance
+
+        total = task["total"]
+        current = task["current"]
+        if total == 0:
+            return
+
+        percent = (current / total) * 100
+        now = self._time.monotonic()
+        next_milestone = task["last_log_percent"] + self._LOG_INTERVAL_PCT
+        hit_milestone = percent >= next_milestone
+        hit_heartbeat = (
+            current > 0 and (now - task["last_log_time"]) >= self._LOG_INTERVAL_SECONDS
+        )
+        if not (hit_milestone or hit_heartbeat):
+            return
+
+        task["last_log_percent"] = (
+            int(percent // self._LOG_INTERVAL_PCT) * self._LOG_INTERVAL_PCT
+        )
+        task["last_log_time"] = now
 
         # Use shared run-level cost when available (single source of truth)
         live_cost = (
@@ -782,44 +834,135 @@ class LoggingProgressTracker(ProgressTracker):
             else task["cost"]
         )
 
-        for milestone in milestones:
-            if percent >= milestone and task["last_log_percent"] < milestone:
-                self.logger.info(
-                    f"{task_id}: {task['current']}/{task['total']} "
-                    f"({percent:.1f}%) | Cost: ${live_cost:.4f}"
-                )
-                task["last_log_percent"] = milestone
-                break
+        elapsed = now - task["start_time"]
+        rows_per_second = current / max(elapsed, 0.01)
+        remaining = (total - current) / max(rows_per_second, 0.01)
+        eta_str = self._format_duration(remaining) if current < total else "done"
+        elapsed_str = self._format_duration(elapsed)
+
+        self.logger.info(
+            f"[progress] {task_id} | {percent:.1f}% | {current:,}/{total:,} rows | "
+            f"{rows_per_second:.0f} rows/s | {elapsed_str} elapsed | ETA {eta_str} | "
+            f"${live_cost:.4f}"
+        )
+
+        deployment_line = self._format_deployment_line(task_id, elapsed)
+        if deployment_line:
+            self.logger.info(deployment_line)
 
     def finish(self, task_id: str) -> None:
         """Log completion."""
         if task_id in self.tasks:
             task = self.tasks[task_id]
+            elapsed = self._time.monotonic() - task["start_time"]
+            rows_per_second = task["current"] / max(elapsed, 0.01)
             live_cost = (
                 self._run_progress.snapshot_cost
                 if self._run_progress is not None
                 else task["cost"]
             )
             self.logger.info(
-                f"Completed {task_id}: {task['current']}/{task['total']} rows, "
+                f"Completed {task_id}: {task['current']:,}/{task['total']:,} rows | "
+                f"{self._format_duration(elapsed)} | {rows_per_second:.0f} rows/s | "
                 f"${live_cost:.4f}"
             )
+            deployment_line = self._format_deployment_line(task_id, elapsed)
+            if deployment_line:
+                self.logger.info(deployment_line)
 
     def show_summary(self, result: Any) -> None:
         """Log a plain-text summary of the pipeline result."""
         metrics = result.metrics
         costs = result.costs
         duration = getattr(result, "duration", 0.0)
+        dropped = metrics.total_rows - (
+            metrics.processed_rows + metrics.failed_rows + metrics.skipped_rows
+        )
         self.logger.info(
             f"Pipeline Report:\n"
             f"  Rows: {metrics.processed_rows:,}/{metrics.total_rows:,} "
-            f"(failed={metrics.failed_rows:,}, skipped={metrics.skipped_rows:,})\n"
-            f"  Duration: {duration:.1f}s | {metrics.rows_per_second:.1f} rows/sec\n"
+            f"(failed={metrics.failed_rows:,}, skipped={metrics.skipped_rows:,}"
+            f"{f', dropped={dropped:,}' if dropped > 0 else ''})\n"
+            f"  Duration: {self._format_duration(duration)} | "
+            f"{metrics.rows_per_second:.1f} rows/sec\n"
             f"  Cost: ${costs.total_cost:.4f} "
             f"(${float(costs.total_cost) / max(metrics.processed_rows, 1):.6f}/row)\n"
             f"  Tokens: {costs.input_tokens:,} in + {costs.output_tokens:,} out "
             f"= {costs.total_tokens:,} total"
         )
+
+    @staticmethod
+    def _base_label(deployment: dict[str, Any], dep_id: str) -> str:
+        """Extract a concise display label from deployment metadata."""
+        if "label" in deployment:
+            return deployment["label"]
+        model = deployment.get("model", "")
+        if model:
+            provider = model.split("/")[0] if "/" in model else ""
+            model_short = model.split("/")[1] if "/" in model else model
+            if len(model_short) > 25:
+                model_short = model_short[:22] + "..."
+            return f"{dep_id} ({provider}/{model_short})"
+        return dep_id
+
+    _BAR_WIDTH = 20
+    _FILL = "█"
+    _EMPTY = "░"
+
+    def _format_deployment_line(self, task_id: str, elapsed: float) -> str:
+        """Build a multi-line ASCII scoreboard for router endpoints."""
+        dep_stats = self._deployments.get(task_id, {})
+        if not dep_stats:
+            return ""
+
+        total = sum(dep_stats.values())
+        if total <= 0:
+            return ""
+
+        labels = self._deployment_labels.get(task_id, {})
+        ranked = sorted(dep_stats.items(), key=lambda item: (-item[1], item[0]))
+
+        if len(ranked) == 1:
+            dep_id, count = ranked[0]
+            label = labels.get(dep_id, dep_id)
+            rps = count / max(elapsed, 0.01)
+            bar = self._FILL * self._BAR_WIDTH
+            return f"  [api] {label}  {bar}  {count:,} rows  {rps:.0f}/s"
+
+        w = max(len(labels.get(d, d)) for d, _ in ranked)
+        w = max(w, 8)
+        bw = self._BAR_WIDTH
+
+        lines = [
+            f"  {'Endpoint':<{w}}  {'Bar':<{bw}}  {'Rows':>8}  {'Rate':>6}  {'Share':>5}"
+        ]
+        lines.append(f"  {'─' * w}  {'─' * bw}  {'─' * 8}  {'─' * 6}  {'─' * 5}")
+
+        for dep_id, count in ranked:
+            label = labels.get(dep_id, dep_id)
+            share = (count / total) * 100
+            rps = count / max(elapsed, 0.01)
+
+            filled = round(share / 100 * bw)
+            bar = self._FILL * filled + self._EMPTY * (bw - filled)
+
+            lines.append(
+                f"  {label:<{w}}  {bar}  {count:>8,}  {rps:>5.0f}/s  {share:>4.0f}%"
+            )
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        """Render durations in short human-readable form."""
+        s = int(seconds)
+        if s < 60:
+            return f"{s}s"
+        m, s = divmod(s, 60)
+        if m < 60:
+            return f"{m}m{s:02d}s"
+        h, m = divmod(m, 60)
+        return f"{h}h{m:02d}m{s:02d}s"
 
     def __enter__(self) -> "LoggingProgressTracker":
         """Context manager entry."""
@@ -896,6 +1039,11 @@ class NoOpProgressTracker(ProgressTracker):
         pass
 
     def finish(self, task_id: str) -> None:
+        pass
+
+    def ensure_deployment_task(
+        self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
+    ) -> None:
         pass
 
     def __enter__(self) -> "NoOpProgressTracker":
