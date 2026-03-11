@@ -37,6 +37,7 @@ The extra_params pattern means:
 
 import asyncio
 import logging
+import threading
 import time
 import uuid
 import warnings
@@ -53,6 +54,7 @@ logger = logging.getLogger(__name__)
 _schema_cache: dict[int, dict] = {}
 _prepared_model_cache: dict[int, type] = {}
 _json_schema_patched = False
+_json_schema_lock = threading.Lock()
 
 
 def _install_json_schema_cache() -> None:
@@ -68,43 +70,47 @@ def _install_json_schema_cache() -> None:
     global _json_schema_patched
     if _json_schema_patched:
         return
-    _json_schema_patched = True
 
-    _original_schema = BaseModel.model_json_schema.__func__  # type: ignore[attr-defined]
+    with _json_schema_lock:
+        if _json_schema_patched:
+            return
+        _json_schema_patched = True
 
-    @classmethod  # type: ignore[misc]
-    def _cached_model_json_schema(cls, *args, **kwargs):
-        if args or kwargs:
-            return _original_schema(cls, *args, **kwargs)
-        key = id(cls)
-        cached = _schema_cache.get(key)
-        if cached is not None:
-            return cached
-        result = _original_schema(cls)
-        _schema_cache[key] = result
-        return result
+        _original_schema = BaseModel.model_json_schema.__func__  # type: ignore[attr-defined]
 
-    BaseModel.model_json_schema = _cached_model_json_schema  # type: ignore[assignment]
-
-    try:
-        import instructor.processing.response as _resp_mod
-
-        _original_prepare = _resp_mod.prepare_response_model
-
-        def _cached_prepare_response_model(response_model):
-            if response_model is None:
-                return None
-            key = id(response_model)
-            cached = _prepared_model_cache.get(key)
+        @classmethod  # type: ignore[misc]
+        def _cached_model_json_schema(cls, *args, **kwargs):
+            if args or kwargs:
+                return _original_schema(cls, *args, **kwargs)
+            key = id(cls)
+            cached = _schema_cache.get(key)
             if cached is not None:
-                return cached
-            result = _original_prepare(response_model)
-            _prepared_model_cache[key] = result
+                return cached.copy()
+            result = _original_schema(cls)
+            _schema_cache[key] = result
             return result
 
-        _resp_mod.prepare_response_model = _cached_prepare_response_model
-    except (ImportError, AttributeError):
-        pass
+        BaseModel.model_json_schema = _cached_model_json_schema  # type: ignore[assignment]
+
+        try:
+            import instructor.processing.response as _resp_mod
+
+            _original_prepare = _resp_mod.prepare_response_model
+
+            def _cached_prepare_response_model(response_model):
+                if response_model is None:
+                    return None
+                key = id(response_model)
+                cached = _prepared_model_cache.get(key)
+                if cached is not None:
+                    return cached
+                result = _original_prepare(response_model)
+                _prepared_model_cache[key] = result
+                return result
+
+            _resp_mod.prepare_response_model = _cached_prepare_response_model
+        except (ImportError, AttributeError):
+            pass
 
 
 # Import Ondine Exceptions for mapping
