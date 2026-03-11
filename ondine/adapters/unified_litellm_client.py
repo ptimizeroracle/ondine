@@ -50,6 +50,63 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+_schema_cache: dict[int, dict] = {}
+_prepared_model_cache: dict[int, type] = {}
+_json_schema_patched = False
+
+
+def _install_json_schema_cache() -> None:
+    """Cache Pydantic JSON schema generation and Instructor model preparation.
+
+    Two bottlenecks are addressed:
+    1. ``BaseModel.model_json_schema()`` — called twice per API call by Instructor
+       on dynamically-created wrapper classes.  We cache by class ``id()``.
+    2. ``prepare_response_model()`` — creates a new ``openai_schema()`` wrapper
+       class on every call, even though the input class never changes.  We cache
+       by the *original* class ``id()``.
+    """
+    global _json_schema_patched
+    if _json_schema_patched:
+        return
+    _json_schema_patched = True
+
+    _original_schema = BaseModel.model_json_schema.__func__  # type: ignore[attr-defined]
+
+    @classmethod  # type: ignore[misc]
+    def _cached_model_json_schema(cls, *args, **kwargs):
+        if args or kwargs:
+            return _original_schema(cls, *args, **kwargs)
+        key = id(cls)
+        cached = _schema_cache.get(key)
+        if cached is not None:
+            return cached
+        result = _original_schema(cls)
+        _schema_cache[key] = result
+        return result
+
+    BaseModel.model_json_schema = _cached_model_json_schema  # type: ignore[assignment]
+
+    try:
+        import instructor.processing.response as _resp_mod
+
+        _original_prepare = _resp_mod.prepare_response_model
+
+        def _cached_prepare_response_model(response_model):
+            if response_model is None:
+                return None
+            key = id(response_model)
+            cached = _prepared_model_cache.get(key)
+            if cached is not None:
+                return cached
+            result = _original_prepare(response_model)
+            _prepared_model_cache[key] = result
+            return result
+
+        _resp_mod.prepare_response_model = _cached_prepare_response_model
+    except (ImportError, AttributeError):
+        pass
+
+
 # Import Ondine Exceptions for mapping
 # Type hint for ObserverDispatcher (avoid circular import)
 from typing import TYPE_CHECKING
@@ -719,25 +776,31 @@ class UnifiedLiteLLMClient(LLMClient):
             )
             return future.result()
 
+    @staticmethod
+    def _ensure_schema_cached(output_cls: type[BaseModel]) -> None:
+        """Install the model_json_schema cache if not already active."""
+        _install_json_schema_cache()
+
     def _calc_cost_from_response(self, response: Any) -> Decimal:
         """
         Calculate cost from LiteLLM response object.
 
         Simple logic: LiteLLM already calculated the cost, just use it!
         """
-        # SIMPLE: Check if LiteLLM already calculated cost (it's in _hidden_params)
-        if hasattr(response, "_hidden_params") and response._hidden_params:
-            hidden = response._hidden_params
-            if isinstance(hidden, dict) and "response_cost" in hidden:
-                cost = hidden["response_cost"]
-                if cost and cost > 0:
-                    return Decimal(str(cost))
+        # Fast path: LiteLLM already calculated cost in _hidden_params
+        hidden = getattr(response, "_hidden_params", None)
+        if isinstance(hidden, dict):
+            cost = hidden.get("response_cost")
+            if cost and cost > 0:
+                return Decimal(str(cost))
 
-        # Fallback: Calculate ourselves
+        # Fallback: Calculate ourselves (expensive — avoid if possible)
         try:
             model_to_use = self.model
-            if self.router and hasattr(response, "model") and response.model:
-                model_to_use = response.model
+            if self.router:
+                resp_model = getattr(response, "model", None)
+                if resp_model:
+                    model_to_use = resp_model
 
             cost = litellm.completion_cost(
                 completion_response=response,
@@ -746,13 +809,13 @@ class UnifiedLiteLLMClient(LLMClient):
             if cost and cost > 0:
                 return Decimal(str(cost))
         except Exception:  # nosec B110
-            # Cost calculation is non-critical, fallback to manual calculation
             pass
 
         # Last resort: Manual calculation from spec
         if self.spec.input_cost_per_1k_tokens or self.spec.output_cost_per_1k_tokens:
-            tokens_in = response.usage.prompt_tokens if response.usage else 0
-            tokens_out = response.usage.completion_tokens if response.usage else 0
+            usage = getattr(response, "usage", None)
+            tokens_in = getattr(usage, "prompt_tokens", 0) if usage else 0
+            tokens_out = getattr(usage, "completion_tokens", 0) if usage else 0
             return self._calc_cost(tokens_in, tokens_out)
 
         return Decimal("0")
@@ -852,6 +915,8 @@ class UnifiedLiteLLMClient(LLMClient):
     ) -> LLMResponse:
         """Structured output via Instructor - use pre-initialized client."""
         start = time.time()
+
+        self._ensure_schema_cached(output_cls)
 
         # Build messages
         messages = [{"role": "user", "content": prompt}]
@@ -1016,51 +1081,38 @@ class UnifiedLiteLLMClient(LLMClient):
         Check for provider-side prompt caching (OpenAI/Azure/Anthropic).
 
         If cached tokens are found, logs a DEBUG message.
-        Uses ONDINE_LOG_LEVEL environment variable (default INFO) to control visibility.
         """
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
         try:
+            usage = getattr(response, "usage", None)
+            if not usage:
+                return
+
             cached_tokens = 0
-            # 1. Check standard OpenAI/Groq format (usage.prompt_tokens_details.cached_tokens)
-            if hasattr(response, "usage") and response.usage:
-                usage = response.usage
-                if (
-                    hasattr(usage, "prompt_tokens_details")
-                    and usage.prompt_tokens_details
-                ):
-                    cached_tokens = getattr(
-                        usage.prompt_tokens_details, "cached_tokens", 0
-                    )
+            details = getattr(usage, "prompt_tokens_details", None)
+            if details:
+                cached_tokens = getattr(details, "cached_tokens", 0)
+            if not cached_tokens:
+                cached_tokens = getattr(usage, "cache_read_input_tokens", 0)
+            if not cached_tokens:
+                return
 
-            # 2. Check Anthropic format (usage.cache_creation_input_tokens / cache_read_input_tokens)
-            # LiteLLM normalizes this, but checking raw just in case
-            if cached_tokens == 0 and hasattr(response, "usage"):
-                cached_tokens = getattr(response.usage, "cache_read_input_tokens", 0)
+            actual_model = getattr(response, "model", None)
+            if not actual_model or "mixed-llm" in actual_model:
+                hidden = getattr(response, "_hidden_params", None)
+                if isinstance(hidden, dict):
+                    actual_model = hidden.get("model_region") or hidden.get("model_id")
+            actual_model = actual_model or self.model
 
-            # Log if hit
-            if cached_tokens > 0:
-                # Try to get actual model name from response
-                # 1. response.model (usually the human-readable model name, e.g., 'gpt-4o-mini')
-                # 2. hidden params (deployment ID, sometimes a hash)
-                # 3. self.model (fallback to 'mixed-llm')
-                actual_model = getattr(response, "model", None)
-
-                if not actual_model or "mixed-llm" in actual_model:
-                    if hasattr(response, "_hidden_params"):
-                        hidden = response._hidden_params
-                        if isinstance(hidden, dict):
-                            # Prefer model_region (often provider/model) over model_id (hash)
-                            if "model_region" in hidden:
-                                actual_model = hidden["model_region"]
-                            elif "model_id" in hidden:
-                                actual_model = hidden["model_id"]
-
-                if not actual_model:
-                    actual_model = self.model
-
-                cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
-                logger.debug(
-                    f"Cache hit! ({actual_model}) {cached_tokens}/{tokens_in} tokens cached ({cache_pct:.0f}%)"
-                )
+            cache_pct = (cached_tokens / tokens_in * 100) if tokens_in > 0 else 0
+            logger.debug(
+                "Cache hit! (%s) %d/%d tokens cached (%.0f%%)",
+                actual_model,
+                cached_tokens,
+                tokens_in,
+                cache_pct,
+            )
         except Exception:  # nosec B110
-            # Don't crash on logging errors - cache hit detection is non-critical
             pass
