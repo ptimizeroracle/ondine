@@ -1,5 +1,9 @@
 """Infrastructure adapters for external systems."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ondine.adapters.checkpoint_storage import (
     CheckpointStorage,
     LocalFileCheckpointStorage,
@@ -24,7 +28,9 @@ from ondine.adapters.streaming_writer import (
     MultiFormatWriter,
     StreamingResultWriter,
 )
-from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+
+if TYPE_CHECKING:
+    from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
 __all__ = [
     # LLM Clients (PUBLIC API)
@@ -56,3 +62,11 @@ __all__ = [
     "CheckpointStorage",
     "LocalFileCheckpointStorage",
 ]
+
+
+def __getattr__(name: str):
+    if name == "UnifiedLiteLLMClient":
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+
+        return UnifiedLiteLLMClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

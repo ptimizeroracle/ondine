@@ -245,3 +245,9 @@ verbose = 1
 dev = [
     "pytest-xdist>=3.8.0",
 ]
+perf = [
+    "memray",
+    "py-spy",
+    "pytest-benchmark",
+    "scalene",
+]
