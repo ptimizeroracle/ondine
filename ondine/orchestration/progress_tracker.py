@@ -905,12 +905,8 @@ class LoggingProgressTracker(ProgressTracker):
             return f"{dep_id} ({provider}/{model_short})"
         return dep_id
 
-    _BAR_WIDTH = 20
-    _FILL = "█"
-    _EMPTY = "░"
-
     def _format_deployment_line(self, task_id: str, elapsed: float) -> str:
-        """Build a multi-line ASCII scoreboard for router endpoints."""
+        """Build a clean multi-line router scoreboard."""
         dep_stats = self._deployments.get(task_id, {})
         if not dep_stats:
             return ""
@@ -926,28 +922,18 @@ class LoggingProgressTracker(ProgressTracker):
             dep_id, count = ranked[0]
             label = labels.get(dep_id, dep_id)
             rps = count / max(elapsed, 0.01)
-            bar = self._FILL * self._BAR_WIDTH
-            return f"  [api] {label}  {bar}  {count:,} rows  {rps:.0f}/s"
+            return f"  ► {label}  {count:,} rows  {rps:.0f}/s"
 
         w = max(len(labels.get(d, d)) for d, _ in ranked)
         w = max(w, 8)
-        bw = self._BAR_WIDTH
 
-        lines = [
-            f"  {'Endpoint':<{w}}  {'Bar':<{bw}}  {'Rows':>8}  {'Rate':>6}  {'Share':>5}"
-        ]
-        lines.append(f"  {'─' * w}  {'─' * bw}  {'─' * 8}  {'─' * 6}  {'─' * 5}")
-
+        lines: list[str] = []
         for dep_id, count in ranked:
             label = labels.get(dep_id, dep_id)
             share = (count / total) * 100
             rps = count / max(elapsed, 0.01)
-
-            filled = round(share / 100 * bw)
-            bar = self._FILL * filled + self._EMPTY * (bw - filled)
-
             lines.append(
-                f"  {label:<{w}}  {bar}  {count:>8,}  {rps:>5.0f}/s  {share:>4.0f}%"
+                f"  ► {label:<{w}}  {count:>8,} rows  {rps:>5.0f}/s  {share:>4.0f}%"
             )
 
         return "\n".join(lines)
