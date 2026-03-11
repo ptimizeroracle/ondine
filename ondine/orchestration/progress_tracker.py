@@ -846,9 +846,8 @@ class LoggingProgressTracker(ProgressTracker):
             f"${live_cost:.4f}"
         )
 
-        deployment_line = self._format_deployment_line(task_id, elapsed)
-        if deployment_line:
-            self.logger.info(deployment_line)
+        for line in self._format_deployment_lines(task_id, elapsed):
+            self.logger.info(line)
 
     def finish(self, task_id: str) -> None:
         """Log completion."""
@@ -866,9 +865,8 @@ class LoggingProgressTracker(ProgressTracker):
                 f"{self._format_duration(elapsed)} | {rows_per_second:.0f} rows/s | "
                 f"${live_cost:.4f}"
             )
-            deployment_line = self._format_deployment_line(task_id, elapsed)
-            if deployment_line:
-                self.logger.info(deployment_line)
+            for line in self._format_deployment_lines(task_id, elapsed):
+                self.logger.info(line)
 
     def show_summary(self, result: Any) -> None:
         """Log a plain-text summary of the pipeline result."""
@@ -905,15 +903,15 @@ class LoggingProgressTracker(ProgressTracker):
             return f"{dep_id} ({provider}/{model_short})"
         return dep_id
 
-    def _format_deployment_line(self, task_id: str, elapsed: float) -> str:
-        """Build a clean multi-line router scoreboard."""
+    def _format_deployment_lines(self, task_id: str, elapsed: float) -> list[str]:
+        """Build per-endpoint scoreboard lines (one per logger.info call)."""
         dep_stats = self._deployments.get(task_id, {})
         if not dep_stats:
-            return ""
+            return []
 
         total = sum(dep_stats.values())
         if total <= 0:
-            return ""
+            return []
 
         labels = self._deployment_labels.get(task_id, {})
         ranked = sorted(dep_stats.items(), key=lambda item: (-item[1], item[0]))
@@ -922,7 +920,7 @@ class LoggingProgressTracker(ProgressTracker):
             dep_id, count = ranked[0]
             label = labels.get(dep_id, dep_id)
             rps = count / max(elapsed, 0.01)
-            return f"  ► {label}  {count:,} rows  {rps:.0f}/s"
+            return [f"► {label}  {count:,} rows  {rps:.0f}/s"]
 
         w = max(len(labels.get(d, d)) for d, _ in ranked)
         w = max(w, 8)
@@ -933,10 +931,10 @@ class LoggingProgressTracker(ProgressTracker):
             share = (count / total) * 100
             rps = count / max(elapsed, 0.01)
             lines.append(
-                f"  ► {label:<{w}}  {count:>8,} rows  {rps:>5.0f}/s  {share:>4.0f}%"
+                f"► {label:<{w}}  {count:>8,} rows  {rps:>5.0f}/s  {share:>4.0f}%"
             )
 
-        return "\n".join(lines)
+        return lines
 
     @staticmethod
     def _format_duration(seconds: float) -> str:

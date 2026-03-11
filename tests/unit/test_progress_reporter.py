@@ -327,10 +327,8 @@ class TestLoggingProgressTracker:
         assert any(
             "[progress] LLMInvocation: 100 rows | 50.0%" in msg for msg in messages
         )
-        scoreboard = [m for m in messages if "East US" in m and "►" in m]
-        assert len(scoreboard) == 1
-        assert "France" in scoreboard[0]
-        assert "0%" in scoreboard[0]
+        assert any("► East US" in m and "100%" in m for m in messages)
+        assert any("► France" in m and "0%" in m for m in messages)
 
     def test_logs_single_api_breakdown_for_one_endpoint(self):
         from ondine.orchestration.progress_tracker import LoggingProgressTracker
