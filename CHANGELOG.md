@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2](https://github.com/ptimizeroracle/ondine/compare/v1.5.1...v1.5.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* address CodeRabbit findings — thread-safe schema patching and defensive copy ([953ef4f](https://github.com/ptimizeroracle/ondine/commit/953ef4f2e570271fef7c84bfa321b420da8a2602))
+* remove debug-level early exit in _check_cache_hit to fix CI test ([b4d5076](https://github.com/ptimizeroracle/ondine/commit/b4d5076ed40bf4572afb347af7e5c3e5041835b8))
+
+
+### Performance Improvements
+
+* cache Instructor schema generation and lazy-load UnifiedLiteLLMClient ([5ab8921](https://github.com/ptimizeroracle/ondine/commit/5ab892168bb79651c723365330e5271239c927ae))
+* cache Instructor schema generation and lazy-load UnifiedLiteLLMClient ([52cdb2f](https://github.com/ptimizeroracle/ondine/commit/52cdb2f151faef8b38d9f7c75ccf6d7af74d7143))
+
 ## [1.5.1](https://github.com/ptimizeroracle/ondine/compare/v1.5.0...v1.5.1) (2026-03-10)
 
 
