@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/ptimizeroracle/ondine/compare/v1.5.3...v1.6.0) (2026-03-12)
+
+
+### Features
+
+* add content-hash routing strategy for cache-friendly load balancing ([f744caf](https://github.com/ptimizeroracle/ondine/commit/f744cafb805a1c99f8b71bcb122712a173400295))
+* checkpoint resilience — gzip compression and optional cleanup ([e028882](https://github.com/ptimizeroracle/ondine/commit/e0288822e491e937a38e2acfff6bc327dff52062))
+* framed ASCII pipeline report for logging progress mode ([ea4f093](https://github.com/ptimizeroracle/ondine/commit/ea4f093e66ee493ab3bfdc87a8768fddf57861c4))
+* router-aware ASCII scoreboard for logging progress mode ([1b10ba7](https://github.com/ptimizeroracle/ondine/commit/1b10ba7b87b707a024499963e234bbaa8398e311))
+* router-aware ASCII scoreboard for logging progress mode ([e169ad3](https://github.com/ptimizeroracle/ondine/commit/e169ad3e46687bc2e311eb1ff579e40b4a946a96))
+
+
+### Bug Fixes
+
+* accurate pipeline report labels and deduplicated logs ([b3e117a](https://github.com/ptimizeroracle/ondine/commit/b3e117a1673dda23635dad6c533f0c179e10ed75))
+* add missing ensure_deployment_task to NoOpProgressTracker ([124b0b8](https://github.com/ptimizeroracle/ondine/commit/124b0b800408cc794daadbcc0308b6f94ac7247e))
+* add missing ensure_deployment_task to NoOpProgressTracker ([ab804e3](https://github.com/ptimizeroracle/ondine/commit/ab804e3066b19d32747f92c1a4805cc50f113061))
+* emit each router endpoint as separate log line ([1f52c1e](https://github.com/ptimizeroracle/ondine/commit/1f52c1e764c64a3beb5aeedc50a2df4f378b34d9))
+* emit pipeline report lines individually to fix alignment ([fee9d6c](https://github.com/ptimizeroracle/ondine/commit/fee9d6c9ff7e52e4e17936f0bf004cb657ceeba0))
+* improve LoggingProgressTracker with percentage, ETA, throughput, and per-deployment stats ([0ee9d18](https://github.com/ptimizeroracle/ondine/commit/0ee9d18ca0cb45da982396ad15c0c9a7cfbc5bbd))
+* update checkpoint tests for gzip format and seed heartbeat timer ([0dbe438](https://github.com/ptimizeroracle/ondine/commit/0dbe438f1f28fc291048c6657fb58962e163d5cd))
+
 ## [1.5.3](https://github.com/ptimizeroracle/ondine/compare/v1.5.2...v1.5.3) (2026-03-11)
 
 
