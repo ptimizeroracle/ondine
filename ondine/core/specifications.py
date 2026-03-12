@@ -462,6 +462,13 @@ class ProcessingSpec(BaseModel):
         description="Progress tracking mode: auto, rich, tqdm, logging, none",
     )
 
+    # Checkpoint retention
+    cleanup_on_success: bool = Field(
+        default=True,
+        description="Delete checkpoints after successful execution. "
+        "Set False to keep checkpoints as a safety net against downstream failures.",
+    )
+
     @field_validator("checkpoint_dir")
     @classmethod
     def validate_checkpoint_dir(cls, v: str | Path) -> Path:
