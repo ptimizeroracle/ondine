@@ -869,25 +869,49 @@ class LoggingProgressTracker(ProgressTracker):
                 self.logger.info(line)
 
     def show_summary(self, result: Any) -> None:
-        """Log a plain-text summary of the pipeline result."""
+        """Log a framed ASCII summary report."""
         metrics = result.metrics
         costs = result.costs
         duration = getattr(result, "duration", 0.0)
         dropped = metrics.total_rows - (
             metrics.processed_rows + metrics.failed_rows + metrics.skipped_rows
         )
-        self.logger.info(
-            f"Pipeline Report:\n"
-            f"  Rows: {metrics.processed_rows:,}/{metrics.total_rows:,} "
-            f"(failed={metrics.failed_rows:,}, skipped={metrics.skipped_rows:,}"
-            f"{f', dropped={dropped:,}' if dropped > 0 else ''})\n"
-            f"  Duration: {self._format_duration(duration)} | "
-            f"{metrics.rows_per_second:.1f} rows/sec\n"
-            f"  Cost: ${costs.total_cost:.4f} "
-            f"(${float(costs.total_cost) / max(metrics.processed_rows, 1):.6f}/row)\n"
-            f"  Tokens: {costs.input_tokens:,} in + {costs.output_tokens:,} out "
-            f"= {costs.total_tokens:,} total"
-        )
+
+        status = "COMPLETE" if result.success else "FAILED"
+        dur_str = self._format_duration(duration)
+        cpr = float(costs.total_cost) / max(metrics.processed_rows, 1)
+
+        rows: list[tuple[str, str]] = [
+            ("Status", status),
+            ("Rows processed", f"{metrics.processed_rows:,} / {metrics.total_rows:,}"),
+        ]
+        if metrics.failed_rows:
+            rows.append(("Failed rows", f"{metrics.failed_rows:,}"))
+        if metrics.skipped_rows:
+            rows.append(("Skipped rows", f"{metrics.skipped_rows:,}"))
+        if dropped > 0:
+            rows.append(("Dropped rows", f"{dropped:,}"))
+        rows.append(("Duration", f"{dur_str} ({metrics.rows_per_second:.1f} rows/sec)"))
+        rows.append(("", ""))
+        rows.append(("Total cost", f"${costs.total_cost:.4f} (${cpr:.6f}/row)"))
+        rows.append(("Input tokens", f"{costs.input_tokens:,}"))
+        rows.append(("Output tokens", f"{costs.output_tokens:,}"))
+        rows.append(("Total tokens", f"{costs.total_tokens:,}"))
+
+        key_w = max(len(k) for k, _ in rows if k)
+        val_w = max(len(v) for _, v in rows if v)
+        inner = key_w + 3 + val_w
+        border = "─" * (inner + 2)
+
+        lines = [f"┌{border}┐", f"│{'Pipeline Report':^{inner + 2}}│", f"├{border}┤"]
+        for key, val in rows:
+            if not key and not val:
+                lines.append(f"├{border}┤")
+            else:
+                lines.append(f"│ {key:<{key_w}} : {val:<{val_w}} │")
+        lines.append(f"└{border}┘")
+
+        self.logger.info("\n".join(lines))
 
     @staticmethod
     def _base_label(deployment: dict[str, Any], dep_id: str) -> str:
