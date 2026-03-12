@@ -11,6 +11,7 @@ from ondine.core.error_handler import ErrorAction, ErrorHandler
 from ondine.core.exceptions import (
     InvalidAPIKeyError,
     ModelNotFoundError,
+    NonRetryableError,
     QuotaExceededError,
 )
 from ondine.core.models import (
@@ -260,7 +261,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             return response
 
-        except BudgetExceededError:
+        except (BudgetExceededError, NonRetryableError):
             raise
         except Exception as e:
             response = self._handle_error(e, idx, self._total_rows)
