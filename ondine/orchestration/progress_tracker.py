@@ -33,31 +33,28 @@ def _build_summary_panel(result: Any) -> Any:
     metrics = result.metrics
     costs = result.costs
 
+    output_rows = len(result.data) if result.data is not None else 0
+    llm_calls = metrics.processed_rows
+    cached = max(
+        output_rows - llm_calls - metrics.failed_rows - metrics.skipped_rows, 0
+    )
+    cpr = float(costs.total_cost) / max(output_rows, 1)
+
     status = "[bold green]COMPLETE" if result.success else "[bold red]FAILED"
     t.add_row("Status", status)
-    t.add_row("Rows processed", f"{metrics.processed_rows:,} / {metrics.total_rows:,}")
+    t.add_row("Output rows", f"{output_rows:,}")
+    if cached > 0:
+        t.add_row("Cached rows", f"[dim]{cached:,} (no LLM cost)[/dim]")
+    t.add_row("LLM calls", f"{llm_calls:,}")
     if metrics.failed_rows:
         t.add_row("Failed rows", f"[red]{metrics.failed_rows:,}[/red]")
     if metrics.skipped_rows:
         t.add_row("Skipped rows", f"[yellow]{metrics.skipped_rows:,}[/yellow]")
-    unaccounted = (
-        metrics.total_rows
-        - metrics.processed_rows
-        - metrics.failed_rows
-        - metrics.skipped_rows
-    )
-    if unaccounted > 0:
-        t.add_row("Dropped rows", f"[red]{unaccounted:,}[/red]")
     t.add_row("Duration", time_str)
     if metrics.rows_per_second:
         t.add_row("Throughput", f"{metrics.rows_per_second:.1f} rows/sec")
     t.add_row("", "")
-    t.add_row("Total cost", f"${costs.total_cost:.4f}")
-    if metrics.processed_rows:
-        t.add_row(
-            "Cost per row",
-            f"${float(costs.total_cost) / metrics.processed_rows:.6f}",
-        )
+    t.add_row("Total cost", f"${costs.total_cost:.4f} (${cpr:.6f}/row)")
     t.add_row("Input tokens", f"{costs.input_tokens:,}")
     t.add_row("Output tokens", f"{costs.output_tokens:,}")
     t.add_row("Total tokens", f"{costs.total_tokens:,}")
@@ -873,24 +870,28 @@ class LoggingProgressTracker(ProgressTracker):
         metrics = result.metrics
         costs = result.costs
         duration = getattr(result, "duration", 0.0)
-        dropped = metrics.total_rows - (
-            metrics.processed_rows + metrics.failed_rows + metrics.skipped_rows
+
+        output_rows = len(result.data) if result.data is not None else 0
+        llm_calls = metrics.processed_rows
+        cached = max(
+            output_rows - llm_calls - metrics.failed_rows - metrics.skipped_rows, 0
         )
 
         status = "COMPLETE" if result.success else "FAILED"
         dur_str = self._format_duration(duration)
-        cpr = float(costs.total_cost) / max(metrics.processed_rows, 1)
+        cpr = float(costs.total_cost) / max(output_rows, 1)
 
         rows: list[tuple[str, str]] = [
             ("Status", status),
-            ("Rows processed", f"{metrics.processed_rows:,} / {metrics.total_rows:,}"),
+            ("Output rows", f"{output_rows:,}"),
         ]
+        if cached > 0:
+            rows.append(("Cached rows", f"{cached:,} (no LLM cost)"))
+        rows.append(("LLM calls", f"{llm_calls:,}"))
         if metrics.failed_rows:
             rows.append(("Failed rows", f"{metrics.failed_rows:,}"))
         if metrics.skipped_rows:
             rows.append(("Skipped rows", f"{metrics.skipped_rows:,}"))
-        if dropped > 0:
-            rows.append(("Dropped rows", f"{dropped:,}"))
         rows.append(("Duration", f"{dur_str} ({metrics.rows_per_second:.1f} rows/sec)"))
         rows.append(("", ""))
         rows.append(("Total cost", f"${costs.total_cost:.4f} (${cpr:.6f}/row)"))
