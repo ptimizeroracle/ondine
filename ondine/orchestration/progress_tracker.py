@@ -911,7 +911,8 @@ class LoggingProgressTracker(ProgressTracker):
                 lines.append(f"│ {key:<{key_w}} : {val:<{val_w}} │")
         lines.append(f"└{border}┘")
 
-        self.logger.info("\n".join(lines))
+        for line in lines:
+            self.logger.info(line)
 
     @staticmethod
     def _base_label(deployment: dict[str, Any], dep_id: str) -> str:
