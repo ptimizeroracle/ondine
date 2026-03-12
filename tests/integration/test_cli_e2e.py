@@ -391,8 +391,8 @@ output:
         with pytest.raises(RuntimeError, match="simulated cli crash"):
             pipeline.execute()
 
-        checkpoint_file = next(checkpoint_dir.glob("*.json"))
-        session_id = checkpoint_file.stem.replace("checkpoint_", "")
+        checkpoint_file = next(checkpoint_dir.glob("*.json*"))
+        session_id = checkpoint_file.name.split("checkpoint_", 1)[1].split(".")[0]
 
         result = runner.invoke(
             cli,

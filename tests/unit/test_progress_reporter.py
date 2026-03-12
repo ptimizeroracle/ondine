@@ -290,3 +290,65 @@ class TestReporterWithSharedState:
         tracker.update(task_id, advance=100, cost=Decimal("0.08"))
 
         assert run_progress.snapshot_cost == Decimal("0.08")
+
+
+class _FakeTime:
+    """Deterministic monotonic clock for logging tracker tests."""
+
+    def __init__(self, values):
+        self._values = iter(values)
+
+    def monotonic(self):
+        return next(self._values)
+
+
+class TestLoggingProgressTracker:
+    """Focused tests for pure logging progress formatting."""
+
+    def test_logs_router_breakdown_for_multiple_endpoints(self):
+        from ondine.orchestration.progress_tracker import LoggingProgressTracker
+
+        tracker = LoggingProgressTracker()
+        tracker.logger = MagicMock()
+        tracker._time = _FakeTime([0.0, 1.0])
+
+        task_id = tracker.start_stage(
+            "LLMInvocation: 100 rows",
+            total_rows=100,
+            deployments=[
+                {"model_id": "swap-reviewer-east-us", "label": "East US"},
+                {"model_id": "swap-reviewer-france", "label": "France"},
+            ],
+        )
+
+        tracker.update(task_id, advance=50, deployment_id="swap-reviewer-east-us")
+
+        messages = [call.args[0] for call in tracker.logger.info.call_args_list]
+        assert any(
+            "[progress] LLMInvocation: 100 rows | 50.0%" in msg for msg in messages
+        )
+        assert any("► East US" in m and "100%" in m for m in messages)
+        assert any("► France" in m and "0%" in m for m in messages)
+
+    def test_logs_single_api_breakdown_for_one_endpoint(self):
+        from ondine.orchestration.progress_tracker import LoggingProgressTracker
+
+        tracker = LoggingProgressTracker()
+        tracker.logger = MagicMock()
+        tracker._time = _FakeTime([0.0, 1.0])
+
+        task_id = tracker.start_stage("LLMInvocation: 100 rows", total_rows=100)
+        tracker.ensure_deployment_task(
+            task_id,
+            "swap-reviewer-france",
+            total_rows=100,
+            label_info="France",
+        )
+
+        tracker.update(task_id, advance=10, deployment_id="swap-reviewer-france")
+
+        messages = [call.args[0] for call in tracker.logger.info.call_args_list]
+        assert any(
+            "[progress] LLMInvocation: 100 rows | 10.0%" in msg for msg in messages
+        )
+        assert any("► France" in msg for msg in messages)

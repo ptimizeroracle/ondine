@@ -101,10 +101,10 @@ def configure_logging(
                     show_path=False,
                 )
             ]
-            # Use ConsoleRenderer for structlog which works well with RichHandler
-            # Enable padding for aligned logs (DEBUG   , INFO    )
+            # Use ConsoleRenderer for structlog which works well with RichHandler.
+            # Keep levels unpadded so log lines stay compact in plain logging mode.
             processors.append(
-                structlog.dev.ConsoleRenderer(colors=True, pad_level=True)
+                structlog.dev.ConsoleRenderer(colors=True, pad_level=False)
             )
         except ImportError:
             # Fallback to custom renderer

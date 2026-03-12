@@ -675,6 +675,25 @@ class PipelineBuilder:
         self._processing_spec.checkpoint_interval = rows
         return self
 
+    def with_checkpoint_cleanup(self, enabled: bool = True) -> "PipelineBuilder":
+        """
+        Control whether checkpoints are deleted after successful execution.
+
+        By default checkpoints are cleaned up on success. Set ``enabled=False``
+        to keep them as a safety net — if downstream code (e.g. ``to_csv()``)
+        crashes after the pipeline returns, you can resume from the checkpoint
+        at zero LLM cost.
+
+        Args:
+            enabled: True (default) to delete checkpoints on success,
+                     False to retain them.
+
+        Returns:
+            Self for chaining
+        """
+        self._processing_spec.cleanup_on_success = enabled
+        return self
+
     def with_rate_limit(self, rpm: int) -> "PipelineBuilder":
         """
         Configure rate limiting.

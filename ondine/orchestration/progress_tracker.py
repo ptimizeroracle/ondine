@@ -33,31 +33,28 @@ def _build_summary_panel(result: Any) -> Any:
     metrics = result.metrics
     costs = result.costs
 
+    output_rows = len(result.data) if result.data is not None else 0
+    llm_calls = metrics.processed_rows
+    cached = max(
+        output_rows - llm_calls - metrics.failed_rows - metrics.skipped_rows, 0
+    )
+    cpr = float(costs.total_cost) / max(output_rows, 1)
+
     status = "[bold green]COMPLETE" if result.success else "[bold red]FAILED"
     t.add_row("Status", status)
-    t.add_row("Rows processed", f"{metrics.processed_rows:,} / {metrics.total_rows:,}")
+    t.add_row("Output rows", f"{output_rows:,}")
+    if cached > 0:
+        t.add_row("Cached rows", f"[dim]{cached:,} (no LLM cost)[/dim]")
+    t.add_row("LLM calls", f"{llm_calls:,}")
     if metrics.failed_rows:
         t.add_row("Failed rows", f"[red]{metrics.failed_rows:,}[/red]")
     if metrics.skipped_rows:
         t.add_row("Skipped rows", f"[yellow]{metrics.skipped_rows:,}[/yellow]")
-    unaccounted = (
-        metrics.total_rows
-        - metrics.processed_rows
-        - metrics.failed_rows
-        - metrics.skipped_rows
-    )
-    if unaccounted > 0:
-        t.add_row("Dropped rows", f"[red]{unaccounted:,}[/red]")
     t.add_row("Duration", time_str)
     if metrics.rows_per_second:
         t.add_row("Throughput", f"{metrics.rows_per_second:.1f} rows/sec")
     t.add_row("", "")
-    t.add_row("Total cost", f"${costs.total_cost:.4f}")
-    if metrics.processed_rows:
-        t.add_row(
-            "Cost per row",
-            f"${float(costs.total_cost) / metrics.processed_rows:.6f}",
-        )
+    t.add_row("Total cost", f"${costs.total_cost:.4f} (${cpr:.6f}/row)")
     t.add_row("Input tokens", f"{costs.input_tokens:,}")
     t.add_row("Output tokens", f"{costs.output_tokens:,}")
     t.add_row("Total tokens", f"{costs.total_tokens:,}")
@@ -735,12 +732,10 @@ class LoggingProgressTracker(ProgressTracker):
     - Not running in a TTY (CI, logs to file)
     - rich library not available
     - User explicitly requests logging mode
-
-    Logs at every 5% milestone with percentage, ETA, throughput, cost,
-    and per-deployment breakdown when a router is in use.
     """
 
     _LOG_INTERVAL_PCT = 5
+    _LOG_INTERVAL_SECONDS = 10.0
 
     def __init__(self):
         """Initialize logging tracker."""
@@ -756,23 +751,38 @@ class LoggingProgressTracker(ProgressTracker):
 
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
         """Start tracking via logging."""
+        start_time = self._time.monotonic()
         self.tasks[stage_name] = {
             "total": total_rows,
             "current": 0,
             "cost": Decimal("0.0"),
             "last_log_percent": 0,
-            "start_time": self._time.monotonic(),
+            "start_time": start_time,
+            "last_log_time": start_time,
         }
-        self.logger.info(f"Starting {stage_name} ({total_rows:,} rows)")
+
+        deployments = metadata.get("deployments", [])
+        if deployments:
+            self._deployments[stage_name] = {}
+            self._deployment_labels[stage_name] = {}
+            for deployment in deployments:
+                dep_id = deployment.get("model_id", deployment.get("name", "unknown"))
+                self._deployments[stage_name][dep_id] = 0
+                self._deployment_labels[stage_name][dep_id] = self._base_label(
+                    deployment, dep_id
+                )
+
+        self.logger.info(f"Starting stage: {stage_name}")
         return stage_name
 
     def ensure_deployment_task(
         self, stage_name: str, deployment_id: str, total_rows: int, label_info: str = ""
     ) -> None:
-        """Register a deployment for per-endpoint tracking."""
+        """Register a deployment for router-aware log snapshots."""
         if stage_name not in self._deployments:
             self._deployments[stage_name] = {}
             self._deployment_labels[stage_name] = {}
+
         if deployment_id not in self._deployments[stage_name]:
             self._deployments[stage_name][deployment_id] = 0
             self._deployment_labels[stage_name][deployment_id] = (
@@ -780,7 +790,7 @@ class LoggingProgressTracker(ProgressTracker):
             )
 
     def update(self, task_id: str, advance: int = 1, **metadata: Any) -> None:
-        """Update progress with percentage, ETA, throughput, and deployment info."""
+        """Update progress with milestone or heartbeat logging."""
         if task_id not in self.tasks:
             return
 
@@ -790,10 +800,10 @@ class LoggingProgressTracker(ProgressTracker):
         if "cost" in metadata and metadata["cost"] is not None:
             task["cost"] += Decimal(str(metadata["cost"]))
 
-        dep_id = metadata.get("deployment_id")
-        if dep_id and task_id in self._deployments:
-            self._deployments[task_id].setdefault(dep_id, 0)
-            self._deployments[task_id][dep_id] += advance
+        deployment_id = metadata.get("deployment_id")
+        if deployment_id and task_id in self._deployments:
+            self._deployments[task_id].setdefault(deployment_id, 0)
+            self._deployments[task_id][deployment_id] += advance
 
         total = task["total"]
         current = task["current"]
@@ -801,98 +811,161 @@ class LoggingProgressTracker(ProgressTracker):
             return
 
         percent = (current / total) * 100
+        now = self._time.monotonic()
         next_milestone = task["last_log_percent"] + self._LOG_INTERVAL_PCT
-        if percent < next_milestone:
+        hit_milestone = percent >= next_milestone
+        hit_heartbeat = (
+            current > 0 and (now - task["last_log_time"]) >= self._LOG_INTERVAL_SECONDS
+        )
+        if not (hit_milestone or hit_heartbeat):
             return
 
         task["last_log_percent"] = (
             int(percent // self._LOG_INTERVAL_PCT) * self._LOG_INTERVAL_PCT
         )
+        task["last_log_time"] = now
 
-        elapsed = self._time.monotonic() - task["start_time"]
-        rps = current / max(elapsed, 0.01)
-        remaining = (total - current) / max(rps, 0.01)
-
+        # Use shared run-level cost when available (single source of truth)
         live_cost = (
             self._run_progress.snapshot_cost
             if self._run_progress is not None
             else task["cost"]
         )
 
+        elapsed = now - task["start_time"]
+        rows_per_second = current / max(elapsed, 0.01)
+        remaining = (total - current) / max(rows_per_second, 0.01)
         eta_str = self._format_duration(remaining) if current < total else "done"
         elapsed_str = self._format_duration(elapsed)
 
-        msg = (
-            f"{task_id}: {current:,}/{total:,} ({percent:.1f}%) | "
-            f"{elapsed_str} elapsed, ETA {eta_str} | "
-            f"{rps:.0f} rows/s | ${live_cost:.4f}"
+        self.logger.info(
+            f"[progress] {task_id} | {percent:.1f}% | {current:,}/{total:,} rows | "
+            f"{rows_per_second:.0f} rows/s | {elapsed_str} elapsed | ETA {eta_str} | "
+            f"${live_cost:.4f}"
         )
 
-        dep_stats = self._deployments.get(task_id, {})
-        if dep_stats:
-            labels = self._deployment_labels.get(task_id, {})
-            parts = []
-            for did, count in sorted(dep_stats.items()):
-                label = labels.get(did, did)
-                parts.append(f"{label}: {count:,}")
-            msg += f" | Deployments: [{', '.join(parts)}]"
-
-        self.logger.info(msg)
+        for line in self._format_deployment_lines(task_id, elapsed):
+            self.logger.info(line)
 
     def finish(self, task_id: str) -> None:
-        """Log completion with final stats."""
-        if task_id not in self.tasks:
-            return
-
-        task = self.tasks[task_id]
-        elapsed = self._time.monotonic() - task["start_time"]
-        rps = task["current"] / max(elapsed, 0.01)
-
-        live_cost = (
-            self._run_progress.snapshot_cost
-            if self._run_progress is not None
-            else task["cost"]
-        )
-
-        msg = (
-            f"Completed {task_id}: {task['current']:,}/{task['total']:,} rows "
-            f"in {self._format_duration(elapsed)} ({rps:.0f} rows/s) | ${live_cost:.4f}"
-        )
-
-        dep_stats = self._deployments.get(task_id, {})
-        if dep_stats:
-            labels = self._deployment_labels.get(task_id, {})
-            parts = []
-            for did, count in sorted(dep_stats.items()):
-                label = labels.get(did, did)
-                parts.append(f"{label}: {count:,}")
-            msg += f" | Deployments: [{', '.join(parts)}]"
-
-        self.logger.info(msg)
+        """Log completion."""
+        if task_id in self.tasks:
+            task = self.tasks[task_id]
+            elapsed = self._time.monotonic() - task["start_time"]
+            rows_per_second = task["current"] / max(elapsed, 0.01)
+            live_cost = (
+                self._run_progress.snapshot_cost
+                if self._run_progress is not None
+                else task["cost"]
+            )
+            self.logger.info(
+                f"Completed {task_id}: {task['current']:,}/{task['total']:,} rows | "
+                f"{self._format_duration(elapsed)} | {rows_per_second:.0f} rows/s | "
+                f"${live_cost:.4f}"
+            )
+            for line in self._format_deployment_lines(task_id, elapsed):
+                self.logger.info(line)
 
     def show_summary(self, result: Any) -> None:
-        """Log a plain-text summary of the pipeline result."""
+        """Log a framed ASCII summary report."""
         metrics = result.metrics
         costs = result.costs
         duration = getattr(result, "duration", 0.0)
-        dropped = metrics.total_rows - (
-            metrics.processed_rows + metrics.failed_rows + metrics.skipped_rows
+
+        output_rows = len(result.data) if result.data is not None else 0
+        llm_calls = metrics.processed_rows
+        cached = max(
+            output_rows - llm_calls - metrics.failed_rows - metrics.skipped_rows, 0
         )
-        self.logger.info(
-            f"Pipeline Report:\n"
-            f"  Rows: {metrics.processed_rows:,}/{metrics.total_rows:,} "
-            f"(failed={metrics.failed_rows:,}, skipped={metrics.skipped_rows:,}"
-            f"{f', dropped={dropped:,}' if dropped > 0 else ''})\n"
-            f"  Duration: {self._format_duration(duration)} | "
-            f"{metrics.rows_per_second:.1f} rows/sec\n"
-            f"  Cost: ${costs.total_cost:.4f} "
-            f"(${float(costs.total_cost) / max(metrics.processed_rows, 1):.6f}/row)\n"
-            f"  Tokens: {costs.input_tokens:,} in + {costs.output_tokens:,} out "
-            f"= {costs.total_tokens:,} total"
-        )
+
+        status = "COMPLETE" if result.success else "FAILED"
+        dur_str = self._format_duration(duration)
+        cpr = float(costs.total_cost) / max(output_rows, 1)
+
+        rows: list[tuple[str, str]] = [
+            ("Status", status),
+            ("Output rows", f"{output_rows:,}"),
+        ]
+        if cached > 0:
+            rows.append(("Cached rows", f"{cached:,} (no LLM cost)"))
+        rows.append(("LLM calls", f"{llm_calls:,}"))
+        if metrics.failed_rows:
+            rows.append(("Failed rows", f"{metrics.failed_rows:,}"))
+        if metrics.skipped_rows:
+            rows.append(("Skipped rows", f"{metrics.skipped_rows:,}"))
+        rows.append(("Duration", f"{dur_str} ({metrics.rows_per_second:.1f} rows/sec)"))
+        rows.append(("", ""))
+        rows.append(("Total cost", f"${costs.total_cost:.4f} (${cpr:.6f}/row)"))
+        rows.append(("Input tokens", f"{costs.input_tokens:,}"))
+        rows.append(("Output tokens", f"{costs.output_tokens:,}"))
+        rows.append(("Total tokens", f"{costs.total_tokens:,}"))
+
+        key_w = max(len(k) for k, _ in rows if k)
+        val_w = max(len(v) for _, v in rows if v)
+        inner = key_w + 3 + val_w
+        border = "─" * (inner + 2)
+
+        lines = [f"┌{border}┐", f"│{'Pipeline Report':^{inner + 2}}│", f"├{border}┤"]
+        for key, val in rows:
+            if not key and not val:
+                lines.append(f"├{border}┤")
+            else:
+                lines.append(f"│ {key:<{key_w}} : {val:<{val_w}} │")
+        lines.append(f"└{border}┘")
+
+        for line in lines:
+            self.logger.info(line)
+
+    @staticmethod
+    def _base_label(deployment: dict[str, Any], dep_id: str) -> str:
+        """Extract a concise display label from deployment metadata."""
+        if "label" in deployment:
+            return deployment["label"]
+        model = deployment.get("model", "")
+        if model:
+            provider = model.split("/")[0] if "/" in model else ""
+            model_short = model.split("/")[1] if "/" in model else model
+            if len(model_short) > 25:
+                model_short = model_short[:22] + "..."
+            return f"{dep_id} ({provider}/{model_short})"
+        return dep_id
+
+    def _format_deployment_lines(self, task_id: str, elapsed: float) -> list[str]:
+        """Build per-endpoint scoreboard lines (one per logger.info call)."""
+        dep_stats = self._deployments.get(task_id, {})
+        if not dep_stats:
+            return []
+
+        total = sum(dep_stats.values())
+        if total <= 0:
+            return []
+
+        labels = self._deployment_labels.get(task_id, {})
+        ranked = sorted(dep_stats.items(), key=lambda item: (-item[1], item[0]))
+
+        if len(ranked) == 1:
+            dep_id, count = ranked[0]
+            label = labels.get(dep_id, dep_id)
+            rps = count / max(elapsed, 0.01)
+            return [f"► {label}  {count:,} rows  {rps:.0f}/s"]
+
+        w = max(len(labels.get(d, d)) for d, _ in ranked)
+        w = max(w, 8)
+
+        lines: list[str] = []
+        for dep_id, count in ranked:
+            label = labels.get(dep_id, dep_id)
+            share = (count / total) * 100
+            rps = count / max(elapsed, 0.01)
+            lines.append(
+                f"► {label:<{w}}  {count:>8,} rows  {rps:>5.0f}/s  {share:>4.0f}%"
+            )
+
+        return lines
 
     @staticmethod
     def _format_duration(seconds: float) -> str:
+        """Render durations in short human-readable form."""
         s = int(seconds)
         if s < 60:
             return f"{s}s"
