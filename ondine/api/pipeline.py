@@ -43,6 +43,7 @@ from ondine.orchestration import (
     SyncExecutor,
     create_progress_tracker,
 )
+from ondine.orchestration.progress_tracker import NoOpProgressTracker
 from ondine.stages import (
     BatchAggregatorStage,
     BatchDisaggregatorStage,
@@ -391,8 +392,18 @@ class Pipeline:
             if self.specifications.processing.cleanup_on_success:
                 state_manager.cleanup_checkpoints(context.session_id)
 
-            # Notify legacy observers of completion
+            # Notify legacy observers of completion.
+            # When the progress tracker will emit its own summary report,
+            # skip LoggingObserver/CostTrackingObserver to avoid redundancy.
+            tracker_ref = getattr(context, "_progress_tracker_ref", None)
+            tracker_has_summary = tracker_ref is not None and not isinstance(
+                tracker_ref, NoOpProgressTracker
+            )
             for observer in self.observers:
+                if tracker_has_summary and isinstance(
+                    observer, (LoggingObserver, CostTrackingObserver)
+                ):
+                    continue
                 observer.on_pipeline_complete(context, result)
 
             # Emit pipeline end event for new observability system
@@ -1099,16 +1110,22 @@ class Pipeline:
         self, stage: Any, input_data: Any, context: ExecutionContext
     ) -> Any:
         """Execute a single stage with observer notifications."""
-        # Notify observers of stage start
+        tracker_ref = getattr(context, "_progress_tracker_ref", None)
+        tracker_active = tracker_ref is not None and not isinstance(
+            tracker_ref, NoOpProgressTracker
+        )
+
         for observer in self.observers:
+            if tracker_active and isinstance(observer, LoggingObserver):
+                continue
             observer.on_stage_start(stage, context)
 
         try:
-            # Execute stage
             result = stage.execute(input_data, context)
 
-            # Notify observers of completion
             for observer in self.observers:
+                if tracker_active and isinstance(observer, LoggingObserver):
+                    continue
                 observer.on_stage_complete(stage, context, result)
 
             return result
