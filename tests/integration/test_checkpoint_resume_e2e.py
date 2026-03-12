@@ -1,5 +1,6 @@
 """Integration tests for checkpoint and resume behavior."""
 
+import gzip
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -79,10 +80,15 @@ def test_checkpoint_resume_restores_partial_progress_without_reprocessing(mock_g
         with pytest.raises(RuntimeError, match="simulated crash"):
             pipeline.execute()
 
-        checkpoint_files = list(checkpoint_dir.glob("*.json"))
+        checkpoint_files = list(checkpoint_dir.glob("*.json*"))
         assert len(checkpoint_files) == 1, "Checkpoint should be written after crash"
 
-        checkpoint_payload = json.loads(checkpoint_files[0].read_text())
+        cp = checkpoint_files[0]
+        if cp.suffix == ".gz":
+            with gzip.open(cp, "rb") as f:
+                checkpoint_payload = json.loads(f.read().decode("utf-8"))
+        else:
+            checkpoint_payload = json.loads(cp.read_text())
         checkpoint_data = checkpoint_payload["data"]
         assert checkpoint_data["last_processed_row"] == 1
         assert len(checkpoint_data["intermediate_data"]["completed_responses"]) == 2
@@ -98,9 +104,8 @@ def test_checkpoint_resume_restores_partial_progress_without_reprocessing(mock_g
             .build()
         )
 
-        result = resumed.execute(
-            resume_from=UUID(checkpoint_files[0].stem.replace("checkpoint_", ""))
-        )
+        stem = checkpoint_files[0].name.split("checkpoint_", 1)[1].split(".")[0]
+        result = resumed.execute(resume_from=UUID(stem))
 
         output = result.to_pandas()
         assert result.success
@@ -166,8 +171,12 @@ def test_checkpoint_contains_completed_response_records(mock_get):
         with pytest.raises(RuntimeError, match="checkpoint me"):
             pipeline.execute()
 
-        checkpoint_file = next(checkpoint_dir.glob("*.json"))
-        checkpoint_data = json.loads(checkpoint_file.read_text())["data"]
+        checkpoint_file = next(checkpoint_dir.glob("*.json*"))
+        if checkpoint_file.suffix == ".gz":
+            with gzip.open(checkpoint_file, "rb") as f:
+                checkpoint_data = json.loads(f.read().decode("utf-8"))["data"]
+        else:
+            checkpoint_data = json.loads(checkpoint_file.read_text())["data"]
         completed = checkpoint_data["intermediate_data"]["completed_responses"]
 
         assert len(completed) == 1

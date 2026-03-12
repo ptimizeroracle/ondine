@@ -751,13 +751,14 @@ class LoggingProgressTracker(ProgressTracker):
 
     def start_stage(self, stage_name: str, total_rows: int, **metadata: Any) -> str:
         """Start tracking via logging."""
+        start_time = self._time.monotonic()
         self.tasks[stage_name] = {
             "total": total_rows,
             "current": 0,
             "cost": Decimal("0.0"),
             "last_log_percent": 0,
-            "start_time": self._time.monotonic(),
-            "last_log_time": 0.0,
+            "start_time": start_time,
+            "last_log_time": start_time,
         }
 
         deployments = metadata.get("deployments", [])
