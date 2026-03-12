@@ -651,12 +651,12 @@ class UnifiedLiteLLMClient(LLMClient):
         if any(p in error_str for p in auth_patterns):
             return InvalidAPIKeyError(f"Authentication error: {error}")
 
-        # 6. Check for Router total failure (Fatal)
+        # 6. Check for Router cooldown (Retryable — transient rate-limit storm)
         if "no deployments available" in error_str:
-            return ModelNotFoundError(
+            return OndineRateLimitError(
                 "All Router deployments are in cooldown. "
-                "This usually means the model name in your deployment config "
-                "does not match what is actually deployed on the endpoint. "
+                "Retrying with backoff. If this persists, check that the model "
+                "name in your deployment config matches the actual deployment. "
                 f"Original: {error}"
             )
 

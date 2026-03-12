@@ -1,6 +1,7 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import asyncio
+import threading
 from decimal import Decimal
 from typing import Any
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.error_handler import ErrorAction, ErrorHandler
 from ondine.core.exceptions import (
+    ConfigurationError,
     InvalidAPIKeyError,
     ModelNotFoundError,
     NonRetryableError,
@@ -156,6 +158,13 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             self._progress_reporter = progress_reporter
             self._total_rows = total_rows
 
+            # Consecutive cooldown breaker: if we see this many cooldown
+            # errors without a single success, treat as fatal config error.
+            self._cooldown_lock = threading.Lock()
+            self._consecutive_cooldowns = 0
+            self._any_success = False
+            self._cooldown_fatal_threshold = 50
+
             # Flatten batches for concurrent processing
             items, batch_map = BatchProcessor.flatten(batches)
 
@@ -241,6 +250,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             if response is None:
                 raise RuntimeError("LLM invocation returned None (unexpected)")
 
+            # Success — reset cooldown counter
+            with self._cooldown_lock:
+                self._any_success = True
+                self._consecutive_cooldowns = 0
+
             # Track deployment distribution
             deployment_id = self._extract_deployment_id(response)
             if deployment_id:
@@ -264,6 +278,8 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         except (BudgetExceededError, NonRetryableError):
             raise
         except Exception as e:
+            self._check_cooldown_breaker(e)
+
             response = self._handle_error(e, idx, self._total_rows)
 
             batch_size = BatchProcessor.get_batch_size(item.metadata)
@@ -276,6 +292,33 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             self._update_context(context, idx, item.metadata, response)
 
             return response
+
+    def _check_cooldown_breaker(self, error: Exception) -> None:
+        """Escalate to fatal if all deployments are permanently failing.
+
+        Distinguishes between:
+        - Transient rate-limit storm: some requests succeed, cooldowns are brief
+        - Wrong model config: ZERO successes ever, every request goes to cooldown
+        """
+        error_str = str(error).lower()
+        if (
+            "no deployments available" not in error_str
+            and "all router deployments" not in error_str
+        ):
+            return
+
+        with self._cooldown_lock:
+            self._consecutive_cooldowns += 1
+            if (
+                not self._any_success
+                and self._consecutive_cooldowns >= self._cooldown_fatal_threshold
+            ):
+                raise ConfigurationError(
+                    f"All Router deployments failed {self._consecutive_cooldowns} "
+                    f"consecutive times with zero successes. The model name in "
+                    f"your deployment config likely does not match what is "
+                    f"actually deployed on the endpoint. Original: {error}"
+                )
 
     def _invoke_with_retry_and_ratelimit(
         self,
