@@ -1182,7 +1182,7 @@ class PipelineBuilder:
 
         Args:
             model_list: List of deployment configs (required)
-            routing_strategy: "simple-shuffle", "content-hash", "weighted-pick", "latency-based-routing", etc.
+            routing_strategy: "simple-shuffle", "weighted-pick", "latency-based-routing", etc.
             timeout: Request timeout in seconds (default: 120)
             num_retries: Retry attempts with other providers on failure (default: 2)
             redis_url: Redis URL for distributed state (optional)

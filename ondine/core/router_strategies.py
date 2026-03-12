@@ -82,19 +82,6 @@ class RouterStrategy(str, Enum):
     Requires: Redis for state
     """
 
-    # Deterministic / Cache-Friendly
-    CONTENT_HASH = "content-hash"
-    """
-    Deterministic routing via SHA-256 hash of prompt content.
-
-    Same prompt always routes to the same deployment, enabling near-100%
-    cache hit rates on re-runs when combined with disk or Redis caching.
-
-    Best for: Batch pipelines with caching enabled
-    Use when: You want cache-friendly load balancing across multiple endpoints
-    Note: Implemented at Ondine level; LiteLLM Router still handles failover
-    """
-
 
 # Quick reference for docstrings
 ROUTER_STRATEGY_DOCS = """
@@ -105,7 +92,6 @@ Available Router Strategies:
 - cost-based-routing: Cheapest deployment
 - least-busy: Fewest active requests (needs Redis)
 - weighted-pick: Custom traffic distribution (set weight in model_list)
-- content-hash: Deterministic routing by prompt content (cache-friendly, no Redis needed)
 
 See: https://docs.litellm.ai/docs/routing
 """

@@ -36,7 +36,6 @@ The extra_params pattern means:
 """
 
 import asyncio
-import hashlib
 import logging
 import threading
 import time
@@ -233,8 +232,6 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Router support (optional)
         self.router = None
-        self._routing_strategy: str | None = None
-        self._deployment_ids: list[str] = []
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
 
@@ -436,15 +433,8 @@ class UnifiedLiteLLMClient(LLMClient):
             self._cooldown_time = config.get("cooldown_time", 60)
             self._wrap_router_failure_callbacks()
 
-            # Store routing strategy and deployment IDs for content-hash routing
-            strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
-            self._routing_strategy = strategy
-            self._deployment_ids = [
-                dep.get("model_id", dep["litellm_params"]["model"])
-                for dep in config["model_list"]
-            ]
-
             # Display Router info using Rich utilities
+            strategy = router_kwargs.get("routing_strategy", "simple-shuffle")
             display_router_deployments(
                 model_name=self.model,
                 strategy=strategy,
@@ -513,16 +503,6 @@ class UnifiedLiteLLMClient(LLMClient):
                 return result
 
             self.router.deployment_callback_on_failure = wrapped_failure_callback
-
-    def _select_deployment_by_content(self, prompt: str) -> str:
-        """Select a deployment deterministically based on prompt content.
-
-        Uses SHA-256 for cross-platform determinism: same prompt always
-        maps to the same deployment, enabling cache-friendly routing.
-        """
-        digest = hashlib.sha256(prompt.encode("utf-8")).digest()
-        idx = int.from_bytes(digest[:4], "big") % len(self._deployment_ids)
-        return self._deployment_ids[idx]
 
     def _emit_cooldown_event(
         self,
@@ -723,11 +703,6 @@ class UnifiedLiteLLMClient(LLMClient):
         # This makes the wrapper truly "thin" - ANY LiteLLM param works without code changes!
         if hasattr(self.spec, "extra_params") and self.spec.extra_params:
             call_kwargs.update(self.spec.extra_params)
-
-        # Content-hash: inject deployment preference as metadata hint
-        if self.router and self._routing_strategy == "content-hash":
-            preferred = self._select_deployment_by_content(prompt)
-            call_kwargs.setdefault("metadata", {})["model_id"] = preferred
 
         # Call LiteLLM (Router or direct)
         try:
@@ -990,11 +965,6 @@ class UnifiedLiteLLMClient(LLMClient):
         # CRITICAL: Pass through extra params (caching, response_format, tools, etc.)
         if hasattr(self.spec, "extra_params") and self.spec.extra_params:
             call_kwargs.update(self.spec.extra_params)
-
-        # Content-hash: inject deployment preference as metadata hint
-        if self.router and self._routing_strategy == "content-hash":
-            preferred = self._select_deployment_by_content(prompt)
-            call_kwargs.setdefault("metadata", {})["model_id"] = preferred
 
         # Prevent models from returning multiple tool calls in a single response.
         # Instructor's parse_tools() asserts exactly one tool call per response;
