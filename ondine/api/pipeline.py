@@ -388,8 +388,8 @@ class Pipeline:
                 # Pass container directly (no Pandas conversion)
                 result = self._auto_retry_failed_rows(result, retry_source)
 
-            # Cleanup checkpoints on success
-            state_manager.cleanup_checkpoints(context.session_id)
+            if self.specifications.processing.cleanup_on_success:
+                state_manager.cleanup_checkpoints(context.session_id)
 
             # Notify legacy observers of completion
             for observer in self.observers:
