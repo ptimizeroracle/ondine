@@ -651,16 +651,7 @@ class UnifiedLiteLLMClient(LLMClient):
         if any(p in error_str for p in auth_patterns):
             return InvalidAPIKeyError(f"Authentication error: {error}")
 
-        # 6. Check for Router total failure (Fatal)
-        if "no deployments available" in error_str:
-            return ModelNotFoundError(
-                "All Router deployments are in cooldown. "
-                "This usually means the model name in your deployment config "
-                "does not match what is actually deployed on the endpoint. "
-                f"Original: {error}"
-            )
-
-        # 7. Check for Model Not Found (Fatal)
+        # 6. Check for Model Not Found (Fatal)
         model_patterns = [
             "decommissioned",
             "not found",
