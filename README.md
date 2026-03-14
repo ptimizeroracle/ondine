@@ -2,18 +2,20 @@
   <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
   # LLM Dataset Engine
+
+  **Batch process millions of rows with LLMs — 100x fewer API calls, 40-50% cost savings, 99.9% completion rate**
+
+  [![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
+  [![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+  [![GitHub stars](https://img.shields.io/github/stars/ptimizeroracle/ondine.svg?style=social)](https://github.com/ptimizeroracle/ondine)
+  [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
+  [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
+
 </div>
 
-[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
-[![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ptimizeroracle/Ondine/branch/main/graph/badge.svg)](https://codecov.io/gh/ptimizeroracle/Ondine)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
-[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
-
-SDK for batch processing tabular datasets with LLMs. Built with native LiteLLM integration for 100+ providers, Instructor for structured output, and comprehensive batch orchestration with automatic cost tracking, checkpointing, and YAML configuration for dataset transformation at scale.
+> **For data engineers and ML practitioners** who need to process millions of tabular rows with LLMs, Ondine is an open-source SDK that delivers **100x fewer API calls** via multi-row batching and **40-50% cost reduction** via prefix caching — with cost estimation, budget limits, checkpointing, and 100+ provider support built in.
 
 ## Features
 
@@ -87,6 +89,20 @@ print(f"Estimated cost: ${estimate.total_cost:.4f}")
 result = pipeline.execute()
 print(f"Total cost: ${result.costs.total_cost:.4f}")
 ```
+
+## Why Ondine?
+
+| Feature | Ondine | LangChain | DSPy | Custom Scripts |
+|---------|--------|-----------|------|----------------|
+| **Purpose-built for tabular data** | ✅ | ❌ General purpose | ❌ Prompt optimization | ⚠️ Manual |
+| **Multi-row batching (100x fewer calls)** | ✅ Built-in | ❌ | ❌ | ⚠️ DIY |
+| **Prefix caching (40-50% savings)** | ✅ Automatic | ❌ | ❌ | ⚠️ DIY |
+| **Pre-run cost estimation** | ✅ | ❌ | ❌ | ❌ |
+| **Budget limits & real-time tracking** | ✅ | ❌ | ❌ | ❌ |
+| **Checkpointing & resume** | ✅ Automatic | ❌ | ❌ | ⚠️ DIY |
+| **100+ LLM providers** | ✅ Via LiteLLM | ✅ Via LangChain Hub | ⚠️ Limited | ⚠️ Manual |
+| **Structured output (Pydantic)** | ✅ Via Instructor | ✅ | ✅ | ⚠️ DIY |
+| **Setup complexity** | `pip install ondine` | Complex chains | Research-oriented | Significant engineering |
 
 ## Installation
 
@@ -1090,6 +1106,16 @@ MIT License - see LICENSE file for details
 - Enhanced Router strategies (cost-based routing)
 - Redis caching analytics dashboard
 
+## Star History
+
+<a href="https://star-history.com/#ptimizeroracle/ondine&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ptimizeroracle/ondine&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ptimizeroracle/ondine&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ptimizeroracle/ondine&type=Date" />
+ </picture>
+</a>
+
 ---
 
-Built with Python and LlamaIndex
+Built with [LiteLLM](https://docs.litellm.ai/) and [Instructor](https://python.useinstructor.com/)
