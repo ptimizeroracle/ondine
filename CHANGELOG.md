@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1](https://github.com/ptimizeroracle/ondine/compare/v1.6.0...v1.6.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* Add Python 3 ([38dab87](https://github.com/ptimizeroracle/ondine/commit/38dab87d0d3e53fca38bc7ea8b21566f5524c0ed)), closes [#93](https://github.com/ptimizeroracle/ondine/issues/93)
+* fail fast when all Router deployments are in cooldown ([bc97232](https://github.com/ptimizeroracle/ondine/commit/bc97232ffa28061ef56df8888c1571c7f91a59ab))
+* treat Router cooldown as retryable with consecutive-failure breaker ([bb184b8](https://github.com/ptimizeroracle/ondine/commit/bb184b87edc25a90701730c5b115369b92495052))
+
 ## [1.6.0](https://github.com/ptimizeroracle/ondine/compare/v1.5.3...v1.6.0) (2026-03-12)
 
 
