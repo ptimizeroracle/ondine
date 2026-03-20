@@ -13,6 +13,8 @@
   [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
   [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
 
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/demo.gif" alt="Ondine Demo" width="700"/>
+
 </div>
 
 > **For data engineers and ML practitioners** who need to process millions of tabular rows with LLMs, Ondine is an open-source SDK that delivers **100x fewer API calls** via multi-row batching and **40-50% cost reduction** via prefix caching — with cost estimation, budget limits, checkpointing, and 100+ provider support built in.
