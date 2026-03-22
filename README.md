@@ -13,7 +13,7 @@
   [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
   [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
 
-  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/demo.gif" alt="Ondine Demo" width="700"/>
+  <img src="assets/images/demo.gif" alt="Ondine Demo" width="700"/>
 
 </div>
 
