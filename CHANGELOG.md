@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2](https://github.com/ptimizeroracle/ondine/compare/v1.6.1...v1.6.2) (2026-03-24)
+
+
+### Security
+
+* exclude compromised litellm 1.82.7 and 1.82.8 ([9a1a469](https://github.com/ptimizeroracle/ondine/commit/9a1a469)), see [BerriAI/litellm#24512](https://github.com/BerriAI/litellm/issues/24512)
+
 ## [1.6.1](https://github.com/ptimizeroracle/ondine/compare/v1.6.0...v1.6.1) (2026-03-19)
 
 
