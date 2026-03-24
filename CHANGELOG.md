@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.2](https://github.com/ptimizeroracle/ondine/compare/v1.6.1...v1.6.2) (2026-03-24)
 
 
+### Bug Fixes
+
+* use relative path for demo GIF so it renders on all branches ([89303c6](https://github.com/ptimizeroracle/ondine/commit/89303c649d589202e5338cd06f53dafcba726bf1))
+
+## [1.6.2](https://github.com/ptimizeroracle/ondine/compare/v1.6.1...v1.6.2) (2026-03-24)
+
+
 ### Security
 
 * exclude compromised litellm 1.82.7 and 1.82.8 ([9a1a469](https://github.com/ptimizeroracle/ondine/commit/9a1a469)), see [BerriAI/litellm#24512](https://github.com/BerriAI/litellm/issues/24512)
