@@ -69,3 +69,17 @@ multi_stage_classification_groq.py
 
 # Cache directory
 .cache/
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Compiled extension modules (built by maturin)
+ondine/_engine*.so
+ondine/_engine*.pyd
+ondine/_engine*.dylib
+ondine/*.dSYM/
+*.dylib.dSYM/
+
+# Agent working files
+.agent/
