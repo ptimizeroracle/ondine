@@ -557,6 +557,45 @@ class Pipeline:
                 f"processing {len(working_df)} remaining rows"
             )
 
+        # Stage 1.5: Knowledge Base retrieval (if configured)
+        kb_store = specs.metadata.get("knowledge_store") if specs.metadata else None
+        kb_config = specs.metadata.get("knowledge_config") if specs.metadata else None
+        if kb_store is not None and kb_config is not None:
+            from ondine.stages.knowledge_retrieval_stage import (
+                KnowledgeRetrievalStage,
+            )
+
+            query_cols = kb_config.get("query_columns") or specs.dataset.input_columns
+            top_k = kb_config.get("top_k", 3)
+
+            # Wire builder-level query_transform into the store if not
+            # already configured directly on the KnowledgeStore instance.
+            qt_spec = kb_config.get("query_transform")
+            if qt_spec and getattr(kb_store, "_query_transform", None) is None:
+                from ondine.knowledge.query import resolve_query_transform
+
+                kb_store._query_transform = resolve_query_transform(qt_spec)
+
+            reranker = None
+            if kb_config.get("rerank"):
+                from ondine.knowledge.reranker import resolve_reranker
+
+                reranker = resolve_reranker(
+                    kb_config.get(
+                        "reranker_model", "cross-encoder/ms-marco-MiniLM-L-12-v2"
+                    )
+                )
+
+            kb_stage = KnowledgeRetrievalStage(
+                store=kb_store,
+                query_columns=query_cols,
+                top_k=top_k,
+                reranker=reranker,
+                evaluate=kb_config.get("evaluate", False),
+                eval_model=kb_config.get("eval_model", "openai/gpt-4o-mini"),
+            )
+            working_df = self._execute_stage(kb_stage, working_df, context)
+
         # Stage 2: Format prompts
         formatter = PromptFormatterStage(
             specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2

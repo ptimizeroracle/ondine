@@ -1360,6 +1360,83 @@ class PipelineBuilder:
 
         return self
 
+    # ── Knowledge Base ─────────────────────────────────────────────
+
+    def with_knowledge_base(
+        self,
+        store: Any = None,
+        *,
+        query_columns: list[str] | None = None,
+        top_k: int = 3,
+        rerank: bool = False,
+        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+        query_transform: str | None = None,
+        evaluate: bool = False,
+        eval_model: str = "openai/gpt-4o-mini",
+    ) -> PipelineBuilder:
+        """Attach a knowledge base for retrieval-augmented generation.
+
+        When a ``KnowledgeStore`` is provided, the pipeline inserts a
+        retrieval stage between data loading and prompt formatting.
+        Each row is augmented with a ``{_kb_context}`` variable that
+        you can reference in your prompt template.
+
+        Args:
+            store: A pre-built ``KnowledgeStore`` (required).
+            query_columns: Input columns to concatenate as the search query.
+                If ``None``, uses all input columns from the dataset spec.
+            top_k: Number of chunks to retrieve per row.
+            rerank: Enable cross-encoder reranking of results.
+            reranker_model: Cross-encoder model name (only used when
+                ``rerank=True``).
+            query_transform: Query expansion strategy. One of
+                ``"multi-query"``, ``"hyde"``, ``"step-back"``, or
+                ``None`` to disable.
+            evaluate: When ``True``, run LLM-as-judge evaluation on
+                RAG answers and add ``_kb_eval_*`` columns.
+            eval_model: LLM model for the judge (only used when
+                ``evaluate=True``).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            from ondine.knowledge import KnowledgeStore
+
+            kb = KnowledgeStore("knowledge.db")
+            kb.ingest("docs/")
+
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("questions.csv", input_columns=["question"], output_columns=["answer"])
+                .with_knowledge_base(kb, top_k=5, rerank=True, query_transform="hyde")
+                .with_prompt(
+                    "Context:\\n{_kb_context}\\n\\nQuestion: {question}\\nAnswer:"
+                )
+                .with_llm(model="openai/gpt-4o-mini")
+                .build()
+            )
+            ```
+        """
+        if store is None:
+            raise ValueError(
+                "A KnowledgeStore instance is required. "
+                "Create one with: KnowledgeStore('path.db')"
+            )
+
+        self._custom_metadata["knowledge_store"] = store
+        self._custom_metadata["knowledge_config"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "rerank": rerank,
+            "reranker_model": reranker_model,
+            "query_transform": query_transform,
+            "evaluate": evaluate,
+            "eval_model": eval_model,
+        }
+        return self
+
     # ── Context Store / Anti-Hallucination ──────────────────────────
 
     def with_context_store(
