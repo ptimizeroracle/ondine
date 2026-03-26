@@ -8,6 +8,7 @@ backed by the Rust EvidenceDB engine with pluggable Python components.
 from ondine.knowledge.protocols import (
     Embedder,
     EvalResult,
+    OCRProvider,
     QueryTransformer,
     Reranker,
     RetrievalScorer,
@@ -22,6 +23,7 @@ __all__ = [
     "Reranker",
     "QueryTransformer",
     "RetrievalScorer",
+    "OCRProvider",
     "EvalResult",
     # Concrete implementations (lazy)
     "DocumentLoader",
@@ -34,6 +36,9 @@ __all__ = [
     "HyDETransformer",
     "StepBackTransformer",
     "LLMJudge",
+    "VisionOCR",
+    "TesseractOCR",
+    "DocTROCR",
 ]
 
 
@@ -52,6 +57,9 @@ def __getattr__(name: str):
         "HyDETransformer": ("ondine.knowledge.query", "HyDETransformer"),
         "StepBackTransformer": ("ondine.knowledge.query", "StepBackTransformer"),
         "LLMJudge": ("ondine.knowledge.eval", "LLMJudge"),
+        "VisionOCR": ("ondine.knowledge.ocr", "VisionOCR"),
+        "TesseractOCR": ("ondine.knowledge.ocr", "TesseractOCR"),
+        "DocTROCR": ("ondine.knowledge.ocr", "DocTROCR"),
     }
 
     if name in _lazy:

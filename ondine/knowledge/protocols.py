@@ -43,6 +43,20 @@ class QueryTransformer(Protocol):
     def transform(self, query: str) -> list[str]: ...
 
 
+# ── OCR / Image-to-Text ──────────────────────────────────────────
+
+
+@runtime_checkable
+class OCRProvider(Protocol):
+    """Extract text from an image file or raw bytes.
+
+    Implementations may use local OCR engines (Tesseract, DocTR) or
+    multimodal LLMs (GPT-4o, Gemini) via litellm.
+    """
+
+    def extract_text(self, image_path: str) -> str: ...
+
+
 # ── Evaluation ────────────────────────────────────────────────────
 
 

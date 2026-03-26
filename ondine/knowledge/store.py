@@ -28,7 +28,12 @@ from ondine.knowledge.reranker import resolve_reranker
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ondine.knowledge.protocols import Embedder, QueryTransformer, Reranker
+    from ondine.knowledge.protocols import (
+        Embedder,
+        OCRProvider,
+        QueryTransformer,
+        Reranker,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +83,11 @@ class KnowledgeStore:
         query_transform: A ``QueryTransformer``-protocol object, a
             strategy-name string (``"multi-query"``, ``"hyde"``,
             ``"step-back"``), or ``None`` to disable.
+        ocr: An ``OCRProvider``-protocol object, a shortcut string
+            (``"vision"``, ``"tesseract"``, ``"doctr"``, or a litellm
+            model name), or ``None`` to skip image files during ingest.
+        extract_pdf_images: When ``True`` and ``ocr`` is configured,
+            also extract and OCR embedded images from PDF pages.
         embed_fn: **Deprecated.** Legacy callable ``list[str] ->
             list[list[float]]``. Use ``embedder`` instead.
         embed_model_name: Model-name label stored alongside embeddings.
@@ -91,12 +101,14 @@ class KnowledgeStore:
         embedder: Embedder | str | None = None,
         reranker: Reranker | str | bool | None = None,
         query_transform: QueryTransformer | str | None = None,
+        ocr: OCRProvider | str | None = None,
+        extract_pdf_images: bool = False,
         embed_fn: EmbedFn | None = None,
         embed_model_name: str = "BAAI/bge-base-en-v1.5",
     ) -> None:
         self._db = self._open_db(db_path)
         self._chunker = chunker or SemanticChunker()
-        self._loader = DocumentLoader()
+        self._loader = DocumentLoader(ocr=ocr, extract_pdf_images=extract_pdf_images)
 
         # Resolve embedder — honour legacy embed_fn for backward compat
         if embed_fn is not None:

@@ -132,19 +132,21 @@ class PromptFormatterStage(
                 last_log_pct = current_pct
 
             try:
-                # Extract only template variables from row
-                # Note: For Jinja2, we pass all row data since variable extraction
-                # from Jinja2 templates is complex (filters, expressions, etc.)
                 if use_jinja2:
                     row_data = dict(row)
                 else:
                     row_data = {k: v for k, v in row.items() if k in template_str}
 
-                # Format prompt (Jinja2 or f-string)
                 if use_jinja2 and jinja_template:
                     prompt = jinja_template.render(**row_data)
                 else:
                     prompt = template_str.format(**row_data)
+
+                # Auto-prepend KB context when the retrieval stage produced it
+                # but the user's template doesn't explicitly reference it.
+                kb_ctx = row.get("_kb_context")
+                if kb_ctx and "_kb_context" not in template_str:
+                    prompt = f"Context:\n{kb_ctx}\n\n{prompt}"
 
                 # Add few-shot examples if specified (but NOT system message)
                 if prompt_spec.few_shot_examples:

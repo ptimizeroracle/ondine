@@ -97,6 +97,27 @@ impl EvidenceGraph {
                 embedding BLOB NOT NULL,
                 model TEXT NOT NULL,
                 dimensions INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS kb_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                source TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS kb_chunks_fts USING fts5(
+                chunk_id,
+                text,
+                content=kb_chunks,
+                content_rowid=rowid
+            );
+
+            CREATE TABLE IF NOT EXISTS kb_chunk_embeddings (
+                chunk_id TEXT PRIMARY KEY REFERENCES kb_chunks(chunk_id),
+                embedding BLOB NOT NULL,
+                model TEXT NOT NULL,
+                dimensions INTEGER NOT NULL
             );"
         )?;
         Ok(())
@@ -344,6 +365,185 @@ impl EvidenceGraph {
         }
 
         Ok(results)
+    }
+
+    // ── Knowledge Base chunk operations ────────────────────────────────
+
+    /// Store a document chunk for knowledge base retrieval.
+    /// Returns the generated chunk_id.
+    pub fn store_chunk(
+        &self,
+        chunk_id: &str,
+        text: &str,
+        source: &str,
+        metadata_json: &str,
+    ) -> Result<(), EvidenceError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO kb_chunks (chunk_id, text, source, metadata) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![chunk_id, text, source, metadata_json],
+        )?;
+
+        let rowid: i64 = self.conn.query_row(
+            "SELECT rowid FROM kb_chunks WHERE chunk_id = ?1",
+            [chunk_id],
+            |row| row.get(0),
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO kb_chunks_fts(rowid, chunk_id, text) VALUES (?1, ?2, ?3)",
+            rusqlite::params![rowid, chunk_id, text],
+        )?;
+        Ok(())
+    }
+
+    /// Embed KB chunks that don't have embeddings yet.
+    pub fn embed_pending_chunks(&self, model_name: &str) -> Result<usize, EvidenceError> {
+        let callback = match &self.embed_callback {
+            Some(cb) => cb,
+            None => return Ok(0),
+        };
+
+        let mut stmt = self.conn.prepare(
+            "SELECT c.chunk_id, c.text FROM kb_chunks c
+             LEFT JOIN kb_chunk_embeddings e ON c.chunk_id = e.chunk_id
+             WHERE e.chunk_id IS NULL"
+        )?;
+
+        let pending: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if pending.is_empty() {
+            return Ok(0);
+        }
+
+        let texts: Vec<String> = pending.iter().map(|(_, t)| t.clone()).collect();
+        let embeddings = callback(&texts).map_err(EvidenceError::Embedding)?;
+
+        if embeddings.len() != pending.len() {
+            return Err(EvidenceError::Embedding(format!(
+                "expected {} embeddings, got {}", pending.len(), embeddings.len()
+            )));
+        }
+
+        let dims = embeddings.first().map_or(0, |e| e.len());
+
+        for (i, (chunk_id, _)) in pending.iter().enumerate() {
+            let blob = f32_vec_to_bytes(&embeddings[i]);
+            self.conn.execute(
+                "INSERT OR REPLACE INTO kb_chunk_embeddings (chunk_id, embedding, model, dimensions)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![chunk_id, blob, model_name, dims as i32],
+            )?;
+        }
+
+        Ok(pending.len())
+    }
+
+    /// Hybrid search over KB chunks: FTS5 + dense + RRF.
+    /// Returns (chunk_id, text, source, metadata_json, score) tuples.
+    pub fn query_chunks(
+        &self,
+        question: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, String, String, String, f64)>, EvidenceError> {
+        let dense_results = self.try_dense_chunk_search(question, limit * 2);
+        let sparse_results = self.query_chunks_fts(question, limit * 2)?;
+
+        let scored = match dense_results {
+            Some(dense) if !dense.is_empty() => {
+                rrf_fuse(&dense, &sparse_results, limit)
+            }
+            _ => {
+                sparse_results.into_iter().take(limit).collect()
+            }
+        };
+
+        let mut results = Vec::with_capacity(scored.len());
+        for (chunk_id, score) in &scored {
+            let row = self.conn.query_row(
+                "SELECT text, source, metadata FROM kb_chunks WHERE chunk_id = ?1",
+                [chunk_id],
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                )),
+            );
+            match row {
+                Ok((text, source, metadata)) => {
+                    results.push((chunk_id.clone(), text, source, metadata, *score));
+                }
+                Err(_) => continue,
+            }
+        }
+        Ok(results)
+    }
+
+    fn try_dense_chunk_search(&self, question: &str, limit: usize) -> Option<Vec<(String, f64)>> {
+        let callback = self.embed_callback.as_ref()?;
+        let embeddings = callback(&[question.to_string()]).ok()?;
+        let query_vec = embeddings.into_iter().next()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT chunk_id, embedding FROM kb_chunk_embeddings"
+        ).ok()?;
+
+        let mut scored: Vec<(String, f64)> = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let blob: Vec<u8> = row.get(1)?;
+                Ok((id, blob))
+            })
+            .ok()?
+            .filter_map(|r| r.ok())
+            .map(|(id, blob)| {
+                let stored = bytes_to_f32_vec(&blob);
+                let sim = cosine_similarity(&query_vec, &stored);
+                (id, sim)
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+        Some(scored)
+    }
+
+    fn query_chunks_fts(&self, question: &str, limit: usize) -> Result<Vec<(String, f64)>, EvidenceError> {
+        let fts_query = question
+            .split_whitespace()
+            .map(|w| format!("\"{}\"", w.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+
+        if fts_query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT fts.chunk_id, fts.rank
+             FROM kb_chunks_fts fts
+             WHERE kb_chunks_fts MATCH ?1
+             ORDER BY fts.rank
+             LIMIT ?2"
+        )?;
+
+        let results = stmt
+            .query_map(rusqlite::params![fts_query, limit], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(results.into_iter().map(|(id, rank)| (id, -rank)).collect())
+    }
+
+    /// Count of chunks currently in the knowledge base.
+    pub fn chunk_count(&self) -> Result<usize, EvidenceError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM kb_chunks", [], |row| row.get(0),
+        )?;
+        Ok(count as usize)
     }
 
     pub fn get_contradictions(&self, claim_id: Uuid) -> Result<Vec<Uuid>, EvidenceError> {
@@ -608,5 +808,76 @@ mod tests {
         let results = graph.query("Organic", 10).unwrap();
         assert!(!results.is_empty());
         assert!(results[0].claim.text.contains("Organic"));
+    }
+
+    // ── Knowledge Base chunk tests ───────────────────────────────────
+
+    #[test]
+    fn store_and_retrieve_kb_chunk_via_fts() {
+        let graph = EvidenceGraph::open_in_memory().unwrap();
+        graph.store_chunk("c1", "Organic cereals contain whole grains", "doc.pdf", "{}").unwrap();
+        graph.store_chunk("c2", "Frozen vegetables are flash-frozen", "doc.pdf", "{}").unwrap();
+
+        let results = graph.query_chunks("organic grains", 5).unwrap();
+        assert!(!results.is_empty(), "FTS should return at least one chunk");
+        assert_eq!(results[0].0, "c1");
+    }
+
+    #[test]
+    fn kb_chunk_count_reflects_stored_chunks() {
+        let graph = EvidenceGraph::open_in_memory().unwrap();
+        assert_eq!(graph.chunk_count().unwrap(), 0);
+        graph.store_chunk("c1", "text a", "src", "{}").unwrap();
+        graph.store_chunk("c2", "text b", "src", "{}").unwrap();
+        assert_eq!(graph.chunk_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn kb_chunk_upsert_replaces_content() {
+        let graph = EvidenceGraph::open_in_memory().unwrap();
+        graph.store_chunk("c1", "old text about apples", "doc.pdf", "{}").unwrap();
+        graph.store_chunk("c1", "new text about bananas", "doc.pdf", "{}").unwrap();
+
+        assert_eq!(graph.chunk_count().unwrap(), 1);
+        let results = graph.query_chunks("bananas", 5).unwrap();
+        assert!(!results.is_empty());
+        assert!(results[0].1.contains("bananas"), "chunk text should be updated");
+    }
+
+    #[test]
+    fn embed_and_dense_search_kb_chunks() {
+        let mut graph = EvidenceGraph::open_in_memory().unwrap();
+        graph.store_chunk("c1", "Organic cereals with whole grains", "a.pdf", "{}").unwrap();
+        graph.store_chunk("c2", "Frozen vegetables are flash-frozen at harvest", "b.pdf", "{}").unwrap();
+        graph.store_chunk("c3", "Bio-certified organic granola bars", "c.pdf", "{}").unwrap();
+
+        graph.set_embed_callback(Box::new(|texts: &[String]| {
+            Ok(texts.iter().map(|t| {
+                if t.contains("organic") || t.contains("granola") || t.contains("Organic") {
+                    vec![0.9_f32, 0.1, 0.0, 0.0]
+                } else if t.contains("frozen") || t.contains("Frozen") {
+                    vec![0.0_f32, 0.1, 0.9, 0.0]
+                } else {
+                    vec![0.5_f32, 0.5, 0.5, 0.5]
+                }
+            }).collect())
+        }));
+        let embedded = graph.embed_pending_chunks("test-model").unwrap();
+        assert_eq!(embedded, 3);
+
+        let results = graph.query_chunks("organic products", 5).unwrap();
+        assert!(!results.is_empty());
+        let top_text = &results[0].1;
+        assert!(
+            top_text.contains("rganic") || top_text.contains("granola"),
+            "expected organic/granola at top, got: {top_text}"
+        );
+    }
+
+    #[test]
+    fn query_chunks_empty_db_returns_empty() {
+        let graph = EvidenceGraph::open_in_memory().unwrap();
+        let results = graph.query_chunks("anything", 5).unwrap();
+        assert!(results.is_empty());
     }
 }

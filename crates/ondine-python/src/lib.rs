@@ -129,6 +129,87 @@ impl EvidenceDB {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Serialization error: {e}")))
     }
 
+    // ── Knowledge Base chunk operations ────────────────────────────────
+
+    /// Store a document chunk in the knowledge base.
+    #[pyo3(signature = (chunk_id, text, source, metadata_json = "{}"))]
+    fn store_chunk(
+        &self,
+        chunk_id: &str,
+        text: &str,
+        source: &str,
+        metadata_json: &str,
+    ) -> PyResult<()> {
+        let graph = self.inner.lock().unwrap();
+        graph.store_chunk(chunk_id, text, source, metadata_json)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("store_chunk error: {e}")))
+    }
+
+    /// Hybrid search over KB chunks. Returns JSON array of
+    /// [chunk_id, text, source, metadata_json, score] tuples.
+    #[pyo3(signature = (question, limit = 5))]
+    fn query_chunks(&self, question: &str, limit: usize) -> PyResult<String> {
+        let graph = self.inner.lock().unwrap();
+        let results = graph.query_chunks(question, limit)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("query_chunks error: {e}")))?;
+        serde_json::to_string(&results)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Serialization error: {e}")))
+    }
+
+    /// Embed pending KB chunks using the same callback mechanism as claims.
+    #[pyo3(signature = (callback, model_name = "text-embedding-3-small"))]
+    fn embed_pending_chunks(
+        &self,
+        py: Python<'_>,
+        callback: PyObject,
+        model_name: &str,
+    ) -> PyResult<usize> {
+        let mut graph = self.inner.lock().unwrap();
+
+        let cb_ref = callback.clone_ref(py);
+        let rust_embed: ondine_core::evidence::store::EmbedCallback =
+            Box::new(move |texts: &[String]| {
+                Python::with_gil(|py| {
+                    let py_texts = PyList::new(
+                        py,
+                        texts.iter().map(|t| t.as_str()),
+                    ).map_err(|e| format!("Failed to create Python list: {e}"))?;
+
+                    let result = cb_ref
+                        .call1(py, (py_texts,))
+                        .map_err(|e| format!("Python embed callback error: {e}"))?;
+
+                    let outer_list = result
+                        .downcast_bound::<PyList>(py)
+                        .map_err(|e| format!("Embed callback must return list of lists: {e}"))?;
+
+                    let mut embeddings = Vec::with_capacity(outer_list.len());
+                    for item in outer_list.iter() {
+                        let inner = item
+                            .downcast::<PyList>()
+                            .map_err(|e| format!("Inner embedding must be list: {e}"))?;
+                        let vec: Vec<f32> = inner
+                            .iter()
+                            .map(|v| v.extract::<f32>().unwrap_or(0.0))
+                            .collect();
+                        embeddings.push(vec);
+                    }
+                    Ok(embeddings)
+                })
+            });
+
+        graph.set_embed_callback(rust_embed);
+        graph.embed_pending_chunks(model_name)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Embedding error: {e}")))
+    }
+
+    /// Number of chunks in the knowledge base.
+    fn chunk_count(&self) -> PyResult<usize> {
+        let graph = self.inner.lock().unwrap();
+        graph.chunk_count()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("chunk_count error: {e}")))
+    }
+
     /// Embed pending claims using a Python callback.
     /// callback receives a list of strings and returns a list of list[float].
     #[pyo3(signature = (callback, model_name = "text-embedding-3-small"))]
