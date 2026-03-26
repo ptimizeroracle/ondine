@@ -28,6 +28,14 @@ from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.api.quick import QuickPipeline
 
+# Context store (pluggable anti-hallucination backends)
+from ondine.context import (
+    ContextStore,
+    EvidenceRecord,
+    GroundingResult,
+    RetrievalResult,
+)
+
 # Core result models
 from ondine.core.models import (
     CostEstimate,
@@ -62,4 +70,27 @@ __all__ = [
     "QualityReport",
     "ProcessingStats",
     "CostEstimate",
+    "ContextStore",
+    "EvidenceRecord",
+    "GroundingResult",
+    "RetrievalResult",
+    "RustContextStore",
+    "ZepContextStore",
+    "InMemoryContextStore",
 ]
+
+
+def __getattr__(name: str):
+    if name == "RustContextStore":
+        from ondine.context.rust_store import RustContextStore
+
+        return RustContextStore
+    if name == "ZepContextStore":
+        from ondine.context.zep_store import ZepContextStore
+
+        return ZepContextStore
+    if name == "InMemoryContextStore":
+        from ondine.context.memory_store import InMemoryContextStore
+
+        return InMemoryContextStore
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

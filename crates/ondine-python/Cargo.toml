@@ -1,0 +1,15 @@
+[package]
+name = "ondine-python"
+version = "0.1.0"
+edition = "2021"
+description = "Ondine Context Store — Python bindings via PyO3"
+
+[lib]
+name = "ondine_python"
+crate-type = ["cdylib"]
+
+[dependencies]
+ondine-core = { path = "../ondine-core" }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
