@@ -865,9 +865,18 @@ class Pipeline:
                         for col in output_cols:
                             row[col] = None
                         grounding_score = None
-            elif not grounding_cfg:
+
+            # Always store the claim in the evidence graph so evidence
+            # priming can retrieve it on subsequent runs.  Store the full
+            # context (input + output) so TF-IDF search can match on the
+            # input text, not just the raw LLM answer.
+            if idx not in stored_claim_ids:
+                source_label = " ".join(source_text_parts) if source_text_parts else ""
+                evidence_text = (
+                    f"{source_label} → {output_text}" if source_label else output_text
+                )
                 record = EvidenceRecord(
-                    text=output_text,
+                    text=evidence_text,
                     source_ref=f"row_{idx}",
                     claim_type="factual",
                     source_type="llm_response",
