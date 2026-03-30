@@ -160,6 +160,9 @@ jobs:
         uv run mypy ondine/ || true
 
     - name: Run unit tests
+      env:
+        CUDA_VISIBLE_DEVICES: ""
+        PYTORCH_MPS_HIGH_WATERMARK_RATIO: "0.0"
       run: |
         uv run pytest tests/unit/ -v --tb=short
 
