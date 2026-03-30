@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/ptimizeroracle/ondine/compare/v1.6.2...v1.7.0) (2026-03-30)
+
+
+### Features
+
+* **context:** evidence priming — pre-LLM injection from evidence graph ([#107](https://github.com/ptimizeroracle/ondine/issues/107)) ([0f38a1b](https://github.com/ptimizeroracle/ondine/commit/0f38a1b401668077b571ab90684c01664930b4f5))
+* **context:** pluggable context store, Rust evidence graph, grounding & Zep backend ([#106](https://github.com/ptimizeroracle/ondine/issues/106)) ([3e8f40e](https://github.com/ptimizeroracle/ondine/commit/3e8f40ee1a625494656d9b5b76443bcb114b8d7b))
+
+
+### Documentation
+
+* context store, RAG knowledge base, and evidence priming documentation ([#110](https://github.com/ptimizeroracle/ondine/issues/110)) ([227e252](https://github.com/ptimizeroracle/ondine/commit/227e25284cf2bb782bf2748f0273fc975860124c))
+
 ## [1.6.2](https://github.com/ptimizeroracle/ondine/compare/v1.6.1...v1.6.2) (2026-03-24)
 
 
