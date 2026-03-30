@@ -577,6 +577,65 @@ class Pipeline:
                 f"processing {len(working_df)} remaining rows"
             )
 
+        # Stage 1.5: Knowledge Base retrieval (if configured)
+        kb_store = specs.metadata.get("knowledge_store") if specs.metadata else None
+        kb_config = specs.metadata.get("knowledge_config") if specs.metadata else None
+        if kb_store is not None and kb_config is not None:
+            from ondine.stages.knowledge_retrieval_stage import (
+                KnowledgeRetrievalStage,
+            )
+
+            query_cols = kb_config.get("query_columns") or specs.dataset.input_columns
+            top_k = kb_config.get("top_k", 3)
+
+            # Wire builder-level query_transform into the store if not
+            # already configured directly on the KnowledgeStore instance.
+            qt_spec = kb_config.get("query_transform")
+            if qt_spec and getattr(kb_store, "_query_transform", None) is None:
+                from ondine.knowledge.query import resolve_query_transform
+
+                kb_store._query_transform = resolve_query_transform(qt_spec)
+
+            reranker = None
+            if kb_config.get("rerank"):
+                from ondine.knowledge.reranker import resolve_reranker
+
+                reranker = resolve_reranker(
+                    kb_config.get(
+                        "reranker_model", "cross-encoder/ms-marco-MiniLM-L-12-v2"
+                    )
+                )
+
+            kb_stage = KnowledgeRetrievalStage(
+                store=kb_store,
+                query_columns=query_cols,
+                top_k=top_k,
+                reranker=reranker,
+                evaluate=kb_config.get("evaluate", False),
+                eval_model=kb_config.get("eval_model", "openai/gpt-4o-mini"),
+            )
+            working_df = self._execute_stage(kb_stage, working_df, context)
+
+        # Stage 1.7: Evidence priming (if configured) — injects prior evidence
+        # from the context store into each row before prompt formatting.
+        evidence_priming_cfg = (
+            specs.metadata.get("evidence_priming") if specs.metadata else None
+        )
+        evidence_store = specs.metadata.get("context_store") if specs.metadata else None
+        if evidence_priming_cfg is not None and evidence_store is not None:
+            from ondine.stages.evidence_retrieval_stage import EvidenceRetrievalStage
+
+            query_cols = (
+                evidence_priming_cfg.get("query_columns") or specs.dataset.input_columns
+            )
+            ev_stage = EvidenceRetrievalStage(
+                store=evidence_store,
+                query_columns=query_cols,
+                top_k=evidence_priming_cfg.get("top_k", 3),
+                min_score=evidence_priming_cfg.get("min_score", 0.1),
+            )
+            working_df = self._execute_stage(ev_stage, working_df, context)
+
         # Stage 2: Format prompts
         formatter = PromptFormatterStage(
             specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2
@@ -828,9 +887,18 @@ class Pipeline:
                         for col in output_cols:
                             row[col] = None
                         grounding_score = None
-            elif not grounding_cfg:
+
+            # Always store the claim in the evidence graph so evidence
+            # priming can retrieve it on subsequent runs.  Store the full
+            # context (input + output) so TF-IDF search can match on the
+            # input text, not just the raw LLM answer.
+            if idx not in stored_claim_ids:
+                source_label = " ".join(source_text_parts) if source_text_parts else ""
+                evidence_text = (
+                    f"{source_label} → {output_text}" if source_label else output_text
+                )
                 record = EvidenceRecord(
-                    text=output_text,
+                    text=evidence_text,
                     source_ref=f"row_{idx}",
                     claim_type="factual",
                     source_type="llm_response",

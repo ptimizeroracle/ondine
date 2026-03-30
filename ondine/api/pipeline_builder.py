@@ -1360,6 +1360,83 @@ class PipelineBuilder:
 
         return self
 
+    # ── Knowledge Base ─────────────────────────────────────────────
+
+    def with_knowledge_base(
+        self,
+        store: Any = None,
+        *,
+        query_columns: list[str] | None = None,
+        top_k: int = 3,
+        rerank: bool = False,
+        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+        query_transform: str | None = None,
+        evaluate: bool = False,
+        eval_model: str = "openai/gpt-4o-mini",
+    ) -> PipelineBuilder:
+        """Attach a knowledge base for retrieval-augmented generation.
+
+        When a ``KnowledgeStore`` is provided, the pipeline inserts a
+        retrieval stage between data loading and prompt formatting.
+        Each row is augmented with a ``{_kb_context}`` variable that
+        you can reference in your prompt template.
+
+        Args:
+            store: A pre-built ``KnowledgeStore`` (required).
+            query_columns: Input columns to concatenate as the search query.
+                If ``None``, uses all input columns from the dataset spec.
+            top_k: Number of chunks to retrieve per row.
+            rerank: Enable cross-encoder reranking of results.
+            reranker_model: Cross-encoder model name (only used when
+                ``rerank=True``).
+            query_transform: Query expansion strategy. One of
+                ``"multi-query"``, ``"hyde"``, ``"step-back"``, or
+                ``None`` to disable.
+            evaluate: When ``True``, run LLM-as-judge evaluation on
+                RAG answers and add ``_kb_eval_*`` columns.
+            eval_model: LLM model for the judge (only used when
+                ``evaluate=True``).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            from ondine.knowledge import KnowledgeStore
+
+            kb = KnowledgeStore("knowledge.db")
+            kb.ingest("docs/")
+
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("questions.csv", input_columns=["question"], output_columns=["answer"])
+                .with_knowledge_base(kb, top_k=5, rerank=True, query_transform="hyde")
+                .with_prompt(
+                    "Context:\\n{_kb_context}\\n\\nQuestion: {question}\\nAnswer:"
+                )
+                .with_llm(model="openai/gpt-4o-mini")
+                .build()
+            )
+            ```
+        """
+        if store is None:
+            raise ValueError(
+                "A KnowledgeStore instance is required. "
+                "Create one with: KnowledgeStore('path.db')"
+            )
+
+        self._custom_metadata["knowledge_store"] = store
+        self._custom_metadata["knowledge_config"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "rerank": rerank,
+            "reranker_model": reranker_model,
+            "query_transform": query_transform,
+            "evaluate": evaluate,
+            "eval_model": eval_model,
+        }
+        return self
+
     # ── Context Store / Anti-Hallucination ──────────────────────────
 
     def with_context_store(
@@ -1404,6 +1481,57 @@ class PipelineBuilder:
         self._custom_metadata["context_store"] = store
         return self
 
+    def with_evidence_priming(
+        self,
+        query_columns: list[str] | None = None,
+        *,
+        top_k: int = 3,
+        min_score: float = 0.1,
+    ) -> PipelineBuilder:
+        """Inject prior evidence into prompts before LLM inference.
+
+        Enables pre-LLM evidence retrieval: for each row, searches the context
+        store for previously validated answers and prepends them to the prompt.
+        Results below ``min_score`` are discarded to avoid injecting noise.
+
+        On the first run the evidence store is empty — the feature is a no-op.
+        Evidence accumulates across runs as grounding/verification stores validated
+        claims, so subsequent runs benefit from prior answers.
+
+        Requires a context store (calls ``with_context_store()`` automatically
+        if not already set).
+
+        Args:
+            query_columns: Columns to use as the search query. Defaults to the
+                pipeline's input columns.
+            top_k: Maximum evidence records to retrieve per row.
+            min_score: Minimum relevance score to include a result (0-1).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["product"], output_columns=["category"])
+                .with_prompt("Classify: {product}")
+                .with_context_store(RustContextStore("evidence.db"))
+                .with_evidence_priming(query_columns=["product"], top_k=3, min_score=0.2)
+                .build()
+            )
+            ```
+        """
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        self._custom_metadata["evidence_priming"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "min_score": min_score,
+        }
+        return self
+
     def with_grounding(
         self,
         threshold: float = 0.3,
@@ -1423,6 +1551,7 @@ class PipelineBuilder:
             threshold: Minimum similarity score to accept (0.0-1.0).
             action: What to do with ungrounded responses:
                     "flag" (add grounding_score column),
+                    "retry" (re-prompt the LLM),
                     "skip" (drop the row).
             embed_fn: Optional callable ``(list[str]) -> list[list[float]]``
                       that returns embedding vectors for the given texts.
@@ -1432,7 +1561,7 @@ class PipelineBuilder:
         Returns:
             Self for chaining
         """
-        valid_actions = ("flag", "skip")
+        valid_actions = ("flag", "retry", "skip")
         if action not in valid_actions:
             raise ValueError(f"action must be one of {valid_actions}, got '{action}'")
 

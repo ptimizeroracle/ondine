@@ -90,9 +90,9 @@ class TestBuilderContextMethods:
         builder = self._base_builder().with_grounding(embed_fn=mock_fn)
         assert builder._custom_metadata["grounding"]["embed_fn"] is mock_fn
 
-    def test_with_grounding_retry_action_rejected(self):
-        with pytest.raises(ValueError, match="action must be one of"):
-            self._base_builder().with_grounding(action="retry")
+    def test_with_grounding_retry_action_accepted(self):
+        builder = self._base_builder().with_grounding(action="retry")
+        assert builder._custom_metadata["grounding"]["action"] == "retry"
 
     def test_chaining_all_context_methods(self):
         store = RustContextStore(":memory:")
