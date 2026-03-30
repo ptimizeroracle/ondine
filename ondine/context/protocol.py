@@ -76,8 +76,20 @@ class ContextStore(ABC):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
+        embed_fn: callable | None = None,
     ) -> list[GroundingResult]:
-        """Ground an LLM response against source sentences via TF-IDF.
+        """Ground an LLM response against source sentences.
+
+        Uses TF-IDF cosine similarity by default. When *embed_fn* is
+        provided, dense embedding similarity is also computed and the
+        final score is ``max(tfidf_score, embedding_score)``.
+
+        Args:
+            response_text: The LLM-generated text to verify.
+            source_sentences: Reference sentences to ground against.
+            threshold: Minimum similarity score to accept (0.0-1.0).
+            embed_fn: Optional ``(list[str]) -> list[list[float]]``
+                      that returns embedding vectors.
 
         Default implementation returns empty (no grounding).
         Override in backends that support it.

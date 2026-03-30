@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import uuid
 
 from ondine.context.protocol import (
@@ -101,6 +102,7 @@ class RustContextStore(ContextStore):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
+        embed_fn: callable | None = None,
     ) -> list[GroundingResult]:
         decision_id = str(uuid.uuid4())
         raw_claims = json.dumps(
@@ -126,6 +128,27 @@ class RustContextStore(ContextStore):
             decision_id, raw_claims, doc_sentences, threshold
         )
         grounded = json.loads(result_json)
+
+        # Augment with embedding similarity when an embed_fn is provided
+        if embed_fn is not None and source_sentences:
+            embed_boost = _best_embedding_similarity(
+                embed_fn, response_text, source_sentences
+            )
+            for g in grounded:
+                g["confidence"] = max(g["confidence"], embed_boost)
+
+            # If TF-IDF returned nothing but embeddings exceed threshold,
+            # synthesise a result so the claim is not silently dropped.
+            if not grounded and embed_boost >= threshold:
+                grounded = [
+                    {
+                        "claim_id": str(uuid.uuid4()),
+                        "claim_text": response_text,
+                        "source": "embedding",
+                        "confidence": embed_boost,
+                    }
+                ]
+
         return [
             GroundingResult(
                 claim_id=g["claim_id"],
@@ -146,6 +169,33 @@ class RustContextStore(ContextStore):
 
     def close(self) -> None:
         self._db = None
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _best_embedding_similarity(
+    embed_fn: callable,
+    response_text: str,
+    source_sentences: list[str],
+) -> float:
+    """Return the best embedding cosine similarity between response and sources."""
+    all_texts = [response_text] + list(source_sentences)
+    embeddings = embed_fn(all_texts)
+    response_emb = embeddings[0]
+    best = 0.0
+    for source_emb in embeddings[1:]:
+        sim = _cosine_similarity(response_emb, source_emb)
+        if sim > best:
+            best = sim
+    return best
 
 
 def _map_source_type(source_type: str) -> str:

@@ -4,6 +4,7 @@ Main Pipeline class - the Facade for the entire system.
 This is the primary entry point that users interact with.
 """
 
+import math
 from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from decimal import Decimal
@@ -58,6 +59,25 @@ from ondine.utils import RateLimiter, RetryHandler, get_logger
 from ondine.utils.optional_dependencies import raise_parquet_extra_error
 
 logger = get_logger(__name__)
+
+
+def _values_contradict(val_a: str, val_b: str, tolerance: int | float | None) -> bool:
+    """Determine whether two value strings are contradictory.
+
+    When *tolerance* is ``None``, any difference is a contradiction
+    (exact match semantics, backward-compatible).  When *tolerance*
+    is a number, both values are parsed as floats and the difference
+    must exceed *tolerance* to count.  Non-numeric values always
+    fall back to exact inequality.
+    """
+    if val_a == val_b:
+        return False
+    if tolerance is None:
+        return True
+    try:
+        return abs(float(val_a) - float(val_b)) > tolerance
+    except (ValueError, TypeError):
+        return val_a != val_b
 
 
 class Pipeline:
@@ -850,11 +870,13 @@ class Pipeline:
                         source_text_parts.append(str(val))
 
             grounding_score = None
+            embed_fn = grounding_cfg.get("embed_fn") if grounding_cfg else None
             if grounding_cfg and source_text_parts:
                 grounding_results = context_store.ground(
                     output_text,
                     source_text_parts,
                     threshold=grounding_threshold,
+                    embed_fn=embed_fn,
                 )
                 if grounding_results:
                     grounding_score = grounding_results[0].confidence
@@ -893,6 +915,7 @@ class Pipeline:
         if contradiction_cfg:
             key_cols = contradiction_cfg.get("key_columns") or input_cols
             value_cols = contradiction_cfg.get("value_columns") or output_cols
+            tolerance = contradiction_cfg.get("tolerance")
 
             key_to_claims: dict[str, list[tuple[int, str, str]]] = {}
             for idx, row in enumerate(result_rows):
@@ -913,7 +936,11 @@ class Pipeline:
                     if val in seen_values:
                         continue
                     for prev_val, prev_cid in seen_values.items():
-                        if prev_val != val and prev_cid and claim_id:
+                        if (
+                            _values_contradict(prev_val, val, tolerance)
+                            and prev_cid
+                            and claim_id
+                        ):
                             try:
                                 context_store.add_contradiction(prev_cid, claim_id)
                                 row = result_rows[idx]
@@ -923,16 +950,33 @@ class Pipeline:
                     seen_values[val] = claim_id
 
         if include_confidence:
+            scoring_mode = (
+                confidence_cfg.get("scoring_mode", "default")
+                if confidence_cfg
+                else "default"
+            )
             for idx, row in enumerate(result_rows):
                 gs = row.get("_grounding_score")
                 if gs is not None:
-                    search_results = context_store.search(
-                        " ".join(str(row.get(c, "")) for c in output_cols), limit=1
-                    )
-                    support = search_results[0].support_count if search_results else 0
-                    row["_confidence_score"] = min(
-                        1.0, gs * 0.7 + min(support, 5) / 5 * 0.3
-                    )
+                    if scoring_mode == "sigmoid":
+                        # Sigmoid centered at 0.3, steepness 10
+                        row["_confidence_score"] = 1.0 / (
+                            1.0 + math.exp(-10 * (gs - 0.3))
+                        )
+                    elif scoring_mode == "grounding_only":
+                        row["_confidence_score"] = min(1.0, gs)
+                    else:
+                        # Default: current formula (backward compatible)
+                        search_results = context_store.search(
+                            " ".join(str(row.get(c, "")) for c in output_cols),
+                            limit=1,
+                        )
+                        support = (
+                            search_results[0].support_count if search_results else 0
+                        )
+                        row["_confidence_score"] = min(
+                            1.0, gs * 0.7 + min(support, 5) / 5 * 0.3
+                        )
                 else:
                     row["_confidence_score"] = None
 

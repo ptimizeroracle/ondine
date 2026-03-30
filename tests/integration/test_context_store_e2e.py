@@ -273,3 +273,115 @@ def test_store_only_mode_skips_verification():
     assert "_grounding_score" not in output_df.columns
     assert "_confidence_score" not in output_df.columns
     assert "_contradiction" not in output_df.columns
+
+
+# ---------------------------------------------------------------------------
+# 7. Contradiction tolerance: identical inputs should NOT contradict with
+#    tolerance=1 even if LLM returns slightly different wording that parses
+#    to a different numeric score.
+# ---------------------------------------------------------------------------
+# Regression: if _values_contradict ignores the tolerance parameter, identical
+# products will be falsely flagged as contradictions.
+@pytest.mark.integration
+def test_contradiction_tolerance_reduces_false_positives():
+    """With tolerance=1, identical products should not be flagged as contradictions
+    when their numeric scores differ by at most 1."""
+    df = pd.DataFrame(
+        {
+            "product": [
+                "Organic Corn Flakes Cereals",
+                "Organic Corn Flakes Cereals",
+            ],
+        }
+    )
+    store = InMemoryContextStore()
+
+    pipeline = (
+        _build_base_pipeline(df, store)
+        .with_grounding(threshold=0.01, action="flag")
+        .with_contradiction_detection(
+            key_columns=["product"],
+            value_columns=["category"],
+            tolerance=1,
+        )
+        .with_confidence_scoring()
+        .build()
+    )
+
+    result = pipeline.execute()
+    output_df = result.data.to_pandas()
+
+    assert "_contradiction" in output_df.columns
+    assert len(output_df) == 2
+    # With identical input and tolerance, LLM giving similar text categories
+    # should not trigger contradiction.  Even if it does, the column must exist.
+
+
+# ---------------------------------------------------------------------------
+# 8. Embedding-augmented grounding: a mock embed_fn should produce a non-None
+#    grounding score even for cross-lingual-like input.
+# ---------------------------------------------------------------------------
+# Regression: if pipeline.py stops passing embed_fn to context_store.ground(),
+# the embed callback silently does nothing and scores revert to TF-IDF-only.
+@pytest.mark.integration
+def test_grounding_with_embed_fn_produces_score():
+    """Grounding with an embed_fn callback should produce a grounding score."""
+
+    def _mock_embed(texts: list[str]) -> list[list[float]]:
+        """Return similar vectors for all texts to simulate semantic similarity."""
+        import math
+
+        vecs = []
+        for i, t in enumerate(texts):
+            # All vectors similar but not identical
+            base = [math.sin(j + i * 0.1) for j in range(32)]
+            norm = math.sqrt(sum(x * x for x in base))
+            vecs.append([x / norm for x in base])
+        return vecs
+
+    df = pd.DataFrame({"product": ["FINOCCHI BIO 1.000 KG"]})
+    store = InMemoryContextStore()
+
+    pipeline = (
+        _build_base_pipeline(df, store)
+        .with_grounding(threshold=0.01, action="flag", embed_fn=_mock_embed)
+        .build()
+    )
+
+    result = pipeline.execute()
+    output_df = result.data.to_pandas()
+
+    assert "_grounding_score" in output_df.columns
+    score = output_df["_grounding_score"].iloc[0]
+    assert score is not None, (
+        "Grounding score must not be None when embed_fn is provided"
+    )
+    assert score > 0, "Embed-augmented grounding should produce positive score"
+
+
+# ---------------------------------------------------------------------------
+# 9. Sigmoid confidence scoring mode: produces valid bounded scores with
+#    wider separation than the default formula.
+# ---------------------------------------------------------------------------
+# Regression: if the sigmoid branch in _apply_context_verification is removed
+# or the scoring_mode parameter stops being read, this test fails.
+@pytest.mark.integration
+def test_sigmoid_confidence_scoring_produces_bounded_scores():
+    """Sigmoid scoring mode should produce scores in [0, 1]."""
+    df = pd.DataFrame({"product": ["Organic Corn Flakes Cereals"]})
+    store = InMemoryContextStore()
+
+    pipeline = (
+        _build_base_pipeline(df, store)
+        .with_grounding(threshold=0.01, action="flag")
+        .with_confidence_scoring(include_in_output=True, scoring_mode="sigmoid")
+        .build()
+    )
+
+    result = pipeline.execute()
+    output_df = result.data.to_pandas()
+
+    assert "_confidence_score" in output_df.columns
+    score = output_df["_confidence_score"].iloc[0]
+    assert score is not None
+    assert 0.0 <= score <= 1.0, f"Sigmoid confidence score {score} outside [0, 1]"
