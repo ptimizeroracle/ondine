@@ -596,6 +596,26 @@ class Pipeline:
             )
             working_df = self._execute_stage(kb_stage, working_df, context)
 
+        # Stage 1.7: Evidence priming (if configured) — injects prior evidence
+        # from the context store into each row before prompt formatting.
+        evidence_priming_cfg = (
+            specs.metadata.get("evidence_priming") if specs.metadata else None
+        )
+        evidence_store = specs.metadata.get("context_store") if specs.metadata else None
+        if evidence_priming_cfg is not None and evidence_store is not None:
+            from ondine.stages.evidence_retrieval_stage import EvidenceRetrievalStage
+
+            query_cols = (
+                evidence_priming_cfg.get("query_columns") or specs.dataset.input_columns
+            )
+            ev_stage = EvidenceRetrievalStage(
+                store=evidence_store,
+                query_columns=query_cols,
+                top_k=evidence_priming_cfg.get("top_k", 3),
+                min_score=evidence_priming_cfg.get("min_score", 0.1),
+            )
+            working_df = self._execute_stage(ev_stage, working_df, context)
+
         # Stage 2: Format prompts
         formatter = PromptFormatterStage(
             specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2

@@ -43,8 +43,8 @@ class TestDocumentLoader:
         assert docs[0].metadata["format"] == "md"
 
     def test_unsupported_extension_returns_empty(self, loader, tmp_path):
-        f = tmp_path / "data.csv"
-        f.write_text("a,b,c\n1,2,3")
+        f = tmp_path / "data.xyz"
+        f.write_text("unsupported content")
 
         docs = loader.load(f)
         assert docs == []
@@ -58,7 +58,8 @@ class TestDocumentLoader:
         sources = {d.source for d in docs}
         assert str(tmp_path / "a.txt") in sources
         assert str(tmp_path / "b.md") in sources
-        assert len(docs) == 2
+        assert str(tmp_path / "c.csv") in sources
+        assert len(docs) == 3
 
     def test_document_is_frozen(self):
         doc = Document(text="t", source="s")

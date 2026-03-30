@@ -1481,6 +1481,57 @@ class PipelineBuilder:
         self._custom_metadata["context_store"] = store
         return self
 
+    def with_evidence_priming(
+        self,
+        query_columns: list[str] | None = None,
+        *,
+        top_k: int = 3,
+        min_score: float = 0.1,
+    ) -> PipelineBuilder:
+        """Inject prior evidence into prompts before LLM inference.
+
+        Enables pre-LLM evidence retrieval: for each row, searches the context
+        store for previously validated answers and prepends them to the prompt.
+        Results below ``min_score`` are discarded to avoid injecting noise.
+
+        On the first run the evidence store is empty — the feature is a no-op.
+        Evidence accumulates across runs as grounding/verification stores validated
+        claims, so subsequent runs benefit from prior answers.
+
+        Requires a context store (calls ``with_context_store()`` automatically
+        if not already set).
+
+        Args:
+            query_columns: Columns to use as the search query. Defaults to the
+                pipeline's input columns.
+            top_k: Maximum evidence records to retrieve per row.
+            min_score: Minimum relevance score to include a result (0-1).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["product"], output_columns=["category"])
+                .with_prompt("Classify: {product}")
+                .with_context_store(RustContextStore("evidence.db"))
+                .with_evidence_priming(query_columns=["product"], top_k=3, min_score=0.2)
+                .build()
+            )
+            ```
+        """
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        self._custom_metadata["evidence_priming"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "min_score": min_score,
+        }
+        return self
+
     def with_grounding(
         self,
         threshold: float = 0.3,

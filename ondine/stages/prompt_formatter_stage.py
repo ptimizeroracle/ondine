@@ -148,6 +148,16 @@ class PromptFormatterStage(
                 if kb_ctx and "_kb_context" not in template_str:
                     prompt = f"Context:\n{kb_ctx}\n\n{prompt}"
 
+                # Auto-append prior evidence AFTER kb context (external docs
+                # are more authoritative than prior LLM answers).
+                ev_ctx = row.get("_evidence_context")
+                if ev_ctx and "_evidence_context" not in template_str:
+                    prompt = (
+                        f"{prompt}\n\n"
+                        f"Previously validated answers for similar inputs "
+                        f"(use as reference, not as ground truth):\n{ev_ctx}"
+                    )
+
                 # Add few-shot examples if specified (but NOT system message)
                 if prompt_spec.few_shot_examples:
                     examples_text = self._format_few_shot_examples(
