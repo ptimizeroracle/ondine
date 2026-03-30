@@ -28,20 +28,29 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         enable-cache: true
 
+    - name: Install maturin
+      run: pip install maturin
+
     - name: Install package profile
       shell: bash
       run: |
         if [ "${{ matrix.profile }}" = "core" ]; then
-          uv pip install --system .
+          pip install .
         elif [ "${{ matrix.profile }}" = "observability" ]; then
-          uv pip install --system ".[observability]"
+          pip install ".[observability]"
         else
-          uv pip install --system ".[all]"
+          pip install ".[all]"
         fi
 
     - name: Smoke test profile
@@ -69,14 +78,25 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         enable-cache: true
 
-    - name: Install dependencies
+    - name: Install dependencies + build Rust extension
       run: |
-        uv sync --extra dev --extra observability --extra excel --extra parquet
+        uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge
+        uv pip install maturin
+        uv run maturin develop
+
+    - name: Run Rust tests
+      run: cargo test -p ondine-core
 
     - name: Run linter
       run: |
@@ -111,14 +131,25 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         enable-cache: true
 
-    - name: Install dependencies
+    - name: Install dependencies + build Rust extension
       run: |
-        uv sync --extra dev --extra observability --extra excel --extra parquet
+        uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge
+        uv pip install maturin
+        uv run maturin develop
+
+    - name: Run Rust tests
+      run: cargo test -p ondine-core
 
     - name: Run linter
       run: |
@@ -129,6 +160,9 @@ jobs:
         uv run mypy ondine/ || true
 
     - name: Run unit tests
+      env:
+        CUDA_VISIBLE_DEVICES: ""
+        PYTORCH_MPS_HIGH_WATERMARK_RATIO: "0.0"
       run: |
         uv run pytest tests/unit/ -v --tb=short
 
@@ -168,14 +202,22 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         enable-cache: true
 
-    - name: Install with pandas 1.5
+    - name: Install with pandas 1.5 + build Rust extension
       run: |
-        uv sync --extra dev --extra excel --extra parquet
+        uv sync --extra dev --extra excel --extra parquet --extra knowledge
+        uv pip install maturin
+        uv run maturin develop
         uv pip install "pandas==1.5.3" "numpy<1.24" --force-reinstall
 
     - name: Verify pandas version
@@ -225,15 +267,21 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install maturin
+      run: pip install maturin
 
     - name: Build package
       run: |
-        uv build
+        maturin build --release
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: dist
-        path: dist/
+        path: target/wheels/

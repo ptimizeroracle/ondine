@@ -89,11 +89,18 @@ class LLMCallEvent:
     cost: Decimal = field(default_factory=lambda: Decimal("0.0"))
     latency_ms: float = 0.0
 
-    # RAG Context (optional, for future RAG integration)
+    # RAG Context (populated by ContextStore when enabled)
     rag_context: str | None = None
     rag_sources: list[dict] | None = None
     rag_technique: str | None = None
     retrieval_latency_ms: float | None = None
+
+    # Context Store / Anti-Hallucination (populated when grounding is enabled)
+    grounding_score: float | None = None
+    grounding_action: str | None = None
+    contradiction_detected: bool | None = None
+    confidence_score: float | None = None
+    evidence_claim_id: str | None = None
 
     # Prompt Engineering (optional)
     prompt_template_id: str | None = None

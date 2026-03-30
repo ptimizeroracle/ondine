@@ -4,11 +4,16 @@ Pipeline Builder - Fluent API for constructing pipelines.
 Implements Builder pattern for intuitive pipeline creation.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
+if TYPE_CHECKING:
+    from ondine.context.protocol import ContextStore
+
+import pandas as pd  # noqa: TC002
 
 from ondine.api.pipeline import Pipeline
 from ondine.core.specifications import (
@@ -65,7 +70,7 @@ class PipelineBuilder:
         self._streaming_max_pending: int = 3
 
     @staticmethod
-    def create() -> "PipelineBuilder":
+    def create() -> PipelineBuilder:
         """
         Start builder chain.
 
@@ -75,7 +80,7 @@ class PipelineBuilder:
         return PipelineBuilder()
 
     @staticmethod
-    def from_specifications(specs: PipelineSpecifications) -> "PipelineBuilder":
+    def from_specifications(specs: PipelineSpecifications) -> PipelineBuilder:
         """
         Create builder from existing specifications.
 
@@ -107,7 +112,7 @@ class PipelineBuilder:
         output_columns: list[str],
         delimiter: str = ",",
         encoding: str = "utf-8",
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure CSV data source.
 
@@ -149,7 +154,7 @@ class PipelineBuilder:
         input_columns: list[str],
         output_columns: list[str],
         sheet_name: str | int = 0,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure Excel data source.
 
@@ -176,7 +181,7 @@ class PipelineBuilder:
         path: str,
         input_columns: list[str],
         output_columns: list[str],
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure Parquet data source.
 
@@ -201,7 +206,7 @@ class PipelineBuilder:
         df: pd.DataFrame,
         input_columns: list[str],
         output_columns: list[str],
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure DataFrame source.
 
@@ -238,7 +243,7 @@ class PipelineBuilder:
         self,
         template: str,
         system_message: str | None = None,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure prompt template.
 
@@ -266,7 +271,7 @@ class PipelineBuilder:
         )
         return self
 
-    def with_system_prompt(self, system_prompt: str) -> "PipelineBuilder":
+    def with_system_prompt(self, system_prompt: str) -> PipelineBuilder:
         """
         Set system prompt for caching optimization.
 
@@ -308,7 +313,7 @@ class PipelineBuilder:
         self._prompt_spec.system_message = system_prompt
         return self
 
-    def with_batch_size(self, batch_size: int) -> "PipelineBuilder":
+    def with_batch_size(self, batch_size: int) -> PipelineBuilder:
         """
         Set batch size for multi-row processing.
 
@@ -352,7 +357,7 @@ class PipelineBuilder:
         self._prompt_spec.batch_size = batch_size
         return self
 
-    def with_batch_strategy(self, strategy: str) -> "PipelineBuilder":
+    def with_batch_strategy(self, strategy: str) -> PipelineBuilder:
         """
         Set batch formatting strategy.
 
@@ -393,7 +398,7 @@ class PipelineBuilder:
         self._prompt_spec.batch_strategy = strategy
         return self
 
-    def with_jinja2(self, enabled: bool | None = True) -> "PipelineBuilder":
+    def with_jinja2(self, enabled: bool | None = True) -> PipelineBuilder:
         """
         Control Jinja2 template rendering mode.
 
@@ -452,7 +457,7 @@ class PipelineBuilder:
         input_cost_per_1k_tokens: Decimal | None = None,
         output_cost_per_1k_tokens: Decimal | None = None,
         **kwargs: any,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure LLM provider.
 
@@ -540,7 +545,7 @@ class PipelineBuilder:
         )
         return self
 
-    def with_llm_spec(self, spec: LLMSpec) -> "PipelineBuilder":
+    def with_llm_spec(self, spec: LLMSpec) -> PipelineBuilder:
         """
         Configure LLM using a pre-built LLMSpec object.
 
@@ -593,7 +598,7 @@ class PipelineBuilder:
         self._llm_spec = spec
         return self
 
-    def with_custom_llm_client(self, client: any) -> "PipelineBuilder":
+    def with_custom_llm_client(self, client: any) -> PipelineBuilder:
         """
         Provide a custom LLM client instance directly.
 
@@ -631,7 +636,7 @@ class PipelineBuilder:
         self._custom_llm_client = client
         return self
 
-    def with_concurrency(self, threads: int) -> "PipelineBuilder":
+    def with_concurrency(self, threads: int) -> PipelineBuilder:
         """
         Configure concurrent requests.
 
@@ -662,7 +667,7 @@ class PipelineBuilder:
         self._processing_spec.concurrency = threads
         return self
 
-    def with_checkpoint_interval(self, rows: int) -> "PipelineBuilder":
+    def with_checkpoint_interval(self, rows: int) -> PipelineBuilder:
         """
         Configure checkpoint frequency.
 
@@ -675,7 +680,7 @@ class PipelineBuilder:
         self._processing_spec.checkpoint_interval = rows
         return self
 
-    def with_checkpoint_cleanup(self, enabled: bool = True) -> "PipelineBuilder":
+    def with_checkpoint_cleanup(self, enabled: bool = True) -> PipelineBuilder:
         """
         Control whether checkpoints are deleted after successful execution.
 
@@ -694,7 +699,7 @@ class PipelineBuilder:
         self._processing_spec.cleanup_on_success = enabled
         return self
 
-    def with_rate_limit(self, rpm: int) -> "PipelineBuilder":
+    def with_rate_limit(self, rpm: int) -> PipelineBuilder:
         """
         Configure rate limiting.
 
@@ -725,7 +730,7 @@ class PipelineBuilder:
         self._processing_spec.rate_limit_rpm = rpm
         return self
 
-    def with_max_retries(self, retries: int) -> "PipelineBuilder":
+    def with_max_retries(self, retries: int) -> PipelineBuilder:
         """
         Configure maximum retry attempts.
 
@@ -738,7 +743,7 @@ class PipelineBuilder:
         self._processing_spec.max_retries = retries
         return self
 
-    def with_max_budget(self, budget: float) -> "PipelineBuilder":
+    def with_max_budget(self, budget: float) -> PipelineBuilder:
         """
         Configure maximum budget.
 
@@ -769,7 +774,7 @@ class PipelineBuilder:
         self._processing_spec.max_budget = Decimal(str(budget))
         return self
 
-    def with_error_policy(self, policy: str) -> "PipelineBuilder":
+    def with_error_policy(self, policy: str) -> PipelineBuilder:
         """
         Configure error handling policy.
 
@@ -784,7 +789,7 @@ class PipelineBuilder:
         self._processing_spec.error_policy = ErrorPolicy(policy.lower())
         return self
 
-    def with_checkpoint_dir(self, directory: str) -> "PipelineBuilder":
+    def with_checkpoint_dir(self, directory: str) -> PipelineBuilder:
         """
         Configure checkpoint directory.
 
@@ -797,7 +802,7 @@ class PipelineBuilder:
         self._processing_spec.checkpoint_dir = Path(directory)
         return self
 
-    def with_parser(self, parser: any) -> "PipelineBuilder":
+    def with_parser(self, parser: any) -> PipelineBuilder:
         """
         Configure response parser.
 
@@ -836,7 +841,7 @@ class PipelineBuilder:
 
         return self
 
-    def to_csv(self, path: str) -> "PipelineBuilder":
+    def to_csv(self, path: str) -> PipelineBuilder:
         """
         Configure CSV output destination.
 
@@ -855,7 +860,7 @@ class PipelineBuilder:
         path: str,
         format: str = "csv",
         merge_strategy: str = "replace",
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure output destination.
 
@@ -886,7 +891,7 @@ class PipelineBuilder:
         )
         return self
 
-    def with_executor(self, executor: ExecutionStrategy) -> "PipelineBuilder":
+    def with_executor(self, executor: ExecutionStrategy) -> PipelineBuilder:
         """
         Set custom execution strategy.
 
@@ -899,7 +904,7 @@ class PipelineBuilder:
         self._executor = executor
         return self
 
-    def with_async_execution(self, max_concurrency: int = 10) -> "PipelineBuilder":
+    def with_async_execution(self, max_concurrency: int = 10) -> PipelineBuilder:
         """
         Use async execution strategy.
 
@@ -919,7 +924,7 @@ class PipelineBuilder:
         self,
         chunk_size: int = 10000,
         max_pending_chunks: int = 3,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Enable streaming execution for large datasets.
 
@@ -957,7 +962,7 @@ class PipelineBuilder:
         self._executor = StreamingExecutor(chunk_size=chunk_size)
         return self
 
-    def with_progress_mode(self, mode: str = "auto") -> "PipelineBuilder":
+    def with_progress_mode(self, mode: str = "auto") -> PipelineBuilder:
         """
         Configure progress tracking mode.
 
@@ -992,7 +997,7 @@ class PipelineBuilder:
         stage_name: str,
         position: str = "before_prompt",
         **stage_kwargs,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Add a custom pipeline stage by name.
 
@@ -1079,7 +1084,7 @@ class PipelineBuilder:
 
     def with_observer(
         self, name: str, config: dict[str, any] | None = None
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Add observability observer to the pipeline.
 
@@ -1161,7 +1166,7 @@ class PipelineBuilder:
         allowed_fails: int = 3,  # Failures before provider cooldown
         cooldown_time: int = 60,  # Seconds to disable failed provider
         **router_kwargs,
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Enable LiteLLM Router for load balancing, failover, and resilience.
 
@@ -1249,7 +1254,7 @@ class PipelineBuilder:
 
     def with_redis_cache(
         self, redis_url: str = "redis://localhost:6379", ttl: int = 3600
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Enable LiteLLM Redis caching.
 
@@ -1274,7 +1279,7 @@ class PipelineBuilder:
         }
         return self
 
-    def with_disk_cache(self, cache_dir: str = ".cache") -> "PipelineBuilder":
+    def with_disk_cache(self, cache_dir: str = ".cache") -> PipelineBuilder:
         """
         Enable LiteLLM Disk caching.
 
@@ -1299,7 +1304,7 @@ class PipelineBuilder:
         self,
         schema: Any,
         mode: str = "auto",
-    ) -> "PipelineBuilder":
+    ) -> PipelineBuilder:
         """
         Configure structured output using a Pydantic model.
 
@@ -1354,6 +1359,273 @@ class PipelineBuilder:
             self._custom_parser = JSONParser()
 
         return self
+
+    # ── Knowledge Base ─────────────────────────────────────────────
+
+    def with_knowledge_base(
+        self,
+        store: Any = None,
+        *,
+        query_columns: list[str] | None = None,
+        top_k: int = 3,
+        rerank: bool = False,
+        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+        query_transform: str | None = None,
+        evaluate: bool = False,
+        eval_model: str = "openai/gpt-4o-mini",
+    ) -> PipelineBuilder:
+        """Attach a knowledge base for retrieval-augmented generation.
+
+        When a ``KnowledgeStore`` is provided, the pipeline inserts a
+        retrieval stage between data loading and prompt formatting.
+        Each row is augmented with a ``{_kb_context}`` variable that
+        you can reference in your prompt template.
+
+        Args:
+            store: A pre-built ``KnowledgeStore`` (required).
+            query_columns: Input columns to concatenate as the search query.
+                If ``None``, uses all input columns from the dataset spec.
+            top_k: Number of chunks to retrieve per row.
+            rerank: Enable cross-encoder reranking of results.
+            reranker_model: Cross-encoder model name (only used when
+                ``rerank=True``).
+            query_transform: Query expansion strategy. One of
+                ``"multi-query"``, ``"hyde"``, ``"step-back"``, or
+                ``None`` to disable.
+            evaluate: When ``True``, run LLM-as-judge evaluation on
+                RAG answers and add ``_kb_eval_*`` columns.
+            eval_model: LLM model for the judge (only used when
+                ``evaluate=True``).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            from ondine.knowledge import KnowledgeStore
+
+            kb = KnowledgeStore("knowledge.db")
+            kb.ingest("docs/")
+
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("questions.csv", input_columns=["question"], output_columns=["answer"])
+                .with_knowledge_base(kb, top_k=5, rerank=True, query_transform="hyde")
+                .with_prompt(
+                    "Context:\\n{_kb_context}\\n\\nQuestion: {question}\\nAnswer:"
+                )
+                .with_llm(model="openai/gpt-4o-mini")
+                .build()
+            )
+            ```
+        """
+        if store is None:
+            raise ValueError(
+                "A KnowledgeStore instance is required. "
+                "Create one with: KnowledgeStore('path.db')"
+            )
+
+        self._custom_metadata["knowledge_store"] = store
+        self._custom_metadata["knowledge_config"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "rerank": rerank,
+            "reranker_model": reranker_model,
+            "query_transform": query_transform,
+            "evaluate": evaluate,
+            "eval_model": eval_model,
+        }
+        return self
+
+    # ── Context Store / Anti-Hallucination ──────────────────────────
+
+    def with_context_store(
+        self,
+        store: ContextStore | None = None,
+    ) -> PipelineBuilder:
+        """Configure the context store backend for evidence-based verification.
+
+        When enabled, the pipeline stores validated LLM responses and retrieves
+        prior evidence to enrich prompts and detect contradictions.
+
+        Args:
+            store: ContextStore instance, or None to auto-detect:
+                   tries RustContextStore first, falls back to InMemoryContextStore.
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            from ondine.context import RustContextStore
+
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", ...)
+                .with_context_store(RustContextStore("evidence.db"))
+                .with_grounding(threshold=0.3)
+                .build()
+            )
+            ```
+        """
+        if store is None:
+            try:
+                from ondine.context.rust_store import RustContextStore
+
+                store = RustContextStore()
+            except ImportError:
+                from ondine.context.memory_store import InMemoryContextStore
+
+                store = InMemoryContextStore()
+
+        self._custom_metadata["context_store"] = store
+        return self
+
+    def with_evidence_priming(
+        self,
+        query_columns: list[str] | None = None,
+        *,
+        top_k: int = 3,
+        min_score: float = 0.1,
+    ) -> PipelineBuilder:
+        """Inject prior evidence into prompts before LLM inference.
+
+        Enables pre-LLM evidence retrieval: for each row, searches the context
+        store for previously validated answers and prepends them to the prompt.
+        Results below ``min_score`` are discarded to avoid injecting noise.
+
+        On the first run the evidence store is empty — the feature is a no-op.
+        Evidence accumulates across runs as grounding/verification stores validated
+        claims, so subsequent runs benefit from prior answers.
+
+        Requires a context store (calls ``with_context_store()`` automatically
+        if not already set).
+
+        Args:
+            query_columns: Columns to use as the search query. Defaults to the
+                pipeline's input columns.
+            top_k: Maximum evidence records to retrieve per row.
+            min_score: Minimum relevance score to include a result (0-1).
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            pipeline = (
+                PipelineBuilder.create()
+                .from_csv("data.csv", input_columns=["product"], output_columns=["category"])
+                .with_prompt("Classify: {product}")
+                .with_context_store(RustContextStore("evidence.db"))
+                .with_evidence_priming(query_columns=["product"], top_k=3, min_score=0.2)
+                .build()
+            )
+            ```
+        """
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        self._custom_metadata["evidence_priming"] = {
+            "query_columns": query_columns,
+            "top_k": top_k,
+            "min_score": min_score,
+        }
+        return self
+
+    def with_grounding(
+        self,
+        threshold: float = 0.3,
+        action: str = "flag",
+    ) -> PipelineBuilder:
+        """Enable TF-IDF grounding verification on LLM responses.
+
+        After the LLM produces a response, grounding compares it against
+        source text via TF-IDF cosine similarity. Responses below the
+        threshold are flagged, retried, or skipped.
+
+        Requires a context store to be configured (auto-enables if not set).
+
+        Args:
+            threshold: Minimum TF-IDF similarity score to accept (0.0-1.0).
+            action: What to do with ungrounded responses:
+                    "flag" (add grounding_score column),
+                    "retry" (re-prompt the LLM),
+                    "skip" (drop the row).
+
+        Returns:
+            Self for chaining
+        """
+        valid_actions = ("flag", "retry", "skip")
+        if action not in valid_actions:
+            raise ValueError(f"action must be one of {valid_actions}, got '{action}'")
+
+        self._custom_metadata["grounding"] = {
+            "threshold": threshold,
+            "action": action,
+        }
+
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        return self
+
+    def with_contradiction_detection(
+        self,
+        key_columns: list[str] | None = None,
+        value_columns: list[str] | None = None,
+    ) -> PipelineBuilder:
+        """Enable cross-row contradiction detection.
+
+        After grounding, checks whether the LLM produced conflicting outputs
+        for rows that share the same key columns but differ in value columns.
+
+        Requires a context store to be configured (auto-enables if not set).
+
+        Args:
+            key_columns: Columns that identify the same entity (e.g., ["product_id"]).
+                         If None, uses the input columns from the dataset spec.
+            value_columns: Columns to compare for contradictions (e.g., ["category"]).
+                           If None, uses the output columns from the dataset spec.
+
+        Returns:
+            Self for chaining
+        """
+        self._custom_metadata["contradiction_detection"] = {
+            "key_columns": key_columns,
+            "value_columns": value_columns,
+        }
+
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        return self
+
+    def with_confidence_scoring(
+        self,
+        include_in_output: bool = True,
+    ) -> PipelineBuilder:
+        """Enable confidence scoring on LLM responses.
+
+        Adds a confidence score to each row, computed from the TF-IDF
+        grounding similarity and the evidence support count.
+
+        Args:
+            include_in_output: Whether to add a 'confidence_score' column
+                               to the output DataFrame.
+
+        Returns:
+            Self for chaining
+        """
+        self._custom_metadata["confidence_scoring"] = {
+            "include_in_output": include_in_output,
+        }
+
+        if "context_store" not in self._custom_metadata:
+            self.with_context_store()
+
+        return self
+
+    # ── Build ─────────────────────────────────────────────────────
 
     def build(self) -> Pipeline:
         """

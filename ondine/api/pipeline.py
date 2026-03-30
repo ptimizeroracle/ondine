@@ -557,6 +557,65 @@ class Pipeline:
                 f"processing {len(working_df)} remaining rows"
             )
 
+        # Stage 1.5: Knowledge Base retrieval (if configured)
+        kb_store = specs.metadata.get("knowledge_store") if specs.metadata else None
+        kb_config = specs.metadata.get("knowledge_config") if specs.metadata else None
+        if kb_store is not None and kb_config is not None:
+            from ondine.stages.knowledge_retrieval_stage import (
+                KnowledgeRetrievalStage,
+            )
+
+            query_cols = kb_config.get("query_columns") or specs.dataset.input_columns
+            top_k = kb_config.get("top_k", 3)
+
+            # Wire builder-level query_transform into the store if not
+            # already configured directly on the KnowledgeStore instance.
+            qt_spec = kb_config.get("query_transform")
+            if qt_spec and getattr(kb_store, "_query_transform", None) is None:
+                from ondine.knowledge.query import resolve_query_transform
+
+                kb_store._query_transform = resolve_query_transform(qt_spec)
+
+            reranker = None
+            if kb_config.get("rerank"):
+                from ondine.knowledge.reranker import resolve_reranker
+
+                reranker = resolve_reranker(
+                    kb_config.get(
+                        "reranker_model", "cross-encoder/ms-marco-MiniLM-L-12-v2"
+                    )
+                )
+
+            kb_stage = KnowledgeRetrievalStage(
+                store=kb_store,
+                query_columns=query_cols,
+                top_k=top_k,
+                reranker=reranker,
+                evaluate=kb_config.get("evaluate", False),
+                eval_model=kb_config.get("eval_model", "openai/gpt-4o-mini"),
+            )
+            working_df = self._execute_stage(kb_stage, working_df, context)
+
+        # Stage 1.7: Evidence priming (if configured) — injects prior evidence
+        # from the context store into each row before prompt formatting.
+        evidence_priming_cfg = (
+            specs.metadata.get("evidence_priming") if specs.metadata else None
+        )
+        evidence_store = specs.metadata.get("context_store") if specs.metadata else None
+        if evidence_priming_cfg is not None and evidence_store is not None:
+            from ondine.stages.evidence_retrieval_stage import EvidenceRetrievalStage
+
+            query_cols = (
+                evidence_priming_cfg.get("query_columns") or specs.dataset.input_columns
+            )
+            ev_stage = EvidenceRetrievalStage(
+                store=evidence_store,
+                query_columns=query_cols,
+                top_k=evidence_priming_cfg.get("top_k", 3),
+                min_score=evidence_priming_cfg.get("min_score", 0.1),
+            )
+            working_df = self._execute_stage(ev_stage, working_df, context)
+
         # Stage 2: Format prompts
         formatter = PromptFormatterStage(
             specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2
@@ -682,6 +741,28 @@ class Pipeline:
             context,
         )
 
+        # Stage 4.5: Context Store — grounding, storage, contradiction detection
+        context_store = specs.metadata.get("context_store") if specs.metadata else None
+        grounding_cfg = specs.metadata.get("grounding") if specs.metadata else None
+        contradiction_cfg = (
+            specs.metadata.get("contradiction_detection") if specs.metadata else None
+        )
+        confidence_cfg = (
+            specs.metadata.get("confidence_scoring") if specs.metadata else None
+        )
+
+        if context_store and (grounding_cfg or contradiction_cfg or confidence_cfg):
+            results_df = self._apply_context_verification(
+                results_df,
+                working_df,
+                context_store,
+                grounding_cfg,
+                contradiction_cfg,
+                confidence_cfg,
+                specs,
+                context,
+            )
+
         # Stage 5: Write results (if output spec provided)
         if specs.output:
             writer = ResultWriterStage()
@@ -715,6 +796,162 @@ class Pipeline:
                 merged_columns.append(col)
 
         return ResultContainerImpl(data=merged_rows, columns=merged_columns)
+
+    def _apply_context_verification(
+        self,
+        results_df: Any,
+        working_df: Any,
+        context_store: Any,
+        grounding_cfg: dict | None,
+        contradiction_cfg: dict | None,
+        confidence_cfg: dict | None,
+        specs: PipelineSpecifications,
+        context: ExecutionContext,
+    ) -> Any:
+        """Apply context store verification (grounding, contradiction, confidence)."""
+        from ondine.context.protocol import EvidenceRecord
+
+        output_cols = specs.dataset.output_columns
+        input_cols = specs.dataset.input_columns
+
+        grounding_threshold = (
+            grounding_cfg.get("threshold", 0.3) if grounding_cfg else 0.3
+        )
+        grounding_action = (
+            grounding_cfg.get("action", "flag") if grounding_cfg else "flag"
+        )
+        include_confidence = (
+            confidence_cfg.get("include_in_output", True) if confidence_cfg else False
+        )
+
+        result_rows = list(results_df)
+        working_rows = list(working_df)
+        stored_claim_ids: dict[int, str] = {}
+
+        for idx, row in enumerate(result_rows):
+            output_text_parts = []
+            for col in output_cols:
+                val = row.get(col)
+                if val is not None:
+                    output_text_parts.append(str(val))
+            output_text = " ".join(output_text_parts)
+
+            if not output_text.strip():
+                if include_confidence:
+                    row["_grounding_score"] = None
+                    row["_confidence_score"] = None
+                continue
+
+            source_text_parts = []
+            if idx < len(working_rows):
+                for col in input_cols:
+                    val = working_rows[idx].get(col)
+                    if val is not None:
+                        source_text_parts.append(str(val))
+
+            grounding_score = None
+            if grounding_cfg and source_text_parts:
+                grounding_results = context_store.ground(
+                    output_text,
+                    source_text_parts,
+                    threshold=grounding_threshold,
+                )
+                if grounding_results:
+                    grounding_score = grounding_results[0].confidence
+                    stored_claim_ids[idx] = grounding_results[0].claim_id
+                else:
+                    grounding_score = 0.0
+                    if grounding_action == "skip":
+                        for col in output_cols:
+                            row[col] = None
+                        grounding_score = None
+
+            # Always store the claim in the evidence graph so evidence
+            # priming can retrieve it on subsequent runs.  Store the full
+            # context (input + output) so TF-IDF search can match on the
+            # input text, not just the raw LLM answer.
+            if idx not in stored_claim_ids:
+                source_label = " ".join(source_text_parts) if source_text_parts else ""
+                evidence_text = (
+                    f"{source_label} → {output_text}" if source_label else output_text
+                )
+                record = EvidenceRecord(
+                    text=evidence_text,
+                    source_ref=f"row_{idx}",
+                    claim_type="factual",
+                    source_type="llm_response",
+                    asserted_by="pipeline",
+                )
+                cid = context_store.store(record)
+                stored_claim_ids[idx] = cid
+
+            if include_confidence:
+                row["_grounding_score"] = grounding_score
+            if grounding_cfg and grounding_action == "flag":
+                row["_grounding_score"] = grounding_score
+
+        if contradiction_cfg:
+            key_cols = contradiction_cfg.get("key_columns") or input_cols
+            value_cols = contradiction_cfg.get("value_columns") or output_cols
+
+            key_to_claims: dict[str, list[tuple[int, str, str]]] = {}
+            for idx, row in enumerate(result_rows):
+                key_parts = [str(row.get(c, "")) for c in key_cols]
+                key = "|".join(key_parts)
+                val_parts = [str(row.get(c, "")) for c in value_cols]
+                val = "|".join(val_parts)
+                claim_id = stored_claim_ids.get(idx, "")
+                key_to_claims.setdefault(key, []).append((idx, claim_id, val))
+
+            for key, entries in key_to_claims.items():
+                if len(entries) < 2:
+                    continue
+                seen_values: dict[str, str] = {}
+                for idx, claim_id, val in entries:
+                    if not claim_id or not val:
+                        continue
+                    if val in seen_values:
+                        continue
+                    for prev_val, prev_cid in seen_values.items():
+                        if prev_val != val and prev_cid and claim_id:
+                            try:
+                                context_store.add_contradiction(prev_cid, claim_id)
+                                row = result_rows[idx]
+                                row["_contradiction"] = True
+                            except Exception as exc:  # noqa: BLE001
+                                logger.debug("Contradiction store failed: %s", exc)
+                    seen_values[val] = claim_id
+
+        if include_confidence:
+            for idx, row in enumerate(result_rows):
+                gs = row.get("_grounding_score")
+                if gs is not None:
+                    search_results = context_store.search(
+                        " ".join(str(row.get(c, "")) for c in output_cols), limit=1
+                    )
+                    support = search_results[0].support_count if search_results else 0
+                    row["_confidence_score"] = min(
+                        1.0, gs * 0.7 + min(support, 5) / 5 * 0.3
+                    )
+                else:
+                    row["_confidence_score"] = None
+
+        from ondine.adapters.containers import ResultContainerImpl
+
+        columns = list(results_df.columns)
+        extra_cols = []
+        if (
+            grounding_cfg
+            and grounding_action == "flag"
+            and "_grounding_score" not in columns
+        ):
+            extra_cols.append("_grounding_score")
+        if include_confidence and "_confidence_score" not in columns:
+            extra_cols.append("_confidence_score")
+        if contradiction_cfg and "_contradiction" not in columns:
+            extra_cols.append("_contradiction")
+
+        return ResultContainerImpl(data=result_rows, columns=columns + extra_cols)
 
     def _filter_container_for_resume(
         self, container: Any, last_processed_row: int

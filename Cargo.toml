@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/ondine-core", "crates/ondine-python"]
+resolver = "2"

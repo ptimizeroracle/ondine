@@ -86,6 +86,13 @@ mlx = [
     "mlx>=0.29.0",
     "mlx-lm>=0.28.0",
 ]
+knowledge = [
+    "pymupdf>=1.24",
+    "sentence-transformers>=3.0",
+]
+zep = [
+    "zep-cloud>=2.0",
+]
 azure = [
     "azure-identity>=1.15.0",
 ]
@@ -120,6 +127,8 @@ all = [
     "mlx>=0.29.0",
     "mlx-lm>=0.28.0",
     "azure-identity>=1.15.0",
+    "pymupdf>=1.24",
+    "sentence-transformers>=3.0",
 ]
 
 [project.scripts]
@@ -127,11 +136,14 @@ ondine = "ondine.cli.main:cli"
 hermes = "ondine.cli.main:cli"  # Keep backward compatibility alias
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.wheel]
-packages = ["ondine"]
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "ondine._engine"
+manifest-path = "crates/ondine-python/Cargo.toml"
+python-source = "."
 
 # Ruff configuration (replaces black, isort, flake8, etc.)
 [tool.ruff]
