@@ -91,7 +91,7 @@ jobs:
 
     - name: Install dependencies + build Rust extension
       run: |
-        uv sync --extra dev --extra observability --extra excel --extra parquet
+        uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge
         uv pip install maturin
         uv run maturin develop
 
@@ -144,7 +144,7 @@ jobs:
 
     - name: Install dependencies + build Rust extension
       run: |
-        uv sync --extra dev --extra observability --extra excel --extra parquet
+        uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge
         uv pip install maturin
         uv run maturin develop
 
@@ -212,7 +212,7 @@ jobs:
 
     - name: Install with pandas 1.5 + build Rust extension
       run: |
-        uv sync --extra dev --extra excel --extra parquet
+        uv sync --extra dev --extra excel --extra parquet --extra knowledge
         uv pip install maturin
         uv run maturin develop
         uv pip install "pandas==1.5.3" "numpy<1.24" --force-reinstall
