@@ -6,6 +6,7 @@ workloads but useful for unit tests and environments without a Rust toolchain.
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 
@@ -68,12 +69,20 @@ class InMemoryContextStore(ContextStore):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
+        embed_fn: callable | None = None,
     ) -> list[GroundingResult]:
         best_sim = 0.0
         for sentence in source_sentences:
             sim = tfidf_cosine_similarity(response_text, sentence)
             if sim > best_sim:
                 best_sim = sim
+
+        # Augment with embedding similarity when available
+        if embed_fn is not None and source_sentences:
+            embed_sim = _best_embedding_similarity(
+                embed_fn, response_text, source_sentences
+            )
+            best_sim = max(best_sim, embed_sim)
 
         if best_sim < threshold:
             return []
@@ -110,3 +119,23 @@ class InMemoryContextStore(ContextStore):
     def close(self) -> None:
         self._records.clear()
         self._contradictions.clear()
+
+
+def _best_embedding_similarity(
+    embed_fn: callable,
+    response_text: str,
+    source_sentences: list[str],
+) -> float:
+    """Return the best embedding cosine similarity between response and sources."""
+    all_texts = [response_text] + list(source_sentences)
+    embeddings = embed_fn(all_texts)
+    response_emb = embeddings[0]
+    best = 0.0
+    for source_emb in embeddings[1:]:
+        dot = sum(a * b for a, b in zip(response_emb, source_emb, strict=False))
+        norm_a = math.sqrt(sum(a * a for a in response_emb))
+        norm_b = math.sqrt(sum(b * b for b in source_emb))
+        sim = dot / (norm_a * norm_b) if norm_a > 0 and norm_b > 0 else 0.0
+        if sim > best:
+            best = sim
+    return best

@@ -1408,32 +1408,38 @@ class PipelineBuilder:
         self,
         threshold: float = 0.3,
         action: str = "flag",
+        embed_fn: callable | None = None,
     ) -> PipelineBuilder:
-        """Enable TF-IDF grounding verification on LLM responses.
+        """Enable grounding verification on LLM responses.
 
         After the LLM produces a response, grounding compares it against
-        source text via TF-IDF cosine similarity. Responses below the
-        threshold are flagged, retried, or skipped.
+        source text via TF-IDF cosine similarity. When an embedding function
+        is provided, dense cosine similarity is also computed and the final
+        score is ``max(tfidf_score, embedding_score)``.
 
         Requires a context store to be configured (auto-enables if not set).
 
         Args:
-            threshold: Minimum TF-IDF similarity score to accept (0.0-1.0).
+            threshold: Minimum similarity score to accept (0.0-1.0).
             action: What to do with ungrounded responses:
                     "flag" (add grounding_score column),
-                    "retry" (re-prompt the LLM),
                     "skip" (drop the row).
+            embed_fn: Optional callable ``(list[str]) -> list[list[float]]``
+                      that returns embedding vectors for the given texts.
+                      When provided, embedding cosine similarity augments
+                      the TF-IDF score (taking the max of both).
 
         Returns:
             Self for chaining
         """
-        valid_actions = ("flag", "retry", "skip")
+        valid_actions = ("flag", "skip")
         if action not in valid_actions:
             raise ValueError(f"action must be one of {valid_actions}, got '{action}'")
 
         self._custom_metadata["grounding"] = {
             "threshold": threshold,
             "action": action,
+            "embed_fn": embed_fn,
         }
 
         if "context_store" not in self._custom_metadata:
@@ -1445,6 +1451,7 @@ class PipelineBuilder:
         self,
         key_columns: list[str] | None = None,
         value_columns: list[str] | None = None,
+        tolerance: int | float | None = None,
     ) -> PipelineBuilder:
         """Enable cross-row contradiction detection.
 
@@ -1458,6 +1465,11 @@ class PipelineBuilder:
                          If None, uses the input columns from the dataset spec.
             value_columns: Columns to compare for contradictions (e.g., ["category"]).
                            If None, uses the output columns from the dataset spec.
+            tolerance: For numeric value columns, differences within this
+                       tolerance are **not** flagged as contradictions.
+                       ``None`` (default) uses exact string equality.
+                       For example, ``tolerance=1`` on a 0-5 scale ignores
+                       ±1 score differences.
 
         Returns:
             Self for chaining
@@ -1465,6 +1477,7 @@ class PipelineBuilder:
         self._custom_metadata["contradiction_detection"] = {
             "key_columns": key_columns,
             "value_columns": value_columns,
+            "tolerance": tolerance,
         }
 
         if "context_store" not in self._custom_metadata:
@@ -1475,6 +1488,7 @@ class PipelineBuilder:
     def with_confidence_scoring(
         self,
         include_in_output: bool = True,
+        scoring_mode: str = "default",
     ) -> PipelineBuilder:
         """Enable confidence scoring on LLM responses.
 
@@ -1484,12 +1498,20 @@ class PipelineBuilder:
         Args:
             include_in_output: Whether to add a 'confidence_score' column
                                to the output DataFrame.
+            scoring_mode: Scoring formula to use. One of ``"default"``,
+                          ``"sigmoid"``, or ``"grounding_only"``.
 
         Returns:
             Self for chaining
         """
+        valid_modes = ("default", "sigmoid", "grounding_only")
+        if scoring_mode not in valid_modes:
+            raise ValueError(
+                f"scoring_mode must be one of {valid_modes!r}, got {scoring_mode!r}"
+            )
         self._custom_metadata["confidence_scoring"] = {
             "include_in_output": include_in_output,
+            "scoring_mode": scoring_mode,
         }
 
         if "context_store" not in self._custom_metadata:
