@@ -35,6 +35,9 @@
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
 - **Multi-Column Processing**: Generate multiple output columns with composition or JSON parsing
 - **Custom Providers**: Integrate any OpenAI-compatible API (Together.AI, vLLM, Ollama, custom endpoints)
+- **Context Store (Anti-Hallucination)**: Post-LLM quality layer with grounding verification, contradiction detection, and confidence scoring (Rust/SQLite/FTS5)
+- **Knowledge Store (RAG)**: Pre-LLM knowledge retrieval with document ingestion, hybrid search, and reranking
+- **Evidence Priming**: Pre-LLM injection of prior validated answers for cross-run consistency
 
 ## Quick Start
 
@@ -637,6 +640,102 @@ result = (
 )
 ```
 
+### 15. Context Store — Anti-Hallucination Quality Layer (NEW!)
+
+Add post-LLM grounding, contradiction detection, and confidence scoring to catch hallucinations before they reach your output:
+
+```python
+from ondine import PipelineBuilder
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("data.csv", input_columns=["text"], output_columns=["summary"])
+    .with_prompt("Summarize: {text}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    # Anti-hallucination quality layer (post-LLM)
+    .with_context_store()                # Enable evidence graph (Rust/SQLite/FTS5)
+    .with_grounding()                    # Verify claims against source text
+    .with_contradiction_detection()      # Flag conflicting statements across rows
+    .with_confidence_scoring()           # Score each output 0.0-1.0
+    .build()
+)
+
+result = pipeline.execute()
+# Outputs include grounding status, contradiction flags, and confidence scores
+```
+
+**How it works:**
+- Stores validated claims in a persistent evidence graph (SQLite + FTS5 full-text search)
+- Grounding stage checks LLM output against input text to flag unsupported claims
+- Contradiction detection compares new outputs against previously validated evidence
+- Confidence scoring combines grounding + contradiction signals into a 0-1 score
+- Powered by a Rust backend via PyO3 for sub-millisecond lookups
+
+### 16. Knowledge Store — RAG Retrieval (NEW!)
+
+Inject relevant knowledge from your documents into each prompt before the LLM call:
+
+```python
+from ondine import PipelineBuilder
+from ondine.knowledge import KnowledgeStore, SentenceTransformerEmbedder
+
+# Build a knowledge store from your documents
+kb = KnowledgeStore(embedder=SentenceTransformerEmbedder())
+kb.ingest("docs/")
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("questions.csv", input_columns=["question"], output_columns=["answer"])
+    .with_prompt("Answer using the provided context: {question}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    # RAG: retrieve top-k chunks and inject as {_kb_context} (pre-LLM)
+    .with_knowledge_base(kb, top_k=5)
+    .build()
+)
+
+result = pipeline.execute()
+# Each row's prompt is augmented with the most relevant knowledge chunks
+```
+
+**How it works:**
+- Ingests documents (PDF, text, images via OCR) into chunked embeddings
+- Hybrid search combines BM25 keyword matching with vector similarity
+- Optional reranking stage scores candidates for higher precision
+- Retrieved chunks are injected into the system prompt before each LLM call
+- Rust-powered chunking and indexing for fast ingestion at scale
+
+### 17. Evidence Priming — Cross-Run Consistency (NEW!)
+
+Re-inject prior validated answers so the LLM stays consistent across pipeline runs:
+
+```python
+from ondine import PipelineBuilder
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("data.csv", input_columns=["text"], output_columns=["category"])
+    .with_prompt("Classify: {text}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .with_context_store()  # Required: evidence graph stores validated answers
+    # Inject top-k prior answers matching the current input (pre-LLM)
+    .with_evidence_priming(
+        query_columns=["text"],  # Columns to search against evidence graph
+        top_k=3,                 # Number of prior answers to inject
+        min_score=0.1            # Minimum similarity threshold
+    )
+    .build()
+)
+
+result = pipeline.execute()
+# LLM sees relevant prior answers, improving consistency across runs
+```
+
+**How it works:**
+- Queries the evidence graph for previously validated outputs similar to the current input
+- Matched evidence is prepended to the LLM prompt as reference examples
+- Helps the model produce consistent classifications and extractions over time
+- Works with `with_context_store()` to build a growing knowledge loop
+
 ## CLI Usage
 
 Ondine includes a powerful command-line interface for processing datasets without writing code.
@@ -714,20 +813,28 @@ The SDK follows a **layered architecture**:
 
 ```
 ┌─────────────────────────────────────────┐
-│  Layer 4: High-Level API                │
+│  Layer 5: High-Level API                │
 │  (Pipeline, PipelineBuilder)            │
 ├─────────────────────────────────────────┤
-│  Layer 3: Orchestration Engine          │
+│  Layer 4: Orchestration Engine          │
 │  (PipelineExecutor, StateManager)       │
+├─────────────────────────────────────────┤
+│  Layer 3: Quality & Knowledge (NEW)     │
+│  Pre-LLM: KnowledgeRetrieval,          │
+│           EvidencePriming               │
+│  Post-LLM: Grounding, Contradiction,   │
+│            ConfidenceScoring            │
 ├─────────────────────────────────────────┤
 │  Layer 2: Processing Stages             │
 │  (DataLoader, LLMInvocation, Parser)    │
 ├─────────────────────────────────────────┤
 │  Layer 1: Infrastructure Adapters       │
-│  (LLMClient, DataReader, Checkpoint)    │
+│  (LLMClient, DataReader, Checkpoint,   │
+│   ContextStore, KnowledgeStore)         │
 ├─────────────────────────────────────────┤
-│  Layer 0: Core Utilities                │
-│  (RetryHandler, RateLimiter, Logging)   │
+│  Layer 0: Core Utilities (Rust/PyO3)    │
+│  (RetryHandler, RateLimiter, Logging,   │
+│   SQLite/FTS5, EvidenceGraph)           │
 └─────────────────────────────────────────┘
 ```
 
