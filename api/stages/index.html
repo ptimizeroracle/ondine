@@ -2741,6 +2741,72 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#ondine.stages--core-stages-in-typical-execution-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core stages (in typical execution order)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.stages--multi-run-aggregation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-run &amp; aggregation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.stages--response-parsers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response parsers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.stages--batch-processing-utilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batch processing utilities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.stages--stage-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.stages--examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ondine.stages.BatchAggregatorStage" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3939,7 +4005,82 @@
 
     <div class="doc doc-contents first">
 
-        <p>Processing stages for data transformation.</p>
+        <p>Processing stages for the Ondine data-transformation pipeline.</p>
+<p>Each stage implements the <code>PipelineStage</code> protocol and is composed into
+a linear pipeline by the <code>PipelineBuilder</code>.  Stages are executed in
+order; each receives the output of the previous stage.</p>
+<h4 id="ondine.stages--core-stages-in-typical-execution-order">Core stages (in typical execution order)<a class="headerlink" href="#ondine.stages--core-stages-in-typical-execution-order" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>DataLoaderStage</code> -- Load input data from CSV, DataFrame, or other
+  sources into a <code>DataContainer</code>.</li>
+<li><code>EvidenceRetrievalStage</code> -- Pre-LLM evidence priming: search the
+  context store for previously validated answers and inject them into
+  each row as <code>_evidence_context</code> so the LLM can leverage prior
+  evidence for consistency.</li>
+<li><code>KnowledgeRetrievalStage</code> -- RAG retrieval: search the knowledge
+  base for relevant chunks and inject them as <code>_kb_context</code>.</li>
+<li><code>BatchDisaggregatorStage</code> -- Split a <code>DataContainer</code> into
+  individual prompt items for parallel LLM processing.</li>
+<li><code>PromptFormatterStage</code> -- Render prompt templates with per-row
+  variables (including <code>_evidence_context</code> and <code>_kb_context</code>).</li>
+<li><code>LLMInvocationStage</code> -- Send formatted prompts to the configured
+  LLM provider and collect responses.</li>
+<li><code>ResponseParserStage</code> -- Parse raw LLM text into structured output
+  using one of the built-in parsers (JSON, Pydantic, Regex, raw text).</li>
+<li><code>BatchAggregatorStage</code> -- Re-assemble individual results into a
+  single <code>DataContainer</code>.</li>
+<li><code>ResultWriterStage</code> -- Write final results to CSV or other sinks.</li>
+</ul>
+<h4 id="ondine.stages--multi-run-aggregation">Multi-run &amp; aggregation<a class="headerlink" href="#ondine.stages--multi-run-aggregation" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>MultiRunStage</code> -- Run a sub-pipeline multiple times and aggregate
+  results via a configurable <code>AggregationStrategy</code>:
+  <code>ConsensusStrategy</code>, <code>FirstSuccessStrategy</code>, <code>AllStrategy</code>,
+  <code>AverageStrategy</code>.</li>
+</ul>
+<h4 id="ondine.stages--response-parsers">Response parsers<a class="headerlink" href="#ondine.stages--response-parsers" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>ResponseParser</code> (ABC), <code>RawTextParser</code>, <code>JSONParser</code>,
+  <code>PydanticParser</code>, <code>RegexParser</code>.</li>
+<li><code>create_response_parser</code> -- Factory function to instantiate a parser
+  by name.</li>
+</ul>
+<h4 id="ondine.stages--batch-processing-utilities">Batch processing utilities<a class="headerlink" href="#ondine.stages--batch-processing-utilities" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>BatchProcessor</code> -- Process items in configurable batches.</li>
+<li><code>BatchMap</code> -- Map a function over batches.</li>
+<li><code>PromptItem</code> -- A single prompt with metadata for batch processing.</li>
+</ul>
+<h4 id="ondine.stages--stage-registry">Stage registry<a class="headerlink" href="#ondine.stages--stage-registry" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>StageRegistry</code> -- Discover and register stages by name.</li>
+<li><code>@stage</code> -- Decorator to register a custom stage class.</li>
+</ul>
+<h4 id="ondine.stages--examples">Examples<a class="headerlink" href="#ondine.stages--examples" title="Permanent link">&para;</a></h4>
+<p>Using the builder API (most common)::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.api import PipelineBuilder
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv(&quot;data.csv&quot;, input_columns=[&quot;text&quot;], output_columns=[&quot;label&quot;])
+    .with_prompt(&quot;Classify: {text}&quot;)
+    .with_llm(model=&quot;openai/gpt-4o-mini&quot;)
+    .with_context_store()
+    .with_evidence_priming(query_columns=[&quot;text&quot;], top_k=3)
+    .to_csv(&quot;results.csv&quot;)
+    .build()
+)
+</code></pre></div>
+<p>Direct stage composition::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.stages import (
+    DataLoaderStage,
+    EvidenceRetrievalStage,
+    PromptFormatterStage,
+    LLMInvocationStage,
+    ResponseParserStage,
+    ResultWriterStage,
+)
+</code></pre></div>
 
 
 

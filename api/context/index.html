@@ -2741,6 +2741,50 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#ondine.context--backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.context--core-data-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core data classes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.context--key-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key capabilities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.context--examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ondine.context.ContextStore" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2916,10 +2960,73 @@
     <div class="doc doc-contents first">
 
         <p>Pluggable context store for Ondine's anti-hallucination pipeline.</p>
-<p>Provides a protocol (ABC) and multiple backends:
-- RustContextStore: High-performance default backed by compiled Rust + SQLite/FTS5
-- ZepContextStore: Cloud-hosted knowledge graph via Zep Cloud API
-- InMemoryContextStore: Pure-Python fallback for testing</p>
+<p>The context store system provides persistent evidence storage, retrieval,
+grounding verification, contradiction detection, confidence scoring, and
+evidence priming. Every LLM response processed by the pipeline can be
+stored as an evidence record, then retrieved later to ground future
+responses and detect contradictions.</p>
+<h4 id="ondine.context--backends">Backends<a class="headerlink" href="#ondine.context--backends" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>RustContextStore</code> -- High-performance default backed by compiled Rust
+  with SQLite/FTS5.  Supports full-text search, TF-IDF + optional dense
+  embedding grounding, and contradiction tracking.</li>
+<li><code>ZepContextStore</code> -- Cloud-hosted knowledge graph via Zep Cloud API.</li>
+<li><code>InMemoryContextStore</code> -- Pure-Python fallback for testing and
+  prototyping (no persistence).</li>
+</ul>
+<h4 id="ondine.context--core-data-classes">Core data classes<a class="headerlink" href="#ondine.context--core-data-classes" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>EvidenceRecord</code> -- A single piece of evidence with text, source
+  reference, claim type, confidence, and arbitrary metadata.</li>
+<li><code>RetrievalResult</code> -- A scored result returned from a context store
+  search, including support count for contradiction-aware ranking.</li>
+<li><code>GroundingResult</code> -- The outcome of grounding an LLM claim against
+  source sentences, carrying a confidence score and grounded/ungrounded flag.</li>
+</ul>
+<h4 id="ondine.context--key-capabilities">Key capabilities<a class="headerlink" href="#ondine.context--key-capabilities" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Evidence storage &amp; retrieval</strong> -- Store validated LLM outputs as
+  evidence records and retrieve them by claim ID or semantic search.</li>
+<li><strong>Grounding verification</strong> -- Verify new LLM responses against source
+  sentences using TF-IDF cosine similarity or dense embeddings.  Claims
+  below the confidence threshold are flagged as ungrounded.</li>
+<li><strong>Contradiction detection</strong> -- Flag pairs of claims as contradictory
+  and query the contradiction graph for a given claim.</li>
+<li><strong>Confidence scoring</strong> -- Each evidence record carries an optional
+  confidence float that downstream stages can use for filtering.</li>
+<li><strong>Evidence priming</strong> -- Prior validated evidence is injected into
+  prompts before LLM inference so the model can leverage earlier answers
+  for consistency (see <code>EvidenceRetrievalStage</code>).</li>
+</ul>
+<h4 id="ondine.context--examples">Examples<a class="headerlink" href="#ondine.context--examples" title="Permanent link">&para;</a></h4>
+<p>Standalone usage::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.context import RustContextStore, EvidenceRecord
+
+store = RustContextStore(&quot;evidence.db&quot;)
+claim_id = store.store(EvidenceRecord(
+    text=&quot;Paris is the capital of France.&quot;,
+    source_ref=&quot;geography-101&quot;,
+    claim_type=&quot;factual&quot;,
+    confidence=0.95,
+))
+results = store.search(&quot;capital of France&quot;, limit=3)
+store.close()
+</code></pre></div>
+<p>With the pipeline builder API::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.api import PipelineBuilder
+from ondine.context import RustContextStore
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv(&quot;data.csv&quot;, input_columns=[&quot;question&quot;], output_columns=[&quot;answer&quot;])
+    .with_prompt(&quot;Answer: {question}&quot;)
+    .with_llm(model=&quot;openai/gpt-4o-mini&quot;)
+    .with_context_store(RustContextStore(&quot;evidence.db&quot;))
+    .with_grounding(threshold=0.3)
+    .with_evidence_priming(query_columns=[&quot;question&quot;], top_k=3)
+    .build()
+)
+</code></pre></div>
 
 
 

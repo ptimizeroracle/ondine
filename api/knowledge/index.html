@@ -2741,6 +2741,105 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#ondine.knowledge--facade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Facade
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--protocols-abcs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Protocols (ABCs)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--embedders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Embedders
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--rerankers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rerankers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--query-transformers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query transformers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--ocr-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OCR providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--document-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ondine.knowledge--examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ondine.knowledge.Embedder" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2927,9 +3026,106 @@
     <div class="doc doc-contents first">
 
         <p>Knowledge Base module for hybrid retrieval-augmented generation.</p>
-<p>Provides document ingestion, semantic chunking, hybrid search (BM25 + dense),
-cross-encoder reranking, query transformation, and RAG evaluation — all
-backed by the Rust EvidenceDB engine with pluggable Python components.</p>
+<p>This module implements the full RAG lifecycle: document ingestion, semantic
+chunking, embedding, hybrid search (BM25 + dense vectors), cross-encoder
+reranking, query transformation, OCR for images and PDFs, and LLM-as-judge
+evaluation -- all backed by the Rust <code>EvidenceDB</code> engine with pluggable
+Python components.</p>
+<h4 id="ondine.knowledge--facade">Facade<a class="headerlink" href="#ondine.knowledge--facade" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>KnowledgeStore</code> -- The primary entry point.  Wraps the Rust EvidenceDB
+  and exposes a deep-module interface: callers interact via <code>ingest()</code> and
+  <code>search()</code> only; all intermediate steps (chunking, embedding, FTS5/dense
+  indexing, query transformation, reranking) are hidden.</li>
+</ul>
+<h4 id="ondine.knowledge--protocols-abcs">Protocols (ABCs)<a class="headerlink" href="#ondine.knowledge--protocols-abcs" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>Embedder</code> -- Embed a list of texts into dense vectors.</li>
+<li><code>Reranker</code> -- Re-score candidate chunks against the original query.</li>
+<li><code>QueryTransformer</code> -- Expand or rewrite a user query before retrieval.</li>
+<li><code>RetrievalScorer</code> -- Score retrieval quality (precision/recall).</li>
+<li><code>OCRProvider</code> -- Extract text from images or PDF pages.</li>
+<li><code>EvalResult</code> -- Structured output from RAG evaluation.</li>
+</ul>
+<h4 id="ondine.knowledge--embedders">Embedders<a class="headerlink" href="#ondine.knowledge--embedders" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>SentenceTransformerEmbedder</code> -- Local embedding via sentence-transformers
+  (default: <code>BAAI/bge-base-en-v1.5</code>).</li>
+<li><code>OpenAIEmbedder</code> -- Remote embedding via the OpenAI API.</li>
+</ul>
+<h4 id="ondine.knowledge--rerankers">Rerankers<a class="headerlink" href="#ondine.knowledge--rerankers" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>CrossEncoderReranker</code> -- Local cross-encoder reranking
+  (default: <code>cross-encoder/ms-marco-MiniLM-L-12-v2</code>).</li>
+<li><code>JinaReranker</code> -- Remote reranking via the Jina AI API.</li>
+</ul>
+<h4 id="ondine.knowledge--query-transformers">Query transformers<a class="headerlink" href="#ondine.knowledge--query-transformers" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>MultiQueryTransformer</code> -- Generate multiple query reformulations and
+  merge their result sets for broader recall.</li>
+<li><code>HyDETransformer</code> -- Hypothetical Document Embeddings: generate a
+  synthetic answer, embed it, and retrieve by dense similarity.</li>
+<li><code>StepBackTransformer</code> -- Step-back prompting: generate a more abstract
+  version of the query for better conceptual retrieval.</li>
+</ul>
+<h4 id="ondine.knowledge--ocr-providers">OCR providers<a class="headerlink" href="#ondine.knowledge--ocr-providers" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>VisionOCR</code> -- Extract text from images using a vision LLM (e.g.
+  <code>openai/gpt-4o-mini</code>).</li>
+<li><code>TesseractOCR</code> -- Local OCR via Tesseract.</li>
+<li><code>DocTROCR</code> -- Local OCR via the DocTR deep-learning model.</li>
+</ul>
+<h4 id="ondine.knowledge--document-handling">Document handling<a class="headerlink" href="#ondine.knowledge--document-handling" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>DocumentLoader</code> -- Load documents from files (PDF, DOCX, TXT, HTML,
+  Markdown, images) or directories with recursive globbing.</li>
+<li><code>SemanticChunker</code> -- Split documents into semantically coherent chunks
+  using sentence-boundary detection and configurable overlap.</li>
+</ul>
+<h4 id="ondine.knowledge--evaluation">Evaluation<a class="headerlink" href="#ondine.knowledge--evaluation" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>LLMJudge</code> -- LLM-as-judge evaluation of RAG answers for
+  faithfulness, relevance, and completeness.</li>
+</ul>
+<h4 id="ondine.knowledge--examples">Examples<a class="headerlink" href="#ondine.knowledge--examples" title="Permanent link">&para;</a></h4>
+<p>Basic ingest and search::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.knowledge import KnowledgeStore
+
+kb = KnowledgeStore(&quot;knowledge.db&quot;)
+kb.ingest(&quot;docs/&quot;)
+results = kb.search(&quot;How does authentication work?&quot;, top_k=5)
+for r in results:
+    print(f&quot;[{r.score:.2f}] {r.text[:80]}...&quot;)
+</code></pre></div>
+<p>With reranking and query expansion::</p>
+<div class="language-text highlight"><pre><span></span><code>kb = KnowledgeStore(
+    &quot;knowledge.db&quot;,
+    reranker=True,                    # default cross-encoder
+    query_transform=&quot;multi-query&quot;,    # generate multiple reformulations
+)
+kb.ingest(&quot;docs/&quot;)
+results = kb.search(&quot;authentication flow&quot;, top_k=5)
+</code></pre></div>
+<p>With the pipeline builder API::</p>
+<div class="language-text highlight"><pre><span></span><code>from ondine.api import PipelineBuilder
+from ondine.knowledge import KnowledgeStore
+
+kb = KnowledgeStore(&quot;knowledge.db&quot;, reranker=True)
+kb.ingest(&quot;docs/&quot;)
+
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv(&quot;questions.csv&quot;, input_columns=[&quot;question&quot;], output_columns=[&quot;answer&quot;])
+    .with_knowledge_base(kb, top_k=5, rerank=True, query_transform=&quot;hyde&quot;)
+    .with_prompt(&quot;Context:\n{_kb_context}\n\nQuestion: {question}\nAnswer:&quot;)
+    .with_llm(model=&quot;openai/gpt-4o-mini&quot;)
+    .build()
+)
+</code></pre></div>
+<p>OCR-enabled ingest for images and PDFs::</p>
+<div class="language-text highlight"><pre><span></span><code>kb = KnowledgeStore(&quot;knowledge.db&quot;, ocr=&quot;vision&quot;, extract_pdf_images=True)
+kb.ingest(&quot;scanned_docs/&quot;)
+</code></pre></div>
 
 
 
