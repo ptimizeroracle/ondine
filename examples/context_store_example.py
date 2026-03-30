@@ -123,8 +123,8 @@ print("grounding_score    : 0-1 similarity between LLM output and source text")
 print("grounding_flag     : True when grounding_score < threshold (0.3)")
 print("contradiction_flag : True when rows with the same product_id got")
 print("                     different categories")
-print("confidence_score   : 0-1 composite score (sigmoid mode blends grounding")
-print("                     similarity with evidence support)")
+print("confidence_score   : 0-1 composite score (sigmoid mode uses grounding")
+print("                     score only; linear mode blends grounding + support)")
 
 # ---------------------------------------------------------------------------
 # 6. Metrics summary.

@@ -677,18 +677,19 @@ Inject relevant knowledge from your documents into each prompt before the LLM ca
 
 ```python
 from ondine import PipelineBuilder
-from ondine.knowledge import KnowledgeBase
+from ondine.knowledge import KnowledgeStore, SentenceTransformerEmbedder
 
-# Build a knowledge base from your documents
-kb = KnowledgeBase.from_directory("docs/", chunk_size=512)
+# Build a knowledge store from your documents
+kb = KnowledgeStore(embedder=SentenceTransformerEmbedder())
+kb.ingest("docs/")
 
 pipeline = (
     PipelineBuilder.create()
     .from_csv("questions.csv", input_columns=["question"], output_columns=["answer"])
     .with_prompt("Answer using the provided context: {question}")
     .with_llm(provider="openai", model="gpt-4o-mini")
-    # RAG: retrieve top-k chunks and inject into prompt (pre-LLM)
-    .with_knowledge_base(kb, top_k=5, rerank=True)
+    # RAG: retrieve top-k chunks and inject as {_kb_context} (pre-LLM)
+    .with_knowledge_base(kb, top_k=5)
     .build()
 )
 
@@ -829,7 +830,7 @@ The SDK follows a **layered architecture**:
 ├─────────────────────────────────────────┤
 │  Layer 1: Infrastructure Adapters       │
 │  (LLMClient, DataReader, Checkpoint,   │
-│   ContextStore, KnowledgeBase)          │
+│   ContextStore, KnowledgeStore)         │
 ├─────────────────────────────────────────┤
 │  Layer 0: Core Utilities (Rust/PyO3)    │
 │  (RetryHandler, RateLimiter, Logging,   │

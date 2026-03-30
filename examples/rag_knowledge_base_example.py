@@ -88,7 +88,7 @@ pipeline = (
         "You are a helpful customer support agent. Answer the customer's "
         "question using ONLY the context provided. If the context does not "
         "contain enough information, say so.\n\n"
-        "Context:\n{kb_context}\n\n"
+        "Context:\n{_kb_context}\n\n"
         "Question: {customer_question}\n\n"
         "Answer:"
     )
@@ -98,7 +98,7 @@ pipeline = (
         temperature=0.0,
     )
     # Attach the knowledge base — retrieves top_k chunks per row and
-    # injects them as {kb_context} in the prompt.
+    # injects them as {_kb_context} in the prompt.
     .with_knowledge_base(kb, top_k=5)
     .build()
 )
