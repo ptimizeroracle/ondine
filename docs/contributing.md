@@ -6,8 +6,8 @@ Thank you for your interest in contributing to Ondine!
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Ondine.git
-   cd Ondine
+   git clone https://github.com/<your-username>/ondine.git
+   cd ondine
    ```
 
 2. **Set Up Development Environment**
@@ -168,7 +168,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
 
 ## Reporting Bugs
 
-1. Check if the bug is already reported in [Issues](https://github.com/ptimizeroracle/Ondine/issues)
+1. Check if the bug is already reported in [Issues](https://github.com/ptimizeroracle/ondine/issues)
 2. If not, create a new issue with:
    - Clear title and description
    - Steps to reproduce
@@ -178,7 +178,7 @@ See `examples/15_custom_llm_provider.py` and `examples/16_custom_pipeline_stage.
 
 ## Suggesting Features
 
-1. Check [existing feature requests](https://github.com/ptimizeroracle/Ondine/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
+1. Check [existing feature requests](https://github.com/ptimizeroracle/ondine/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
 2. Open a new issue with:
    - Clear use case description
    - Proposed API or interface
@@ -215,12 +215,12 @@ Maintainers should avoid manual version bumps unless they are intentionally repa
 
 ## Good First Issues
 
-Look for issues labeled [`good first issue`](https://github.com/ptimizeroracle/Ondine/labels/good%20first%20issue) - these are great for newcomers!
+Look for issues labeled [`good first issue`](https://github.com/ptimizeroracle/ondine/labels/good%20first%20issue) - these are great for newcomers!
 
 ## Getting Help
 
-- **Questions?** Open a [Discussion](https://github.com/ptimizeroracle/Ondine/discussions)
-- **Bugs?** Open an [Issue](https://github.com/ptimizeroracle/Ondine/issues)
+- **Questions?** Open a [Discussion](https://github.com/ptimizeroracle/ondine/discussions)
+- **Bugs?** Open an [Issue](https://github.com/ptimizeroracle/ondine/issues)
 - **Chat?** Join our community (link coming soon)
 
 ## Code of Conduct
