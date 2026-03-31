@@ -5,9 +5,12 @@ Thank you for your interest in contributing to Ondine!
 ## Quick Start
 
 1. **Fork and Clone**
+
+   Click **Fork** on [github.com/ptimizeroracle/ondine](https://github.com/ptimizeroracle/ondine), then clone your fork:
    ```bash
-   git clone https://github.com/<your-username>/ondine.git
+   git clone https://github.com/ptimizeroracle/ondine.git
    cd ondine
+   git remote add upstream https://github.com/ptimizeroracle/ondine.git
    ```
 
 2. **Set Up Development Environment**
