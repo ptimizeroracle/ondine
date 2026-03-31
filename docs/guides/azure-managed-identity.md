@@ -512,5 +512,5 @@ Includes:
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/ptimizeroracle/Ondine/issues
+- GitHub Issues: https://github.com/ptimizeroracle/ondine/issues
 - Documentation: https://ptimizeroracle.github.io/ondine

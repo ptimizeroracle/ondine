@@ -10,7 +10,7 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
   [![GitHub stars](https://img.shields.io/github/stars/ptimizeroracle/ondine.svg?style=social)](https://github.com/ptimizeroracle/ondine)
-  [![Tests](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/Ondine/actions/workflows/ci.yml)
+  [![Tests](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml)
   [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
 
   <img src="assets/images/demo.gif" alt="Ondine Demo" width="700"/>
@@ -1072,7 +1072,7 @@ Additional resources:
 
 Contributions welcome! Please follow:
 
-1. Fork the repository at https://github.com/ptimizeroracle/Ondine
+1. Fork the repository at https://github.com/ptimizeroracle/ondine
 2. Create a feature branch
 3. Follow the existing code style (Black, Ruff)
 4. Add tests for new features
@@ -1093,7 +1093,7 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- **Repository**: https://github.com/ptimizeroracle/Ondine
+- **Repository**: https://github.com/ptimizeroracle/ondine
 - **Issues**: Open an issue on GitHub
 - **Discussions**: Use GitHub Discussions for questions
 - **Email**: git@binblok.com

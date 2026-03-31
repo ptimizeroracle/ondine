@@ -572,4 +572,4 @@ Adds a Textual-based TUI for interactive progress monitoring, a generic pipeline
 
 ---
 
-[1.0.0]: https://github.com/ptimizeroracle/Ondine/releases/tag/v1.0.0
+[1.0.0]: https://github.com/ptimizeroracle/ondine/releases/tag/v1.0.0

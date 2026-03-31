@@ -55,6 +55,7 @@ site/
 # IDE files
 .idea/
 .cursor/
+.claude/
 
 # Generated architecture diagrams (regenerated from model.yaml)
 docs/architecture/diagrams/

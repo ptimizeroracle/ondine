@@ -1,0 +1,52 @@
+name: Feature Request
+description: Suggest an idea or feature for Ondine
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a new feature for Ondine! Please fill out the form below to help us understand your request.
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: A clear and concise description of what the problem is. Ex. I'm always frustrated when...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented in Ondine.
+      placeholder: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives-considered
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: Have you tried other approaches? Why didn't they work?
+    validations:
+      required: false
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case / Who Benefits
+      description: Describe the use case and who will benefit from this feature.
+      placeholder: This feature would be useful for... because...
+    validations:
+      required: true
+  - type: dropdown
+    id: willingness-to-contribute
+    attributes:
+      label: Willingness to Contribute
+      description: Are you willing to submit a Pull Request to implement this feature?
+      options:
+        - "Yes"
+        - "No"
+        - "Maybe"
+    validations:
+      required: true
