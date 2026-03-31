@@ -1,0 +1,96 @@
+name: Bug Report
+description: File a bug report for Ondine
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report for Ondine! Please provide as much detail as possible to help us reproduce and fix the issue.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: dropdown
+    id: python-version
+    attributes:
+      label: Python Version
+      description: What version of Python are you running?
+      options:
+        - "3.10"
+        - "3.11"
+        - "3.12"
+        - "3.13"
+    validations:
+      required: true
+  - type: input
+    id: llm-provider
+    attributes:
+      label: LLM Provider Affected
+      description: Which LLM provider (e.g., OpenAI, Anthropic, local) is affected by this bug?
+      placeholder: ex. OpenAI
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Please provide clear steps to reproduce the behavior.
+      placeholder: |
+        1. Initialize Ondine with...
+        2. Call method...
+        3. Observe error...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: Expected vs Actual Behavior
+      description: What did you expect to happen, and what actually happened?
+      placeholder: |
+        Expected: The batch process should complete successfully.
+        Actual: The process crashes with an exception.
+    validations:
+      required: true
+  - type: textarea
+    id: error-traceback
+    attributes:
+      label: Full Error Traceback
+      description: Please copy and paste the full error traceback. This will be automatically formatted into code.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: minimal-reproduction
+    attributes:
+      label: Minimal Reproduction Code Block
+      description: Provide a minimal, self-contained code snippet that reproduces the issue.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: ondine-version
+    attributes:
+      label: Ondine Version
+      description: What version of Ondine are you using?
+      placeholder: ex. v1.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation Method
+      description: How did you install Ondine?
+      options:
+        - pip
+        - uv
+        - source
+    validations:
+      required: true
