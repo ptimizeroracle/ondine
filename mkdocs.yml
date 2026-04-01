@@ -34,27 +34,6 @@ theme:
 
 plugins:
   - search
-  - gen-files:
-      scripts:
-        - docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - section-index
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            docstring_style: google
-            show_source: true
-            show_root_heading: true
-            show_root_full_path: false
-            show_signature_annotations: true
-            separate_signature: true
-            merge_init_into_class: true
-            show_if_no_docstring: false
-            filters:
-              - "!^_"  # Exclude private members
-            members_order: source
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -75,7 +54,7 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
+  - Home: README.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
@@ -84,6 +63,11 @@ nav:
       - Execution Modes: guides/execution-modes.md
       - Structured Output: guides/structured-output.md
       - Cost Control: guides/cost-control.md
+      - Batch Processing: guides/batch-processing.md
+      - Multi-Column Processing: guides/multi-column.md
+      - Pipeline Composition: guides/pipeline-composition.md
+      - Observability: guides/observability_profiling.md
+      - Azure Managed Identity: guides/azure-managed-identity.md
       - Providers:
           - OpenAI: guides/providers/openai.md
           - Anthropic Claude: guides/providers/anthropic.md
@@ -91,55 +75,6 @@ nav:
           - Azure OpenAI: guides/providers/azure.md
           - Local MLX: guides/providers/local-mlx.md
           - Custom APIs: guides/providers/custom.md
-      - Multi-Column Processing: guides/multi-column.md
-      - Pipeline Composition: guides/pipeline-composition.md
-  - API Reference:
-      - Overview: api/index.md
-      - High-Level API:
-          - Pipeline: api/api/pipeline.md
-          - PipelineBuilder: api/api/pipeline_builder.md
-          - QuickPipeline: api/api/quick.md
-          - PipelineComposer: api/api/pipeline_composer.md
-          - DatasetProcessor: api/api/dataset_processor.md
-      - Core:
-          - Specifications: api/core/specifications.md
-          - Models: api/core/models.md
-          - Error Handler: api/core/error_handler.md
-      - Stages:
-          - PipelineStage: api/stages/pipeline_stage.md
-          - Data Loader: api/stages/data_loader_stage.md
-          - Prompt Formatter: api/stages/prompt_formatter_stage.md
-          - LLM Invocation: api/stages/llm_invocation_stage.md
-          - Response Parser: api/stages/response_parser_stage.md
-          - Parser Factory: api/stages/parser_factory.md
-          - Result Writer: api/stages/result_writer_stage.md
-      - Orchestration:
-          - Pipeline Executor: api/orchestration/pipeline_executor.md
-          - Sync Executor: api/orchestration/sync_executor.md
-          - Async Executor: api/orchestration/async_executor.md
-          - Streaming Executor: api/orchestration/streaming_executor.md
-          - Execution Context: api/orchestration/execution_context.md
-          - State Manager: api/orchestration/state_manager.md
-          - Observers: api/orchestration/observers.md
-      - Adapters:
-          - LLM Client: api/adapters/llm_client.md
-          - Data IO: api/adapters/data_io.md
-          - Checkpoint Storage: api/adapters/checkpoint_storage.md
-      - Utilities:
-          - Cost Tracker: api/utils/cost_tracker.md
-          - Budget Controller: api/utils/budget_controller.md
-          - Rate Limiter: api/utils/rate_limiter.md
-          - Retry Handler: api/utils/retry_handler.md
-          - Logging: api/utils/logging_utils.md
-      - Configuration:
-          - Config Loader: api/config/config_loader.md
-      - CLI:
-          - Commands: api/cli/main.md
-      - Integrations:
-          - Airflow: api/integrations/airflow.md
-          - Prefect: api/integrations/prefect.md
-  - Architecture:
-      - Technical Reference: architecture/technical-reference.md
   - Contributing: contributing.md
 
 extra:

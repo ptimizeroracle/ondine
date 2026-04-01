@@ -3669,7 +3669,7 @@ wheels = [
 
 [[package]]
 name = "ondine"
-version = "1.6.2"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
