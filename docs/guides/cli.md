@@ -1,6 +1,6 @@
 # CLI Reference
 
-Ondine ships a command-line tool named `ondine` (with `hermes` as a backward-compatible alias). Use it to process datasets, estimate costs, validate configurations, inspect files, manage checkpoints, and list providers — all without writing Python.
+The CLI tool is called `ondine` (`hermes` still works as an alias). It handles dataset processing, cost estimation, config validation, file inspection, checkpoint management, and provider listing. No Python required.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Ondine ships a command-line tool named `ondine` (with `hermes` as a backward-com
 pip install ondine
 ```
 
-Verify the installation:
+Check it worked:
 
 ```bash
 ondine --version
@@ -16,7 +16,7 @@ ondine --version
 
 ## Configuration File
 
-All commands that act on a pipeline require a YAML (or JSON) configuration file passed with `--config` / `-c`. The file describes the data source, prompt, LLM, processing, and output settings.
+Every pipeline command needs a YAML (or JSON) config file via `--config` / `-c`. This is where you define your data source, prompt, LLM, processing behavior, and output.
 
 **Minimal example (`config.yaml`):**
 
@@ -45,11 +45,11 @@ output:
   path: results.csv
 ```
 
-YAML field notes:
-- `data.source.type` → accepts `csv`, `excel`, `parquet`
-- `data.source.path` → file path
-- `processing.rate_limit` → requests per minute
-- `output.format` → `csv`, `excel`, or `parquet`
+Quick notes on the fields:
+- `data.source.type` -- `csv`, `excel`, `parquet`
+- `data.source.path` -- file path
+- `processing.rate_limit` -- requests per minute
+- `output.format` -- `csv`, `excel`, or `parquet`
 
 ---
 
@@ -57,7 +57,7 @@ YAML field notes:
 
 ### `process`
 
-Process a dataset using LLM transformations defined in a config file.
+This is the command you'll run most of the time. It takes your config and runs the actual LLM pipeline against your dataset.
 
 ```
 ondine process [OPTIONS]
@@ -108,13 +108,13 @@ ondine process -c config.yaml -i data.csv \
     --checkpoint-dir /tmp/my-checkpoints
 ```
 
-After execution the CLI prints an **Execution Results** table (rows processed/failed/skipped, duration, total cost, cost per row) and a **Quality Report** table (success rate, null/empty outputs, quality score).
+When it finishes, you get two tables: an **Execution Results** table (rows processed/failed/skipped, duration, total cost, cost per row) and a **Quality Report** (success rate, null/empty outputs, quality score).
 
 ---
 
 ### `estimate`
 
-Estimate the cost of processing a dataset without running the pipeline.
+Run this before `process` to see what the bill looks like. No data gets sent anywhere.
 
 ```
 ondine estimate [OPTIONS]
@@ -140,13 +140,13 @@ ondine estimate -c config.yaml -i data.csv --model gpt-4o-mini
 ondine estimate -c config.yaml -i data.csv --model gpt-4o
 ```
 
-Output includes total cost, total/input/output tokens, rows to process, confidence level, and cost per row. A warning is printed when the estimated cost exceeds $10.
+Output shows total cost, total/input/output tokens, rows to process, confidence level, and cost per row. You'll get a warning if the estimate goes above $10.
 
 ---
 
 ### `validate`
 
-Validate a pipeline configuration file without executing anything.
+Catches config mistakes before you burn API credits. Does not call any LLM.
 
 ```
 ondine validate [OPTIONS]
@@ -165,17 +165,17 @@ ondine validate [OPTIONS]
 # Basic validation
 ondine validate -c config.yaml
 
-# Verbose — also shows configuration summary
+# Verbose -- also shows configuration summary
 ondine validate -c config.yaml --verbose
 ```
 
-Exits with status 0 on success, status 1 on validation errors. Any warnings (non-fatal issues) are printed even when validation passes.
+Exit 0 means you're good. Exit 1 means something is wrong. Warnings (non-fatal) still print even on a passing run.
 
 ---
 
 ### `resume`
 
-Resume a pipeline run from a saved checkpoint after a failure or interruption.
+Pick up where you left off after a crash or Ctrl-C. Needs the session ID that was printed when the original run started.
 
 ```
 ondine resume [OPTIONS]
@@ -192,7 +192,7 @@ ondine resume [OPTIONS]
 | `--output PATH` | `-o` | No | Override output path |
 | `--verbose` | `-v` | No | Show full traceback on errors |
 
-*`--config` is required once the checkpoint is found — the command will error if it is omitted.
+*`--config` is required once the checkpoint is found -- the command will error if you skip it.
 
 **Examples:**
 
@@ -210,13 +210,13 @@ ondine resume -s 3f2a1b4c-1234-5678-abcd-ef0123456789 \
     -c config.yaml -o results_resumed.csv
 ```
 
-Before resuming, the CLI prints a **Checkpoint Information** table showing the session ID, rows already processed, total rows, last pipeline stage, timestamp, and cost accumulated so far.
+Before it starts processing again, you'll see a **Checkpoint Information** table with the session ID, rows already done, total rows, last pipeline stage, timestamp, and cost so far.
 
 ---
 
 ### `list-checkpoints`
 
-List all saved checkpoints in a directory.
+See what checkpoints exist. Useful when you don't remember the session ID.
 
 ```
 ondine list-checkpoints [OPTIONS]
@@ -238,13 +238,13 @@ ondine list-checkpoints
 ondine list-checkpoints --checkpoint-dir /tmp/my-checkpoints
 ```
 
-Output is a table with session ID (truncated), rows processed, total rows, last stage, cost so far, timestamp, and file path.
+Prints a table: session ID (truncated), rows processed, total rows, last stage, cost so far, timestamp, file path.
 
 ---
 
 ### `inspect`
 
-Inspect an input data file — shows file metadata, column info, and a row preview.
+Quick look at a data file before you write your config. Shows metadata, columns, and a row preview.
 
 ```
 ondine inspect [OPTIONS]
@@ -270,21 +270,19 @@ ondine inspect -i data.parquet --head 20
 ondine inspect -i data.xlsx
 ```
 
-Output includes file path, type, total rows, total columns, memory usage, per-column dtype and null counts, and a plain-text row preview.
+You get the file path, type, total rows, total columns, memory usage, per-column dtype and null counts, and a text row preview.
 
-Note: inspecting Excel files requires `pip install ondine[excel]` and Parquet files require `pip install ondine[parquet]`.
+Heads up: Excel files need `pip install ondine[excel]` and Parquet files need `pip install ondine[parquet]`.
 
 ---
 
 ### `list-providers`
 
-List all supported LLM providers with platform, cost tier, use case, and API key requirements.
+Dumps the full provider table. No flags.
 
 ```
 ondine list-providers
 ```
-
-No options. Always prints the full provider table.
 
 **Supported providers:**
 
@@ -298,13 +296,7 @@ No options. Always prints the full provider table.
 | `mlx` | Apple MLX | macOS M1/M2/M3/M4 | Free |
 | `litellm` | LiteLLM (Universal) | Cloud | Varies |
 
-**Example:**
-
-```bash
-ondine list-providers
-```
-
-The command also prints per-provider requirement notes and usage examples.
+Also prints per-provider requirement notes and usage examples.
 
 ---
 
@@ -320,7 +312,7 @@ ondine COMMAND --help  # Print help for a specific command
 
 ## Config File Reference
 
-All keys accepted in the YAML configuration:
+Every key the YAML config accepts:
 
 ```yaml
 # Data source
@@ -395,3 +387,5 @@ ondine process -c config.yaml -i data.csv -o results.csv --max-budget 5.0
 ondine list-checkpoints
 ondine resume -s <session-id> -c config.yaml -o results.csv
 ```
+
+Always set `--max-budget` on your first run with a new dataset. Better to hit the ceiling early than to find out the hard way.

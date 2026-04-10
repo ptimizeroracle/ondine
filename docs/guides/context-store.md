@@ -1,17 +1,17 @@
 # Context Store and Anti-Hallucination
 
-Ondine's context store system gives pipelines a memory of prior validated LLM responses. Each output can be stored as an evidence record, retrieved to inform future prompts, verified against source text, and checked for cross-row contradictions. Together these capabilities form a composable anti-hallucination pipeline.
+The context store gives your pipeline memory. Each LLM output gets stored as an evidence record that future runs can retrieve, verify against source text, and check for contradictions. You wire up the pieces you need -- priming, grounding, contradiction detection, confidence scoring -- and skip what you don't.
 
 ## How it works
 
-When a context store is attached to a pipeline, each processed row goes through the following lifecycle:
+Attach a context store to a pipeline and each row flows through up to six stages:
 
-1. **Evidence priming** (optional, pre-LLM) — the store is searched for prior validated answers relevant to the current row. The top-k results are injected into the prompt as `_evidence_context`.
-2. **LLM inference** — the model generates a response, optionally informed by primed evidence.
-3. **Grounding verification** (optional, post-LLM) — the response is compared against source text using TF-IDF cosine similarity (or dense embeddings if an `embed_fn` is supplied). Results below the threshold are flagged.
-4. **Contradiction detection** (optional) — rows that share the same key columns but produce different output values are flagged as contradictions.
-5. **Confidence scoring** (optional) — a composite score is computed from the grounding similarity and evidence support count and written to a `confidence_score` column.
-6. **Storage** — validated responses are stored as evidence records, accumulating a knowledge base for subsequent pipeline runs.
+1. **Evidence priming** (optional, pre-LLM) -- searches the store for prior validated answers relevant to the current row. Top-k results land in `_evidence_context`.
+2. **LLM inference** -- the model generates a response, optionally informed by primed evidence.
+3. **Grounding verification** (optional, post-LLM) -- compares the response against source text using TF-IDF cosine similarity (or dense embeddings if you supply an `embed_fn`). Scores below the threshold get flagged.
+4. **Contradiction detection** (optional) -- rows sharing the same key columns but producing different outputs get flagged.
+5. **Confidence scoring** (optional) -- a composite score from grounding similarity and evidence support count, written to `confidence_score`.
+6. **Storage** -- validated responses go into the store as evidence records for next time.
 
 ---
 
@@ -19,7 +19,7 @@ When a context store is attached to a pipeline, each processed row goes through 
 
 ### RustContextStore
 
-The default high-performance backend. It compiles to a native extension (`ondine._engine`) backed by SQLite with FTS5 full-text search. Supports hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, and contradiction tracking.
+The default. Compiles to a native extension (`ondine._engine`) backed by SQLite with FTS5 full-text search. Hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, contradiction tracking.
 
 ```python
 from ondine.context import RustContextStore
@@ -31,13 +31,13 @@ store = RustContextStore("evidence.db")
 store = RustContextStore(":memory:")
 ```
 
-**When to use:** Production workloads, datasets processed across multiple runs, any case where evidence accumulation between runs matters.
+Use this for production workloads, multi-run datasets, anything where evidence should accumulate between runs.
 
-**Requires:** The compiled Rust extension. Install with `pip install ondine` (a Rust toolchain is required only when building from source).
+Requires the compiled Rust extension. `pip install ondine` handles it -- a Rust toolchain is only needed when building from source.
 
 ### ZepContextStore
 
-A cloud-hosted knowledge graph backed by the [Zep Cloud](https://www.getzep.com/) API. Zep automatically extracts entities and relationships from stored text, enabling graph-aware semantic search with cross-encoder reranking.
+Cloud-hosted knowledge graph backed by [Zep Cloud](https://www.getzep.com/). Zep extracts entities and relationships from stored text automatically, giving you graph-aware semantic search with cross-encoder reranking.
 
 ```python
 from ondine.context import ZepContextStore
@@ -49,17 +49,17 @@ store = ZepContextStore(graph_id="my-pipeline-run")
 store = ZepContextStore(graph_id="my-pipeline-run", api_key="zep-...")
 ```
 
-Each `graph_id` acts as an isolated namespace. Multiple pipeline runs can share a graph (for cross-run memory) or use separate graphs (for isolation). The `graph_id` defaults to a random UUID if not specified.
+Each `graph_id` is an isolated namespace. Share a graph across pipeline runs for cross-run memory, or use separate graphs for isolation. Defaults to a random UUID if you don't specify one.
 
-**When to use:** When you need a managed cloud store, cross-run persistent knowledge graphs, or Zep's entity/relationship extraction.
+Good for managed cloud storage, persistent knowledge graphs, or when you want Zep's entity/relationship extraction.
 
-**Requires:** `pip install ondine[zep]` and a `ZEP_API_KEY` environment variable (or explicit `api_key`).
+Requires `pip install ondine[zep]` and a `ZEP_API_KEY` environment variable (or explicit `api_key`).
 
-**Note on availability:** `ZepContextStore.available` returns `False` if the client could not be initialized (missing package or invalid key). The store gracefully degrades — `search()` returns an empty list — so pipelines continue running even without a valid Zep connection.
+`ZepContextStore.available` returns `False` if the client couldn't initialize (missing package or bad key). The store degrades gracefully -- `search()` returns an empty list -- so your pipeline keeps running even without a valid Zep connection.
 
 ### InMemoryContextStore
 
-A pure-Python fallback with no external dependencies. Uses the same TF-IDF algorithm as the Rust backend but runs entirely in Python. All data is lost when the process exits.
+Pure-Python fallback. No external dependencies. Same TF-IDF algorithm as the Rust backend, just slower. Everything vanishes when the process exits.
 
 ```python
 from ondine.context import InMemoryContextStore
@@ -67,7 +67,7 @@ from ondine.context import InMemoryContextStore
 store = InMemoryContextStore()
 ```
 
-**When to use:** Unit tests, CI environments without a Rust toolchain, quick prototyping where persistence is not needed.
+Use it for unit tests, CI without a Rust toolchain, quick prototyping.
 
 ---
 
@@ -124,7 +124,7 @@ store.close()
 | `source_type` | `str` | `"llm_response"` | One of `"document"`, `"llm_response"`, `"user_correction"`, `"external"` |
 | `asserted_by` | `str` | `"pipeline"` | Who/what asserted the claim |
 | `claim_id` | `str \| None` | `None` | If None, a UUID is assigned on store |
-| `confidence` | `float \| None` | `None` | Optional confidence score (0.0–1.0) |
+| `confidence` | `float \| None` | `None` | Optional confidence score (0.0--1.0) |
 | `metadata` | `dict` | `{}` | Arbitrary key-value metadata |
 
 ### RetrievalResult fields
@@ -143,7 +143,7 @@ store.close()
 
 ### with_context_store()
 
-Attaches a context store to the pipeline. All other anti-hallucination methods require a store and will call this automatically if it has not been set.
+Attaches a context store to the pipeline. Every other anti-hallucination method needs a store and will call this automatically if you haven't set one.
 
 ```python
 def with_context_store(
@@ -151,9 +151,7 @@ def with_context_store(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
-
-- `store` — A `ContextStore` instance. If `None`, the builder auto-detects: it tries `RustContextStore` (in-memory) first and falls back to `InMemoryContextStore` if the Rust extension is unavailable.
+- `store` -- A `ContextStore` instance. Pass `None` and the builder auto-detects: tries `RustContextStore` (in-memory) first, falls back to `InMemoryContextStore` if the Rust extension isn't available.
 
 ```python
 from ondine import PipelineBuilder
@@ -169,13 +167,13 @@ pipeline = (
 )
 ```
 
-For persistent storage across multiple pipeline runs, always pass an explicit store with a file path. The auto-detected store uses `":memory:"` which does not persist.
+If you want evidence to persist across runs, pass an explicit store with a file path. The auto-detected store uses `":memory:"` and throws everything away on exit.
 
 ---
 
 ### with_evidence_priming()
 
-Enriches each row with prior validated answers before LLM inference. The store is searched using the configured query columns, and the top-k results are written to `_evidence_context` and `_evidence_count` columns. The prompt formatter automatically includes `_evidence_context` if it appears in the template.
+Enriches each row with prior validated answers before LLM inference. Searches the store using the configured query columns, writes top-k results to `_evidence_context` and `_evidence_count`. The prompt formatter picks up `_evidence_context` automatically if your template references it.
 
 ```python
 def with_evidence_priming(
@@ -186,13 +184,11 @@ def with_evidence_priming(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
+- `query_columns` -- Input columns to concatenate as the search query. Defaults to the pipeline's input columns.
+- `top_k` -- Max evidence records retrieved per row.
+- `min_score` -- Minimum relevance score (0.0--1.0). Results below this get discarded so you don't inject noise.
 
-- `query_columns` — Which input columns to concatenate as the search query. Defaults to the pipeline's input columns when `None`.
-- `top_k` — Maximum number of evidence records to retrieve per row.
-- `min_score` — Minimum relevance score to include a result (0.0–1.0). Results below this are discarded to prevent injecting low-relevance noise.
-
-**Note:** On the first pipeline run the evidence store is empty, so evidence priming is a no-op. Evidence accumulates as grounding and verification store validated claims, so subsequent runs benefit from prior answers.
+First run? The store is empty, so priming is a no-op. Evidence accumulates as grounding and verification store validated claims. Second run onward is where you see the benefit.
 
 ```python
 pipeline = (
@@ -209,7 +205,7 @@ pipeline = (
 )
 ```
 
-The `_evidence_context` column contains formatted evidence with relevance scores and source references:
+The `_evidence_context` column looks like this:
 
 ```
 [score=0.87](source: classification-run-1) Produce
@@ -221,7 +217,7 @@ The `_evidence_context` column contains formatted evidence with relevance scores
 
 ### with_grounding()
 
-Verifies each LLM response against its source text after inference. Adds `grounding_score` (float, 0–1) and `grounding_flag` (bool, `True` when the score is below the threshold) columns to the output.
+Verifies each LLM response against its source text after inference. Adds `grounding_score` (float, 0--1) and `grounding_flag` (bool, `True` when below threshold).
 
 ```python
 def with_grounding(
@@ -231,14 +227,12 @@ def with_grounding(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
-
-- `threshold` — Minimum similarity score to consider a response grounded (0.0–1.0). Responses scoring below this value are considered ungrounded.
-- `action` — What to do with ungrounded responses:
-  - `"flag"` (default) — add `grounding_score` and `grounding_flag` columns and continue.
-  - `"retry"` — re-prompt the LLM for that row.
-  - `"skip"` — drop the ungrounded row from the output.
-- `embed_fn` — Optional callable with signature `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity is computed alongside TF-IDF. The final score is `max(tfidf_score, embedding_score)`, so embeddings can rescue claims that TF-IDF misses due to vocabulary mismatch.
+- `threshold` -- Minimum similarity for a response to count as grounded (0.0--1.0).
+- `action` -- What happens to ungrounded responses:
+  - `"flag"` (default) -- adds the score and flag columns, keeps going.
+  - `"retry"` -- re-prompts the LLM for that row.
+  - `"skip"` -- drops the ungrounded row entirely.
+- `embed_fn` -- Optional callable: `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is `max(tfidf_score, embedding_score)` -- embeddings can rescue claims that TF-IDF misses due to vocabulary mismatch.
 
 ```python
 # Basic grounding with flag action
@@ -277,20 +271,20 @@ pipeline = (
 )
 ```
 
-**Threshold guidance:**
+**Threshold cheat sheet:**
 
-| Threshold | Behavior |
+| Threshold | What happens |
 |---|---|
-| `0.1` | Very permissive — only the most divergent responses are flagged |
-| `0.3` | Recommended starting point for most classification tasks |
-| `0.5` | Moderate — suitable for factual Q&A where response must closely mirror source |
-| `0.7+` | Strict — most responses will be flagged unless they nearly quote the source |
+| `0.1` | Very permissive -- only wildly divergent responses get flagged |
+| `0.3` | Good starting point for most classification tasks |
+| `0.5` | Moderate -- for factual Q&A where the response should closely mirror source |
+| `0.7+` | Strict -- most responses get flagged unless they nearly quote the source |
 
 ---
 
 ### with_contradiction_detection()
 
-Flags rows whose output conflicts with a previously seen row that shares the same key column values. Adds a `contradiction_flag` (bool) column to the output.
+Flags rows whose output conflicts with a previous row sharing the same key column values. Adds a `contradiction_flag` (bool) column.
 
 ```python
 def with_contradiction_detection(
@@ -300,11 +294,9 @@ def with_contradiction_detection(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
-
-- `key_columns` — Columns that identify the same entity (e.g., `["product_id"]`). Rows sharing the same values in these columns are compared. Defaults to the pipeline's input columns when `None`.
-- `value_columns` — Columns holding the outputs to compare. Defaults to the pipeline's output columns when `None`.
-- `tolerance` — Differences smaller than or equal to this value are not flagged as contradictions. `None` (default) uses exact string equality. Useful for numeric outputs — for example, `tolerance=1` on a 0–5 rating scale ignores ±1 score differences.
+- `key_columns` -- Columns identifying the same entity (e.g., `["product_id"]`). Rows with matching values here get compared. Defaults to input columns.
+- `value_columns` -- Columns holding outputs to compare. Defaults to output columns.
+- `tolerance` -- Differences at or below this value aren't flagged. `None` means exact string equality. Handy for numeric outputs -- `tolerance=1` on a 0--5 rating scale ignores +/-1 differences.
 
 ```python
 pipeline = (
@@ -322,13 +314,13 @@ pipeline = (
 )
 ```
 
-A `contradiction_flag` value of `True` means this row's output differs from a previously seen row with the same `product_id`. Investigate these rows to determine whether the LLM is inconsistent or the input data contains genuinely different items.
+`contradiction_flag = True` means this row's output differs from a previous row with the same `product_id`. Could be LLM inconsistency. Could be genuinely different items sharing an ID. Investigate.
 
 ---
 
 ### with_confidence_scoring()
 
-Adds a `confidence_score` column (float, 0–1) computed from the grounding similarity and evidence support count.
+Adds a `confidence_score` column (float, 0--1) derived from grounding similarity and evidence support count.
 
 ```python
 def with_confidence_scoring(
@@ -337,13 +329,11 @@ def with_confidence_scoring(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
-
-- `include_in_output` — Whether to write the `confidence_score` column to the output DataFrame.
-- `scoring_mode` — Formula to use:
-  - `"default"` — blends grounding score and evidence support count.
-  - `"sigmoid"` — applies a sigmoid transform to the grounding score only.
-  - `"grounding_only"` — passes the raw grounding score through without blending.
+- `include_in_output` -- Whether to write `confidence_score` to the output DataFrame.
+- `scoring_mode`:
+  - `"default"` -- blends grounding score and evidence support count.
+  - `"sigmoid"` -- sigmoid transform on the grounding score only.
+  - `"grounding_only"` -- raw grounding score, no blending.
 
 ```python
 pipeline = (
@@ -362,7 +352,7 @@ pipeline = (
 
 ## Full anti-hallucination pipeline
 
-The following example combines all four features:
+All four features wired together:
 
 ```python
 import pandas as pd
@@ -409,14 +399,14 @@ print(result.data[
 ])
 ```
 
-Output columns added by the anti-hallucination stack:
+Columns the anti-hallucination stack adds:
 
 | Column | Type | When present | Description |
 |---|---|---|---|
-| `grounding_score` | float | `with_grounding` enabled | TF-IDF (or max TF-IDF/embedding) similarity of the LLM response to its source text |
+| `grounding_score` | float | `with_grounding` enabled | TF-IDF (or max TF-IDF/embedding) similarity of the response to source text |
 | `grounding_flag` | bool | `with_grounding` enabled | `True` when `grounding_score < threshold` |
-| `contradiction_flag` | bool | `with_contradiction_detection` enabled | `True` when this row's output conflicts with a prior row sharing the same key columns |
-| `confidence_score` | float | `with_confidence_scoring` enabled | Composite score (0–1) computed per the selected `scoring_mode` |
+| `contradiction_flag` | bool | `with_contradiction_detection` enabled | `True` when this row's output conflicts with a prior row sharing the same keys |
+| `confidence_score` | float | `with_confidence_scoring` enabled | Composite score (0--1) per the selected `scoring_mode` |
 | `_evidence_context` | str | `with_evidence_priming` enabled | Formatted prior evidence injected into the prompt |
 | `_evidence_count` | int | `with_evidence_priming` enabled | Number of evidence records that exceeded `min_score` |
 
@@ -424,7 +414,7 @@ Output columns added by the anti-hallucination stack:
 
 ## Zep Cloud setup
 
-1. Create an account at [https://www.getzep.com/](https://www.getzep.com/) and obtain an API key.
+1. Create an account at [https://www.getzep.com/](https://www.getzep.com/) and grab an API key.
 
 2. Install the optional dependency:
 
@@ -438,7 +428,7 @@ Output columns added by the anti-hallucination stack:
     export ZEP_API_KEY=your-key-here
     ```
 
-4. Use `ZepContextStore` in your pipeline:
+4. Drop `ZepContextStore` into your pipeline:
 
     ```python
     from ondine import PipelineBuilder
@@ -458,15 +448,15 @@ Output columns added by the anti-hallucination stack:
     )
     ```
 
-Zep graphs are created automatically on first use. Storing to the same `graph_id` from multiple pipeline runs accumulates evidence over time. Use a unique `graph_id` per project or experiment to keep evidence namespaces separate.
+Zep graphs get created on first use. Storing to the same `graph_id` across runs accumulates evidence over time. Use a unique `graph_id` per project or experiment to keep things separate.
 
-`ZepContextStore` does not implement `ground()` or `add_contradiction()` — those operations fall back to no-ops. For full grounding and contradiction support with cloud persistence, pair `ZepContextStore` for storage and search with `RustContextStore` for grounding operations, or use `RustContextStore` exclusively.
+One caveat: `ZepContextStore` doesn't implement `ground()` or `add_contradiction()` -- those are no-ops. If you need full grounding and contradiction support with cloud persistence, pair `ZepContextStore` for storage/search with `RustContextStore` for grounding, or just use `RustContextStore` for everything.
 
 ---
 
 ## Choosing a backend
 
-| Requirement | Recommended backend |
+| Requirement | Backend |
 |---|---|
 | Production pipeline, persistent evidence | `RustContextStore("evidence.db")` |
 | Multi-run evidence accumulation | `RustContextStore("evidence.db")` |
@@ -478,7 +468,7 @@ Zep graphs are created automatically on first use. Storing to the same `graph_id
 
 ## Related
 
-- [RAG Knowledge Base](../../examples/rag_knowledge_base_example.py) — retrieval-augmented generation with `KnowledgeStore`
-- [Context Store Example](../../examples/context_store_example.py) — full anti-hallucination pipeline
-- [Cost Control](cost-control.md) — budget limits and cost estimation
-- [Structured Output](structured-output.md) — type-safe LLM responses
+- [RAG Knowledge Base](../../examples/rag_knowledge_base_example.py) -- retrieval-augmented generation with `KnowledgeStore`
+- [Context Store Example](../../examples/context_store_example.py) -- full anti-hallucination pipeline
+- [Cost Control](cost-control.md) -- budget limits and cost estimation
+- [Structured Output](structured-output.md) -- type-safe LLM responses

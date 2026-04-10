@@ -1,8 +1,8 @@
 # Error Handling
 
-Ondine provides two complementary layers of error handling: a configurable **policy** that determines what happens when a row fails (skip it, retry it, use a default, or abort), and a **retry handler** that executes transient-error retries with exponential backoff.
+Two layers. A **policy** decides what happens when a row fails — skip it, retry it, substitute a default, or abort. A **retry handler** deals with transient API errors using exponential backoff. They work together, but they're separate things.
 
-## Overview
+## Quick Reference
 
 | Layer | What it handles | Where configured |
 |-------|----------------|-----------------|
@@ -13,7 +13,7 @@ Ondine provides two complementary layers of error handling: a configurable **pol
 
 ## ErrorPolicy
 
-`ErrorPolicy` is a string enum defined in `ondine.core.specifications`. It controls what the pipeline does when a stage fails for a given row.
+`ErrorPolicy` is a string enum in `ondine.core.specifications`. It tells the pipeline what to do when a stage fails for a given row.
 
 ```python
 from ondine.core.specifications import ErrorPolicy
@@ -27,7 +27,7 @@ ErrorPolicy.USE_DEFAULT # "use_default"
 
 ### SKIP (default)
 
-Log the error and leave the output column empty for that row. Processing continues with the next row.
+Logs the error, leaves the output column empty for that row, moves on.
 
 ```python
 pipeline = (
@@ -45,11 +45,11 @@ failed = result.to_pandas()[result.to_pandas()["result"].isna()]
 print(f"{len(failed)} rows failed and were skipped")
 ```
 
-Use `skip` when partial results are acceptable and you want maximum throughput.
+Good when partial results are fine and you want throughput.
 
 ### FAIL
 
-Raise the error immediately and stop the pipeline. A checkpoint is saved before raising, so you can resume after fixing the underlying problem.
+Raises immediately. Stops the pipeline. A checkpoint gets saved before the raise, so you can fix the problem and resume.
 
 ```python
 pipeline = (
@@ -62,11 +62,11 @@ pipeline = (
 )
 ```
 
-Use `fail` in CI pipelines or data validation workflows where any failure is unacceptable.
+The right choice for CI pipelines or data validation where any failure means the output is useless.
 
 ### RETRY
 
-Retry the failed row up to `max_retries` times. If all attempts are exhausted, the row is skipped (same behaviour as `skip`).
+Retries the failed row up to `max_retries` times. If all attempts are exhausted, falls back to skip behavior.
 
 ```python
 pipeline = (
@@ -80,11 +80,11 @@ pipeline = (
 )
 ```
 
-Use `retry` when failures are likely to be transient (rate limits, network hiccups).
+The retry policy you'll want for most production use. Rate limits and network hiccups are the norm, not the exception.
 
 ### USE_DEFAULT
 
-Return a fixed default value for any failed row instead of leaving it empty or raising.
+Returns a fixed default value for any failed row instead of leaving it empty or raising.
 
 ```python
 from ondine.core.specifications import ProcessingSpec, ErrorPolicy
@@ -102,13 +102,13 @@ pipeline = (
 )
 ```
 
-Use `use_default` when downstream consumers require a non-null value in every row (e.g. a report that cannot tolerate missing values).
+For when downstream consumers can't handle nulls — dashboards, reports, that kind of thing.
 
 ## Configuring Retries
 
 ### `with_max_retries(retries: int)`
 
-Set the maximum number of retry attempts when the policy is `retry`.
+Maximum retry attempts when the policy is `retry`.
 
 ```python
 pipeline = (
@@ -126,7 +126,7 @@ pipeline = (
 
 ### `retry_delay` (via `ProcessingSpec`)
 
-The initial delay in seconds between retry attempts. The `RetryHandler` applies exponential backoff, so delays grow as: `retry_delay * 2^(attempt - 1)`, capped at 60 seconds.
+Initial delay in seconds between retries. The `RetryHandler` applies exponential backoff: `retry_delay * 2^(attempt - 1)`, capped at 60 seconds.
 
 ```python
 from ondine.core.specifications import ProcessingSpec, ErrorPolicy
@@ -140,9 +140,9 @@ spec = ProcessingSpec(
 
 **Default:** `1.0` seconds.
 
-### Exponential Backoff Schedule
+### Backoff Schedule
 
-Given `retry_delay=1.0` and `max_retries=5`:
+With `retry_delay=1.0` and `max_retries=5`:
 
 | Attempt | Delay before attempt |
 |---------|---------------------|
@@ -152,22 +152,22 @@ Given `retry_delay=1.0` and `max_retries=5`:
 | 4 | 4s |
 | 5 | 8s |
 
-The maximum delay is capped at 60 seconds regardless of the multiplier.
+Cap is 60 seconds no matter the multiplier.
 
-## Retry Levels
+## Two Levels of Retry
 
-Ondine has two distinct retry mechanisms that operate at different scopes:
+One thing to watch: Ondine has two retry mechanisms at different scopes.
 
 | Mechanism | Scope | Trigger |
 |-----------|-------|---------|
 | `RetryHandler` | Single LLM API call | Transient errors: rate limits (429), network timeouts, 502/503 |
-| `ErrorPolicy.RETRY` | Pipeline row | Any stage failure, after `RetryHandler` exhausted |
+| `ErrorPolicy.RETRY` | Pipeline row | Any stage failure, after `RetryHandler` is exhausted |
 
-`RetryHandler` runs automatically for transient errors regardless of your `ErrorPolicy`. It only retries `RetryableError`, `RateLimitError`, and `NetworkError` subtypes — configuration errors (invalid API key, 401, 403) are never retried and always fail immediately.
+`RetryHandler` fires automatically for transient errors regardless of your `ErrorPolicy`. It only retries `RetryableError`, `RateLimitError`, and `NetworkError` subtypes. Config errors (bad API key, 401, 403) fail immediately — no retries, no wasted time.
 
 ## Handling Partial Failures
 
-When using `skip` or `retry`, successful rows are returned alongside failed ones. Inspect `result.errors` and the output DataFrame together to understand partial results:
+With `skip` or `retry`, you get successful rows alongside failed ones. Here's how to inspect what happened:
 
 ```python
 result = pipeline.execute()
@@ -187,11 +187,11 @@ failed_rows = df[df["result"].isna()]
 print(f"Rows with missing output: {len(failed_rows)}")
 ```
 
-## Production Error Handling Patterns
+## Production Patterns
 
-### Conservative: Skip and Monitor
+### Skip and Monitor
 
-Maximise throughput while capturing failure statistics for alerting:
+Max throughput, but alert if too many rows fail:
 
 ```python
 from ondine import PipelineBuilder
@@ -221,9 +221,9 @@ if failure_rate > 0.05:
 df.to_csv("output.csv", index=False)
 ```
 
-### Resilient: Retry with Backoff
+### Retry with Backoff
 
-For high-volume jobs hitting rate-limited APIs:
+The setup you'll want for high-volume jobs against rate-limited APIs:
 
 ```python
 from ondine import PipelineBuilder
@@ -252,9 +252,9 @@ pipeline.specifications.processing = processing
 result = pipeline.execute()
 ```
 
-### Strict: Fail Fast on Any Error
+### Fail Fast
 
-Use in data-quality pipelines where partial results are worse than no results:
+For data-quality pipelines where partial results are worse than no results:
 
 ```python
 from ondine import PipelineBuilder
@@ -276,9 +276,9 @@ except Exception as e:
     print("Fix the issue and resume from the checkpoint printed above.")
 ```
 
-### Combining Retry and Checkpointing
+### Retry + Checkpointing Together
 
-For multi-hour jobs, combine both features so a failure mid-run can be resumed without losing completed work:
+Multi-hour jobs need both. A failure mid-run shouldn't mean losing hours of completed work.
 
 ```python
 from ondine import PipelineBuilder
@@ -306,12 +306,12 @@ result = pipeline.execute()
 
 ## Non-Retryable Errors
 
-Certain errors bypass all retry and skip logic and immediately halt the pipeline regardless of policy:
+Some errors bypass all retry and skip logic. Pipeline halts immediately regardless of policy:
 
-- Invalid API key / authentication failures (`401`, `403`)
+- Invalid API key / auth failures (`401`, `403`)
 - `NonRetryableError` and its subclasses
 
-This prevents burning retries on configuration mistakes. Fix the underlying issue (e.g. set the correct API key) and re-run.
+No point burning retries on a bad API key. Fix the config, re-run.
 
 ## Related
 

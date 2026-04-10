@@ -1,17 +1,17 @@
 # Routing
 
-LLM routing lets a single pipeline distribute requests across multiple model deployments — different providers, models, or API keys — with automatic failover, load balancing, and circuit breaking built in. Ondine exposes this through `with_router()`, which configures a [LiteLLM Router](https://docs.litellm.ai/docs/routing) under the hood.
+LLM routing lets one pipeline spread requests across multiple model deployments — different providers, models, or API keys — with automatic failover, load balancing, and circuit breaking. Ondine wraps this in `with_router()`, which configures a [LiteLLM Router](https://docs.litellm.ai/docs/routing) under the hood.
 
 ---
 
 ## What LLM Routing Solves
 
-A single provider has practical limits: rate limits that throttle throughput, outages that stop processing entirely, and pricing that may not be optimal for your workload. A router abstracts these away:
+A single provider has real limits. Rate limits throttle your throughput. Outages halt processing. Pricing may not fit your workload. A router abstracts all of that:
 
-- **Failover** — if Groq returns errors, requests automatically go to OpenAI instead.
+- **Failover** — Groq starts erroring? Requests automatically shift to OpenAI.
 - **Load balancing** — spread 1,000 concurrent requests across three deployments instead of hammering one.
-- **Cost optimization** — route to the cheapest provider that meets your latency requirement.
-- **Resilience** — a built-in circuit breaker puts failing providers into a temporary cooldown rather than retrying indefinitely.
+- **Cost optimization** — route to the cheapest provider that meets your latency needs.
+- **Resilience** — a built-in circuit breaker pulls failing providers into cooldown instead of retrying forever.
 
 ---
 
@@ -49,7 +49,7 @@ def with_router(
 
 ## The `model_list` Format
 
-Each entry in `model_list` represents one deployment. The `model_name` field is the shared logical name the router uses for load balancing — multiple entries with the same `model_name` are treated as interchangeable replicas.
+Each entry in `model_list` is one deployment. The `model_name` field is the shared logical name the router uses for load balancing — if multiple entries share the same `model_name`, they're treated as interchangeable replicas.
 
 ```python
 {
@@ -63,7 +63,7 @@ Each entry in `model_list` represents one deployment. The `model_name` field is 
 }
 ```
 
-Deployments with different `model_name` values are not load-balanced against each other — they are treated as separate pools. For automatic failover, all deployments must share the same `model_name`.
+Quick note: deployments with *different* `model_name` values don't get load-balanced against each other — they're separate pools. For automatic failover, all deployments need the same `model_name`.
 
 ---
 
@@ -71,7 +71,7 @@ Deployments with different `model_name` values are not load-balanced against eac
 
 ### Failover between two providers
 
-The simplest setup: two deployments with the same `model_name`. The router distributes requests between them and automatically fails over if one provider goes down.
+The simplest setup. Two deployments, same `model_name`. The router splits traffic between them and fails over automatically if one goes down.
 
 ```python
 import os
@@ -107,13 +107,13 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-With the default `simple-shuffle` strategy and two deployments, traffic is split roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures, puts Groq into a 60-second cooldown, and the remaining requests all go to OpenAI until Groq recovers.
+With the default `simple-shuffle` strategy and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures, puts Groq into a 60-second cooldown, and all remaining requests go to OpenAI until Groq recovers.
 
 ---
 
 ## Routing Strategies
 
-The `routing_strategy` parameter accepts any of the following values, defined in `RouterStrategy`:
+The `routing_strategy` parameter takes any of these values (defined in `RouterStrategy`):
 
 | Strategy | Value | Best for | Redis required |
 |----------|-------|----------|----------------|
@@ -138,7 +138,7 @@ from ondine.core.router_strategies import RouterStrategy
 
 ### Simple shuffle (default)
 
-Random selection with equal probability. No external state required.
+Random selection, equal probability. No external state needed. This is the one you'll use 90% of the time during development.
 
 ```python
 .with_router(
@@ -149,7 +149,7 @@ Random selection with equal probability. No external state required.
 
 ### Latency-based routing
 
-Routes each request to the deployment with the lowest recorded average latency. Requires Redis to share latency measurements across workers.
+Sends each request to the deployment with the lowest recorded average latency. Needs Redis to share latency data across workers.
 
 ```python
 .with_router(
@@ -161,7 +161,7 @@ Routes each request to the deployment with the lowest recorded average latency. 
 
 ### Weighted pick
 
-Routes based on explicit weights. Set a `"weight"` key inside `litellm_params` for each deployment. Useful when you want most traffic on a fast free-tier provider with a smaller paid-tier fallback.
+Routes based on explicit weights. Set a `"weight"` key in `litellm_params` for each deployment. Handy when you want most traffic on a fast free-tier provider with a paid fallback catching the rest.
 
 ```python
 .with_router(
@@ -189,7 +189,7 @@ Routes based on explicit weights. Set a `"weight"` key inside `litellm_params` f
 
 ### Cost-based routing
 
-Routes to the cheapest deployment based on LiteLLM's cost database. Costs must be defined in your `model_list` or in LiteLLM's built-in pricing tables.
+Picks the cheapest deployment using LiteLLM's cost database. Costs need to be defined in your `model_list` or in LiteLLM's built-in pricing tables.
 
 ```python
 .with_router(
@@ -217,13 +217,13 @@ Routes to the cheapest deployment based on LiteLLM's cost database. Costs must b
 
 ## Circuit Breaker / Resilience
 
-The circuit breaker is enabled by default with sensible values. It prevents a failing provider from continuing to receive requests during an outage.
+The circuit breaker is on by default. It stops a failing provider from soaking up requests during an outage.
 
-**Default behavior:**
-- After **3 consecutive failures**, the deployment enters cooldown.
-- The cooldown lasts **60 seconds**.
-- During cooldown, all requests are routed to healthy deployments.
-- After cooldown, the deployment is re-admitted and monitored again.
+**How it works:**
+- After **3 consecutive failures**, the deployment goes into cooldown.
+- Cooldown lasts **60 seconds**.
+- During cooldown, requests go to healthy deployments only.
+- After cooldown, the deployment gets re-admitted and monitored again.
 
 ### Tuning the circuit breaker
 
@@ -253,7 +253,7 @@ The circuit breaker is enabled by default with sensible values. It prevents a fa
 
 ## Multi-Provider Load Balancing
 
-For high-throughput pipelines, spread load across three or more deployments. Each deployment can have its own per-deployment rate limit (`rpm`) set in `litellm_params`.
+For high-throughput pipelines, spread load across three or more deployments. Each one can have its own per-deployment rate limit (`rpm`) in `litellm_params`.
 
 ```python
 import os
@@ -312,7 +312,7 @@ print(f"Total cost: ${result.costs.total_cost:.4f}")
 
 ## Combining Router with Redis Caching
 
-When using the router in production, pair it with `with_redis_cache()` to avoid duplicate API calls. The cache is checked before the router selects a deployment, so a cache hit never touches any provider.
+In production, pair the router with `with_redis_cache()` so you don't waste API calls on duplicate inputs. The cache gets checked *before* the router picks a deployment, so a cache hit never touches any provider.
 
 ```python
 import os
@@ -358,7 +358,7 @@ pipeline = (
 
 ## Passing Additional LiteLLM Router Parameters
 
-`with_router()` accepts `**router_kwargs`, which pass through directly to LiteLLM Router. Any parameter documented at [docs.litellm.ai/docs/routing](https://docs.litellm.ai/docs/routing) can be used this way.
+`with_router()` accepts `**router_kwargs`, which pass straight through to LiteLLM Router. Anything documented at [docs.litellm.ai/docs/routing](https://docs.litellm.ai/docs/routing) works here.
 
 ```python
 .with_router(
@@ -373,9 +373,9 @@ pipeline = (
 
 ## Deployment Distribution Tracking
 
-Ondine uses an internal `DeploymentTracker` to map LiteLLM's internal deployment hash IDs to the friendly `model_id` values from your `model_list`. This powers the progress display during execution, showing which provider handled each request.
+Ondine uses an internal `DeploymentTracker` to map LiteLLM's internal deployment hash IDs back to the friendly `model_id` values from your `model_list`. This drives the progress display during execution, showing you which provider handled each request.
 
-To give deployments readable labels in the progress UI, set `model_id` in each entry:
+To get readable labels in the progress UI, set `model_id` on each entry:
 
 ```python
 {
@@ -388,7 +388,7 @@ To give deployments readable labels in the progress UI, set `model_id` in each e
 }
 ```
 
-If `model_id` is omitted, `model_name` is used as the label.
+If you skip `model_id`, the router falls back to `model_name` as the label.
 
 ---
 

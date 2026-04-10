@@ -1,49 +1,6 @@
 # Knowledge Base & RAG Guide
 
-Add retrieval-augmented generation (RAG) to your pipelines: ingest documents, search them with hybrid BM25 + dense vector retrieval, and inject context into your LLM prompts automatically.
-
-## Overview
-
-The knowledge base system covers the full RAG lifecycle:
-
-- **Ingestion**: Load PDF, Markdown, plain text, CSV, HTML, and image files
-- **Chunking**: Split documents into semantically coherent chunks
-- **Embedding**: Encode chunks as dense vectors for semantic search
-- **Hybrid search**: Combine BM25 full-text search and dense vector retrieval via Reciprocal Rank Fusion (RRF)
-- **Reranking**: Re-score results with a cross-encoder for higher precision
-- **Query transformation**: Expand or rewrite queries before retrieval to improve recall
-- **OCR**: Extract text from images and scanned PDFs
-- **Evaluation**: Score RAG answers for faithfulness, relevancy, and context precision using an LLM judge
-
-The primary entry point is `KnowledgeStore`. It exposes two public methods — `ingest()` and `search()` — and hides all intermediate steps behind that interface.
-
-## Installation
-
-Install the `knowledge` extra to get PDF loading and local embedding support:
-
-```bash
-pip install 'ondine[knowledge]'
-```
-
-This adds:
-- `pymupdf` — PDF text extraction
-- `sentence-transformers` — local embedding and cross-encoder reranking
-
-For API-based embedders, rerankers, query transformers, and OCR, install `litellm`:
-
-```bash
-pip install litellm
-```
-
-For offline OCR alternatives:
-
-```bash
-# Tesseract (requires the tesseract binary on your PATH)
-pip install pytesseract Pillow
-
-# DocTR deep-learning OCR
-pip install python-doctr
-```
+`KnowledgeStore` gives you RAG in two method calls: `ingest()` your documents, `search()` them with hybrid BM25 + dense vector retrieval, and let the pipeline inject context into prompts for you.
 
 ## Quick Start
 
@@ -62,9 +19,48 @@ for r in results:
     print(f"[{r.score:.2f}] {r.source}: {r.text[:120]}...")
 ```
 
-### Using with the Pipeline Builder
+That covers ingest, search, and results. Everything below is configuration and fine-tuning.
 
-The most common use case is attaching a `KnowledgeStore` to a processing pipeline so that every row is automatically augmented with retrieved context:
+## What it does under the hood
+
+The full RAG lifecycle, handled for you:
+
+- **Ingestion** -- PDF, Markdown, plain text, CSV, HTML, image files
+- **Chunking** -- splits documents at semantic breakpoints
+- **Embedding** -- encodes chunks as dense vectors
+- **Hybrid search** -- BM25 full-text + dense vector retrieval, fused via Reciprocal Rank Fusion (RRF)
+- **Reranking** -- cross-encoder re-scoring for higher precision
+- **Query transformation** -- expands or rewrites queries before retrieval
+- **OCR** -- pulls text from images and scanned PDFs
+- **Evaluation** -- scores RAG answers on faithfulness, relevancy, and context precision with an LLM judge
+
+## Installation
+
+```bash
+pip install 'ondine[knowledge]'
+```
+
+Gets you `pymupdf` (PDF extraction) and `sentence-transformers` (local embeddings + cross-encoder reranking).
+
+For API-based embedders, rerankers, query transformers, and OCR:
+
+```bash
+pip install litellm
+```
+
+Offline OCR options:
+
+```bash
+# Tesseract (requires the tesseract binary on your PATH)
+pip install pytesseract Pillow
+
+# DocTR deep-learning OCR
+pip install python-doctr
+```
+
+## Using with the Pipeline Builder
+
+The most common pattern -- attach a `KnowledgeStore` to a pipeline so every row gets augmented with retrieved context automatically:
 
 ```python
 import pandas as pd
@@ -96,7 +92,7 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-The pipeline inserts a retrieval stage before prompt formatting. Each row's query columns are concatenated, searched against the knowledge base, and the top chunks are joined into the `{_kb_context}` template variable.
+The pipeline inserts a retrieval stage before prompt formatting. Each row's query columns get concatenated, searched against the knowledge base, and the top chunks land in the `{_kb_context}` template variable.
 
 ## KnowledgeStore
 
@@ -114,8 +110,6 @@ KnowledgeStore(
     extract_pdf_images: bool = False,
 )
 ```
-
-**Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -148,7 +142,7 @@ All three return the number of chunks stored.
 kb.search(query: str, limit: int = 5) -> list[SearchResult]
 ```
 
-Returns a list of `SearchResult` objects:
+Returns `SearchResult` objects:
 
 ```python
 @dataclass(frozen=True)
@@ -173,10 +167,10 @@ kb.chunk_count  # int: number of chunks currently stored
 | Extension(s) | Reader | Extra required |
 |---|---|---|
 | `.pdf` | PyMuPDF | `ondine[knowledge]` |
-| `.md`, `.txt`, `.csv`, `.tsv`, `.json`, `.xml`, `.html`, `.htm` | stdlib text reader | — |
+| `.md`, `.txt`, `.csv`, `.tsv`, `.json`, `.xml`, `.html`, `.htm` | stdlib text reader | -- |
 | `.png`, `.jpg`, `.jpeg`, `.webp`, `.tiff`, `.bmp`, `.gif` | OCR provider | OCR configured |
 
-When you call `kb.ingest("docs/")` on a directory, all supported files are loaded recursively.
+Point `kb.ingest("docs/")` at a directory and it picks up all supported files recursively.
 
 ### Loading text inline
 
@@ -190,7 +184,7 @@ kb.ingest_text(
 
 ### Loading pre-built Document objects
 
-Use `ingest_documents()` when you need to control text extraction yourself:
+Use `ingest_documents()` when you want to control text extraction yourself:
 
 ```python
 from ondine.knowledge import KnowledgeStore
@@ -205,11 +199,11 @@ kb = KnowledgeStore(":memory:")
 kb.ingest_documents(docs)
 ```
 
-`Document` is a frozen dataclass with three fields: `text: str`, `source: str`, and `metadata: dict`.
+`Document` is a frozen dataclass: `text: str`, `source: str`, `metadata: dict`.
 
 ## Chunking
 
-`SemanticChunker` splits documents into coherent chunks by detecting breakpoints where sentence-level embeddings diverge. When `sentence-transformers` is not installed it falls back gracefully to fixed-size sentence-count windows.
+`SemanticChunker` splits documents by detecting breakpoints where sentence-level embeddings diverge. If `sentence-transformers` isn't installed, it falls back to fixed-size sentence-count windows. No crash, just coarser splits.
 
 ### Default behaviour
 
@@ -235,21 +229,19 @@ chunker = SemanticChunker(
 kb = KnowledgeStore("knowledge.db", chunker=chunker)
 ```
 
-**Parameters:**
-
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `max_chunk_tokens` | `512` | Soft upper bound on chunk size in whitespace tokens |
-| `breakpoint_percentile` | `0.25` | Percentile threshold for breakpoint detection. Lower values produce more, smaller chunks |
-| `model_name` | `"all-MiniLM-L6-v2"` | `sentence-transformers` model used for similarity scoring during splitting |
+| `breakpoint_percentile` | `0.25` | Percentile threshold for breakpoint detection. Lower = more, smaller chunks |
+| `model_name` | `"all-MiniLM-L6-v2"` | `sentence-transformers` model for similarity scoring during splitting |
 
 ## Embedding Models
 
-Embeddings enable dense vector search. Without an embedder, `KnowledgeStore` falls back to BM25 full-text search only.
+Embeddings power dense vector search. Without an embedder, `KnowledgeStore` falls back to BM25 only.
 
 ### Auto-detection (default)
 
-When `embedder=None`, the store attempts to load `SentenceTransformerEmbedder("BAAI/bge-base-en-v1.5")`. If `sentence-transformers` is not installed, embeddings are silently disabled and only BM25 is used.
+Pass `embedder=None` (or don't pass it at all) and the store tries to load `SentenceTransformerEmbedder("BAAI/bge-base-en-v1.5")`. If `sentence-transformers` isn't installed, embeddings get silently disabled -- you still get BM25.
 
 ### SentenceTransformerEmbedder (local)
 
@@ -262,17 +254,17 @@ kb = KnowledgeStore(
 )
 ```
 
-Or pass the model name as a string:
+Or just pass the model name:
 
 ```python
 kb = KnowledgeStore("knowledge.db", embedder="BAAI/bge-large-en-v1.5")
 ```
 
-The model is loaded lazily on the first embed call.
+The model loads lazily on the first embed call.
 
 ### OpenAIEmbedder (API-based)
 
-Uses `litellm` for provider-agnostic access. Works with OpenAI, Cohere, Azure, and any litellm-supported provider:
+Routes through `litellm`, so it works with OpenAI, Cohere, Azure, and any other litellm-supported provider:
 
 ```python
 from ondine.knowledge import KnowledgeStore, OpenAIEmbedder
@@ -287,7 +279,7 @@ kb = KnowledgeStore(
 )
 ```
 
-Passing a string that contains `"text-embedding"` also selects `OpenAIEmbedder`:
+If your string contains `"text-embedding"`, it auto-selects `OpenAIEmbedder`:
 
 ```python
 kb = KnowledgeStore("knowledge.db", embedder="text-embedding-3-small")
@@ -295,7 +287,7 @@ kb = KnowledgeStore("knowledge.db", embedder="text-embedding-3-small")
 
 ### Custom embedder
 
-Any object with an `embed(texts: list[str]) -> list[list[float]]` method works:
+Any object with `embed(texts: list[str]) -> list[list[float]]` works:
 
 ```python
 class MyEmbedder:
@@ -308,7 +300,7 @@ kb = KnowledgeStore("knowledge.db", embedder=MyEmbedder())
 
 ## Reranking
 
-Reranking re-scores the initial hybrid-search candidates using a cross-attention model. This improves precision at the cost of an extra inference step.
+Reranking re-scores your initial hybrid-search candidates with a cross-attention model. Better precision, one extra inference step.
 
 ### Enable with default cross-encoder
 
@@ -316,7 +308,7 @@ Reranking re-scores the initial hybrid-search candidates using a cross-attention
 kb = KnowledgeStore("knowledge.db", reranker=True)
 ```
 
-This uses `CrossEncoderReranker("cross-encoder/ms-marco-MiniLM-L-12-v2")`.
+Uses `CrossEncoderReranker("cross-encoder/ms-marco-MiniLM-L-12-v2")`.
 
 ### CrossEncoderReranker (local)
 
@@ -332,7 +324,7 @@ kb = KnowledgeStore(
 )
 ```
 
-Or pass the model name as a string:
+Or pass the model name:
 
 ```python
 kb = KnowledgeStore("knowledge.db", reranker="cross-encoder/ms-marco-MiniLM-L-12-v2")
@@ -353,7 +345,7 @@ kb = KnowledgeStore(
 )
 ```
 
-Passing a string containing `"jina"` also selects `JinaReranker`:
+A string containing `"jina"` also selects `JinaReranker`:
 
 ```python
 kb = KnowledgeStore("knowledge.db", reranker="jina-reranker-v2-base-multilingual")
@@ -361,7 +353,7 @@ kb = KnowledgeStore("knowledge.db", reranker="jina-reranker-v2-base-multilingual
 
 ### Custom reranker
 
-Any object with a `rerank(query: str, results: list, top_k: int | None) -> list` method works:
+Any object with `rerank(query: str, results: list, top_k: int | None) -> list`:
 
 ```python
 class MyReranker:
@@ -373,13 +365,13 @@ kb = KnowledgeStore("knowledge.db", reranker=MyReranker())
 
 ## Query Transformation
 
-Query transformers expand or rewrite the query before retrieval. The store runs hybrid search for each expanded query, deduplicates results, then optionally reranks the merged set.
+Query transformers rewrite or expand the query before retrieval. The store runs hybrid search for each expanded query, deduplicates, then optionally reranks the merged set.
 
-All three built-in transformers require `litellm` and an API key for the underlying LLM.
+All three built-in transformers need `litellm` and an API key for the underlying LLM.
 
 ### MultiQueryTransformer
 
-Generates N rephrasings of the original query. Retrieval unions results across all variants, improving recall for ambiguous queries.
+Generates N rephrasings of the original query. Retrieval unions results across all variants -- good for ambiguous queries where a single phrasing misses relevant docs.
 
 ```python
 from ondine.knowledge import KnowledgeStore, MultiQueryTransformer
@@ -394,17 +386,17 @@ kb = KnowledgeStore(
 )
 ```
 
-Or pass the shortcut string:
+Shortcut:
 
 ```python
 kb = KnowledgeStore("knowledge.db", query_transform="multi-query")
 ```
 
-**How it works:** The transformer asks the LLM to return a JSON array of `n` alternative formulations. Each formulation is searched independently; results are merged and deduplicated before reranking.
+The transformer asks the LLM for a JSON array of `n` alternative formulations. Each one gets searched independently; results merge and deduplicate before reranking.
 
 ### HyDETransformer
 
-Hypothetical Document Embeddings. The LLM generates a short hypothetical answer to the query; that answer is used as the retrieval query. Because the hypothesis is semantically closer to relevant passages than the raw question, dense retrieval improves.
+Hypothetical Document Embeddings. The LLM generates a short hypothetical answer to your query, and that answer becomes the retrieval query. Because the hypothesis sits closer in embedding space to relevant passages than the raw question does, dense retrieval gets a real boost.
 
 ```python
 from ondine.knowledge import KnowledgeStore, HyDETransformer
@@ -424,11 +416,11 @@ Or:
 kb = KnowledgeStore("knowledge.db", query_transform="hyde")
 ```
 
-**Returns:** `[original_query, hypothesis]`. Both are searched; results are merged before reranking.
+Returns `[original_query, hypothesis]`. Both get searched; results merge before reranking.
 
 ### StepBackTransformer
 
-Generates a more abstract, generalised version of the query so that retrieval can surface broader context that the specific query might miss.
+Generates a more abstract version of your query so retrieval can surface broader context that the specific query would miss.
 
 ```python
 from ondine.knowledge import KnowledgeStore, StepBackTransformer
@@ -448,7 +440,7 @@ Or:
 kb = KnowledgeStore("knowledge.db", query_transform="step-back")
 ```
 
-**Returns:** `[original_query, step_back_query]`. Both are searched; results are merged.
+Returns `[original_query, step_back_query]`. Both searched; results merged.
 
 ### Combining reranking and query transformation
 
@@ -464,14 +456,14 @@ kb.ingest("docs/")
 results = kb.search("what are the rate limits for the API?", limit=5)
 ```
 
-Search flow with both enabled:
+Here's what happens at search time:
 1. `HyDETransformer` produces `[original_query, hypothesis]`
-2. Hybrid search runs for each variant; results are deduplicated
+2. Hybrid search runs for each variant; results get deduplicated
 3. `CrossEncoderReranker` re-scores the merged set and returns top-5
 
 ## OCR Support
 
-OCR providers extract text from image files (`.png`, `.jpg`, `.webp`, etc.) and optionally from images embedded in PDF pages.
+OCR providers extract text from image files (`.png`, `.jpg`, `.webp`, etc.) and optionally from images embedded inside PDFs.
 
 ### VisionOCR (multimodal LLM)
 
@@ -490,13 +482,13 @@ kb = KnowledgeStore(
 kb.ingest("scanned_docs/")
 ```
 
-Or use the shortcut string `"vision"` (defaults to `gpt-4o`):
+Shortcut `"vision"` defaults to `gpt-4o`:
 
 ```python
 kb = KnowledgeStore("knowledge.db", ocr="vision")
 ```
 
-You can also pass any litellm model name directly:
+Any litellm model name works too:
 
 ```python
 kb = KnowledgeStore("knowledge.db", ocr="anthropic/claude-3-5-sonnet-20241022")
@@ -504,7 +496,7 @@ kb = KnowledgeStore("knowledge.db", ocr="anthropic/claude-3-5-sonnet-20241022")
 
 ### TesseractOCR (local, offline)
 
-Requires the `tesseract` binary on your system PATH and the `pytesseract` and `Pillow` Python packages.
+Needs the `tesseract` binary on your PATH plus `pytesseract` and `Pillow`.
 
 ```bash
 # macOS
@@ -526,7 +518,7 @@ kb = KnowledgeStore(
 )
 ```
 
-Or use the shortcut string:
+Or:
 
 ```python
 kb = KnowledgeStore("knowledge.db", ocr="tesseract")
@@ -534,7 +526,7 @@ kb = KnowledgeStore("knowledge.db", ocr="tesseract")
 
 ### DocTROCR (local, deep-learning)
 
-High-accuracy local OCR optimised for documents and screenshots. Requires `python-doctr`.
+High-accuracy local OCR tuned for documents and screenshots. Needs `python-doctr`.
 
 ```python
 from ondine.knowledge import KnowledgeStore, DocTROCR
@@ -556,7 +548,7 @@ kb = KnowledgeStore("knowledge.db", ocr="doctr")
 
 ### Extracting images embedded in PDFs
 
-Set `extract_pdf_images=True` alongside any OCR provider to also OCR images embedded within PDF pages:
+Set `extract_pdf_images=True` alongside any OCR provider:
 
 ```python
 kb = KnowledgeStore(
@@ -571,7 +563,7 @@ Chunks from embedded images carry `{"format": "pdf_image", "extraction": "ocr", 
 
 ### Custom OCR provider
 
-Any object with an `extract_text(image_path: str) -> str` method works:
+Any object with `extract_text(image_path: str) -> str`:
 
 ```python
 class MyOCR:
@@ -599,8 +591,6 @@ PipelineBuilder.with_knowledge_base(
 ) -> PipelineBuilder
 ```
 
-**Parameters:**
-
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `store` | required | A pre-built `KnowledgeStore` instance |
@@ -612,7 +602,7 @@ PipelineBuilder.with_knowledge_base(
 | `evaluate` | `False` | Run LLM-as-judge evaluation; adds `_kb_eval_*` columns to results |
 | `eval_model` | `"openai/gpt-4o-mini"` | LLM for evaluation (only used when `evaluate=True`) |
 
-**The `{_kb_context}` variable** is injected into the prompt template automatically. It contains the top-k retrieved chunks joined with newlines.
+`{_kb_context}` gets injected into the prompt template automatically -- it holds the top-k retrieved chunks joined with newlines.
 
 ### Full pipeline example
 
@@ -654,7 +644,7 @@ print(result.data[["question", "answer"]].to_string())
 
 ## Evaluation
 
-`LLMJudge` scores a RAG answer on three dimensions using an LLM as evaluator.
+`LLMJudge` scores a RAG answer on three dimensions.
 
 ### Using LLMJudge directly
 
@@ -691,7 +681,7 @@ class EvalResult:
 
 ### Automated evaluation in a pipeline
 
-Pass `evaluate=True` to `with_knowledge_base()`. The pipeline runs the judge after each LLM call and adds three columns to the output DataFrame: `_kb_eval_faithfulness`, `_kb_eval_relevancy`, and `_kb_eval_context_precision`.
+Pass `evaluate=True` to `with_knowledge_base()`. The pipeline runs the judge after each LLM call and adds three columns: `_kb_eval_faithfulness`, `_kb_eval_relevancy`, `_kb_eval_context_precision`.
 
 ```python
 pipeline = (
@@ -710,7 +700,7 @@ print(result.data[eval_cols].to_string())
 
 ### Custom evaluator
 
-Any object with a `score(query: str, answer: str, contexts: list[str]) -> EvalResult` method satisfies the `RetrievalScorer` protocol.
+Any object with `score(query: str, answer: str, contexts: list[str]) -> EvalResult` satisfies the `RetrievalScorer` protocol.
 
 ## Persistent vs In-Memory Storage
 
@@ -718,11 +708,11 @@ Any object with a `score(query: str, answer: str, contexts: list[str]) -> EvalRe
 # In-memory: fast, no disk I/O, lost when the process exits
 kb = KnowledgeStore(":memory:")
 
-# Persistent: survives restarts, can be shared across pipelines
+# Persistent: survives restarts, shareable across pipelines
 kb = KnowledgeStore("knowledge.db")
 ```
 
-For production use, ingest once and reuse the same `db_path`:
+In production, ingest once and reuse the same `db_path`:
 
 ```python
 # ingest_once.py — run once to populate
@@ -734,6 +724,8 @@ print(f"Stored {kb.chunk_count} chunks")
 kb = KnowledgeStore("knowledge.db")  # no ingest() call needed
 results = kb.search("authentication flow")
 ```
+
+Re-ingesting large document sets is expensive. Separate the ingest step from query time.
 
 ## Supported File Types
 
@@ -749,7 +741,7 @@ results = kb.search("authentication flow")
 
 ## Custom Components
 
-All components are specified by protocol. Passing any object with the matching method signature works without subclassing.
+All components follow a protocol pattern. Pass any object with the matching method signature -- no subclassing needed.
 
 | Protocol | Method signature | Used for |
 |----------|-----------------|----------|
@@ -759,46 +751,44 @@ All components are specified by protocol. Passing any object with the matching m
 | `OCRProvider` | `extract_text(image_path: str) -> str` | Image-to-text extraction |
 | `RetrievalScorer` | `score(query: str, answer: str, contexts: list[str]) -> EvalResult` | RAG evaluation |
 
-## Best Practices
+## Practical Tips
 
-**Chunking size:** Smaller chunks (`max_chunk_tokens=256`) improve precision but may lose surrounding context. Larger chunks (`512–1024`) preserve more context but dilute relevance scores. Start with the default of 512 and adjust based on your evaluation scores.
+**Chunk size tradeoffs.** Smaller chunks (`max_chunk_tokens=256`) sharpen precision but lose surrounding context. Larger chunks (`512-1024`) preserve context but dilute relevance scores. Start with 512 (the default) and tune from there based on eval scores.
 
-**Embedder choice:** `BAAI/bge-base-en-v1.5` (default) is a strong all-around local model. Use `text-embedding-3-small` if you prefer API-based embeddings and want to avoid local GPU/CPU overhead.
+**Embedder choice.** `BAAI/bge-base-en-v1.5` (the default) is solid for most use cases. Switch to `text-embedding-3-small` if you want API-based embeddings and don't want local GPU/CPU overhead.
 
-**Always rerank for production:** Enable `reranker=True` when retrieval quality matters. The cross-encoder runs locally with no API cost and typically improves precision significantly.
+**Turn on reranking for anything real.** `reranker=True` runs a cross-encoder locally -- no API cost -- and the precision improvement is usually significant.
 
-**Query transformation:** Use `"hyde"` for question-answering tasks where queries are questions and documents are factual passages. Use `"multi-query"` for broad, exploratory retrieval. Use `"step-back"` when queries are highly specific and may miss broader conceptual matches.
+**Picking a query transform.** `"hyde"` works well for QA where queries are questions and documents are factual. `"multi-query"` is better for broad, exploratory retrieval. `"step-back"` helps when queries are too specific and miss conceptual matches.
 
-**Combine strategies:** Reranking and query transformation stack well. Query transformation increases recall; reranking restores precision on the merged candidate set.
-
-**Persistent storage:** Use a file path instead of `":memory:"` in production. Re-ingesting large document sets is expensive; a persistent database allows you to separate the ingest step from the query step.
+**Stack them.** Reranking and query transformation play well together. Query transformation widens recall; reranking tightens precision on the merged candidates.
 
 ## Troubleshooting
 
 ### No results returned
 
-- Check `kb.chunk_count` to confirm documents were ingested.
-- Verify the file extension is in the supported list.
-- If ingesting images and getting no results, confirm an OCR provider is configured.
+- Check `kb.chunk_count` -- did anything actually get ingested?
+- Make sure the file extension is in the supported list.
+- Ingesting images with no OCR provider configured? Nothing will happen.
 
 ### Low retrieval quality
 
-- Enable reranking (`reranker=True`).
-- Try a query transformation strategy (`query_transform="hyde"` is a good first choice).
-- Increase `limit` in `search()` or `top_k` in `with_knowledge_base()` to surface more candidates.
-- Reduce `breakpoint_percentile` in `SemanticChunker` to create smaller, more focused chunks.
+- Turn on reranking (`reranker=True`).
+- Try `query_transform="hyde"` as a first experiment.
+- Bump `limit` in `search()` or `top_k` in `with_knowledge_base()` to widen the candidate pool.
+- Lower `breakpoint_percentile` in `SemanticChunker` to get smaller, more focused chunks.
 
 ### `ImportError: PyMuPDF is required`
 
-Install the knowledge extra: `pip install 'ondine[knowledge]'`.
+`pip install 'ondine[knowledge]'`
 
 ### `sentence-transformers not installed; using fixed-size chunking`
 
-This is an info-level log, not an error. Install `sentence-transformers` (included in `ondine[knowledge]`) for semantic chunking. Without it, the chunker falls back to fixed-size windows.
+Info-level log, not an error. Install `sentence-transformers` (comes with `ondine[knowledge]`) for semantic chunking. Without it, the chunker uses fixed-size windows -- functional but coarser.
 
 ### Query transformation has no effect
 
-All query transformers require `litellm` and a valid API key. Check that `litellm` is installed and the relevant environment variable (e.g. `OPENAI_API_KEY`) is set. When a transformer call fails, it logs a warning and falls back to the original query.
+All query transformers need `litellm` and a valid API key. Make sure `litellm` is installed and the right env var (e.g. `OPENAI_API_KEY`) is set. When a transformer call fails, it logs a warning and falls back to the original query silently.
 
 ## API Reference
 
@@ -826,15 +816,11 @@ All query transformers require `litellm` and a valid API key. Check that `litell
 
 | Field | Type | Description |
 |---|---|---|
-| `faithfulness` | `float` | 0–1; answer grounded in retrieved context |
-| `relevancy` | `float` | 0–1; answer addresses the query |
-| `context_precision` | `float` | 0–1; retrieved contexts are relevant |
+| `faithfulness` | `float` | 0-1; answer grounded in retrieved context |
+| `relevancy` | `float` | 0-1; answer addresses the query |
+| `context_precision` | `float` | 0-1; retrieved contexts are relevant |
 | `metadata` | `dict` | Evaluator metadata (model used, raw scores) |
 
 ## Examples
 
-See `examples/rag_knowledge_base_example.py` for a complete working example:
-- Ingest product policy documents as inline text
-- Build a pipeline that answers customer questions with KB context
-- Cost estimation before execution
-- Display results and execution metrics
+See `examples/rag_knowledge_base_example.py` for a working example covering inline text ingestion, pipeline-based QA with KB context, cost estimation, and result display.

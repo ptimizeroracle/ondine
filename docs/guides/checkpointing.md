@@ -1,8 +1,8 @@
 # Checkpointing
 
-Checkpointing saves execution state to disk as the pipeline runs. If a job is interrupted — by a crash, a network failure, or a keyboard interrupt — it can be resumed from the last saved position instead of restarting from row zero.
+Checkpointing saves your pipeline's state to disk as it runs. Crash, network blip, Ctrl+C — doesn't matter. You pick up from the last saved position instead of row zero.
 
-## Overview
+## Quick Reference
 
 | Feature | Default | Notes |
 |---------|---------|-------|
@@ -13,26 +13,26 @@ Checkpointing saves execution state to disk as the pipeline runs. If a job is in
 
 ## How It Works
 
-When a pipeline runs, the `StateManager` periodically serialises the execution context — including the last processed row index, accumulated cost, and completed responses — into a compressed JSON file under the checkpoint directory. Each file is named after the session UUID:
+The `StateManager` periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:
 
 ```
 .checkpoints/checkpoint_<session-uuid>.json.gz
 ```
 
-If execution fails, the pipeline logs the session UUID and a ready-to-paste resume call:
+When execution fails, you get a ready-to-paste resume call in the logs:
 
 ```
 Pipeline failed. Checkpoint saved.
 Resume with: pipeline.execute(resume_from=UUID('e650ee2a-0c71-4761-ac3f-bdab8ecd920b'))
 ```
 
-On resume, the pipeline skips all rows already processed and continues from where it left off, at zero additional LLM cost for completed rows.
+Copy-paste that, and the pipeline skips everything already done. Zero additional LLM cost for completed rows.
 
 ## Builder Methods
 
 ### `with_checkpoint_dir(directory: str)`
 
-Set the directory where checkpoint files are written. The directory is created automatically if it does not exist.
+Where checkpoint files go. Directory gets created if it doesn't exist.
 
 ```python
 pipeline = (
@@ -45,11 +45,11 @@ pipeline = (
 )
 ```
 
-**Default:** `.checkpoints` (relative to the working directory).
+**Default:** `.checkpoints` (relative to working directory).
 
 ### `with_checkpoint_interval(rows: int)`
 
-Control how often a checkpoint is written. Lower values mean less re-work on failure, at the cost of slightly more disk I/O.
+How often a checkpoint is written. Lower = less re-work on failure, but more disk I/O.
 
 ```python
 pipeline = (
@@ -64,7 +64,7 @@ pipeline = (
 
 **Default:** `500` rows.
 
-**Guidelines:**
+Here's what works in practice:
 
 | Dataset Size | Recommended Interval |
 |-------------|---------------------|
@@ -75,10 +75,10 @@ pipeline = (
 
 ### `with_checkpoint_cleanup(enabled: bool = True)`
 
-Control whether checkpoint files are deleted after a successful run.
+Controls whether checkpoint files get deleted after a successful run.
 
-- `True` (default) — checkpoints are deleted once the pipeline returns successfully, keeping the directory clean.
-- `False` — checkpoints are retained even after success. Use this when downstream code (e.g. writing to a database) might fail after the pipeline completes, so you can resume without re-running LLM calls.
+- `True` (default) — deletes checkpoints once the pipeline returns successfully.
+- `False` — keeps them around. You want this when downstream code (writing to a database, pushing to S3) might fail after the pipeline itself finishes. Lets you resume without re-running LLM calls.
 
 ```python
 pipeline = (
@@ -93,7 +93,7 @@ pipeline = (
 
 ## Resuming a Failed Pipeline
 
-When execution fails or is interrupted, the pipeline prints a resume instruction to the log. Copy the UUID from that message and pass it to `execute()`:
+Pipeline fails, you get a UUID in the logs. Pass it to `execute()`:
 
 ```python
 from uuid import UUID
@@ -114,7 +114,7 @@ result = pipeline.execute(resume_from=UUID("e650ee2a-0c71-4761-ac3f-bdab8ecd920b
 print(f"Resumed. Processed {result.metrics.processed_rows} rows total.")
 ```
 
-The `resume_from` parameter is also available on the async entry point:
+Works with async too:
 
 ```python
 result = await pipeline.execute_async(
@@ -126,7 +126,7 @@ result = await pipeline.execute_async(
 
 ### Overnight Batch Job
 
-A long-running job should checkpoint frequently and keep checkpoints after success in case the downstream write fails:
+Long-running job? Checkpoint frequently. Keep checkpoints after success in case the DB write blows up.
 
 ```python
 from ondine import PipelineBuilder
@@ -151,9 +151,9 @@ result = pipeline.execute()
 write_to_database(result.to_pandas())   # If this fails, you can resume
 ```
 
-### Robust Resume Script
+### Auto-Resume Script
 
-Wrap the execute call to capture the session ID on failure and re-run automatically:
+Wrap `execute()` to capture the session ID on failure so you can re-run automatically:
 
 ```python
 import logging
@@ -190,9 +190,9 @@ result = run()
 # result = run(resume_from=UUID("..."))
 ```
 
-### Inspecting Available Checkpoints
+### Listing Checkpoints
 
-Use `LocalFileCheckpointStorage` directly to list checkpoints and inspect their state before deciding which to resume:
+Use `LocalFileCheckpointStorage` to see what's available before deciding which to resume:
 
 ```python
 from pathlib import Path
@@ -211,8 +211,6 @@ for info in storage.list_checkpoints():
 
 ### Cleaning Up Old Checkpoints
 
-To delete checkpoints older than a given number of days:
-
 ```python
 from pathlib import Path
 from ondine.adapters.checkpoint_storage import LocalFileCheckpointStorage
@@ -224,9 +222,11 @@ print(f"Deleted {deleted} old checkpoint files.")
 
 ## When NOT to Use Checkpointing
 
-- **Small datasets (< 1K rows):** The pipeline completes quickly; checkpointing adds overhead with little benefit.
-- **Idempotent pipelines that are cheap to rerun:** If re-processing from scratch costs less than managing checkpoint state, skip it.
-- **Streaming mode:** When using `execute_stream()`, consider checkpointing at the chunk level rather than the row level.
+**Small datasets (< 1K rows).** Pipeline finishes fast; checkpointing just adds overhead.
+
+**Idempotent pipelines that are cheap to rerun.** If re-processing from scratch costs less than managing checkpoint state, skip it.
+
+**Streaming mode.** With `execute_stream()`, think about checkpointing at the chunk level rather than the row level.
 
 ## Related
 
