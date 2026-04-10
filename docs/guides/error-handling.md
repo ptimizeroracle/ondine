@@ -11,6 +11,15 @@ Two layers. A **policy** decides what happens when a row fails — skip it, retr
 | `retry_delay` | Initial backoff delay in seconds | `ProcessingSpec.retry_delay` |
 | `RetryHandler` | Transient API errors (rate limits, network timeouts) | Applied automatically |
 
+<!-- IMAGE_PLACEHOLDER
+title: Error Policy Decision Flowchart
+type: flowchart
+description: A flowchart starting with a rounded-rect node "Row processing error occurs" (red) at the top. An arrow leads down to a diamond decision node "Which ErrorPolicy?". Four arrows branch out from the diamond, each labeled with the policy name. Left branch labeled "SKIP" leads to a node "Log error, set output to None, continue to next row" (yellow). Right branch labeled "FAIL" leads to a node "Save checkpoint, raise exception, pipeline stops" (red). Down-left branch labeled "RETRY" leads to a loop structure: node "Retry attempt (with backoff delay)" (orange), arrow to diamond "Success?", if yes arrow to "Continue to next row" (green), if no arrow to diamond "Attempts < max_retries?", if yes loop back to "Retry attempt", if no arrow to "Fall back to SKIP behavior" (yellow). Down-right branch labeled "USE_DEFAULT" leads to node "Substitute fixed default value for output, continue to next row" (blue). All terminal continue nodes converge with a dashed arrow to a final node "Process next row" (green) at the bottom.
+placement: full-width
+alt_text: Decision flowchart showing error policy routing: SKIP continues with null, FAIL stops the pipeline, RETRY loops with exponential backoff then falls back to skip, USE_DEFAULT substitutes a fixed value.
+-->
+![Error Policy Decision Flowchart](images/error-policy-decision-flowchart.png)
+
 ## ErrorPolicy
 
 `ErrorPolicy` is a string enum in `ondine.core.specifications`. It tells the pipeline what to do when a stage fails for a given row.
@@ -155,6 +164,15 @@ With `retry_delay=1.0` and `max_retries=5`:
 Cap is 60 seconds no matter the multiplier.
 
 ## Two Levels of Retry
+
+<!-- IMAGE_PLACEHOLDER
+title: Two Retry Levels
+type: architecture
+description: A diagram with two nested rounded rectangles representing retry scopes. The outer rectangle is labeled "ErrorPolicy.RETRY (row-level)" with a subtitle "Scope: entire pipeline row — any stage failure". Inside it, a smaller rectangle is labeled "RetryHandler (API-call level)" with a subtitle "Scope: single LLM API call — transient errors only (429, 502, 503, timeouts)". Inside the inner rectangle, a small loop arrow icon and the text "Automatic exponential backoff, retries RetryableError / RateLimitError / NetworkError". Between the inner and outer rectangles (but still inside the outer one), text reads "If RetryHandler exhausts all attempts, the error bubbles up here. Row-level retry re-runs the entire stage for this row, up to max_retries times." Below both rectangles, a horizontal arrow labeled "Non-retryable errors (401, 403, bad config)" bypasses both boxes and points to a stop sign node labeled "Immediate failure — no retries at either level".
+placement: full-width
+alt_text: Architecture diagram showing two nested retry levels: the inner RetryHandler for transient API errors, and the outer ErrorPolicy RETRY for row-level failures, with non-retryable errors bypassing both.
+-->
+![Two Retry Levels](images/two-retry-levels.png)
 
 One thing to watch: Ondine has two retry mechanisms at different scopes.
 

@@ -34,6 +34,15 @@ The full RAG lifecycle, handled for you:
 - **OCR** -- pulls text from images and scanned PDFs
 - **Evaluation** -- scores RAG answers on faithfulness, relevancy, and context precision with an LLM judge
 
+<!-- IMAGE_PLACEHOLDER
+title: RAG Ingestion Pipeline
+type: data-flow
+description: A left-to-right data flow diagram showing the document ingestion pipeline. Five sequential stages connected by arrows: (1) "Document Loading" box on the far left — labeled with file icons for PDF, MD, TXT, CSV, HTML, images; an arrow labeled "raw text" points right to (2) "OCR" box (dashed border, indicating optional) — labeled "images & scanned PDFs only"; arrow points right to (3) "Semantic Chunking" box — inside show a document splitting into 3 smaller pieces, label "breakpoint detection via sentence embeddings"; arrow labeled "chunks" points right to (4) "Embedding" box — label "dense vector encoding (e.g. BGE, OpenAI)"; arrow labeled "vectors + text" points right to (5) "SQLite Store" cylinder — two compartments inside labeled "FTS5 (BM25 index)" and "Vector table". Use a blue color palette for processing boxes and a green cylinder for the store.
+placement: full-width
+alt_text: Data flow diagram showing the RAG ingestion pipeline: documents are loaded, optionally OCR-processed, split into semantic chunks, embedded as dense vectors, and stored in SQLite with both BM25 and vector indexes.
+-->
+![RAG Ingestion Pipeline](images/rag-ingestion-pipeline.png)
+
 ## Installation
 
 ```bash
@@ -93,6 +102,15 @@ result = pipeline.execute()
 ```
 
 The pipeline inserts a retrieval stage before prompt formatting. Each row's query columns get concatenated, searched against the knowledge base, and the top chunks land in the `{_kb_context}` template variable.
+
+<!-- IMAGE_PLACEHOLDER
+title: Pipeline Builder RAG Integration
+type: sequence-diagram
+description: A left-to-right sequence diagram showing how with_knowledge_base() injects context into each pipeline row. Four vertical swim lanes labeled "DataFrame Row", "KnowledgeStore", "Prompt Formatter", and "LLM". (1) DataFrame Row sends arrow labeled "query columns (e.g. question)" to KnowledgeStore. (2) KnowledgeStore performs internal steps shown as a self-loop labeled "hybrid search + optional rerank". (3) KnowledgeStore sends arrow labeled "top-k chunks as _kb_context" back to DataFrame Row. (4) DataFrame Row sends arrow labeled "row fields + _kb_context" to Prompt Formatter. (5) Prompt Formatter sends arrow labeled "formatted prompt with context injected" to LLM. (6) LLM sends arrow labeled "response" back to DataFrame Row. (7) Optional dashed arrow from DataFrame Row to a box labeled "LLMJudge" with return arrow labeled "_kb_eval_faithfulness, _kb_eval_relevancy, _kb_eval_context_precision" (labeled "if evaluate=True"). Use blue for the main flow arrows and gray dashed for the optional evaluation path.
+placement: full-width
+alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge base context for each row, injects it into the prompt template as _kb_context, sends to the LLM, and optionally evaluates the response.
+-->
+![Pipeline Builder RAG Integration](images/pipeline-builder-rag-integration.png)
 
 ## KnowledgeStore
 
@@ -460,6 +478,15 @@ Here's what happens at search time:
 1. `HyDETransformer` produces `[original_query, hypothesis]`
 2. Hybrid search runs for each variant; results get deduplicated
 3. `CrossEncoderReranker` re-scores the merged set and returns top-5
+
+<!-- IMAGE_PLACEHOLDER
+title: RAG Search Flow
+type: flowchart
+description: A top-to-bottom flowchart showing the full search path. Start with a "User Query" rounded box at the top. Arrow down to a diamond decision node labeled "Query Transform configured?". Yes branch goes right to a "Query Transformer" box (show three sub-labels stacked: "MultiQuery — N rephrasings", "HyDE — hypothetical answer", "StepBack — abstract query"); arrow from transformer labeled "expanded queries" goes down. No branch goes straight down. Both paths converge at a "Hybrid Search" box split into two parallel lanes: left lane "BM25 Full-Text" and right lane "Dense Vector Search", both feeding into a merge point labeled "Reciprocal Rank Fusion (RRF)". Arrow labeled "fused candidates" goes down to another diamond "Reranker configured?". Yes goes right to "Cross-Encoder Reranker" box labeled "re-score with cross-attention"; arrow labeled "re-ranked results" goes down. No goes straight down. Both converge at a "Top-K Results" rounded box at the bottom. Use orange for query transformation boxes, blue for search boxes, purple for reranker, and green for the final results.
+placement: full-width
+alt_text: Flowchart showing the RAG search flow: user query optionally passes through query transformation, then hybrid search combines BM25 and dense vector retrieval via RRF, optionally reranks with a cross-encoder, and returns top-K results.
+-->
+![RAG Search Flow](images/rag-search-flow.png)
 
 ## OCR Support
 

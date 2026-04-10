@@ -13,6 +13,15 @@ Attach a context store to a pipeline and each row flows through up to six stages
 5. **Confidence scoring** (optional) -- a composite score from grounding similarity and evidence support count, written to `confidence_score`.
 6. **Storage** -- validated responses go into the store as evidence records for next time.
 
+<!-- IMAGE_PLACEHOLDER
+title: Anti-Hallucination Pipeline Lifecycle
+type: data-flow
+description: A left-to-right pipeline diagram showing six stages as rounded boxes connected by arrows, with a feedback loop. Stage 1 "Evidence Priming" (dashed border, labeled "optional, pre-LLM") — inside label "search store for prior validated answers, write to _evidence_context". Arrow labeled "primed row" points right to Stage 2 "LLM Inference" (solid blue box) — label "model generates response, informed by evidence". Arrow labeled "raw response" points right to Stage 3 "Grounding Verification" (dashed border, labeled "optional, post-LLM") — inside show a comparison icon with labels "response vs source text", "TF-IDF cosine similarity (or dense embeddings)", and three outcome branches below: "flag" (yellow), "retry" (orange, loops back to Stage 2 with a curved arrow), "skip" (red, arrow to a trash icon). Arrow labeled "grounded response" points right to Stage 4 "Contradiction Detection" (dashed border, labeled "optional") — inside label "compare with prior rows sharing same key columns", output "contradiction_flag". Arrow points right to Stage 5 "Confidence Scoring" (dashed border, labeled "optional") — inside label "composite of grounding score + evidence support count", output "confidence_score". Arrow points right to Stage 6 "Storage" (green cylinder) — label "validated response stored as evidence record". A large curved feedback arrow goes from Stage 6 back to Stage 1, labeled "evidence available for next run". Use blue for the LLM box, green for storage, dashed gray borders for optional stages.
+placement: full-width
+alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: evidence priming, LLM inference, grounding verification, contradiction detection, confidence scoring, and storage, with a feedback loop from storage back to evidence priming for subsequent runs.
+-->
+![Anti-Hallucination Pipeline Lifecycle](images/anti-hallucination-pipeline-lifecycle.png)
+
 ---
 
 ## Store backends
@@ -233,6 +242,15 @@ def with_grounding(
   - `"retry"` -- re-prompts the LLM for that row.
   - `"skip"` -- drops the ungrounded row entirely.
 - `embed_fn` -- Optional callable: `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is `max(tfidf_score, embedding_score)` -- embeddings can rescue claims that TF-IDF misses due to vocabulary mismatch.
+
+<!-- IMAGE_PLACEHOLDER
+title: Grounding Verification Flow
+type: flowchart
+description: A top-to-bottom flowchart showing how grounding verification decides the fate of an LLM response. Start with "LLM Response" rounded box at top. Arrow labeled "response text + source sentences" goes down to a box "Similarity Scoring" split into two parallel paths: left path "TF-IDF Cosine Similarity" and right path "Dense Embedding Cosine (if embed_fn provided)" shown with dashed border. Both paths feed into a merge node labeled "score = max(tfidf, embedding)". Arrow goes down to a diamond decision node "score >= threshold?". Yes branch goes right to a green box "Grounded" with outputs "grounding_score = value, grounding_flag = False". No branch goes down to a second diamond "action?". Three branches from this diamond: left branch labeled "flag" goes to yellow box "Flag & Continue" with output "grounding_flag = True, row kept"; middle branch labeled "retry" goes to orange box "Re-prompt LLM" with a curved arrow looping back to "LLM Response" at the top; right branch labeled "skip" goes to red box "Drop Row" with output "row removed from results". All terminal boxes feed into a bottom box "Store as Evidence Record (if grounded)".
+placement: full-width
+alt_text: Flowchart showing grounding verification: LLM response is scored against source text via TF-IDF and optional dense embeddings, then compared to the threshold. Grounded responses pass through; ungrounded ones are flagged, retried, or skipped depending on the configured action.
+-->
+![Grounding Verification Flow](images/grounding-verification-flow.png)
 
 ```python
 # Basic grounding with flag action
@@ -455,6 +473,15 @@ One caveat: `ZepContextStore` doesn't implement `ground()` or `add_contradiction
 ---
 
 ## Choosing a backend
+
+<!-- IMAGE_PLACEHOLDER
+title: Context Store Backend Comparison
+type: architecture
+description: A three-column comparison diagram showing the three store backends side by side. Each column is a tall rounded rectangle with a header bar. Left column header "RustContextStore" (blue) — inside list vertically: icon of a gear labeled "Native Rust extension + SQLite", icon of a disk labeled "Persistent (file) or in-memory", icon of a search lens labeled "FTS5 BM25 + dense vectors (RRF)", checkmark icons for "ground()", "add_contradiction()", "search()", "store()". Caption below: "Best for: production, multi-run accumulation". Middle column header "ZepContextStore" (purple) — inside: icon of a cloud labeled "Zep Cloud hosted", icon of a graph labeled "Knowledge graph with entity extraction", icon of a search lens labeled "Graph-aware semantic search + cross-encoder reranking", checkmark for "search()", "store()", X marks for "ground() (no-op)", "add_contradiction() (no-op)". Caption: "Best for: managed cloud, entity relationships". Right column header "InMemoryContextStore" (gray) — inside: icon of RAM labeled "Pure Python, no dependencies", icon of a clock labeled "Ephemeral — lost on exit", icon of a search lens labeled "TF-IDF search only", checkmark for "ground()", "add_contradiction()", "search()", "store()". Caption: "Best for: tests, CI, quick prototypes". Draw a dashed arrow from ZepContextStore to RustContextStore labeled "pair for full grounding support" to illustrate the caveat mentioned in the docs.
+placement: full-width
+alt_text: Side-by-side comparison of the three context store backends — RustContextStore (persistent, full-featured), ZepContextStore (cloud-hosted with entity extraction but no grounding), and InMemoryContextStore (ephemeral pure-Python fallback) — showing their capabilities, storage model, and search features.
+-->
+![Context Store Backend Comparison](images/context-store-backend-comparison.png)
 
 | Requirement | Backend |
 |---|---|

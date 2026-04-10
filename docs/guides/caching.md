@@ -8,6 +8,15 @@ When you enable caching, Ondine hands a cache config to LiteLLM. LiteLLM hashes 
 
 This is *not* the same as [prefix caching](cost-control.md), which is a provider-side optimization for repeated system prompts. Response caching runs on your infrastructure and skips the API call entirely.
 
+<!-- IMAGE_PLACEHOLDER
+title: Cache Lookup Request Flow
+type: flowchart
+description: A left-to-right flowchart showing the lifecycle of a single pipeline request through the caching layer. Nodes and edges: (1) "Incoming Request" box with prompt text and parameters feeds into (2) "Hash prompt + params" processing step, which feeds into (3) "Cache Lookup" diamond decision node. On the "HIT" branch (green arrow), flow goes to (4) "Return Cached Response" box labeled "zero cost, no API call". On the "MISS" branch (red arrow), flow goes to (5) "Call LLM API" box (labeled with provider icon), then to (6) "Store Response in Cache" box (with a dashed arrow looping back to the cache store), and finally to (7) "Return Fresh Response" box. The cache store should be depicted as a cylinder labeled "Disk or Redis" sitting between nodes 3 and 6, with bidirectional arrows (read on lookup, write on miss).
+placement: full-width
+alt_text: Flowchart showing how a request is hashed, checked against the cache, and either returned immediately on a hit or sent to the LLM API on a miss before the response is stored and returned.
+-->
+![Cache Lookup Request Flow](images/cache-lookup-request-flow.png)
+
 ---
 
 ## Disk Caching
@@ -157,6 +166,15 @@ pipeline = (
 | TTL / expiry | No | Yes |
 | Best for | Local development | Production, distributed |
 | Persistence | Permanent (manual cleanup) | Configurable via TTL |
+
+<!-- IMAGE_PLACEHOLDER
+title: Disk vs Redis Cache Architecture
+type: architecture
+description: A side-by-side architecture comparison with two panels. LEFT PANEL labeled "Disk Cache": a single box "Pipeline Process" at top, with an arrow down to a cylinder "Local Filesystem (.cache/)" on the same machine boundary (dashed rectangle labeled "Single Machine"). No TTL icon; a small label reads "Permanent until manual delete". RIGHT PANEL labeled "Redis Cache": three boxes at top labeled "Worker 1", "Worker 2", "Worker 3" each inside separate dashed rectangles labeled "Machine A", "Machine B", "Machine C". All three have arrows converging on a single shared cylinder labeled "Redis Server" in the center, with a small clock icon and label "TTL-based expiry". Between the two panels, a vertical dashed divider. Below each panel, a compact bullet list: Disk side shows "Zero setup, single-process, no expiry"; Redis side shows "Shared state, multi-process, automatic TTL expiry".
+placement: full-width
+alt_text: Architecture diagram comparing disk caching with a single process writing to local filesystem versus Redis caching with multiple distributed workers sharing a centralized Redis server with TTL-based expiry.
+-->
+![Disk vs Redis Cache Architecture](images/disk-vs-redis-cache-architecture.png)
 
 **Disk** when you're working locally and want zero-infrastructure caching that sticks around forever.
 

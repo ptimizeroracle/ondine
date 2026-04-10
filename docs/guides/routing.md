@@ -13,6 +13,15 @@ A single provider has real limits. Rate limits throttle your throughput. Outages
 - **Cost optimization** — route to the cheapest provider that meets your latency needs.
 - **Resilience** — a built-in circuit breaker pulls failing providers into cooldown instead of retrying forever.
 
+<!-- IMAGE_PLACEHOLDER
+title: Multi-Provider Routing Flow
+type: flowchart
+description: A top-to-bottom flowchart showing the full request lifecycle through the router. Nodes and edges: (1) "Pipeline Request" box at top feeds into (2) "Cache Check" diamond. HIT branch (green, dashed) skips to "Return Cached Response" at bottom right. MISS branch continues to (3) "Router" box (large, emphasized). From the Router, an arrow labeled with the active routing_strategy name goes to (4) a "Strategy Selection" step that fans out to three provider boxes arranged horizontally: "Provider A (Groq)", "Provider B (OpenAI)", "Provider C (Together AI)" — each with a small status indicator (green circle = healthy, red circle = cooldown). A solid arrow from Strategy Selection points to whichever provider is selected. From the selected provider, a "Success" arrow (green) goes down to "Return Response + store in cache". A "Failure" arrow (red) loops back to the Router with label "retry (num_retries)" and an additional red arrow from the Router to a "Circuit Breaker" box with label "after allowed_fails failures" which sets the failing provider's indicator to red and label "cooldown_time seconds". Show the retry loop clearly with a curved arrow.
+placement: full-width
+alt_text: Flowchart showing a pipeline request passing through an optional cache check, then into the router which uses the configured strategy to select among multiple providers, with retry logic and a circuit breaker that puts failing providers into cooldown.
+-->
+![Multi-Provider Routing Flow](images/multi-provider-routing-flow.png)
+
 ---
 
 ## `with_router()`
@@ -135,6 +144,15 @@ from ondine.core.router_strategies import RouterStrategy
     routing_strategy=RouterStrategy.LATENCY_BASED,
 )
 ```
+
+<!-- IMAGE_PLACEHOLDER
+title: Routing Strategy Comparison
+type: comparison-table-visual
+description: A visual grid with four columns, one per key strategy. Each column is a mini-diagram showing how that strategy picks a provider from three candidates (A, B, C). COLUMN 1 "simple-shuffle": three provider boxes of equal size with random double-headed arrows between them and a dice icon; label "Random, equal probability". COLUMN 2 "latency-based-routing": three provider boxes with small latency bar charts next to each (A=50ms, B=120ms, C=80ms); a bold arrow points to Provider A (lowest); a Redis icon in the corner; label "Picks lowest avg latency". COLUMN 3 "usage-based-routing-v2": three provider boxes with usage meters (A=70% full, B=30% full, C=50% full); a bold arrow points to Provider B (least used); a Redis icon in the corner; label "Balances utilization across deployments". COLUMN 4 "cost-based-routing": three provider boxes with price tags (A=$0.05, B=$0.50, C=$0.10); a bold arrow points to Provider A (cheapest); label "Picks cheapest per LiteLLM pricing". All four columns sit inside a single rounded rectangle with the header "Routing Strategies at a Glance".
+placement: full-width
+alt_text: Visual comparison of four routing strategies showing how simple-shuffle picks randomly, latency-based picks the fastest provider, usage-based picks the least utilized, and cost-based picks the cheapest.
+-->
+![Routing Strategy Comparison](images/routing-strategy-comparison.png)
 
 ### Simple shuffle (default)
 

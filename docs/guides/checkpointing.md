@@ -13,6 +13,15 @@ Checkpointing saves your pipeline's state to disk as it runs. Crash, network bli
 
 ## How It Works
 
+<!-- IMAGE_PLACEHOLDER
+title: Checkpoint Resume Lifecycle
+type: flowchart
+description: A horizontal flowchart with five rounded-rect nodes connected by arrows, left to right. Node 1 "pipeline.execute()" (green) arrow labeled "processing rows 1..N" to Node 2 "Failure at row N" (red). Node 2 arrow labeled "StateManager saves state" to Node 3 "Checkpoint file on disk" (blue, icon of a floppy/file). Node 3 arrow labeled "pipeline.execute(resume_from=UUID)" to Node 4 "Resume from row N+1" (orange). Node 4 arrow labeled "processing rows N+1..end" to Node 5 "Complete" (green). Below Nodes 1-2 a dashed annotation reads "Rows 1..N processed and paid for". Below Nodes 4-5 a dashed annotation reads "Only remaining rows processed — zero duplicate LLM cost". The overall flow direction is left-to-right.
+placement: full-width
+alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at row N, save checkpoint, resume from row N, complete with no duplicate cost.
+-->
+![Checkpoint Resume Lifecycle](images/checkpoint-resume-lifecycle.png)
+
 The `StateManager` periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:
 
 ```
@@ -46,6 +55,15 @@ pipeline = (
 ```
 
 **Default:** `.checkpoints` (relative to working directory).
+
+<!-- IMAGE_PLACEHOLDER
+title: StateManager Periodic Save Cycle
+type: sequence-diagram
+description: A vertical sequence diagram with two lifelines — "Pipeline Executor" on the left and "StateManager" on the right. Step 1 Pipeline Executor sends "process batch (rows 1-500)" to itself (self-arrow). Step 2 after batch completes, Pipeline Executor sends "notify batch complete (row_index=500, cost=$0.12)" to StateManager. Step 3 StateManager checks "row_index % checkpoint_interval == 0?" with a decision diamond. If yes, Step 4 StateManager serialises state to box labeled "checkpoint_<uuid>.json.gz" on disk (drawn as a cylinder to the right). Arrow from StateManager to cylinder labeled "gzip JSON write". Step 5 control returns to Pipeline Executor which sends "process batch (rows 501-1000)" self-arrow. Step 6 same notify/check/write cycle repeats. A note on the right side reads "Interval is configurable — default every 500 rows".
+placement: full-width
+alt_text: Sequence diagram showing the StateManager saving checkpoints to disk at regular intervals as the pipeline executor processes batches of rows.
+-->
+![StateManager Periodic Save Cycle](images/statemanager-periodic-save-cycle.png)
 
 ### `with_checkpoint_interval(rows: int)`
 
