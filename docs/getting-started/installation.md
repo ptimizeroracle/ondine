@@ -75,10 +75,98 @@ pip install ondine[dev]
 - pre-commit hooks
 - Security scanners (bandit, pip-audit)
 
+### Redis (Response Caching)
+
+For LiteLLM Redis-backed response caching:
+
+```bash
+pip install ondine[redis]
+```
+
+**Installs:** `redis>=5.0.0`
+
+### Excel Support
+
+For reading and writing `.xlsx` / `.xls` files:
+
+```bash
+pip install ondine[excel]
+```
+
+**Installs:** `openpyxl>=3.1.0`
+
+### Parquet Support
+
+For reading and writing Parquet files:
+
+```bash
+pip install ondine[parquet]
+```
+
+**Installs:** `pyarrow>=15.0.0`
+
+### TUI (Terminal User Interface)
+
+For the interactive terminal dashboard:
+
+```bash
+pip install ondine[tui]
+```
+
+**Installs:** `textual>=1.0.0`
+
+### Performance (uvloop)
+
+For faster async I/O on Linux and macOS:
+
+```bash
+pip install ondine[performance]
+```
+
+**Installs:** `uvloop>=0.19.0` (not installed on Windows)
+
+### Knowledge Base / RAG
+
+For PDF ingestion and embedding-based knowledge stores:
+
+```bash
+pip install ondine[knowledge]
+```
+
+**Installs:** `pymupdf>=1.24`, `sentence-transformers>=3.0`
+
+### Zep (Long-Term Memory)
+
+For Zep Cloud-backed memory and conversation history:
+
+```bash
+pip install ondine[zep]
+```
+
+**Installs:** `zep-cloud>=2.0`
+
+### Azure (Managed Identity)
+
+Required when using Azure OpenAI with Managed Identity authentication:
+
+```bash
+pip install ondine[azure]
+```
+
+**Installs:** `azure-identity>=1.15.0`
+
+See [Azure Managed Identity Guide](../guides/azure-managed-identity.md) for setup details.
+
 ### Install All Optional Dependencies
 
 ```bash
-pip install ondine[mlx,observability,dev]
+pip install ondine[all]
+```
+
+`[all]` installs every optional extra except `[dev]`, `[observability]`, `[docs]`, and `[mlx]`. Install those separately as needed:
+
+```bash
+pip install ondine[all,mlx,observability]
 ```
 
 ## Verify Installation

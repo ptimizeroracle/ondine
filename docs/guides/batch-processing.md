@@ -115,9 +115,26 @@ pipeline = (
 - ~200 token overhead per batch
 - Requires LLM to follow JSON format
 
-### CSV Strategy (Future)
+### CSV Strategy
 
-Coming soon - more compact format for simple use cases.
+A more compact format suited for simple, single-output use cases:
+
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .with_batch_size(100)
+    .with_batch_strategy("csv")
+    .build()
+)
+```
+
+**Pros:**
+- More compact than JSON (lower token overhead)
+- Simpler output format for single-column results
+
+**Cons:**
+- Less reliable for complex or multi-field outputs
+- No Pydantic validation
 
 ## Error Handling
 
@@ -320,8 +337,6 @@ Set batch formatting strategy.
 
 ## Limitations
 
-- JSON strategy only (CSV coming soon)
 - Batch size limited by model context window
 - Requires LLM to follow JSON format instructions
 - Larger batches = higher risk of partial failures
-

@@ -16,6 +16,16 @@
 * [Pipeline Composition](guides/pipeline-composition.md)
 * [Observability](guides/observability_profiling.md)
 * [Azure Managed Identity](guides/azure-managed-identity.md)
+* [Caching](guides/caching.md)
+* [Routing & Load Balancing](guides/routing.md)
+* [Checkpointing & Recovery](guides/checkpointing.md)
+* [Error Handling](guides/error-handling.md)
+* [Command-Line Interface](guides/cli.md)
+
+## Knowledge & Grounding
+
+* [Knowledge Base / RAG](guides/knowledge-base-rag.md)
+* [Context Store & Anti-Hallucination](guides/context-store.md)
 
 ## Providers
 

@@ -5,7 +5,7 @@ Configure and use Anthropic Claude models with Ondine.
 ## Setup
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_API_KEY="sk-ant-..."  # pragma: allowlist secret
 ```
 
 ## Basic Usage
@@ -19,7 +19,7 @@ pipeline = (
     .with_prompt("Analyze: {text}")
     .with_llm(
         provider="anthropic",
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-20250514",
         temperature=0.0,
         max_tokens=1024
     )
@@ -31,8 +31,7 @@ result = pipeline.execute()
 
 ## Available Models
 
-- `claude-3-5-sonnet-20241022` - Most capable (recommended)
-- `claude-3-5-haiku-20241022` - Fast and cost-effective
+- `claude-sonnet-4-20250514` - Most capable (recommended)
 - `claude-3-opus-20240229` - Most capable, legacy
 
 ## Configuration Options
@@ -40,7 +39,7 @@ result = pipeline.execute()
 ```python
 .with_llm(
     provider="anthropic",
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-20250514",
     temperature=0.7,
     max_tokens=4096,
     top_p=1.0
@@ -55,4 +54,3 @@ Recommended concurrency: 10-20
 
 - [OpenAI](openai.md)
 - [Cost Control](../cost-control.md)
-
