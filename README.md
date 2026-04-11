@@ -811,32 +811,7 @@ output:
 
 The SDK follows a **layered architecture**:
 
-```
-┌─────────────────────────────────────────┐
-│  Layer 5: High-Level API                │
-│  (Pipeline, PipelineBuilder)            │
-├─────────────────────────────────────────┤
-│  Layer 4: Orchestration Engine          │
-│  (PipelineExecutor, StateManager)       │
-├─────────────────────────────────────────┤
-│  Layer 3: Quality & Knowledge (NEW)     │
-│  Pre-LLM: KnowledgeRetrieval,          │
-│           EvidencePriming               │
-│  Post-LLM: Grounding, Contradiction,   │
-│            ConfidenceScoring            │
-├─────────────────────────────────────────┤
-│  Layer 2: Processing Stages             │
-│  (DataLoader, LLMInvocation, Parser)    │
-├─────────────────────────────────────────┤
-│  Layer 1: Infrastructure Adapters       │
-│  (LLMClient, DataReader, Checkpoint,   │
-│   ContextStore, KnowledgeStore)         │
-├─────────────────────────────────────────┤
-│  Layer 0: Core Utilities (Rust/PyO3)    │
-│  (RetryHandler, RateLimiter, Logging,   │
-│   SQLite/FTS5, EvidenceGraph)           │
-└─────────────────────────────────────────┘
-```
+![Ondine SDK Architecture](assets/architecture-layers.png)
 
 ### Key Design Principles
 
