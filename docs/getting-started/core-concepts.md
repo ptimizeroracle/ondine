@@ -6,19 +6,7 @@ Understanding Ondine's architecture will help you build more sophisticated pipel
 
 Ondine is built on a layered architecture:
 
-```
-┌─────────────────────────────────────────┐
-│   High-Level APIs (QuickPipeline)      │  User-friendly interfaces
-├─────────────────────────────────────────┤
-│   Pipeline Builder & Configuration     │  Fluent API, YAML config
-├─────────────────────────────────────────┤
-│   Pipeline Orchestration               │  Execution strategies
-├─────────────────────────────────────────┤
-│   Pipeline Stages                      │  Composable processing units
-├─────────────────────────────────────────┤
-│   Adapters (LLM, Storage, IO)         │  External integrations
-└─────────────────────────────────────────┘
-```
+![Ondine Architecture Overview](images/architecture-overview.png)
 
 ## Key Components
 
@@ -74,18 +62,18 @@ pipeline = (
     PipelineBuilder.create()
     # Data source
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
-    
+
     # Prompt configuration
     .with_prompt("Process: {text}")
-    
+
     # LLM configuration
     .with_llm(provider="openai", model="gpt-4o-mini")
-    
+
     # Processing configuration
     .with_batch_size(100)
     .with_concurrency(5)
     .with_retry_policy(max_retries=3)
-    
+
     # Build immutable pipeline
     .build()
 )
@@ -104,12 +92,7 @@ pipeline = (
 
 Stages are composable processing units that form a pipeline:
 
-```
-┌────────────┐    ┌─────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Data     │───▶│   Prompt    │───▶│     LLM      │───▶│   Response   │
-│   Loader   │    │  Formatter  │    │  Invocation  │    │    Parser    │
-└────────────┘    └─────────────┘    └──────────────┘    └──────────────┘
-```
+![Pipeline Stages](images/pipeline-stages.png)
 
 **Built-in stages:**
 - `DataLoaderStage`: Load data from files/dataframes
@@ -128,7 +111,7 @@ class MyCustomStage(PipelineStage):
     def process(self, input_data, context):
         # Your processing logic
         return processed_data
-    
+
     def validate_input(self, input_data):
         # Validation logic
         return ValidationResult(valid=True)
@@ -178,7 +161,7 @@ spec = LLMSpec(
     model="gpt-4o-mini",
     temperature=0.7,
     max_tokens=1000,
-    api_key="sk-..."  # Or use environment variable
+    api_key="sk-..."  # Or use environment variable  # pragma: allowlist secret
 )
 ```
 
@@ -414,4 +397,3 @@ exporter.start()
 - [Structured Output](../guides/structured-output.md) - Type-safe response parsing
 - [Cost Control](../guides/cost-control.md) - Optimize costs and set budgets
 - [API Reference](../api/index.md) - Detailed API documentation
-
