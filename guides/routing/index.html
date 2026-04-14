@@ -1361,7 +1361,7 @@ description: A top-to-bottom flowchart showing the full request lifecycle throug
 placement: full-width
 alt_text: Flowchart showing a pipeline request passing through an optional cache check, then into the router which uses the configured strategy to select among multiple providers, with retry logic and a circuit breaker that puts failing providers into cooldown.
 -->
-<p><img alt="Multi-Provider Routing Flow" src="guides/images/multi-provider-routing-flow.png" /></p>
+<p><img alt="Multi-Provider Routing Flow" src="../images/multi-provider-routing-flow.png" /></p>
 <hr />
 <h2 id="with_router"><code>with_router()</code><a class="headerlink" href="#with_router" title="Permanent link">&para;</a></h2>
 <h3 id="signature">Signature<a class="headerlink" href="#signature" title="Permanent link">&para;</a></h3>
@@ -1560,7 +1560,7 @@ description: A visual grid with four columns, one per key strategy. Each column 
 placement: full-width
 alt_text: Visual comparison of four routing strategies showing how simple-shuffle picks randomly, latency-based picks the fastest provider, usage-based picks the least utilized, and cost-based picks the cheapest.
 -->
-<p><img alt="Routing Strategy Comparison" src="guides/images/routing-strategy-comparison.png" /></p>
+<p><img alt="Routing Strategy Comparison" src="../images/routing-strategy-comparison.png" /></p>
 <h3 id="simple-shuffle-default">Simple shuffle (default)<a class="headerlink" href="#simple-shuffle-default" title="Permanent link">&para;</a></h3>
 <p>Random selection, equal probability. No external state needed. This is the one you'll use 90% of the time during development.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="o">.</span><span class="n">with_router</span><span class="p">(</span>

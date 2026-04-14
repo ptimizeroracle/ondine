@@ -1345,7 +1345,7 @@ description: A left-to-right pipeline diagram showing six stages as rounded boxe
 placement: full-width
 alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: evidence priming, LLM inference, grounding verification, contradiction detection, confidence scoring, and storage, with a feedback loop from storage back to evidence priming for subsequent runs.
 -->
-<p><img alt="Anti-Hallucination Pipeline Lifecycle" src="guides/images/anti-hallucination-pipeline-lifecycle.png" /></p>
+<p><img alt="Anti-Hallucination Pipeline Lifecycle" src="../images/anti-hallucination-pipeline-lifecycle.png" /></p>
 <hr />
 <h2 id="store-backends">Store backends<a class="headerlink" href="#store-backends" title="Permanent link">&para;</a></h2>
 <h3 id="rustcontextstore">RustContextStore<a class="headerlink" href="#rustcontextstore" title="Permanent link">&para;</a></h3>
@@ -1601,7 +1601,7 @@ description: A top-to-bottom flowchart showing how grounding verification decide
 placement: full-width
 alt_text: Flowchart showing grounding verification: LLM response is scored against source text via TF-IDF and optional dense embeddings, then compared to the threshold. Grounded responses pass through; ungrounded ones are flagged, retried, or skipped depending on the configured action.
 -->
-<p><img alt="Grounding Verification Flow" src="guides/images/grounding-verification-flow.png" /></p>
+<p><img alt="Grounding Verification Flow" src="../images/grounding-verification-flow.png" /></p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Basic grounding with flag action</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
@@ -1859,7 +1859,7 @@ description: A three-column comparison diagram showing the three store backends 
 placement: full-width
 alt_text: Side-by-side comparison of the three context store backends — RustContextStore (persistent, full-featured), ZepContextStore (cloud-hosted with entity extraction but no grounding), and InMemoryContextStore (ephemeral pure-Python fallback) — showing their capabilities, storage model, and search features.
 -->
-<p><img alt="Context Store Backend Comparison" src="guides/images/context-store-backend-comparison.png" /></p>
+<p><img alt="Context Store Backend Comparison" src="../images/context-store-backend-comparison.png" /></p>
 <table>
 <thead>
 <tr>

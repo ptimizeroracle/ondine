@@ -1378,7 +1378,7 @@ description: A flowchart starting with a rounded-rect node "Row processing error
 placement: full-width
 alt_text: Decision flowchart showing error policy routing: SKIP continues with null, FAIL stops the pipeline, RETRY loops with exponential backoff then falls back to skip, USE_DEFAULT substitutes a fixed value.
 -->
-<p><img alt="Error Policy Decision Flowchart" src="guides/images/error-policy-decision-flowchart.png" /></p>
+<p><img alt="Error Policy Decision Flowchart" src="../images/error-policy-decision-flowchart.png" /></p>
 <h2 id="errorpolicy">ErrorPolicy<a class="headerlink" href="#errorpolicy" title="Permanent link">&para;</a></h2>
 <p><code>ErrorPolicy</code> is a string enum in <code>ondine.core.specifications</code>. It tells the pipeline what to do when a stage fails for a given row.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.core.specifications</span><span class="w"> </span><span class="kn">import</span> <span class="n">ErrorPolicy</span>
@@ -1514,7 +1514,7 @@ description: A diagram with two nested rounded rectangles representing retry sco
 placement: full-width
 alt_text: Architecture diagram showing two nested retry levels: the inner RetryHandler for transient API errors, and the outer ErrorPolicy RETRY for row-level failures, with non-retryable errors bypassing both.
 -->
-<p><img alt="Two Retry Levels" src="guides/images/two-retry-levels.png" /></p>
+<p><img alt="Two Retry Levels" src="../images/two-retry-levels.png" /></p>
 <p>One thing to watch: Ondine has two retry mechanisms at different scopes.</p>
 <table>
 <thead>
