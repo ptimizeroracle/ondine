@@ -1,6 +1,6 @@
 # Error Handling
 
-Two layers. A **policy** decides what happens when a row fails — skip it, retry it, substitute a default, or abort. A **retry handler** deals with transient API errors using exponential backoff. They work together, but they're separate things.
+Two layers. A **policy** decides what happens when a row fails (skip it, retry it, substitute a default, or abort). A **retry handler** deals with transient API errors using exponential backoff. They work together, but they're separate things.
 
 ## Quick Reference
 
@@ -111,7 +111,7 @@ pipeline = (
 )
 ```
 
-For when downstream consumers can't handle nulls — dashboards, reports, that kind of thing.
+For when downstream consumers can't handle nulls -- dashboards, reports, that kind of thing.
 
 ## Configuring Retries
 
@@ -155,7 +155,7 @@ With `retry_delay=1.0` and `max_retries=5`:
 
 | Attempt | Delay before attempt |
 |---------|---------------------|
-| 1 (initial) | — |
+| 1 (initial) | -- |
 | 2 | 1s |
 | 3 | 2s |
 | 4 | 4s |
@@ -168,7 +168,7 @@ Cap is 60 seconds no matter the multiplier.
 <!-- IMAGE_PLACEHOLDER
 title: Two Retry Levels
 type: architecture
-description: A diagram with two nested rounded rectangles representing retry scopes. The outer rectangle is labeled "ErrorPolicy.RETRY (row-level)" with a subtitle "Scope: entire pipeline row — any stage failure". Inside it, a smaller rectangle is labeled "RetryHandler (API-call level)" with a subtitle "Scope: single LLM API call — transient errors only (429, 502, 503, timeouts)". Inside the inner rectangle, a small loop arrow icon and the text "Automatic exponential backoff, retries RetryableError / RateLimitError / NetworkError". Between the inner and outer rectangles (but still inside the outer one), text reads "If RetryHandler exhausts all attempts, the error bubbles up here. Row-level retry re-runs the entire stage for this row, up to max_retries times." Below both rectangles, a horizontal arrow labeled "Non-retryable errors (401, 403, bad config)" bypasses both boxes and points to a stop sign node labeled "Immediate failure — no retries at either level".
+description: A diagram with two nested rounded rectangles representing retry scopes. The outer rectangle is labeled "ErrorPolicy.RETRY (row-level)" with a subtitle "Scope: entire pipeline row -- any stage failure". Inside it, a smaller rectangle is labeled "RetryHandler (API-call level)" with a subtitle "Scope: single LLM API call -- transient errors only (429, 502, 503, timeouts)". Inside the inner rectangle, a small loop arrow icon and the text "Automatic exponential backoff, retries RetryableError / RateLimitError / NetworkError". Between the inner and outer rectangles (but still inside the outer one), text reads "If RetryHandler exhausts all attempts, the error bubbles up here. Row-level retry re-runs the entire stage for this row, up to max_retries times." Below both rectangles, a horizontal arrow labeled "Non-retryable errors (401, 403, bad config)" bypasses both boxes and points to a stop sign node labeled "Immediate failure -- no retries at either level".
 placement: full-width
 alt_text: Architecture diagram showing two nested retry levels: the inner RetryHandler for transient API errors, and the outer ErrorPolicy RETRY for row-level failures, with non-retryable errors bypassing both.
 -->
@@ -181,7 +181,7 @@ One thing to watch: Ondine has two retry mechanisms at different scopes.
 | `RetryHandler` | Single LLM API call | Transient errors: rate limits (429), network timeouts, 502/503 |
 | `ErrorPolicy.RETRY` | Pipeline row | Any stage failure, after `RetryHandler` is exhausted |
 
-`RetryHandler` fires automatically for transient errors regardless of your `ErrorPolicy`. It only retries `RetryableError`, `RateLimitError`, and `NetworkError` subtypes. Config errors (bad API key, 401, 403) fail immediately — no retries, no wasted time.
+`RetryHandler` fires automatically for transient errors regardless of your `ErrorPolicy`. It only retries `RetryableError`, `RateLimitError`, and `NetworkError` subtypes. Config errors (bad API key, 401, 403) fail immediately -- no retries, no wasted time.
 
 ## Handling Partial Failures
 
@@ -333,6 +333,6 @@ No point burning retries on a bad API key. Fix the config, re-run.
 
 ## Related
 
-- [Checkpointing](checkpointing.md) — saving state so failed pipelines can resume
-- [Cost Control](cost-control.md) — budget limits that complement fault-tolerance settings
-- [Execution Modes](execution-modes.md) — async and streaming modes for large datasets
+- [Checkpointing](checkpointing.md) -- saving state so failed pipelines can resume
+- [Cost Control](cost-control.md) -- budget limits that complement fault-tolerance settings
+- [Execution Modes](execution-modes.md) -- async and streaming modes for large datasets

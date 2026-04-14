@@ -32,7 +32,7 @@ result = pipeline.execute()
 print(f"Processed {result.metrics.processed_rows} rows")
 ```
 
-Loads the entire dataset into memory, processes rows one batch at a time. Good for anything under 50K rows — scripts, notebooks, debugging. If the dataset is bigger or you need speed, keep reading.
+Loads the entire dataset into memory, processes rows one batch at a time. Good for anything under 50K rows -- scripts, notebooks, debugging. If the dataset is bigger or you need speed, keep reading.
 
 ## Async
 
@@ -77,7 +77,7 @@ One caveat: more concurrency means you hit rate limits faster. Start low, increa
 
 Standard and async both load the full dataset into memory. That breaks once you hit 100K+ rows. Streaming processes fixed-size chunks: only 1-2 chunks in memory at any point.
 
-The tradeoff: you get an iterator of `ExecutionResult` objects (one per chunk) instead of a single result. Write output incrementally — don't collect everything into a list and defeat the purpose.
+The tradeoff: you get an iterator of `ExecutionResult` objects (one per chunk) instead of a single result. Write output incrementally -- don't collect everything into a list and defeat the purpose.
 
 ```python
 from ondine import PipelineBuilder
@@ -210,7 +210,7 @@ Regardless of mode: enable [checkpointing](checkpointing.md) and set a [budget c
 
 **Async specifically:** start at `max_concurrency=10`, bump it up in increments. If you jump straight to 100, most providers will throttle you and your effective throughput drops. Each concurrent request holds its response in memory too, so watch your footprint on large outputs.
 
-**Streaming specifically:** pick a chunk size that balances progress granularity vs. overhead. A 500K-row dataset with `chunk_size=100` means 5,000 chunk iterations — that's a lot of overhead for small gains. See the chunk size table above.
+**Streaming specifically:** pick a chunk size that balances progress granularity vs. overhead. A 500K-row dataset with `chunk_size=100` means 5,000 chunk iterations -- that's a lot of overhead for small gains. See the chunk size table above.
 
 ## Related
 

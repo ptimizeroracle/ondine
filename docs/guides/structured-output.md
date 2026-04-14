@@ -1,6 +1,6 @@
 # Structured Output (Pydantic)
 
-LLMs return strings. You need typed data. Define a Pydantic model, and Ondine validates every response against it — wrong types, missing fields, and constraint violations get caught before they reach your code.
+LLMs return strings. You need typed data. Define a Pydantic model, and Ondine validates every response against it -- wrong types, missing fields, and constraint violations get caught before they reach your code.
 
 ```python
 # Without: "The brand is Apple and model is iPhone 15 Pro"
@@ -273,7 +273,7 @@ except ValidationError as e:
 
 The parser does validation, but the LLM still needs to produce valid JSON in the first place. Two things help more than anything else:
 
-**Show the exact shape you expect.** Don't describe the format — show it:
+**Show the exact shape you expect.** Don't describe the format -- show it:
 
 ```python
 prompt = """
