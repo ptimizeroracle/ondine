@@ -1318,7 +1318,7 @@ description: A horizontal flowchart with five rounded-rect nodes connected by ar
 placement: full-width
 alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at row N, save checkpoint, resume from row N, complete with no duplicate cost.
 -->
-<p><img alt="Checkpoint Resume Lifecycle" src="../images/checkpoint-resume-lifecycle.png" /></p>
+<p><img alt="Checkpoint Resume Lifecycle" src="guides/images/checkpoint-resume-lifecycle.png" /></p>
 <p>The <code>StateManager</code> periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>.checkpoints/checkpoint_&lt;session-uuid&gt;.json.gz
 </span></code></pre></div>
@@ -1347,7 +1347,7 @@ description: A vertical sequence diagram with two lifelines — "Pipeline Execut
 placement: full-width
 alt_text: Sequence diagram showing the StateManager saving checkpoints to disk at regular intervals as the pipeline executor processes batches of rows.
 -->
-<p><img alt="StateManager Periodic Save Cycle" src="../images/statemanager-periodic-save-cycle.png" /></p>
+<p><img alt="StateManager Periodic Save Cycle" src="guides/images/statemanager-periodic-save-cycle.png" /></p>
 <h3 id="with_checkpoint_intervalrows-int"><code>with_checkpoint_interval(rows: int)</code><a class="headerlink" href="#with_checkpoint_intervalrows-int" title="Permanent link">&para;</a></h3>
 <p>How often a checkpoint is written. Lower = less re-work on failure, but more disk I/O.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>

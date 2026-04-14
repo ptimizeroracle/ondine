@@ -1850,7 +1850,7 @@ description: A left-to-right data flow diagram showing the document ingestion pi
 placement: full-width
 alt_text: Data flow diagram showing the RAG ingestion pipeline: documents are loaded, optionally OCR-processed, split into semantic chunks, embedded as dense vectors, and stored in SQLite with both BM25 and vector indexes.
 -->
-<p><img alt="RAG Ingestion Pipeline" src="../images/rag-ingestion-pipeline.png" /></p>
+<p><img alt="RAG Ingestion Pipeline" src="guides/images/rag-ingestion-pipeline.png" /></p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;ondine[knowledge]&#39;</span>
 </span></code></pre></div>
@@ -1903,7 +1903,7 @@ description: A left-to-right sequence diagram showing how with_knowledge_base() 
 placement: full-width
 alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge base context for each row, injects it into the prompt template as _kb_context, sends to the LLM, and optionally evaluates the response.
 -->
-<p><img alt="Pipeline Builder RAG Integration" src="../images/pipeline-builder-rag-integration.png" /></p>
+<p><img alt="Pipeline Builder RAG Integration" src="guides/images/pipeline-builder-rag-integration.png" /></p>
 <h2 id="knowledgestore">KnowledgeStore<a class="headerlink" href="#knowledgestore" title="Permanent link">&para;</a></h2>
 <h3 id="constructor">Constructor<a class="headerlink" href="#constructor" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2251,7 +2251,7 @@ description: A top-to-bottom flowchart showing the full search path. Start with 
 placement: full-width
 alt_text: Flowchart showing the RAG search flow: user query optionally passes through query transformation, then hybrid search combines BM25 and dense vector retrieval via RRF, optionally reranks with a cross-encoder, and returns top-K results.
 -->
-<p><img alt="RAG Search Flow" src="../images/rag-search-flow.png" /></p>
+<p><img alt="RAG Search Flow" src="guides/images/rag-search-flow.png" /></p>
 <h2 id="ocr-support">OCR Support<a class="headerlink" href="#ocr-support" title="Permanent link">&para;</a></h2>
 <p>OCR providers extract text from image files (<code>.png</code>, <code>.jpg</code>, <code>.webp</code>, etc.) and optionally from images embedded inside PDFs.</p>
 <h3 id="visionocr-multimodal-llm">VisionOCR (multimodal LLM)<a class="headerlink" href="#visionocr-multimodal-llm" title="Permanent link">&para;</a></h3>

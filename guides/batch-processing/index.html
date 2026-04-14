@@ -1938,6 +1938,14 @@
 - <strong>API calls</strong>: 100× fewer (5M → 50K with batch_size=100)
 - <strong>Processing time</strong>: 100× faster (69 hours → 42 minutes)
 - <strong>Rate limit issues</strong>: Virtually eliminated</p>
+<!-- IMAGE_PLACEHOLDER
+title: Multi-Row Batching Flow
+type: data-flow
+description: Left-to-right data flow with enterprise Stripe/Vercel design language (subtle grid background, 1px connectors, #0F172A/#64748B typography). Left side: a vertical stack of 5 individual row boxes labeled "Row 1" through "Row 5", each with a small document icon. Arrow labeled "batch_size=5" points right to a single large box labeled "Batch Aggregator" with a green left-accent bar — inside show the 5 rows being combined into one JSON array. Single arrow labeled "1 API call" points right to an LLM box (blue left-accent bar, labeled "GPT-4o-mini"). Single arrow labeled "1 response" points right to a "Batch Disaggregator" box (orange left-accent bar) — inside show the JSON response being split back into 5 individual results. 5 arrows fan out right to 5 result boxes. Below the diagram, a comparison bar: "Without batching: 5 API calls, 5× latency" (red, crossed out) vs "With batching: 1 API call, 1× latency" (green, checkmark). Keep spacing generous, cards with subtle shadows.
+placement: full-width
+alt_text: Data flow diagram showing how multi-row batching combines 5 rows into 1 API call through batch aggregation, sends to LLM, then disaggregates the response back into 5 individual results.
+-->
+<p><img alt="Multi-Row Batching Flow" src="guides/images/multi-row-batching-flow.png" /></p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
