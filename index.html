@@ -424,6 +424,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#why-ondine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Ondine?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1189,6 +1200,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#why-ondine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Ondine?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1250,8 +1272,8 @@
 
 
 <h1 id="ondine">Ondine<a class="headerlink" href="#ondine" title="Permanent link">&para;</a></h1>
-<p><strong>SDK for batch processing tabular datasets with LLMs.</strong></p>
-<p>For data engineers and ML practitioners who need to process millions of tabular rows with LLMs, Ondine delivers <strong>100x fewer API calls</strong> via multi-row batching and <strong>40-50% cost reduction</strong> via prefix caching -- with cost estimation, budget limits, checkpointing, and 100+ provider support built in.</p>
+<p><strong>Run LLMs on tabular data — 100x fewer API calls, 40-50% lower cost.</strong></p>
+<p>Ondine is an open-source Python SDK for data engineers and ML practitioners who need to process large CSV/DataFrame datasets with LLMs. Multi-row batching, prefix caching, and budget controls are built in from day one — not bolted on later.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuickPipeline</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
@@ -1261,18 +1283,46 @@
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </span></code></pre></div>
+<h2 id="why-ondine">Why Ondine?<a class="headerlink" href="#why-ondine" title="Permanent link">&para;</a></h2>
+<p>Most teams processing tabular data with LLMs hit the same three walls: <strong>API cost spirals</strong>, <strong>brittle pipelines that crash halfway through</strong>, and <strong>hallucinated outputs that are hard to catch at scale</strong>. Ondine is built to solve exactly those three problems.</p>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Ondine's answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API bills too high</td>
+<td>Multi-row batching (100 rows/call) + prefix caching → 40-50% savings</td>
+</tr>
+<tr>
+<td>Pipeline crashes lose progress</td>
+<td>Checkpointing — resume from last saved row, not row 0</td>
+</tr>
+<tr>
+<td>LLM makes things up</td>
+<td>Context Store — ground each response against your source data</td>
+</tr>
+<tr>
+<td>Too many providers to juggle</td>
+<td>100+ providers via LiteLLM, single unified API</td>
+</tr>
+</tbody>
+</table>
 <h2 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Quick API</strong> -- 3-line hello world with smart defaults</li>
-<li><strong>Builder API</strong> -- Full control over pipeline configuration</li>
+<li><strong>Quick API</strong> — 3-line hello world with smart defaults</li>
+<li><strong>Builder API</strong> — Full control over pipeline configuration</li>
 <li><strong>100+ LLM providers</strong> via LiteLLM (OpenAI, Anthropic, Groq, Azure, local MLX)</li>
-<li><strong>Multi-row batching</strong> -- Process 100 rows per API call</li>
-<li><strong>Prefix caching</strong> -- 40-50% cost reduction on repeated prompts</li>
-<li><strong>Cost estimation</strong> -- Know the cost before you run</li>
-<li><strong>Budget limits</strong> -- Hard caps on spending</li>
-<li><strong>Checkpointing</strong> -- Resume failed pipelines from where they stopped</li>
-<li><strong>Structured output</strong> -- Pydantic models, JSON, regex parsing</li>
-<li><strong>Observability</strong> -- OpenTelemetry, Langfuse, structured logging</li>
+<li><strong>Multi-row batching</strong> — Process 100 rows per API call</li>
+<li><strong>Prefix caching</strong> — 40-50% cost reduction on repeated prompts</li>
+<li><strong>Cost estimation</strong> — Know the cost before you run</li>
+<li><strong>Budget limits</strong> — Hard caps on spending</li>
+<li><strong>Checkpointing</strong> — Resume failed pipelines from where they stopped</li>
+<li><strong>Structured output</strong> — Pydantic models, JSON, regex parsing</li>
+<li><strong>Observability</strong> — OpenTelemetry, Langfuse, structured logging</li>
 </ul>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine

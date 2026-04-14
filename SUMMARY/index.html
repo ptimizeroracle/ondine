@@ -1094,10 +1094,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#processing" class="md-nav__link">
+  <a href="#pipeline-guides" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Processing
+        Pipeline Guides
       
     </span>
   </a>
@@ -1105,10 +1105,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#quality-safety" class="md-nav__link">
+  <a href="#accuracy-reliability" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quality &amp; Safety
+        Accuracy &amp; Reliability
       
     </span>
   </a>
@@ -1116,21 +1116,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance" class="md-nav__link">
+  <a href="#cost-performance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Performance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#operations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Operations
+        Cost &amp; Performance
       
     </span>
   </a>
@@ -1142,6 +1131,17 @@
     <span class="md-ellipsis">
       
         Providers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
       
     </span>
   </a>
@@ -1190,36 +1190,31 @@
 <h1 id="table-of-contents">Table of contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h1>
 <h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
 <ul>
+<li><a href="../">What is Ondine?</a></li>
 <li><a href="../getting-started/installation/">Installation</a></li>
-<li><a href="../getting-started/quickstart/">Quickstart</a></li>
-<li><a href="../getting-started/core-concepts/">Core Concepts</a></li>
+<li><a href="../getting-started/quickstart/">5-Minute Quickstart</a></li>
+<li><a href="../getting-started/core-concepts/">How It Works</a></li>
 </ul>
-<h2 id="processing">Processing<a class="headerlink" href="#processing" title="Permanent link">&para;</a></h2>
+<h2 id="pipeline-guides">Pipeline Guides<a class="headerlink" href="#pipeline-guides" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../guides/execution-modes/">Execution Modes</a></li>
 <li><a href="../guides/batch-processing/">Batch Processing</a></li>
-<li><a href="../guides/multi-column/">Multi-Column Processing</a></li>
+<li><a href="../guides/execution-modes/">Async &amp; Streaming</a></li>
+<li><a href="../guides/multi-column/">Multiple Output Columns</a></li>
+<li><a href="../guides/structured-output/">Structured Output (Pydantic)</a></li>
 <li><a href="../guides/pipeline-composition/">Pipeline Composition</a></li>
-<li><a href="../guides/structured-output/">Structured Output</a></li>
 </ul>
-<h2 id="quality-safety">Quality &amp; Safety<a class="headerlink" href="#quality-safety" title="Permanent link">&para;</a></h2>
+<h2 id="accuracy-reliability">Accuracy &amp; Reliability<a class="headerlink" href="#accuracy-reliability" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../guides/knowledge-base-rag/">Knowledge Base / RAG</a></li>
-<li><a href="../guides/context-store/">Context Store &amp; Anti-Hallucination</a></li>
-<li><a href="../guides/error-handling/">Error Handling</a></li>
+<li><a href="../guides/context-store/">Anti-Hallucination</a></li>
+<li><a href="../guides/knowledge-base-rag/">RAG &amp; Knowledge Bases</a></li>
+<li><a href="../guides/error-handling/">Error Handling &amp; Retries</a></li>
 <li><a href="../guides/checkpointing/">Checkpointing &amp; Recovery</a></li>
 </ul>
-<h2 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h2>
+<h2 id="cost-performance">Cost &amp; Performance<a class="headerlink" href="#cost-performance" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../guides/cost-control/">Cost Control</a></li>
-<li><a href="../guides/caching/">Caching &amp; Rate Limiting</a></li>
-<li><a href="../guides/routing/">Routing &amp; Load Balancing</a></li>
-</ul>
-<h2 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../guides/cli/">CLI Reference</a></li>
-<li><a href="../guides/observability_profiling/">Observability</a></li>
-<li><a href="../guides/azure-managed-identity/">Azure Managed Identity</a></li>
+<li><a href="../guides/cost-control/">Cost Estimation &amp; Budgets</a></li>
+<li><a href="../guides/caching/">Caching</a></li>
+<li><a href="../guides/routing/">Multi-Provider Routing</a></li>
 </ul>
 <h2 id="providers">Providers<a class="headerlink" href="#providers" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1227,8 +1222,14 @@
 <li><a href="../guides/providers/anthropic/">Anthropic Claude</a></li>
 <li><a href="../guides/providers/groq/">Groq</a></li>
 <li><a href="../guides/providers/azure/">Azure OpenAI</a></li>
-<li><a href="../guides/providers/local-mlx/">Local MLX</a></li>
-<li><a href="../guides/providers/custom/">Custom APIs</a></li>
+<li><a href="../guides/providers/local-mlx/">Local Models (MLX)</a></li>
+<li><a href="../guides/providers/custom/">Custom / Any API</a></li>
+</ul>
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../guides/cli/">CLI</a></li>
+<li><a href="../guides/observability_profiling/">Observability &amp; Profiling</a></li>
+<li><a href="../guides/azure-managed-identity/">Azure Authentication</a></li>
 </ul>
 <h2 id="community">Community<a class="headerlink" href="#community" title="Permanent link">&para;</a></h2>
 <ul>
