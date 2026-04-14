@@ -2,6 +2,15 @@
 
 Ondine provides comprehensive cost management features to prevent budget overruns and optimize spending on LLM APIs.
 
+<!-- IMAGE_PLACEHOLDER
+title: Cost Control Budget Lifecycle
+type: flowchart
+description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Top-to-bottom flow showing budget enforcement during pipeline execution. Top: "Pipeline Start" pill (green). Arrow down to "estimate_cost()" box (blue left-accent) with label "pre-flight cost check". Arrow splits at diamond "Within budget?". Yes arrow → "Execute Pipeline" box (blue). Inside execution box, show a progress bar filling left to right with three threshold markers: 75% (yellow warning icon, label "Warning logged"), 90% (orange alert icon, label "Alert logged"), 100% (red stop icon, label "BudgetExceeded raised"). Arrow from execution to "Cost Report" box (green left-accent) showing breakdown: "tokens: input/output, cost: by stage, savings: from cache hits". No arrow from diamond → "Abort" box (red left-accent, label "adjust budget or optimize before running"). Keep it tall and narrow, generous vertical spacing.
+placement: full-width
+alt_text: Flowchart showing cost control lifecycle: pre-flight estimation, budget check, execution with 75%/90%/100% threshold warnings, and final cost reporting.
+-->
+![Cost Control Budget Lifecycle](guides/images/cost-control-budget-lifecycle.png)
+
 ## Cost Optimization Strategies
 
 ### 1. Multi-Row Batching (100× Speedup) - NEW!

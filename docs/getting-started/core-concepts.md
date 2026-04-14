@@ -6,7 +6,7 @@ Understanding Ondine's architecture will help you build more sophisticated pipel
 
 Ondine is built on a layered architecture:
 
-![Ondine Architecture Overview](images/architecture-overview.png)
+![Ondine Architecture Overview](getting-started/images/architecture-overview.png)
 
 ## Key Components
 
@@ -92,7 +92,7 @@ pipeline = (
 
 Stages are composable processing units that form a pipeline:
 
-![Pipeline Stages](images/pipeline-stages.png)
+![Pipeline Stages](getting-started/images/pipeline-stages.png)
 
 **Built-in stages:**
 - `DataLoaderStage`: Load data from files/dataframes
