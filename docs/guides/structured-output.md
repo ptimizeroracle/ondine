@@ -24,14 +24,7 @@ ProductInfo(brand="Apple", model="iPhone 15 Pro", price=999.99, condition="new")
 - IDE autocomplete for response fields
 - Validation errors caught early
 
-<!-- IMAGE_PLACEHOLDER
-title: Structured Output Validation Flow
-type: flowchart
-description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Top-to-bottom flow with 4 stages. Stage 1: "Raw LLM Response" box (gray left-accent) containing example JSON string '{"brand": "Apple", "model": "iPhone 15 Pro", "price": 999.99}'. Arrow down to Stage 2: "Pydantic Model" box (blue left-accent) showing the class definition with fields and types — brand: str, model: str, price: float, condition: str. Arrow splits into two paths at a diamond labeled "Validation". Left path (green arrow, labeled "Pass"): leads to "Typed Object" box (green left-accent) showing ProductInfo(brand="Apple", ...) with a checkmark icon. Right path (red arrow, labeled "Fail"): leads to "Validation Error" box (red left-accent) showing "price: expected float, got 'expensive'" with an X icon, then a dashed arrow labeled "retry or default" loops back up to Stage 1. Keep the layout clean, generous whitespace.
-placement: full-width
-alt_text: Flowchart showing how LLM raw JSON response passes through Pydantic model validation, producing either a typed object on success or a validation error with retry on failure.
--->
-![Structured Output Validation Flow](images/structured-output-validation-flow.png)
+![Structured Output Validation Flow](images/structured-output.png)
 
 ## Basic Usage
 

@@ -10,14 +10,7 @@ Ondine supports three execution modes optimized for different use cases. Choosin
 | **Async** | High throughput needs | High | High | Medium |
 | **Streaming** | Large datasets (100K+ rows) | Constant | Medium | Medium |
 
-<!-- IMAGE_PLACEHOLDER
-title: Execution Modes Comparison
-type: comparison-table-visual
-description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Three-column visual comparison, side by side, same style as routing-strategy-comparison.png. Column 1 "Standard": icon of a single arrow going through boxes sequentially (row→row→row), subtitle "Sequential, simple", mini stats "Memory: loads all rows, Speed: 1x, Use: <50K rows". Green left-accent bar. Column 2 "Async": icon showing multiple arrows fanning out from a semaphore to parallel worker boxes then converging, subtitle "Concurrent requests", mini stats "Memory: loads all rows, Speed: 5-20x, Use: throughput-critical". Blue left-accent bar. Column 3 "Streaming": icon showing a conveyor belt with small chunks moving through, only 1-2 chunks visible at a time, subtitle "Chunk-by-chunk", mini stats "Memory: constant ~50MB, Speed: 1x per chunk, Use: 100K+ rows". Orange left-accent bar. Below all three, a fourth row "Streaming + Async" spanning full width with a combined icon, subtitle "Best of both", stats "Memory: constant, Speed: 5-20x". Purple left-accent bar.
-placement: full-width
-alt_text: Side-by-side comparison of four execution modes: Standard (sequential), Async (concurrent), Streaming (memory-efficient), and Streaming+Async (combined), showing memory usage, speed, and best use cases.
--->
-![Execution Modes Comparison](images/execution-modes-comparison.png)
+![Execution Modes Comparison](images/execution-modes.png)
 
 ## Standard Execution (Default)
 
