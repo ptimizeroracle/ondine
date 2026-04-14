@@ -31,7 +31,7 @@ description: Enterprise Stripe/Vercel design (grid background, left-accent-bar c
 placement: full-width
 alt_text: Flowchart showing how LLM raw JSON response passes through Pydantic model validation, producing either a typed object on success or a validation error with retry on failure.
 -->
-![Structured Output Validation Flow](guides/images/structured-output-validation-flow.png)
+![Structured Output Validation Flow](images/structured-output-validation-flow.png)
 
 ## Basic Usage
 

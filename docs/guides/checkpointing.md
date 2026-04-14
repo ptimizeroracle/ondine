@@ -20,7 +20,7 @@ description: A horizontal flowchart with five rounded-rect nodes connected by ar
 placement: full-width
 alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at row N, save checkpoint, resume from row N, complete with no duplicate cost.
 -->
-![Checkpoint Resume Lifecycle](guides/images/checkpoint-resume-lifecycle.png)
+![Checkpoint Resume Lifecycle](images/checkpoint-resume-lifecycle.png)
 
 The `StateManager` periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:
 
@@ -63,7 +63,7 @@ description: A vertical sequence diagram with two lifelines — "Pipeline Execut
 placement: full-width
 alt_text: Sequence diagram showing the StateManager saving checkpoints to disk at regular intervals as the pipeline executor processes batches of rows.
 -->
-![StateManager Periodic Save Cycle](guides/images/statemanager-periodic-save-cycle.png)
+![StateManager Periodic Save Cycle](images/statemanager-periodic-save-cycle.png)
 
 ### `with_checkpoint_interval(rows: int)`
 

@@ -9,7 +9,7 @@ description: Enterprise Stripe/Vercel design (grid background, left-accent-bar c
 placement: full-width
 alt_text: Flowchart showing cost control lifecycle: pre-flight estimation, budget check, execution with 75%/90%/100% threshold warnings, and final cost reporting.
 -->
-![Cost Control Budget Lifecycle](guides/images/cost-control-budget-lifecycle.png)
+![Cost Control Budget Lifecycle](images/cost-control-budget-lifecycle.png)
 
 ## Cost Optimization Strategies
 

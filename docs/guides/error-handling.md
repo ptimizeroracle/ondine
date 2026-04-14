@@ -18,7 +18,7 @@ description: A flowchart starting with a rounded-rect node "Row processing error
 placement: full-width
 alt_text: Decision flowchart showing error policy routing: SKIP continues with null, FAIL stops the pipeline, RETRY loops with exponential backoff then falls back to skip, USE_DEFAULT substitutes a fixed value.
 -->
-![Error Policy Decision Flowchart](guides/images/error-policy-decision-flowchart.png)
+![Error Policy Decision Flowchart](images/error-policy-decision-flowchart.png)
 
 ## ErrorPolicy
 
@@ -172,7 +172,7 @@ description: A diagram with two nested rounded rectangles representing retry sco
 placement: full-width
 alt_text: Architecture diagram showing two nested retry levels: the inner RetryHandler for transient API errors, and the outer ErrorPolicy RETRY for row-level failures, with non-retryable errors bypassing both.
 -->
-![Two Retry Levels](guides/images/two-retry-levels.png)
+![Two Retry Levels](images/two-retry-levels.png)
 
 One thing to watch: Ondine has two retry mechanisms at different scopes.
 
