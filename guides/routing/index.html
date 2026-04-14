@@ -1344,15 +1344,15 @@
 
 
 <h1 id="routing">Routing<a class="headerlink" href="#routing" title="Permanent link">&para;</a></h1>
-<p>LLM routing lets one pipeline spread requests across multiple model deployments — different providers, models, or API keys — with automatic failover, load balancing, and circuit breaking. Ondine wraps this in <code>with_router()</code>, which configures a <a href="https://docs.litellm.ai/docs/routing">LiteLLM Router</a> under the hood.</p>
+<p>LLM routing lets one pipeline spread requests across multiple model deployments (different providers, models, or API keys) with automatic failover, load balancing, and circuit breaking. <code>with_router()</code> configures a <a href="https://docs.litellm.ai/docs/routing">LiteLLM Router</a> under the hood.</p>
 <hr />
 <h2 id="what-llm-routing-solves">What LLM Routing Solves<a class="headerlink" href="#what-llm-routing-solves" title="Permanent link">&para;</a></h2>
-<p>A single provider has real limits. Rate limits throttle your throughput. Outages halt processing. Pricing may not fit your workload. A router abstracts all of that:</p>
+<p>A single provider has real limits. Rate limits throttle throughput. Outages halt processing. Pricing rarely fits every workload. A router absorbs all of that:</p>
 <ul>
 <li><strong>Failover</strong> — Groq starts erroring? Requests automatically shift to OpenAI.</li>
 <li><strong>Load balancing</strong> — spread 1,000 concurrent requests across three deployments instead of hammering one.</li>
 <li><strong>Cost optimization</strong> — route to the cheapest provider that meets your latency needs.</li>
-<li><strong>Resilience</strong> — a built-in circuit breaker pulls failing providers into cooldown instead of retrying forever.</li>
+<li><strong>Resilience</strong> — a circuit breaker pulls failing providers into cooldown instead of retrying forever.</li>
 </ul>
 <!-- IMAGE_PLACEHOLDER
 title: Multi-Provider Routing Flow
@@ -1439,7 +1439,7 @@ alt_text: Flowchart showing a pipeline request passing through an optional cache
 </table>
 <hr />
 <h2 id="the-model_list-format">The <code>model_list</code> Format<a class="headerlink" href="#the-model_list-format" title="Permanent link">&para;</a></h2>
-<p>Each entry in <code>model_list</code> is one deployment. The <code>model_name</code> field is the shared logical name the router uses for load balancing — if multiple entries share the same <code>model_name</code>, they're treated as interchangeable replicas.</p>
+<p>Each entry in <code>model_list</code> represents one deployment. The <code>model_name</code> field is the logical name the router uses for load balancing. Multiple entries sharing the same <code>model_name</code> are treated as interchangeable replicas.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="s2">&quot;model_name&quot;</span><span class="p">:</span> <span class="s2">&quot;my-model&quot;</span><span class="p">,</span>          <span class="c1"># Logical name (shared across replicas)</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="s2">&quot;model_id&quot;</span><span class="p">:</span> <span class="s2">&quot;groq-llama&quot;</span><span class="p">,</span>          <span class="c1"># Optional: friendly ID for tracking</span>
@@ -1450,11 +1450,11 @@ alt_text: Flowchart showing a pipeline request passing through an optional cache
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="p">}</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Quick note: deployments with <em>different</em> <code>model_name</code> values don't get load-balanced against each other — they're separate pools. For automatic failover, all deployments need the same <code>model_name</code>.</p>
+<p>Deployments with <em>different</em> <code>model_name</code> values don't get load-balanced against each other; they're separate pools. For automatic failover, all deployments need the same <code>model_name</code>.</p>
 <hr />
 <h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
 <h3 id="failover-between-two-providers">Failover between two providers<a class="headerlink" href="#failover-between-two-providers" title="Permanent link">&para;</a></h3>
-<p>The simplest setup. Two deployments, same <code>model_name</code>. The router splits traffic between them and fails over automatically if one goes down.</p>
+<p>Two deployments, same <code>model_name</code>. The router splits traffic between them and fails over if one goes down.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
@@ -1487,7 +1487,7 @@ alt_text: Flowchart showing a pipeline request passing through an optional cache
 </span><span id="__span-2-30"><a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>
 </span><span id="__span-2-31"><a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </span></code></pre></div>
-<p>With the default <code>simple-shuffle</code> strategy and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures, puts Groq into a 60-second cooldown, and all remaining requests go to OpenAI until Groq recovers.</p>
+<p>With <code>simple-shuffle</code> and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures and puts Groq into a 60-second cooldown. All remaining requests go to OpenAI until Groq recovers.</p>
 <hr />
 <h2 id="routing-strategies">Routing Strategies<a class="headerlink" href="#routing-strategies" title="Permanent link">&para;</a></h2>
 <p>The <code>routing_strategy</code> parameter takes any of these values (defined in <code>RouterStrategy</code>):</p>
@@ -1562,14 +1562,14 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 -->
 <p><img alt="Routing Strategy Comparison" src="../images/routing-strategy-comparison.png" /></p>
 <h3 id="simple-shuffle-default">Simple shuffle (default)<a class="headerlink" href="#simple-shuffle-default" title="Permanent link">&para;</a></h3>
-<p>Random selection, equal probability. No external state needed. This is the one you'll use 90% of the time during development.</p>
+<p>Random selection, equal probability. No external state needed. You'll use this one most of the time during development.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="o">.</span><span class="n">with_router</span><span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">model_list</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">routing_strategy</span><span class="o">=</span><span class="s2">&quot;simple-shuffle&quot;</span><span class="p">,</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="latency-based-routing">Latency-based routing<a class="headerlink" href="#latency-based-routing" title="Permanent link">&para;</a></h3>
-<p>Sends each request to the deployment with the lowest recorded average latency. Needs Redis to share latency data across workers.</p>
+<p>Sends each request to whichever deployment has the lowest recorded average latency. Requires Redis to share latency data across workers.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="o">.</span><span class="n">with_router</span><span class="p">(</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">model_list</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">routing_strategy</span><span class="o">=</span><span class="s2">&quot;latency-based-routing&quot;</span><span class="p">,</span>
@@ -1624,12 +1624,8 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 </span></code></pre></div>
 <hr />
 <h2 id="circuit-breaker-resilience">Circuit Breaker / Resilience<a class="headerlink" href="#circuit-breaker-resilience" title="Permanent link">&para;</a></h2>
-<p>The circuit breaker is on by default. It stops a failing provider from soaking up requests during an outage.</p>
-<p><strong>How it works:</strong>
-- After <strong>3 consecutive failures</strong>, the deployment goes into cooldown.
-- Cooldown lasts <strong>60 seconds</strong>.
-- During cooldown, requests go to healthy deployments only.
-- After cooldown, the deployment gets re-admitted and monitored again.</p>
+<p>The circuit breaker is on by default. It keeps a failing provider from absorbing requests during an outage.</p>
+<p>After <strong>3 consecutive failures</strong> (configurable via <code>allowed_fails</code>), the deployment enters cooldown for <strong>60 seconds</strong> (<code>cooldown_time</code>). During cooldown, only healthy deployments receive traffic. Once the window expires, the deployment is re-admitted and monitored again.</p>
 <h3 id="tuning-the-circuit-breaker">Tuning the circuit breaker<a class="headerlink" href="#tuning-the-circuit-breaker" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># More tolerant — allow more failures before cooldown</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="o">.</span><span class="n">with_router</span><span class="p">(</span>
@@ -1653,7 +1649,7 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 </span></code></pre></div>
 <hr />
 <h2 id="multi-provider-load-balancing">Multi-Provider Load Balancing<a class="headerlink" href="#multi-provider-load-balancing" title="Permanent link">&para;</a></h2>
-<p>For high-throughput pipelines, spread load across three or more deployments. Each one can have its own per-deployment rate limit (<code>rpm</code>) in <code>litellm_params</code>.</p>
+<p>For high-throughput pipelines, spread load across three or more deployments. Each can carry its own per-deployment rate limit (<code>rpm</code>) in <code>litellm_params</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
@@ -1707,7 +1703,7 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 </span></code></pre></div>
 <hr />
 <h2 id="combining-router-with-redis-caching">Combining Router with Redis Caching<a class="headerlink" href="#combining-router-with-redis-caching" title="Permanent link">&para;</a></h2>
-<p>In production, pair the router with <code>with_redis_cache()</code> so you don't waste API calls on duplicate inputs. The cache gets checked <em>before</em> the router picks a deployment, so a cache hit never touches any provider.</p>
+<p>Pair the router with <code>with_redis_cache()</code> so duplicate inputs skip the API entirely. The cache is checked <em>before</em> the router picks a deployment, so a hit never touches any provider.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
@@ -1758,7 +1754,7 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 </span></code></pre></div>
 <hr />
 <h2 id="deployment-distribution-tracking">Deployment Distribution Tracking<a class="headerlink" href="#deployment-distribution-tracking" title="Permanent link">&para;</a></h2>
-<p>Ondine uses an internal <code>DeploymentTracker</code> to map LiteLLM's internal deployment hash IDs back to the friendly <code>model_id</code> values from your <code>model_list</code>. This drives the progress display during execution, showing you which provider handled each request.</p>
+<p>Ondine uses an internal <code>DeploymentTracker</code> to map LiteLLM's opaque deployment hash IDs back to the <code>model_id</code> values from your <code>model_list</code>. This drives the progress display during execution, showing which provider handled each request.</p>
 <p>To get readable labels in the progress UI, set <code>model_id</code> on each entry:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="s2">&quot;model_name&quot;</span><span class="p">:</span> <span class="s2">&quot;fast-llm&quot;</span><span class="p">,</span>

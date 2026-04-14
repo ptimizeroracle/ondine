@@ -23,7 +23,7 @@
     
     
       
-        <title>Knowledge Base & RAG Guide - Ondine Documentation</title>
+        <title>Building RAG Pipelines with KnowledgeStore - Ondine Documentation</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#knowledge-base-rag-guide" class="md-skip">
+        <a href="#building-rag-pipelines-with-knowledgestore" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Knowledge Base &amp; RAG Guide
+              Building RAG Pipelines with KnowledgeStore
             
           </span>
         </div>
@@ -1094,10 +1094,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-it-does-under-the-hood" class="md-nav__link">
+  <a href="#what-happens-under-the-hood" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What it does under the hood
+        What happens under the hood
       
     </span>
   </a>
@@ -1433,10 +1433,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#combining-reranking-and-query-transformation" class="md-nav__link">
+  <a href="#stacking-reranking-with-query-transformation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Combining reranking and query transformation
+        Stacking reranking with query transformation
       
     </span>
   </a>
@@ -1814,7 +1814,7 @@
   
 
 
-<h1 id="knowledge-base-rag-guide">Knowledge Base &amp; RAG Guide<a class="headerlink" href="#knowledge-base-rag-guide" title="Permanent link">&para;</a></h1>
+<h1 id="building-rag-pipelines-with-knowledgestore">Building RAG Pipelines with KnowledgeStore<a class="headerlink" href="#building-rag-pipelines-with-knowledgestore" title="Permanent link">&para;</a></h1>
 <p><code>KnowledgeStore</code> gives you RAG in two method calls: <code>ingest()</code> your documents, <code>search()</code> them with hybrid BM25 + dense vector retrieval, and let the pipeline inject context into prompts for you.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span>
@@ -1831,7 +1831,7 @@
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">score</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">source</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">text</span><span class="p">[:</span><span class="mi">120</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>That covers ingest, search, and results. Everything below is configuration and fine-tuning.</p>
-<h2 id="what-it-does-under-the-hood">What it does under the hood<a class="headerlink" href="#what-it-does-under-the-hood" title="Permanent link">&para;</a></h2>
+<h2 id="what-happens-under-the-hood">What happens under the hood<a class="headerlink" href="#what-happens-under-the-hood" title="Permanent link">&para;</a></h2>
 <p>The full RAG lifecycle, handled for you:</p>
 <ul>
 <li><strong>Ingestion</strong> -- PDF, Markdown, plain text, CSV, HTML, image files</li>
@@ -1841,7 +1841,7 @@
 <li><strong>Reranking</strong> -- cross-encoder re-scoring for higher precision</li>
 <li><strong>Query transformation</strong> -- expands or rewrites queries before retrieval</li>
 <li><strong>OCR</strong> -- pulls text from images and scanned PDFs</li>
-<li><strong>Evaluation</strong> -- scores RAG answers on faithfulness, relevancy, and context precision with an LLM judge</li>
+<li><strong>Evaluation</strong> -- scores RAG answers on faithfulness, relevancy, and context precision using an LLM-as-judge approach</li>
 </ul>
 <!-- IMAGE_PLACEHOLDER
 title: RAG Ingestion Pipeline
@@ -1854,7 +1854,7 @@ alt_text: Data flow diagram showing the RAG ingestion pipeline: documents are lo
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;ondine[knowledge]&#39;</span>
 </span></code></pre></div>
-<p>Gets you <code>pymupdf</code> (PDF extraction) and <code>sentence-transformers</code> (local embeddings + cross-encoder reranking).</p>
+<p>This pulls in <code>pymupdf</code> for PDF extraction and <code>sentence-transformers</code> for local embeddings and cross-encoder reranking.</p>
 <p>For API-based embedders, rerankers, query transformers, and OCR:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>litellm
 </span></code></pre></div>
@@ -1866,7 +1866,7 @@ alt_text: Data flow diagram showing the RAG ingestion pipeline: documents are lo
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>pip<span class="w"> </span>install<span class="w"> </span>python-doctr
 </span></code></pre></div>
 <h2 id="using-with-the-pipeline-builder">Using with the Pipeline Builder<a class="headerlink" href="#using-with-the-pipeline-builder" title="Permanent link">&para;</a></h2>
-<p>The most common pattern -- attach a <code>KnowledgeStore</code> to a pipeline so every row gets augmented with retrieved context automatically:</p>
+<p>This is where most people start. Attach a <code>KnowledgeStore</code> to a pipeline and every row gets augmented with retrieved context automatically:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span>
@@ -2048,7 +2048,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span></code></pre></div>
 <p><code>Document</code> is a frozen dataclass: <code>text: str</code>, <code>source: str</code>, <code>metadata: dict</code>.</p>
 <h2 id="chunking">Chunking<a class="headerlink" href="#chunking" title="Permanent link">&para;</a></h2>
-<p><code>SemanticChunker</code> splits documents by detecting breakpoints where sentence-level embeddings diverge. If <code>sentence-transformers</code> isn't installed, it falls back to fixed-size sentence-count windows. No crash, just coarser splits.</p>
+<p><code>SemanticChunker</code> splits documents by detecting breakpoints where consecutive sentence embeddings diverge beyond a threshold. If <code>sentence-transformers</code> isn't installed, it falls back to fixed-size sentence-count windows. No crash, just coarser splits.</p>
 <h3 id="default-behaviour">Default behaviour<a class="headerlink" href="#default-behaviour" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
@@ -2094,7 +2094,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </tbody>
 </table>
 <h2 id="embedding-models">Embedding Models<a class="headerlink" href="#embedding-models" title="Permanent link">&para;</a></h2>
-<p>Embeddings power dense vector search. Without an embedder, <code>KnowledgeStore</code> falls back to BM25 only.</p>
+<p>Dense vector search lives and dies by the embedding model. Without one configured, <code>KnowledgeStore</code> falls back to BM25 only, which still works but misses semantic matches.</p>
 <h3 id="auto-detection-default">Auto-detection (default)<a class="headerlink" href="#auto-detection-default" title="Permanent link">&para;</a></h3>
 <p>Pass <code>embedder=None</code> (or don't pass it at all) and the store tries to load <code>SentenceTransformerEmbedder("BAAI/bge-base-en-v1.5")</code>. If <code>sentence-transformers</code> isn't installed, embeddings get silently disabled -- you still get BM25.</p>
 <h3 id="sentencetransformerembedder-local">SentenceTransformerEmbedder (local)<a class="headerlink" href="#sentencetransformerembedder-local" title="Permanent link">&para;</a></h3>
@@ -2135,7 +2135,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span> <span class="n">embedder</span><span class="o">=</span><span class="n">MyEmbedder</span><span class="p">())</span>
 </span></code></pre></div>
 <h2 id="reranking">Reranking<a class="headerlink" href="#reranking" title="Permanent link">&para;</a></h2>
-<p>Reranking re-scores your initial hybrid-search candidates with a cross-attention model. Better precision, one extra inference step.</p>
+<p>Reranking re-scores your initial hybrid-search candidates with a cross-attention model. One extra inference step, but the precision gain is worth it for any production workload.</p>
 <h3 id="enable-with-default-cross-encoder">Enable with default cross-encoder<a class="headerlink" href="#enable-with-default-cross-encoder" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span> <span class="n">reranker</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span></code></pre></div>
@@ -2178,10 +2178,10 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span> <span class="n">reranker</span><span class="o">=</span><span class="n">MyReranker</span><span class="p">())</span>
 </span></code></pre></div>
 <h2 id="query-transformation">Query Transformation<a class="headerlink" href="#query-transformation" title="Permanent link">&para;</a></h2>
-<p>Query transformers rewrite or expand the query before retrieval. The store runs hybrid search for each expanded query, deduplicates, then optionally reranks the merged set.</p>
-<p>All three built-in transformers need <code>litellm</code> and an API key for the underlying LLM.</p>
+<p>Query transformers rewrite or expand the user's query before retrieval runs. The store searches each expanded query independently, deduplicates the combined results, then optionally reranks the merged set.</p>
+<p>All three built-in transformers require <code>litellm</code> and an API key for the underlying LLM.</p>
 <h3 id="multiquerytransformer">MultiQueryTransformer<a class="headerlink" href="#multiquerytransformer" title="Permanent link">&para;</a></h3>
-<p>Generates N rephrasings of the original query. Retrieval unions results across all variants -- good for ambiguous queries where a single phrasing misses relevant docs.</p>
+<p>Generates N rephrasings of the original query, then unions retrieval results across all variants. Particularly effective for ambiguous queries where a single phrasing misses relevant docs.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span><span class="p">,</span> <span class="n">MultiQueryTransformer</span>
 </span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>
 </span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2198,7 +2198,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span></code></pre></div>
 <p>The transformer asks the LLM for a JSON array of <code>n</code> alternative formulations. Each one gets searched independently; results merge and deduplicate before reranking.</p>
 <h3 id="hydetransformer">HyDETransformer<a class="headerlink" href="#hydetransformer" title="Permanent link">&para;</a></h3>
-<p>Hypothetical Document Embeddings. The LLM generates a short hypothetical answer to your query, and that answer becomes the retrieval query. Because the hypothesis sits closer in embedding space to relevant passages than the raw question does, dense retrieval gets a real boost.</p>
+<p>Hypothetical Document Embeddings (from the <a href="https://arxiv.org/abs/2212.10496">Gao et al. 2022 paper</a>). The LLM generates a short hypothetical answer to your query, and that answer becomes the retrieval query. Why? The hypothesis sits closer in embedding space to relevant passages than the raw question does, so dense retrieval improves significantly.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span><span class="p">,</span> <span class="n">HyDETransformer</span>
 </span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>
 </span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2214,7 +2214,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span></code></pre></div>
 <p>Returns <code>[original_query, hypothesis]</code>. Both get searched; results merge before reranking.</p>
 <h3 id="stepbacktransformer">StepBackTransformer<a class="headerlink" href="#stepbacktransformer" title="Permanent link">&para;</a></h3>
-<p>Generates a more abstract version of your query so retrieval can surface broader context that the specific query would miss.</p>
+<p>Generates a more abstract version of your query. If someone asks "What's the rate limit for the /users endpoint?", the step-back query might become "How does the API handle rate limiting?" -- pulling in broader context the specific question would miss.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span><span class="p">,</span> <span class="n">StepBackTransformer</span>
 </span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>
 </span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2229,7 +2229,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 <div class="language-python highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span> <span class="n">query_transform</span><span class="o">=</span><span class="s2">&quot;step-back&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Returns <code>[original_query, step_back_query]</code>. Both searched; results merged.</p>
-<h3 id="combining-reranking-and-query-transformation">Combining reranking and query transformation<a class="headerlink" href="#combining-reranking-and-query-transformation" title="Permanent link">&para;</a></h3>
+<h3 id="stacking-reranking-with-query-transformation">Stacking reranking with query transformation<a class="headerlink" href="#stacking-reranking-with-query-transformation" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
 </span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>    <span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span>
 </span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="n">embedder</span><span class="o">=</span><span class="s2">&quot;BAAI/bge-base-en-v1.5&quot;</span><span class="p">,</span>
@@ -2240,7 +2240,7 @@ alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge 
 </span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a>
 </span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="n">results</span> <span class="o">=</span> <span class="n">kb</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;what are the rate limits for the API?&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Here's what happens at search time:
+<p>At search time, the three stages fire in sequence:
 1. <code>HyDETransformer</code> produces <code>[original_query, hypothesis]</code>
 2. Hybrid search runs for each variant; results get deduplicated
 3. <code>CrossEncoderReranker</code> re-scores the merged set and returns top-5</p>
@@ -2253,9 +2253,9 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 -->
 <p><img alt="RAG Search Flow" src="../images/rag-search-flow.png" /></p>
 <h2 id="ocr-support">OCR Support<a class="headerlink" href="#ocr-support" title="Permanent link">&para;</a></h2>
-<p>OCR providers extract text from image files (<code>.png</code>, <code>.jpg</code>, <code>.webp</code>, etc.) and optionally from images embedded inside PDFs.</p>
+<p>Three OCR backends are available, ranging from free-and-local to API-based. Each extracts text from image files (<code>.png</code>, <code>.jpg</code>, <code>.webp</code>, etc.) and optionally from images embedded inside PDFs.</p>
 <h3 id="visionocr-multimodal-llm">VisionOCR (multimodal LLM)<a class="headerlink" href="#visionocr-multimodal-llm" title="Permanent link">&para;</a></h3>
-<p>Uses a vision-capable LLM via <code>litellm</code>. Best quality for complex layouts, charts, and tables.</p>
+<p>Uses a vision-capable LLM via <code>litellm</code>. Highest quality of the three options, especially on complex layouts, charts, and tables. Costs more per image than local alternatives.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span><span class="p">,</span> <span class="n">VisionOCR</span>
 </span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>
 </span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2295,7 +2295,7 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 <div class="language-python highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">,</span> <span class="n">ocr</span><span class="o">=</span><span class="s2">&quot;tesseract&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="doctrocr-local-deep-learning">DocTROCR (local, deep-learning)<a class="headerlink" href="#doctrocr-local-deep-learning" title="Permanent link">&para;</a></h3>
-<p>High-accuracy local OCR tuned for documents and screenshots. Needs <code>python-doctr</code>.</p>
+<p>Deep-learning OCR that runs locally. Better accuracy than Tesseract on document layouts and screenshots, but heavier to install. Needs <code>python-doctr</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge</span><span class="w"> </span><span class="kn">import</span> <span class="n">KnowledgeStore</span><span class="p">,</span> <span class="n">DocTROCR</span>
 </span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>
 </span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span>
@@ -2429,7 +2429,7 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 </span><span id="__span-43-33"><a id="__codelineno-43-33" name="__codelineno-43-33" href="#__codelineno-43-33"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">[[</span><span class="s2">&quot;question&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
 </span></code></pre></div>
 <h2 id="evaluation">Evaluation<a class="headerlink" href="#evaluation" title="Permanent link">&para;</a></h2>
-<p><code>LLMJudge</code> scores a RAG answer on three dimensions.</p>
+<p><code>LLMJudge</code> scores RAG output on three axes: faithfulness (is the answer grounded in context?), relevancy (does it address the query?), and context precision (did retrieval pull the right chunks?).</p>
 <h3 id="using-llmjudge-directly">Using LLMJudge directly<a class="headerlink" href="#using-llmjudge-directly" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-44-1"><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.knowledge.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMJudge</span>
 </span><span id="__span-44-2"><a id="__codelineno-44-2" name="__codelineno-44-2" href="#__codelineno-44-2"></a>
@@ -2481,7 +2481,7 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 </span><span id="__span-47-4"><a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a><span class="c1"># Persistent: survives restarts, shareable across pipelines</span>
 </span><span id="__span-47-5"><a id="__codelineno-47-5" name="__codelineno-47-5" href="#__codelineno-47-5"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>In production, ingest once and reuse the same <code>db_path</code>:</p>
+<p>In production, ingest once and point subsequent runs at the same <code>db_path</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-48-1"><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="c1"># ingest_once.py — run once to populate</span>
 </span><span id="__span-48-2"><a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">)</span>
 </span><span id="__span-48-3"><a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a><span class="n">kb</span><span class="o">.</span><span class="n">ingest</span><span class="p">(</span><span class="s2">&quot;docs/&quot;</span><span class="p">)</span>
@@ -2491,7 +2491,7 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 </span><span id="__span-48-7"><a id="__codelineno-48-7" name="__codelineno-48-7" href="#__codelineno-48-7"></a><span class="n">kb</span> <span class="o">=</span> <span class="n">KnowledgeStore</span><span class="p">(</span><span class="s2">&quot;knowledge.db&quot;</span><span class="p">)</span>  <span class="c1"># no ingest() call needed</span>
 </span><span id="__span-48-8"><a id="__codelineno-48-8" name="__codelineno-48-8" href="#__codelineno-48-8"></a><span class="n">results</span> <span class="o">=</span> <span class="n">kb</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;authentication flow&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Re-ingesting large document sets is expensive. Separate the ingest step from query time.</p>
+<p>Re-ingesting a large corpus means re-chunking and re-embedding everything. Keep the ingest step separate from query time.</p>
 <h2 id="supported-file-types">Supported File Types<a class="headerlink" href="#supported-file-types" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2540,7 +2540,7 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 </tbody>
 </table>
 <h2 id="custom-components">Custom Components<a class="headerlink" href="#custom-components" title="Permanent link">&para;</a></h2>
-<p>All components follow a protocol pattern. Pass any object with the matching method signature -- no subclassing needed.</p>
+<p>Every pluggable component is a protocol. Pass any object with the matching method signature. No subclassing, no base classes, no registration.</p>
 <table>
 <thead>
 <tr>
@@ -2578,11 +2578,10 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 </tbody>
 </table>
 <h2 id="practical-tips">Practical Tips<a class="headerlink" href="#practical-tips" title="Permanent link">&para;</a></h2>
-<p><strong>Chunk size tradeoffs.</strong> Smaller chunks (<code>max_chunk_tokens=256</code>) sharpen precision but lose surrounding context. Larger chunks (<code>512-1024</code>) preserve context but dilute relevance scores. Start with 512 (the default) and tune from there based on eval scores.</p>
-<p><strong>Embedder choice.</strong> <code>BAAI/bge-base-en-v1.5</code> (the default) is solid for most use cases. Switch to <code>text-embedding-3-small</code> if you want API-based embeddings and don't want local GPU/CPU overhead.</p>
-<p><strong>Turn on reranking for anything real.</strong> <code>reranker=True</code> runs a cross-encoder locally -- no API cost -- and the precision improvement is usually significant.</p>
-<p><strong>Picking a query transform.</strong> <code>"hyde"</code> works well for QA where queries are questions and documents are factual. <code>"multi-query"</code> is better for broad, exploratory retrieval. <code>"step-back"</code> helps when queries are too specific and miss conceptual matches.</p>
-<p><strong>Stack them.</strong> Reranking and query transformation play well together. Query transformation widens recall; reranking tightens precision on the merged candidates.</p>
+<p>Start with 512-token chunks (the default). If your eval scores show the model hallucinating past the retrieved context, try dropping to 256 -- you'll get sharper precision at the cost of losing surrounding context. Going above 512 preserves more context but dilutes relevance scores. Let the eval numbers decide, not intuition.</p>
+<p>For embeddings, <code>BAAI/bge-base-en-v1.5</code> handles most English workloads well. Swap to <code>text-embedding-3-small</code> if you want to skip local GPU/CPU overhead and don't mind the API cost.</p>
+<p>Turn on reranking for anything beyond a prototype. <code>reranker=True</code> runs a cross-encoder locally with zero API cost, and the precision lift is hard to argue with.</p>
+<p>On query transforms: reach for <code>"hyde"</code> first when your queries are questions and your documents are factual. <code>"multi-query"</code> fits better for broad exploratory retrieval where you need recall. <code>"step-back"</code> is the one to try when specific queries miss conceptual matches. And yes, you should stack transforms with reranking. The transform widens recall; the reranker tightens precision on the merged candidates.</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="no-results-returned">No results returned<a class="headerlink" href="#no-results-returned" title="Permanent link">&para;</a></h3>
 <ul>
@@ -2600,9 +2599,9 @@ alt_text: Flowchart showing the RAG search flow: user query optionally passes th
 <h3 id="importerror-pymupdf-is-required"><code>ImportError: PyMuPDF is required</code><a class="headerlink" href="#importerror-pymupdf-is-required" title="Permanent link">&para;</a></h3>
 <p><code>pip install 'ondine[knowledge]'</code></p>
 <h3 id="sentence-transformers-not-installed-using-fixed-size-chunking"><code>sentence-transformers not installed; using fixed-size chunking</code><a class="headerlink" href="#sentence-transformers-not-installed-using-fixed-size-chunking" title="Permanent link">&para;</a></h3>
-<p>Info-level log, not an error. Install <code>sentence-transformers</code> (comes with <code>ondine[knowledge]</code>) for semantic chunking. Without it, the chunker uses fixed-size windows -- functional but coarser.</p>
+<p>This is an info-level log, not an error. Install <code>sentence-transformers</code> (bundled with <code>ondine[knowledge]</code>) for semantic chunking. Without it, the chunker uses fixed-size windows. Still works, just coarser.</p>
 <h3 id="query-transformation-has-no-effect">Query transformation has no effect<a class="headerlink" href="#query-transformation-has-no-effect" title="Permanent link">&para;</a></h3>
-<p>All query transformers need <code>litellm</code> and a valid API key. Make sure <code>litellm</code> is installed and the right env var (e.g. <code>OPENAI_API_KEY</code>) is set. When a transformer call fails, it logs a warning and falls back to the original query silently.</p>
+<p>All query transformers require <code>litellm</code> and a valid API key. Make sure <code>litellm</code> is installed and the right env var (e.g. <code>OPENAI_API_KEY</code>) is set. When a transformer call fails, it logs a warning and falls back to the original query silently -- easy to miss if you're not watching logs.</p>
 <h2 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
 <h3 id="knowledgestore_1"><code>KnowledgeStore</code><a class="headerlink" href="#knowledgestore_1" title="Permanent link">&para;</a></h3>
 <table>

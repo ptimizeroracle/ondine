@@ -1277,7 +1277,7 @@
 
 
 <h1 id="checkpointing">Checkpointing<a class="headerlink" href="#checkpointing" title="Permanent link">&para;</a></h1>
-<p>Checkpointing saves your pipeline's state to disk as it runs. Crash, network blip, Ctrl+C — doesn't matter. You pick up from the last saved position instead of row zero.</p>
+<p>Checkpointing saves pipeline state to disk as it runs. Crash, network blip, Ctrl+C. You pick up from the last saved position instead of row zero, and every LLM call you already paid for stays paid for.</p>
 <h2 id="quick-reference">Quick Reference<a class="headerlink" href="#quick-reference" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1319,17 +1319,17 @@ placement: full-width
 alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at row N, save checkpoint, resume from row N, complete with no duplicate cost.
 -->
 <p><img alt="Checkpoint Resume Lifecycle" src="../images/checkpoint-resume-lifecycle.png" /></p>
-<p>The <code>StateManager</code> periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:</p>
+<p>The <code>StateManager</code> periodically serialises execution context (last processed row index, accumulated cost, completed responses) into a compressed JSON file:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>.checkpoints/checkpoint_&lt;session-uuid&gt;.json.gz
 </span></code></pre></div>
-<p>When execution fails, you get a ready-to-paste resume call in the logs:</p>
+<p>When execution fails, the logs hand you a ready-to-paste resume call:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Pipeline failed. Checkpoint saved.
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>Resume with: pipeline.execute(resume_from=UUID(&#39;e650ee2a-0c71-4761-ac3f-bdab8ecd920b&#39;))
 </span></code></pre></div>
-<p>Copy-paste that, and the pipeline skips everything already done. Zero additional LLM cost for completed rows.</p>
+<p>Paste that line back in and the pipeline skips everything already done. No duplicate LLM spend.</p>
 <h2 id="builder-methods">Builder Methods<a class="headerlink" href="#builder-methods" title="Permanent link">&para;</a></h2>
 <h3 id="with_checkpoint_dirdirectory-str"><code>with_checkpoint_dir(directory: str)</code><a class="headerlink" href="#with_checkpoint_dirdirectory-str" title="Permanent link">&para;</a></h3>
-<p>Where checkpoint files go. Directory gets created if it doesn't exist.</p>
+<p>Sets the directory for checkpoint files. Created automatically if missing.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">])</span>
@@ -1349,7 +1349,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 -->
 <p><img alt="StateManager Periodic Save Cycle" src="../images/statemanager-periodic-save-cycle.png" /></p>
 <h3 id="with_checkpoint_intervalrows-int"><code>with_checkpoint_interval(rows: int)</code><a class="headerlink" href="#with_checkpoint_intervalrows-int" title="Permanent link">&para;</a></h3>
-<p>How often a checkpoint is written. Lower = less re-work on failure, but more disk I/O.</p>
+<p>Controls how many rows pass between writes. Lower values mean less re-work after a crash but more disk I/O. For most jobs the default of 500 is fine.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">])</span>
@@ -1360,7 +1360,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><strong>Default:</strong> <code>500</code> rows.</p>
-<p>Here's what works in practice:</p>
+<p>Rough sizing guide:</p>
 <table>
 <thead>
 <tr>
@@ -1390,8 +1390,8 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 <h3 id="with_checkpoint_cleanupenabled-bool-true"><code>with_checkpoint_cleanup(enabled: bool = True)</code><a class="headerlink" href="#with_checkpoint_cleanupenabled-bool-true" title="Permanent link">&para;</a></h3>
 <p>Controls whether checkpoint files get deleted after a successful run.</p>
 <ul>
-<li><code>True</code> (default) — deletes checkpoints once the pipeline returns successfully.</li>
-<li><code>False</code> — keeps them around. You want this when downstream code (writing to a database, pushing to S3) might fail after the pipeline itself finishes. Lets you resume without re-running LLM calls.</li>
+<li><code>True</code> (default) -- deletes checkpoints once the pipeline returns successfully.</li>
+<li><code>False</code> -- keeps them. Use this when downstream code (database writes, S3 uploads) might fail after the pipeline itself finishes. The checkpoint lets you resume without re-running LLM calls.</li>
 </ul>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
@@ -1403,11 +1403,11 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="resuming-a-failed-pipeline">Resuming a Failed Pipeline<a class="headerlink" href="#resuming-a-failed-pipeline" title="Permanent link">&para;</a></h2>
-<p>Pipeline fails, you get a UUID in the logs. Pass it to <code>execute()</code>:</p>
+<p>When a pipeline fails it prints a session UUID. Pass that UUID back to <code>execute()</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">uuid</span><span class="w"> </span><span class="kn">import</span> <span class="n">UUID</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Original pipeline definition — must be identical to the failed run</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Original pipeline definition -- must be identical to the failed run</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">])</span>
@@ -1428,7 +1428,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span></code></pre></div>
 <h2 id="practical-patterns">Practical Patterns<a class="headerlink" href="#practical-patterns" title="Permanent link">&para;</a></h2>
 <h3 id="overnight-batch-job">Overnight Batch Job<a class="headerlink" href="#overnight-batch-job" title="Permanent link">&para;</a></h3>
-<p>Long-running job? Checkpoint frequently. Keep checkpoints after success in case the DB write blows up.</p>
+<p>For long-running jobs, checkpoint frequently and keep the files after success. If the DB write blows up at 3 AM you still have every LLM response on disk.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1451,7 +1451,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="n">write_to_database</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">())</span>   <span class="c1"># If this fails, you can resume</span>
 </span></code></pre></div>
 <h3 id="auto-resume-script">Auto-Resume Script<a class="headerlink" href="#auto-resume-script" title="Permanent link">&para;</a></h3>
-<p>Wrap <code>execute()</code> to capture the session ID on failure so you can re-run automatically:</p>
+<p>Wrap <code>execute()</code> so you can capture the session ID on failure and re-run without manual copy-paste:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">uuid</span><span class="w"> </span><span class="kn">import</span> <span class="n">UUID</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
@@ -1486,7 +1486,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span><span id="__span-8-32"><a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a><span class="c1"># result = run(resume_from=UUID(&quot;...&quot;))</span>
 </span></code></pre></div>
 <h3 id="listing-checkpoints">Listing Checkpoints<a class="headerlink" href="#listing-checkpoints" title="Permanent link">&para;</a></h3>
-<p>Use <code>LocalFileCheckpointStorage</code> to see what's available before deciding which to resume:</p>
+<p><code>LocalFileCheckpointStorage</code> lets you browse available checkpoints before deciding which to resume:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.adapters.checkpoint_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFileCheckpointStorage</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
@@ -1509,14 +1509,14 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 </span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Deleted </span><span class="si">{</span><span class="n">deleted</span><span class="si">}</span><span class="s2"> old checkpoint files.&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="when-not-to-use-checkpointing">When NOT to Use Checkpointing<a class="headerlink" href="#when-not-to-use-checkpointing" title="Permanent link">&para;</a></h2>
-<p><strong>Small datasets (&lt; 1K rows).</strong> Pipeline finishes fast; checkpointing just adds overhead.</p>
-<p><strong>Idempotent pipelines that are cheap to rerun.</strong> If re-processing from scratch costs less than managing checkpoint state, skip it.</p>
-<p><strong>Streaming mode.</strong> With <code>execute_stream()</code>, think about checkpointing at the chunk level rather than the row level.</p>
+<p><strong>Small datasets (&lt; 1K rows).</strong> The pipeline finishes in seconds. Checkpointing adds overhead with no real safety gain.</p>
+<p><strong>Cheap, idempotent pipelines.</strong> If re-processing from scratch costs less than thinking about checkpoint state, just rerun.</p>
+<p><strong>Streaming mode.</strong> <code>execute_stream()</code> delivers results incrementally, so checkpointing belongs at the chunk level, not the row level.</p>
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../execution-modes/">Execution Modes</a> — choosing between standard, async, and streaming</li>
-<li><a href="../cost-control/">Cost Control</a> — budget limits to pair with long-running jobs</li>
-<li><a href="../error-handling/">Error Handling</a> — retry policies for transient failures</li>
+<li><a href="../execution-modes/">Execution Modes</a> -- choosing between standard, async, and streaming</li>
+<li><a href="../cost-control/">Cost Control</a> -- budget limits to pair with long-running jobs</li>
+<li><a href="../error-handling/">Error Handling</a> -- retry policies for transient failures</li>
 </ul>
 
 

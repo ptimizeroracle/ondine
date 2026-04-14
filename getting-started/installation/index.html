@@ -1925,7 +1925,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine
 </span></code></pre></div>
 <h3 id="using-uv-recommended">Using uv (Recommended)<a class="headerlink" href="#using-uv-recommended" title="Permanent link">&para;</a></h3>
-<p>uv is a fast Python package installer and resolver:</p>
+<p>uv resolves and installs packages significantly faster than pip:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install uv if you don&#39;t have it</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -1933,9 +1933,9 @@
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>ondine
 </span></code></pre></div>
 <h2 id="optional-dependencies">Optional Dependencies<a class="headerlink" href="#optional-dependencies" title="Permanent link">&para;</a></h2>
-<p>Ondine provides optional dependency groups for specific features:</p>
+<p>Install only what you need. Each extra pulls in a focused set of packages.</p>
 <h3 id="mlx-apple-silicon-local-inference">MLX (Apple Silicon Local Inference)<a class="headerlink" href="#mlx-apple-silicon-local-inference" title="Permanent link">&para;</a></h3>
-<p>For running models locally on Apple Silicon (M1/M2/M3/M4) with MLX:</p>
+<p>Run models locally on Apple Silicon (M1/M2/M3/M4) with MLX:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>mlx<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Requirements:</strong>
@@ -1947,60 +1947,52 @@
 - Mistral models
 - Any MLX-compatible model from Hugging Face</p>
 <h3 id="observability">Observability<a class="headerlink" href="#observability" title="Permanent link">&para;</a></h3>
-<p>For OpenTelemetry-based observability and tracing:</p>
+<p>OpenTelemetry-based tracing and metrics:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>observability<span class="o">]</span>
 </span></code></pre></div>
-<p><strong>Features:</strong>
-- Distributed tracing with Jaeger
-- Custom metrics export
-- Performance monitoring</p>
+<p>Adds distributed tracing (Jaeger), custom metrics export, and performance monitoring.</p>
 <h3 id="development-tools">Development Tools<a class="headerlink" href="#development-tools" title="Permanent link">&para;</a></h3>
-<p>For contributing or development:</p>
+<p>For contributing to Ondine:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>dev<span class="o">]</span>
 </span></code></pre></div>
-<p><strong>Includes:</strong>
-- pytest and test utilities
-- ruff for linting
-- mypy for type checking
-- pre-commit hooks
-- Security scanners (bandit, pip-audit)</p>
+<p>Pulls in pytest, ruff, mypy, pre-commit hooks, and security scanners (bandit, pip-audit).</p>
 <h3 id="redis-response-caching">Redis (Response Caching)<a class="headerlink" href="#redis-response-caching" title="Permanent link">&para;</a></h3>
-<p>For LiteLLM Redis-backed response caching:</p>
+<p>LiteLLM Redis-backed response caching:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>redis<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>redis&gt;=5.0.0</code></p>
 <h3 id="excel-support">Excel Support<a class="headerlink" href="#excel-support" title="Permanent link">&para;</a></h3>
-<p>For reading and writing <code>.xlsx</code> / <code>.xls</code> files:</p>
+<p>Read and write <code>.xlsx</code> / <code>.xls</code> files:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>excel<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>openpyxl&gt;=3.1.0</code></p>
 <h3 id="parquet-support">Parquet Support<a class="headerlink" href="#parquet-support" title="Permanent link">&para;</a></h3>
-<p>For reading and writing Parquet files:</p>
+<p>Read and write Parquet files:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>parquet<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>pyarrow&gt;=15.0.0</code></p>
 <h3 id="tui-terminal-user-interface">TUI (Terminal User Interface)<a class="headerlink" href="#tui-terminal-user-interface" title="Permanent link">&para;</a></h3>
-<p>For the interactive terminal dashboard:</p>
+<p>Interactive terminal dashboard:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>tui<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>textual&gt;=1.0.0</code></p>
 <h3 id="performance-uvloop">Performance (uvloop)<a class="headerlink" href="#performance-uvloop" title="Permanent link">&para;</a></h3>
-<p>For faster async I/O on Linux and macOS:</p>
+<p>Faster async I/O on Linux and macOS:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>performance<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>uvloop&gt;=0.19.0</code> (not installed on Windows)</p>
 <h3 id="knowledge-base-rag">Knowledge Base / RAG<a class="headerlink" href="#knowledge-base-rag" title="Permanent link">&para;</a></h3>
-<p>For PDF ingestion and embedding-based knowledge stores:</p>
+<p>PDF ingestion and embedding-based knowledge stores:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>knowledge<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>pymupdf&gt;=1.24</code>, <code>sentence-transformers&gt;=3.0</code></p>
 <h3 id="zep-long-term-memory">Zep (Long-Term Memory)<a class="headerlink" href="#zep-long-term-memory" title="Permanent link">&para;</a></h3>
-<p>For Zep Cloud-backed memory and conversation history:</p>
+<p>Zep Cloud-backed memory and conversation history:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>zep<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>zep-cloud&gt;=2.0</code></p>
 <h3 id="azure-managed-identity">Azure (Managed Identity)<a class="headerlink" href="#azure-managed-identity" title="Permanent link">&para;</a></h3>
-<p>Required when using Azure OpenAI with Managed Identity authentication:</p>
+<p>Required for Azure OpenAI with Managed Identity authentication:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>azure<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Installs:</strong> <code>azure-identity&gt;=1.15.0</code></p>
@@ -2012,7 +2004,6 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine<span class="o">[</span>all,mlx,observability<span class="o">]</span>
 </span></code></pre></div>
 <h2 id="verify-installation">Verify Installation<a class="headerlink" href="#verify-installation" title="Permanent link">&para;</a></h2>
-<p>Check that Ondine is installed correctly:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">ondine</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">ondine</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span>
@@ -2022,7 +2013,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>ondine<span class="w"> </span>--version
 </span></code></pre></div>
 <h2 id="api-keys-setup">API Keys Setup<a class="headerlink" href="#api-keys-setup" title="Permanent link">&para;</a></h2>
-<p>Ondine requires API keys for LLM providers. Set them as environment variables:</p>
+<p>Set provider keys as environment variables:</p>
 <h3 id="openai">OpenAI<a class="headerlink" href="#openai" title="Permanent link">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;sk-...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
 </span></code></pre></div>
@@ -2049,37 +2040,26 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;gsk_...&quot;</span><span class="w">  </span><span class="c1"># pragma: allowlist secret</span>
 </span></code></pre></div>
 <h3 id="environment-file">Environment File<a class="headerlink" href="#environment-file" title="Permanent link">&para;</a></h3>
-<p>For convenience, create a <code>.env</code> file in your project root:</p>
+<p>Or put everything in a <code>.env</code> file at your project root:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1"># .env</span>
 </span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...
 </span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...
 </span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_...
 </span></code></pre></div>
-<p>Ondine automatically loads <code>.env</code> files using python-dotenv.</p>
+<p>Ondine loads <code>.env</code> files automatically via python-dotenv.</p>
 <h2 id="upgrade">Upgrade<a class="headerlink" href="#upgrade" title="Permanent link">&para;</a></h2>
-<p>To upgrade to the latest version:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>ondine
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="import-error-no-module-named-ondine">Import Error: No module named 'ondine'<a class="headerlink" href="#import-error-no-module-named-ondine" title="Permanent link">&para;</a></h3>
-<p>Make sure you're in the correct Python environment:</p>
+<p>Verify you're in the right Python environment:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import sys; print(sys.executable)&quot;</span>
 </span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>pip<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>ondine
 </span></code></pre></div>
 <h3 id="mlx-installation-issues">MLX Installation Issues<a class="headerlink" href="#mlx-installation-issues" title="Permanent link">&para;</a></h3>
-<p>MLX only works on Apple Silicon. If you get import errors:</p>
-<ol>
-<li>Verify you're on Apple Silicon: <code>uname -m</code> should show <code>arm64</code></li>
-<li>Install Xcode Command Line Tools: <code>xcode-select --install</code></li>
-<li>Try reinstalling: <code>pip uninstall mlx mlx-lm &amp;&amp; pip install ondine[mlx]</code></li>
-</ol>
+<p>MLX only works on Apple Silicon. If imports fail, check three things: <code>uname -m</code> should print <code>arm64</code>, Xcode Command Line Tools must be installed (<code>xcode-select --install</code>), and a clean reinstall often fixes stale state: <code>pip uninstall mlx mlx-lm &amp;&amp; pip install ondine[mlx]</code>.</p>
 <h3 id="api-key-not-found">API Key Not Found<a class="headerlink" href="#api-key-not-found" title="Permanent link">&para;</a></h3>
-<p>If you get authentication errors:</p>
-<ol>
-<li>Check environment variables: <code>echo $OPENAI_API_KEY</code></li>
-<li>Verify <code>.env</code> file is in the correct directory</li>
-<li>Restart your Python session after setting environment variables</li>
-</ol>
+<p>Authentication errors usually mean the key isn't in scope. Run <code>echo $OPENAI_API_KEY</code> to confirm the variable is set, check that your <code>.env</code> file is in the project root, and restart your Python session after any changes.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../quickstart/">Quickstart Guide</a> - Build your first pipeline</li>

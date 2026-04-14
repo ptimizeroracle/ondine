@@ -1260,7 +1260,7 @@
 
 
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
-<p>The CLI tool is called <code>ondine</code> (<code>hermes</code> still works as an alias). It handles dataset processing, cost estimation, config validation, file inspection, checkpoint management, and provider listing. No Python required.</p>
+<p>The CLI is called <code>ondine</code> (<code>hermes</code> still works as an alias). It runs pipelines, estimates costs, validates configs, inspects data files, manages checkpoints, and lists providers. No Python scripting required.</p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>ondine
 </span></code></pre></div>
@@ -1268,7 +1268,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ondine<span class="w"> </span>--version
 </span></code></pre></div>
 <h2 id="configuration-file">Configuration File<a class="headerlink" href="#configuration-file" title="Permanent link">&para;</a></h2>
-<p>Every pipeline command needs a YAML (or JSON) config file via <code>--config</code> / <code>-c</code>. This is where you define your data source, prompt, LLM, processing behavior, and output.</p>
+<p>Every pipeline command reads a YAML (or JSON) config file passed with <code>--config</code> / <code>-c</code>. The config defines your data source, prompt, LLM, processing behavior, and output destination.</p>
 <p><strong>Minimal example (<code>config.yaml</code>):</strong></p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">data</span><span class="p">:</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
@@ -1301,7 +1301,7 @@
 <hr />
 <h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
 <h3 id="process"><code>process</code><a class="headerlink" href="#process" title="Permanent link">&para;</a></h3>
-<p>This is the command you'll run most of the time. It takes your config and runs the actual LLM pipeline against your dataset.</p>
+<p>The main event. Takes your config and runs the LLM pipeline against the dataset.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ondine process [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1409,10 +1409,10 @@
 </span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>ondine<span class="w"> </span>process<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">    </span>--checkpoint-dir<span class="w"> </span>/tmp/my-checkpoints
 </span></code></pre></div>
-<p>When it finishes, you get two tables: an <strong>Execution Results</strong> table (rows processed/failed/skipped, duration, total cost, cost per row) and a <strong>Quality Report</strong> (success rate, null/empty outputs, quality score).</p>
+<p>On completion you get two tables: <strong>Execution Results</strong> (rows processed/failed/skipped, duration, total cost, cost per row) and <strong>Quality Report</strong> (success rate, null/empty outputs, quality score).</p>
 <hr />
 <h3 id="estimate"><code>estimate</code><a class="headerlink" href="#estimate" title="Permanent link">&para;</a></h3>
-<p>Run this before <code>process</code> to see what the bill looks like. No data gets sent anywhere.</p>
+<p>Run this before <code>process</code> to preview the bill. Nothing leaves your machine.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ondine estimate [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1460,10 +1460,10 @@
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>ondine<span class="w"> </span>estimate<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>--model<span class="w"> </span>gpt-4o-mini
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>ondine<span class="w"> </span>estimate<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>--model<span class="w"> </span>gpt-4o
 </span></code></pre></div>
-<p>Output shows total cost, total/input/output tokens, rows to process, confidence level, and cost per row. You'll get a warning if the estimate goes above $10.</p>
+<p>Output includes total cost, token breakdown (input/output), rows to process, confidence level, and cost per row. Estimates above $10 trigger a warning.</p>
 <hr />
 <h3 id="validate"><code>validate</code><a class="headerlink" href="#validate" title="Permanent link">&para;</a></h3>
-<p>Catches config mistakes before you burn API credits. Does not call any LLM.</p>
+<p>Catches config mistakes before you burn API credits. No LLM calls, no network access.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>ondine validate [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1498,10 +1498,10 @@
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Verbose -- also shows configuration summary</span>
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>ondine<span class="w"> </span>validate<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>--verbose
 </span></code></pre></div>
-<p>Exit 0 means you're good. Exit 1 means something is wrong. Warnings (non-fatal) still print even on a passing run.</p>
+<p>Exit 0: valid. Exit 1: broken. Non-fatal warnings still print on a passing run.</p>
 <hr />
 <h3 id="resume"><code>resume</code><a class="headerlink" href="#resume" title="Permanent link">&para;</a></h3>
-<p>Pick up where you left off after a crash or Ctrl-C. Needs the session ID that was printed when the original run started.</p>
+<p>Picks up where a crashed or interrupted run left off. You need the session ID that was printed when the original run started.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>ondine resume [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1567,10 +1567,10 @@
 </span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>ondine<span class="w"> </span>resume<span class="w"> </span>-s<span class="w"> </span>3f2a1b4c-1234-5678-abcd-ef0123456789<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-o<span class="w"> </span>results_resumed.csv
 </span></code></pre></div>
-<p>Before it starts processing again, you'll see a <strong>Checkpoint Information</strong> table with the session ID, rows already done, total rows, last pipeline stage, timestamp, and cost so far.</p>
+<p>Before processing resumes, a <strong>Checkpoint Information</strong> table shows the session ID, rows completed, total rows, last pipeline stage, timestamp, and cost so far.</p>
 <hr />
 <h3 id="list-checkpoints"><code>list-checkpoints</code><a class="headerlink" href="#list-checkpoints" title="Permanent link">&para;</a></h3>
-<p>See what checkpoints exist. Useful when you don't remember the session ID.</p>
+<p>Lists existing checkpoints. Useful when you have lost track of session IDs.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>ondine list-checkpoints [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1600,7 +1600,7 @@
 <p>Prints a table: session ID (truncated), rows processed, total rows, last stage, cost so far, timestamp, file path.</p>
 <hr />
 <h3 id="inspect"><code>inspect</code><a class="headerlink" href="#inspect" title="Permanent link">&para;</a></h3>
-<p>Quick look at a data file before you write your config. Shows metadata, columns, and a row preview.</p>
+<p>Peek at a data file before writing your config. Shows metadata, columns, and a sample of rows.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>ondine inspect [OPTIONS]
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
@@ -1638,11 +1638,11 @@
 </span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Inspect an Excel workbook</span>
 </span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>ondine<span class="w"> </span>inspect<span class="w"> </span>-i<span class="w"> </span>data.xlsx
 </span></code></pre></div>
-<p>You get the file path, type, total rows, total columns, memory usage, per-column dtype and null counts, and a text row preview.</p>
-<p>Heads up: Excel files need <code>pip install ondine[excel]</code> and Parquet files need <code>pip install ondine[parquet]</code>.</p>
+<p>Output includes file path, type, row/column counts, memory usage, per-column dtypes and null counts, plus a text preview of the first rows.</p>
+<p>Excel support requires <code>pip install ondine[excel]</code>. Parquet requires <code>pip install ondine[parquet]</code>.</p>
 <hr />
 <h3 id="list-providers"><code>list-providers</code><a class="headerlink" href="#list-providers" title="Permanent link">&para;</a></h3>
-<p>Dumps the full provider table. No flags.</p>
+<p>Prints the full provider table. No flags needed.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>ondine list-providers
 </span></code></pre></div>
 <p><strong>Supported providers:</strong></p>
@@ -1709,7 +1709,7 @@
 </span></code></pre></div>
 <hr />
 <h2 id="config-file-reference">Config File Reference<a class="headerlink" href="#config-file-reference" title="Permanent link">&para;</a></h2>
-<p>Every key the YAML config accepts:</p>
+<p>Full list of accepted YAML keys:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Data source</span>
 </span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="nt">data</span><span class="p">:</span>
 </span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
@@ -1778,7 +1778,7 @@
 </span><span id="__span-18-14"><a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>ondine<span class="w"> </span>list-checkpoints
 </span><span id="__span-18-15"><a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>ondine<span class="w"> </span>resume<span class="w"> </span>-s<span class="w"> </span>&lt;session-id&gt;<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-o<span class="w"> </span>results.csv
 </span></code></pre></div>
-<p>Always set <code>--max-budget</code> on your first run with a new dataset. Better to hit the ceiling early than to find out the hard way.</p>
+<p>Set <code>--max-budget</code> on your first run with any new dataset. Hitting a $5 ceiling beats discovering a $200 surprise.</p>
 
 
 

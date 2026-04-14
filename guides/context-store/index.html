@@ -1327,9 +1327,9 @@
 
 
 <h1 id="context-store-and-anti-hallucination">Context Store and Anti-Hallucination<a class="headerlink" href="#context-store-and-anti-hallucination" title="Permanent link">&para;</a></h1>
-<p>The context store gives your pipeline memory. Each LLM output gets stored as an evidence record that future runs can retrieve, verify against source text, and check for contradictions. You wire up the pieces you need -- priming, grounding, contradiction detection, confidence scoring -- and skip what you don't.</p>
+<p>The context store gives your pipeline memory. Every LLM output becomes an evidence record. Future runs retrieve it, verify it against source text, check for contradictions. Wire up the pieces you need -- priming, grounding, contradiction detection, confidence scoring -- and ignore the rest.</p>
 <h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<p>Attach a context store to a pipeline and each row flows through up to six stages:</p>
+<p>Attach a context store and each row flows through up to six stages:</p>
 <ol>
 <li><strong>Evidence priming</strong> (optional, pre-LLM) -- searches the store for prior validated answers relevant to the current row. Top-k results land in <code>_evidence_context</code>.</li>
 <li><strong>LLM inference</strong> -- the model generates a response, optionally informed by primed evidence.</li>
@@ -1349,7 +1349,7 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 <hr />
 <h2 id="store-backends">Store backends<a class="headerlink" href="#store-backends" title="Permanent link">&para;</a></h2>
 <h3 id="rustcontextstore">RustContextStore<a class="headerlink" href="#rustcontextstore" title="Permanent link">&para;</a></h3>
-<p>The default. Compiles to a native extension (<code>ondine._engine</code>) backed by SQLite with FTS5 full-text search. Hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, contradiction tracking.</p>
+<p>The default. Compiles to a native extension (<code>ondine._engine</code>) backed by SQLite with FTS5 full-text search. You get hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, and contradiction tracking.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">RustContextStore</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Persistent database — survives between runs</span>
@@ -1358,10 +1358,10 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># In-memory (Rust speed, no persistence)</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">store</span> <span class="o">=</span> <span class="n">RustContextStore</span><span class="p">(</span><span class="s2">&quot;:memory:&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Use this for production workloads, multi-run datasets, anything where evidence should accumulate between runs.</p>
-<p>Requires the compiled Rust extension. <code>pip install ondine</code> handles it -- a Rust toolchain is only needed when building from source.</p>
+<p>This is what you want for production. Multi-run datasets, accumulated evidence, the works.</p>
+<p>Requires the compiled Rust extension. <code>pip install ondine</code> handles it -- you only need a Rust toolchain when building from source.</p>
 <h3 id="zepcontextstore">ZepContextStore<a class="headerlink" href="#zepcontextstore" title="Permanent link">&para;</a></h3>
-<p>Cloud-hosted knowledge graph backed by <a href="https://www.getzep.com/">Zep Cloud</a>. Zep extracts entities and relationships from stored text automatically, giving you graph-aware semantic search with cross-encoder reranking.</p>
+<p>Cloud-hosted knowledge graph backed by <a href="https://www.getzep.com/">Zep Cloud</a>. Zep extracts entities and relationships from stored text automatically, so you get graph-aware semantic search with cross-encoder reranking out of the box.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZepContextStore</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Uses ZEP_API_KEY environment variable</span>
@@ -1370,17 +1370,17 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Explicit API key</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">store</span> <span class="o">=</span> <span class="n">ZepContextStore</span><span class="p">(</span><span class="n">graph_id</span><span class="o">=</span><span class="s2">&quot;my-pipeline-run&quot;</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;zep-...&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Each <code>graph_id</code> is an isolated namespace. Share a graph across pipeline runs for cross-run memory, or use separate graphs for isolation. Defaults to a random UUID if you don't specify one.</p>
-<p>Good for managed cloud storage, persistent knowledge graphs, or when you want Zep's entity/relationship extraction.</p>
+<p>Each <code>graph_id</code> is an isolated namespace. Share one across pipeline runs for cross-run memory, or use separate graphs to keep experiments from contaminating each other. Defaults to a random UUID if you don't specify one.</p>
+<p>Best fit: managed cloud storage, persistent knowledge graphs, or cases where Zep's entity/relationship extraction does the heavy lifting for you.</p>
 <p>Requires <code>pip install ondine[zep]</code> and a <code>ZEP_API_KEY</code> environment variable (or explicit <code>api_key</code>).</p>
-<p><code>ZepContextStore.available</code> returns <code>False</code> if the client couldn't initialize (missing package or bad key). The store degrades gracefully -- <code>search()</code> returns an empty list -- so your pipeline keeps running even without a valid Zep connection.</p>
+<p><code>ZepContextStore.available</code> returns <code>False</code> if the client couldn't initialize (missing package or bad key). It degrades gracefully -- <code>search()</code> returns an empty list -- so your pipeline won't crash just because Zep is down.</p>
 <h3 id="inmemorycontextstore">InMemoryContextStore<a class="headerlink" href="#inmemorycontextstore" title="Permanent link">&para;</a></h3>
-<p>Pure-Python fallback. No external dependencies. Same TF-IDF algorithm as the Rust backend, just slower. Everything vanishes when the process exits.</p>
+<p>Pure-Python fallback. Zero external dependencies. Same TF-IDF algorithm as the Rust backend, just slower. Everything vanishes when the process exits.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryContextStore</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">store</span> <span class="o">=</span> <span class="n">InMemoryContextStore</span><span class="p">()</span>
 </span></code></pre></div>
-<p>Use it for unit tests, CI without a Rust toolchain, quick prototyping.</p>
+<p>Good for unit tests, CI where you can't compile Rust, quick prototyping. Nothing more.</p>
 <hr />
 <h2 id="working-with-stores-directly">Working with stores directly<a class="headerlink" href="#working-with-stores-directly" title="Permanent link">&para;</a></h2>
 <p>All three backends implement the <code>ContextStore</code> protocol:</p>
@@ -1522,13 +1522,13 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 <hr />
 <h2 id="pipeline-builder-api">Pipeline builder API<a class="headerlink" href="#pipeline-builder-api" title="Permanent link">&para;</a></h2>
 <h3 id="with_context_store">with_context_store()<a class="headerlink" href="#with_context_store" title="Permanent link">&para;</a></h3>
-<p>Attaches a context store to the pipeline. Every other anti-hallucination method needs a store and will call this automatically if you haven't set one.</p>
+<p>Attaches a context store to the pipeline. Every other anti-hallucination method needs a store. If you forget this call, the builder adds one for you.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_context_store</span><span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">store</span><span class="p">:</span> <span class="n">ContextStore</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PipelineBuilder</span>
 </span></code></pre></div>
 <ul>
-<li><code>store</code> -- A <code>ContextStore</code> instance. Pass <code>None</code> and the builder auto-detects: tries <code>RustContextStore</code> (in-memory) first, falls back to <code>InMemoryContextStore</code> if the Rust extension isn't available.</li>
+<li><code>store</code> -- A <code>ContextStore</code> instance. Pass <code>None</code> and the builder picks for you: it tries <code>RustContextStore</code> (in-memory) first, then falls back to <code>InMemoryContextStore</code> if the Rust extension isn't available.</li>
 </ul>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">RustContextStore</span>
@@ -1542,10 +1542,10 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 </span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 </span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>If you want evidence to persist across runs, pass an explicit store with a file path. The auto-detected store uses <code>":memory:"</code> and throws everything away on exit.</p>
+<p>Here's the thing: if you want evidence to persist across runs, pass an explicit store with a file path. The auto-detected store uses <code>":memory:"</code> and throws everything away on exit.</p>
 <hr />
 <h3 id="with_evidence_priming">with_evidence_priming()<a class="headerlink" href="#with_evidence_priming" title="Permanent link">&para;</a></h3>
-<p>Enriches each row with prior validated answers before LLM inference. Searches the store using the configured query columns, writes top-k results to <code>_evidence_context</code> and <code>_evidence_count</code>. The prompt formatter picks up <code>_evidence_context</code> automatically if your template references it.</p>
+<p>Before LLM inference, this searches the store for prior validated answers that match the current row. Top-k results land in <code>_evidence_context</code> and <code>_evidence_count</code>. Reference <code>_evidence_context</code> in your prompt template and the formatter picks it up automatically.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_evidence_priming</span><span class="p">(</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">query_columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="o">*</span><span class="p">,</span>
@@ -1556,7 +1556,7 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 <ul>
 <li><code>query_columns</code> -- Input columns to concatenate as the search query. Defaults to the pipeline's input columns.</li>
 <li><code>top_k</code> -- Max evidence records retrieved per row.</li>
-<li><code>min_score</code> -- Minimum relevance score (0.0--1.0). Results below this get discarded so you don't inject noise.</li>
+<li><code>min_score</code> -- Minimum relevance score (0.0--1.0). Anything below this gets thrown out. Low-scoring evidence is just noise in your prompt.</li>
 </ul>
 <p>First run? The store is empty, so priming is a no-op. Evidence accumulates as grounding and verification store validated claims. Second run onward is where you see the benefit.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1579,7 +1579,7 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 </span></code></pre></div>
 <hr />
 <h3 id="with_grounding">with_grounding()<a class="headerlink" href="#with_grounding" title="Permanent link">&para;</a></h3>
-<p>Verifies each LLM response against its source text after inference. Adds <code>grounding_score</code> (float, 0--1) and <code>grounding_flag</code> (bool, <code>True</code> when below threshold).</p>
+<p>Post-inference reality check. Compares each LLM response against its source text and scores the similarity. Adds <code>grounding_score</code> (float, 0--1) and <code>grounding_flag</code> (bool, <code>True</code> when below threshold).</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_grounding</span><span class="p">(</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">action</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;flag&quot;</span><span class="p">,</span>
@@ -1592,7 +1592,7 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 <li><code>"flag"</code> (default) -- adds the score and flag columns, keeps going.</li>
 <li><code>"retry"</code> -- re-prompts the LLM for that row.</li>
 <li><code>"skip"</code> -- drops the ungrounded row entirely.</li>
-<li><code>embed_fn</code> -- Optional callable: <code>(list[str]) -&gt; list[list[float]]</code>. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is <code>max(tfidf_score, embedding_score)</code> -- embeddings can rescue claims that TF-IDF misses due to vocabulary mismatch.</li>
+<li><code>embed_fn</code> -- Optional callable: <code>(list[str]) -&gt; list[list[float]]</code>. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is <code>max(tfidf_score, embedding_score)</code>. This matters because embeddings catch semantic matches that TF-IDF misses when the vocabulary differs.</li>
 </ul>
 <!-- IMAGE_PLACEHOLDER
 title: Grounding Verification Flow
@@ -1635,7 +1635,7 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 </span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 </span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="p">)</span>
 </span></code></pre></div>
-<p><strong>Threshold cheat sheet:</strong></p>
+<p><strong>How strict is strict?</strong></p>
 <table>
 <thead>
 <tr>
@@ -1664,7 +1664,7 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 </table>
 <hr />
 <h3 id="with_contradiction_detection">with_contradiction_detection()<a class="headerlink" href="#with_contradiction_detection" title="Permanent link">&para;</a></h3>
-<p>Flags rows whose output conflicts with a previous row sharing the same key column values. Adds a <code>contradiction_flag</code> (bool) column.</p>
+<p>Catches inconsistency. If two rows share the same key column values but the model produced different outputs, something is wrong. Adds a <code>contradiction_flag</code> (bool) column.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_contradiction_detection</span><span class="p">(</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">key_columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">value_columns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1674,7 +1674,7 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 <ul>
 <li><code>key_columns</code> -- Columns identifying the same entity (e.g., <code>["product_id"]</code>). Rows with matching values here get compared. Defaults to input columns.</li>
 <li><code>value_columns</code> -- Columns holding outputs to compare. Defaults to output columns.</li>
-<li><code>tolerance</code> -- Differences at or below this value aren't flagged. <code>None</code> means exact string equality. Handy for numeric outputs -- <code>tolerance=1</code> on a 0--5 rating scale ignores +/-1 differences.</li>
+<li><code>tolerance</code> -- Differences at or below this value aren't flagged. <code>None</code> means exact string equality. For numeric outputs, set <code>tolerance=1</code> on a 0--5 rating scale and +/-1 differences stop triggering false alarms.</li>
 </ul>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
@@ -1690,10 +1690,10 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 </span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 </span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="p">)</span>
 </span></code></pre></div>
-<p><code>contradiction_flag = True</code> means this row's output differs from a previous row with the same <code>product_id</code>. Could be LLM inconsistency. Could be genuinely different items sharing an ID. Investigate.</p>
+<p><code>contradiction_flag = True</code> means this row's output differs from a previous row with the same <code>product_id</code>. Maybe the model is being flaky. Maybe two genuinely different items share an ID. Either way, look at it.</p>
 <hr />
 <h3 id="with_confidence_scoring">with_confidence_scoring()<a class="headerlink" href="#with_confidence_scoring" title="Permanent link">&para;</a></h3>
-<p>Adds a <code>confidence_score</code> column (float, 0--1) derived from grounding similarity and evidence support count.</p>
+<p>Rolls grounding similarity and evidence support count into a single number. Adds a <code>confidence_score</code> column (float, 0--1).</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_confidence_scoring</span><span class="p">(</span>
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">include_in_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">scoring_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
@@ -1763,7 +1763,7 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 </span><span id="__span-16-41"><a id="__codelineno-16-41" name="__codelineno-16-41" href="#__codelineno-16-41"></a>     <span class="s2">&quot;contradiction_flag&quot;</span><span class="p">,</span> <span class="s2">&quot;confidence_score&quot;</span><span class="p">]</span>
 </span><span id="__span-16-42"><a id="__codelineno-16-42" name="__codelineno-16-42" href="#__codelineno-16-42"></a><span class="p">])</span>
 </span></code></pre></div>
-<p>Columns the anti-hallucination stack adds:</p>
+<p>Here's what the anti-hallucination stack adds to your output DataFrame:</p>
 <table>
 <thead>
 <tr>
@@ -1848,8 +1848,8 @@ alt_text: Flowchart showing grounding verification: LLM response is scored again
 </span></code></pre></div>
 </li>
 </ol>
-<p>Zep graphs get created on first use. Storing to the same <code>graph_id</code> across runs accumulates evidence over time. Use a unique <code>graph_id</code> per project or experiment to keep things separate.</p>
-<p>One caveat: <code>ZepContextStore</code> doesn't implement <code>ground()</code> or <code>add_contradiction()</code> -- those are no-ops. If you need full grounding and contradiction support with cloud persistence, pair <code>ZepContextStore</code> for storage/search with <code>RustContextStore</code> for grounding, or just use <code>RustContextStore</code> for everything.</p>
+<p>Zep graphs get created on first use. Same <code>graph_id</code> across runs means evidence accumulates. Different <code>graph_id</code> per experiment keeps things clean.</p>
+<p>But watch out: <code>ZepContextStore</code> doesn't implement <code>ground()</code> or <code>add_contradiction()</code>. Those calls are no-ops. If you need full grounding and contradiction support with cloud persistence, pair <code>ZepContextStore</code> for storage/search with <code>RustContextStore</code> for grounding. Or just use <code>RustContextStore</code> for everything.</p>
 <hr />
 <h2 id="choosing-a-backend">Choosing a backend<a class="headerlink" href="#choosing-a-backend" title="Permanent link">&para;</a></h2>
 <!-- IMAGE_PLACEHOLDER

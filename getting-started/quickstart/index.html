@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quickstart-guide" class="md-skip">
+        <a href="#quickstart" class="md-skip">
           Skip to content
         </a>
       
@@ -1560,13 +1560,13 @@
   
 
 
-<h1 id="quickstart-guide">Quickstart Guide<a class="headerlink" href="#quickstart-guide" title="Permanent link">&para;</a></h1>
-<p>Get started with Ondine in 5 minutes. This guide walks you through your first pipeline.</p>
+<h1 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h1>
+<p>Build your first Ondine pipeline in under five minutes.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Python 3.10+</li>
 <li>Ondine installed (<code>pip install ondine</code>)</li>
-<li>OpenAI API key (or another LLM provider)</li>
+<li>An API key for OpenAI or another LLM provider</li>
 </ul>
 <h2 id="your-first-pipeline">Your First Pipeline<a class="headerlink" href="#your-first-pipeline" title="Permanent link">&para;</a></h2>
 <h3 id="1-setup">1. Setup<a class="headerlink" href="#1-setup" title="Permanent link">&para;</a></h3>
@@ -1591,7 +1591,7 @@
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">data</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;products.csv&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="3-quick-api-simplest">3. Quick API (Simplest)<a class="headerlink" href="#3-quick-api-simplest" title="Permanent link">&para;</a></h3>
-<p>The fastest way to process data:</p>
+<p>Fewest lines of code to get results:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuickPipeline</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Create and run pipeline</span>
@@ -1616,7 +1616,7 @@
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>Cost: $0.0012
 </span></code></pre></div></p>
 <h3 id="4-builder-api-more-control">4. Builder API (More Control)<a class="headerlink" href="#4-builder-api-more-control" title="Permanent link">&para;</a></h3>
-<p>For explicit configuration:</p>
+<p>When you need to pin temperature, set concurrency, or name your output columns explicitly:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1712,7 +1712,7 @@
 </span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="understanding-the-results">Understanding the Results<a class="headerlink" href="#understanding-the-results" title="Permanent link">&para;</a></h2>
-<p>The <code>execute()</code> method returns an <code>ExecutionResult</code> object:</p>
+<p><code>execute()</code> returns an <code>ExecutionResult</code> with the processed DataFrame, metrics, and cost breakdown:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># Access the processed data</span>
@@ -1730,7 +1730,7 @@
 </span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">output_tokens</span><span class="p">)</span>       <span class="c1"># Output tokens generated</span>
 </span></code></pre></div>
 <h2 id="cost-estimation">Cost Estimation<a class="headerlink" href="#cost-estimation" title="Permanent link">&para;</a></h2>
-<p>Always estimate costs before processing large datasets:</p>
+<p>Estimate costs before processing large datasets. A 100k-row job on GPT-4o can run into real money; five seconds of estimation saves you from a surprise invoice:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span><span class="o">...</span><span class="n">build</span><span class="p">()</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># Get cost estimate</span>
@@ -1747,7 +1747,7 @@
 </span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cost too high, aborting&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
-<p>Ondine automatically retries failed requests:</p>
+<p>Failed requests are retried automatically with exponential backoff:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1767,7 +1767,7 @@
 </span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;response&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()])</span>
 </span></code></pre></div>
 <h2 id="checkpointing">Checkpointing<a class="headerlink" href="#checkpointing" title="Permanent link">&para;</a></h2>
-<p>For long-running jobs, enable checkpointing to resume on crashes:</p>
+<p>Long-running jobs should checkpoint so a crash at row 9,500 of 10,000 doesn't force a full restart:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;large_dataset.csv&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
@@ -1781,9 +1781,8 @@
 </span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
-<p>Now that you have a working pipeline, explore:</p>
 <ul>
-<li><a href="../core-concepts/">Core Concepts</a> - Understand the architecture</li>
+<li><a href="../core-concepts/">Core Concepts</a> - How the pipeline architecture fits together</li>
 <li><a href="../../guides/execution-modes/">Execution Modes</a> - Async and streaming execution</li>
 <li><a href="../../guides/structured-output/">Structured Output</a> - Type-safe Pydantic models</li>
 <li><a href="../../guides/cost-control/">Cost Control</a> - Budget limits and optimization</li>

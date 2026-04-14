@@ -1298,9 +1298,9 @@
 
 
 <h1 id="multi-column-processing">Multi-Column Processing<a class="headerlink" href="#multi-column-processing" title="Permanent link">&para;</a></h1>
-<p>Generate multiple output columns from a single LLM call using JSON parsing.</p>
+<p>One LLM call can populate several output columns at once. Instead of running separate pipelines for brand, category, and price, you ask the model to return a JSON object and let Ondine split it into columns. This cuts API calls proportionally: three output columns from one call means one-third the cost.</p>
 <h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
-<p>Use JSON parsing to extract multiple fields:</p>
+<p>Define your output columns in <code>from_csv</code>, then tell the model to return matching JSON keys:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.stages.parser_factory</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSONParser</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
@@ -1330,7 +1330,7 @@
 </span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="c1"># Result has 3 new columns: brand, category, price</span>
 </span></code></pre></div>
 <h2 id="with-pydantic-validation">With Pydantic Validation<a class="headerlink" href="#with-pydantic-validation" title="Permanent link">&para;</a></h2>
-<p>For type-safe validation:</p>
+<p>JSON parsing alone does not enforce types. If the model returns <code>"price": "twenty bucks"</code>, you will not know until downstream code breaks. Pydantic catches this at parse time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine.stages.response_parser_stage</span><span class="w"> </span><span class="kn">import</span> <span class="n">PydanticParser</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -1349,7 +1349,7 @@
 </span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="multiple-input-columns">Multiple Input Columns<a class="headerlink" href="#multiple-input-columns" title="Permanent link">&para;</a></h2>
-<p>Use multiple input columns in your prompt:</p>
+<p>You can feed several columns into the prompt template. Each <code>{placeholder}</code> maps to a column name from <code>input_columns</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span>

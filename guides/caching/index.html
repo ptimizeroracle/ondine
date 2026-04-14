@@ -1117,10 +1117,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#when-to-use-disk-caching" class="md-nav__link">
+  <a href="#when-disk-caching-makes-sense" class="md-nav__link">
     <span class="md-ellipsis">
       
-        When to use disk caching
+        When disk caching makes sense
       
     </span>
   </a>
@@ -1167,10 +1167,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#when-to-use-redis-caching" class="md-nav__link">
+  <a href="#when-redis-caching-makes-sense" class="md-nav__link">
     <span class="md-ellipsis">
       
-        When to use Redis caching
+        When Redis caching makes sense
       
     </span>
   </a>
@@ -1250,10 +1250,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#typical-rate-limits-by-provider-tier" class="md-nav__link">
+  <a href="#provider-rate-limits-worth-knowing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Typical rate limits by provider tier
+        Provider rate limits worth knowing
       
     </span>
   </a>
@@ -1261,10 +1261,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rate-limiting-alongside-concurrency" class="md-nav__link">
+  <a href="#rate-limiting-vs-concurrency" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Rate limiting alongside concurrency
+        Rate limiting vs. concurrency
       
     </span>
   </a>
@@ -1277,10 +1277,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#combining-caching-and-rate-limiting" class="md-nav__link">
+  <a href="#caching-rate-limiting-together" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Combining Caching and Rate Limiting
+        Caching + Rate Limiting Together
       
     </span>
   </a>
@@ -1327,9 +1327,9 @@
 
 
 <h1 id="caching-and-rate-limiting">Caching and Rate Limiting<a class="headerlink" href="#caching-and-rate-limiting" title="Permanent link">&para;</a></h1>
-<p>Ondine ships two caching backends — disk and Redis — that store LLM responses and replay them on duplicate requests. No API call, no cost. Pair that with rate limiting and you've got fine-grained control over spend and throughput.</p>
+<p>Ondine ships two caching backends (disk and Redis) that store LLM responses and replay them on duplicate requests. No API call, no cost. Add rate limiting and you control exactly how much you spend and how fast you send.</p>
 <h2 id="how-response-caching-works">How Response Caching Works<a class="headerlink" href="#how-response-caching-works" title="Permanent link">&para;</a></h2>
-<p>When you enable caching, Ondine hands a cache config to LiteLLM. LiteLLM hashes every outgoing prompt + parameters, checks the store, and either returns the cached response (zero cost) or calls the API and writes the result for next time.</p>
+<p>When you enable caching, Ondine passes a cache config to LiteLLM. LiteLLM hashes every outgoing prompt + parameters, checks the store, and either returns the cached response (zero cost) or calls the API and writes the result for next time.</p>
 <p>This is <em>not</em> the same as <a href="../cost-control/">prefix caching</a>, which is a provider-side optimization for repeated system prompts. Response caching runs on your infrastructure and skips the API call entirely.</p>
 <!-- IMAGE_PLACEHOLDER
 title: Cache Lookup Request Flow
@@ -1342,7 +1342,7 @@ alt_text: Flowchart showing how a request is hashed, checked against the cache, 
 <hr />
 <h2 id="disk-caching">Disk Caching<a class="headerlink" href="#disk-caching" title="Permanent link">&para;</a></h2>
 <h3 id="with_disk_cachecache_dircache"><code>with_disk_cache(cache_dir=".cache")</code><a class="headerlink" href="#with_disk_cachecache_dircache" title="Permanent link">&para;</a></h3>
-<p>Stores responses as files on the local filesystem. No Redis, no setup.</p>
+<p>Stores responses as files on the local filesystem. No Redis required, nothing to configure.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1378,13 +1378,8 @@ alt_text: Flowchart showing how a request is hashed, checked against the cache, 
 <p><strong>Custom cache location:</strong></p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="o">.</span><span class="n">with_disk_cache</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="s2">&quot;/tmp/ondine_cache&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<h3 id="when-to-use-disk-caching">When to use disk caching<a class="headerlink" href="#when-to-use-disk-caching" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Dev and testing</strong> — rerun the same pipeline while tweaking prompts. After the first pass, you pay nothing.</li>
-<li><strong>Single-machine workloads</strong> — no Redis to stand up.</li>
-<li><strong>Reproducibility</strong> — cache files stick around between runs, so identical inputs always produce identical outputs.</li>
-<li><strong>Iterative data pipelines</strong> — if your input data rarely changes, reprocessing becomes near-instant.</li>
-</ul>
+<h3 id="when-disk-caching-makes-sense">When disk caching makes sense<a class="headerlink" href="#when-disk-caching-makes-sense" title="Permanent link">&para;</a></h3>
+<p>Disk caching fits local development best. You rerun the same pipeline while tweaking prompts, and after the first pass you pay nothing. It also works well for single-machine workloads where standing up Redis is overkill. Cache files persist between runs, so identical inputs always produce identical outputs. If your input data rarely changes, reprocessing becomes near-instant.</p>
 <h3 id="cost-savings-example">Cost savings example<a class="headerlink" href="#cost-savings-example" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># First run: 1,000 rows × $0.00015/1K tokens ≈ $0.15</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Second run (same inputs): $0.00 — all hits from cache</span>
@@ -1448,13 +1443,8 @@ alt_text: Flowchart showing how a request is hashed, checked against the cache, 
 </tr>
 </tbody>
 </table>
-<h3 id="when-to-use-redis-caching">When to use Redis caching<a class="headerlink" href="#when-to-use-redis-caching" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Multiple workers or processes</strong> — disk cache lives on one machine. Redis is shared.</li>
-<li><strong>Production</strong> — TTL handles expiry for you, so stale data ages out automatically.</li>
-<li><strong>High throughput</strong> — Redis handles concurrent reads/writes without file locking headaches.</li>
-<li><strong>Router setups</strong> — when you're using <code>with_router()</code> across providers, Redis makes sure a cached response gets reused no matter which provider would've handled the request.</li>
-</ul>
+<h3 id="when-redis-caching-makes-sense">When Redis caching makes sense<a class="headerlink" href="#when-redis-caching-makes-sense" title="Permanent link">&para;</a></h3>
+<p>Use Redis when multiple workers or processes need the same cache. Disk cache lives on one machine; Redis is shared. In production, TTL handles expiry so stale data ages out without manual cleanup. Redis also avoids file locking headaches under high concurrency. If you're using <code>with_router()</code> across providers, Redis guarantees a cached response gets reused regardless of which provider would have handled the request.</p>
 <h3 id="ttl-configuration">TTL configuration<a class="headerlink" href="#ttl-configuration" title="Permanent link">&para;</a></h3>
 <p>Pick a TTL based on how fast your inputs change:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Short TTL — data changes daily (e.g., news classification)</span>
@@ -1533,7 +1523,7 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 <p><strong>Redis</strong> when you're running pipelines in parallel, across machines, or need entries to expire on their own.</p>
 <hr />
 <h2 id="cache-invalidation">Cache Invalidation<a class="headerlink" href="#cache-invalidation" title="Permanent link">&para;</a></h2>
-<p>Here's the thing: neither backend auto-invalidates when you change your prompt. If you update the prompt template, old cached responses still come back for the same input values.</p>
+<p>Neither backend auto-invalidates when you change your prompt. Update the prompt template and old cached responses still come back for the same input values. This will bite you if you forget.</p>
 <p><strong>Disk cache:</strong> delete or rename the cache directory.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
@@ -1547,11 +1537,11 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">r</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="s2">&quot;redis://localhost:6379&quot;</span><span class="p">)</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">r</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>  <span class="c1"># Clears all keys in the current database</span>
 </span></code></pre></div>
-<p>To dodge stale responses after a prompt change, use a namespaced cache directory for disk or a dedicated Redis database per pipeline version.</p>
+<p>The simplest way to dodge stale responses after a prompt change: use a namespaced cache directory for disk, or a dedicated Redis database per pipeline version.</p>
 <hr />
 <h2 id="rate-limiting">Rate Limiting<a class="headerlink" href="#rate-limiting" title="Permanent link">&para;</a></h2>
 <h3 id="with_rate_limitrpm"><code>with_rate_limit(rpm)</code><a class="headerlink" href="#with_rate_limitrpm" title="Permanent link">&para;</a></h3>
-<p>Throttles outgoing API requests with a token bucket. Set this below your provider's stated limit so you don't eat 429s.</p>
+<p>Throttles outgoing API requests with a token bucket. Set this below your provider's stated limit to avoid 429 errors.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
@@ -1580,8 +1570,8 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 </tr>
 </tbody>
 </table>
-<p>One catch: rate limiting is per pipeline execution, not global across processes.</p>
-<h3 id="typical-rate-limits-by-provider-tier">Typical rate limits by provider tier<a class="headerlink" href="#typical-rate-limits-by-provider-tier" title="Permanent link">&para;</a></h3>
+<p>One catch: rate limiting is per pipeline execution, not global across processes. If you run three pipelines, each gets its own bucket.</p>
+<h3 id="provider-rate-limits-worth-knowing">Provider rate limits worth knowing<a class="headerlink" href="#provider-rate-limits-worth-knowing" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -1618,9 +1608,9 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 </tr>
 </tbody>
 </table>
-<p>Set <code>rpm</code> about 10-20% below the real limit. That leaves headroom for retries and burst traffic from other processes.</p>
-<h3 id="rate-limiting-alongside-concurrency">Rate limiting alongside concurrency<a class="headerlink" href="#rate-limiting-alongside-concurrency" title="Permanent link">&para;</a></h3>
-<p><code>with_rate_limit()</code> and <code>with_concurrency()</code> do different things. Concurrency caps how many requests are in flight at once; rate limiting caps how many get dispatched per minute.</p>
+<p>Set <code>rpm</code> about 10-20% below the real limit. That headroom absorbs retries and burst traffic from other processes sharing the same API key.</p>
+<h3 id="rate-limiting-vs-concurrency">Rate limiting vs. concurrency<a class="headerlink" href="#rate-limiting-vs-concurrency" title="Permanent link">&para;</a></h3>
+<p>These two get confused. <code>with_concurrency()</code> caps how many requests are in flight at once. <code>with_rate_limit()</code> caps how many get dispatched per minute. You usually want both.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="p">(</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">PipelineBuilder</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">input_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">output_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">])</span>
@@ -1632,7 +1622,7 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 </span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <hr />
-<h2 id="combining-caching-and-rate-limiting">Combining Caching and Rate Limiting<a class="headerlink" href="#combining-caching-and-rate-limiting" title="Permanent link">&para;</a></h2>
+<h2 id="caching-rate-limiting-together">Caching + Rate Limiting Together<a class="headerlink" href="#caching-rate-limiting-together" title="Permanent link">&para;</a></h2>
 <p>All three compose freely:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">ondine</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineBuilder</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
@@ -1652,7 +1642,7 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 </span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total tokens: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">costs</span><span class="o">.</span><span class="n">total_tokens</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Cache hits bypass rate limiting entirely — no API call means no throttle. So for repeated data, your effective throughput is unlimited by the rate limit.</p>
+<p>Cache hits bypass rate limiting entirely. No API call, no throttle. For repeated data your effective throughput is uncapped.</p>
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>
