@@ -1,10 +1,10 @@
 # Caching and Rate Limiting
 
-Ondine ships two caching backends — disk and Redis — that store LLM responses and replay them on duplicate requests. No API call, no cost. Pair that with rate limiting and you've got fine-grained control over spend and throughput.
+Ondine ships two caching backends (disk and Redis) that store LLM responses and replay them on duplicate requests. No API call, no cost. Add rate limiting and you control exactly how much you spend and how fast you send.
 
 ## How Response Caching Works
 
-When you enable caching, Ondine hands a cache config to LiteLLM. LiteLLM hashes every outgoing prompt + parameters, checks the store, and either returns the cached response (zero cost) or calls the API and writes the result for next time.
+When you enable caching, Ondine passes a cache config to LiteLLM. LiteLLM hashes every outgoing prompt + parameters, checks the store, and either returns the cached response (zero cost) or calls the API and writes the result for next time.
 
 This is *not* the same as [prefix caching](cost-control.md), which is a provider-side optimization for repeated system prompts. Response caching runs on your infrastructure and skips the API call entirely.
 
@@ -23,7 +23,7 @@ alt_text: Flowchart showing how a request is hashed, checked against the cache, 
 
 ### `with_disk_cache(cache_dir=".cache")`
 
-Stores responses as files on the local filesystem. No Redis, no setup.
+Stores responses as files on the local filesystem. No Redis required, nothing to configure.
 
 ```python
 from ondine import PipelineBuilder
@@ -52,12 +52,9 @@ result = pipeline.execute()
 .with_disk_cache(cache_dir="/tmp/ondine_cache")
 ```
 
-### When to use disk caching
+### When disk caching makes sense
 
-- **Dev and testing** — rerun the same pipeline while tweaking prompts. After the first pass, you pay nothing.
-- **Single-machine workloads** — no Redis to stand up.
-- **Reproducibility** — cache files stick around between runs, so identical inputs always produce identical outputs.
-- **Iterative data pipelines** — if your input data rarely changes, reprocessing becomes near-instant.
+Disk caching fits local development best. You rerun the same pipeline while tweaking prompts, and after the first pass you pay nothing. It also works well for single-machine workloads where standing up Redis is overkill. Cache files persist between runs, so identical inputs always produce identical outputs. If your input data rarely changes, reprocessing becomes near-instant.
 
 ### Cost savings example
 
@@ -113,12 +110,9 @@ result = pipeline.execute()
 | `redis_url` | `str` | `"redis://localhost:6379"` | Redis connection URL |
 | `ttl` | `int` | `3600` | Cache TTL in seconds (1 hour) |
 
-### When to use Redis caching
+### When Redis caching makes sense
 
-- **Multiple workers or processes** — disk cache lives on one machine. Redis is shared.
-- **Production** — TTL handles expiry for you, so stale data ages out automatically.
-- **High throughput** — Redis handles concurrent reads/writes without file locking headaches.
-- **Router setups** — when you're using `with_router()` across providers, Redis makes sure a cached response gets reused no matter which provider would've handled the request.
+Use Redis when multiple workers or processes need the same cache. Disk cache lives on one machine; Redis is shared. In production, TTL handles expiry so stale data ages out without manual cleanup. Redis also avoids file locking headaches under high concurrency. If you're using `with_router()` across providers, Redis guarantees a cached response gets reused regardless of which provider would have handled the request.
 
 ### TTL configuration
 
@@ -184,7 +178,7 @@ alt_text: Architecture diagram comparing disk caching with a single process writ
 
 ## Cache Invalidation
 
-Here's the thing: neither backend auto-invalidates when you change your prompt. If you update the prompt template, old cached responses still come back for the same input values.
+Neither backend auto-invalidates when you change your prompt. Update the prompt template and old cached responses still come back for the same input values. This will bite you if you forget.
 
 **Disk cache:** delete or rename the cache directory.
 
@@ -205,7 +199,7 @@ r = redis.from_url("redis://localhost:6379")
 r.flushdb()  # Clears all keys in the current database
 ```
 
-To dodge stale responses after a prompt change, use a namespaced cache directory for disk or a dedicated Redis database per pipeline version.
+The simplest way to dodge stale responses after a prompt change: use a namespaced cache directory for disk, or a dedicated Redis database per pipeline version.
 
 ---
 
@@ -213,7 +207,7 @@ To dodge stale responses after a prompt change, use a namespaced cache directory
 
 ### `with_rate_limit(rpm)`
 
-Throttles outgoing API requests with a token bucket. Set this below your provider's stated limit so you don't eat 429s.
+Throttles outgoing API requests with a token bucket. Set this below your provider's stated limit to avoid 429 errors.
 
 ```python
 from ondine import PipelineBuilder
@@ -234,9 +228,9 @@ pipeline = (
 |-----------|------|-------------|
 | `rpm` | `int` | Maximum requests per minute |
 
-One catch: rate limiting is per pipeline execution, not global across processes.
+One catch: rate limiting is per pipeline execution, not global across processes. If you run three pipelines, each gets its own bucket.
 
-### Typical rate limits by provider tier
+### Provider rate limits worth knowing
 
 | Provider / tier | Actual limit | Recommended `rpm` |
 |-----------------|-------------|-------------------|
@@ -246,11 +240,11 @@ One catch: rate limiting is per pipeline execution, not global across processes.
 | Groq paid | 6,000 RPM | 5,000 |
 | Anthropic Tier 1 | 50 RPM | 45 |
 
-Set `rpm` about 10-20% below the real limit. That leaves headroom for retries and burst traffic from other processes.
+Set `rpm` about 10-20% below the real limit. That headroom absorbs retries and burst traffic from other processes sharing the same API key.
 
-### Rate limiting alongside concurrency
+### Rate limiting vs. concurrency
 
-`with_rate_limit()` and `with_concurrency()` do different things. Concurrency caps how many requests are in flight at once; rate limiting caps how many get dispatched per minute.
+These two get confused. `with_concurrency()` caps how many requests are in flight at once. `with_rate_limit()` caps how many get dispatched per minute. You usually want both.
 
 ```python
 pipeline = (
@@ -266,7 +260,7 @@ pipeline = (
 
 ---
 
-## Combining Caching and Rate Limiting
+## Caching + Rate Limiting Together
 
 All three compose freely:
 
@@ -290,7 +284,7 @@ print(f"Total cost: ${result.costs.total_cost:.4f}")
 print(f"Total tokens: {result.costs.total_tokens:,}")
 ```
 
-Cache hits bypass rate limiting entirely — no API call means no throttle. So for repeated data, your effective throughput is unlimited by the rate limit.
+Cache hits bypass rate limiting entirely. No API call, no throttle. For repeated data your effective throughput is uncapped.
 
 ---
 

@@ -1,6 +1,6 @@
 # Pipeline Composition
 
-Compose multiple pipelines to process independent columns with dependencies between them.
+Some tasks need multiple LLM passes where later steps depend on earlier results. Calculate a similarity score first, then explain it. Tag a category first, then generate a recommendation based on that category. `PipelineComposer` wires these dependencies together and handles execution order automatically.
 
 ## Basic Usage
 
@@ -40,7 +40,7 @@ result = composer.execute()
 
 ## Dependencies
 
-Specify dependencies between columns:
+Pass `depends_on` to declare that one column's pipeline needs another column's output. Ondine will not run a dependent pipeline until its prerequisites finish:
 
 ```python
 composer = (
@@ -54,10 +54,7 @@ composer = (
 
 ## Execution Order
 
-Pipelines execute in dependency order:
-1. Independent pipelines run first (parallel if async)
-2. Dependent pipelines wait for their dependencies
-3. Results from previous pipelines are available as input columns
+Independent pipelines (no `depends_on`) run first and can execute in parallel when using async. Once they finish, their output columns become available as input for downstream pipelines. A pipeline will not start until every column listed in its `depends_on` has been populated. This means you get automatic parallelism where possible and sequential execution where required, without manually orchestrating anything.
 
 ## Related
 

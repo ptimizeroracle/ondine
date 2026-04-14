@@ -15,7 +15,7 @@ pip install ondine
 
 ### Using uv (Recommended)
 
-uv is a fast Python package installer and resolver:
+uv resolves and installs packages significantly faster than pip:
 
 ```bash
 # Install uv if you don't have it
@@ -27,11 +27,11 @@ uv pip install ondine
 
 ## Optional Dependencies
 
-Ondine provides optional dependency groups for specific features:
+Install only what you need. Each extra pulls in a focused set of packages.
 
 ### MLX (Apple Silicon Local Inference)
 
-For running models locally on Apple Silicon (M1/M2/M3/M4) with MLX:
+Run models locally on Apple Silicon (M1/M2/M3/M4) with MLX:
 
 ```bash
 pip install ondine[mlx]
@@ -49,35 +49,27 @@ pip install ondine[mlx]
 
 ### Observability
 
-For OpenTelemetry-based observability and tracing:
+OpenTelemetry-based tracing and metrics:
 
 ```bash
 pip install ondine[observability]
 ```
 
-**Features:**
-- Distributed tracing with Jaeger
-- Custom metrics export
-- Performance monitoring
+Adds distributed tracing (Jaeger), custom metrics export, and performance monitoring.
 
 ### Development Tools
 
-For contributing or development:
+For contributing to Ondine:
 
 ```bash
 pip install ondine[dev]
 ```
 
-**Includes:**
-- pytest and test utilities
-- ruff for linting
-- mypy for type checking
-- pre-commit hooks
-- Security scanners (bandit, pip-audit)
+Pulls in pytest, ruff, mypy, pre-commit hooks, and security scanners (bandit, pip-audit).
 
 ### Redis (Response Caching)
 
-For LiteLLM Redis-backed response caching:
+LiteLLM Redis-backed response caching:
 
 ```bash
 pip install ondine[redis]
@@ -87,7 +79,7 @@ pip install ondine[redis]
 
 ### Excel Support
 
-For reading and writing `.xlsx` / `.xls` files:
+Read and write `.xlsx` / `.xls` files:
 
 ```bash
 pip install ondine[excel]
@@ -97,7 +89,7 @@ pip install ondine[excel]
 
 ### Parquet Support
 
-For reading and writing Parquet files:
+Read and write Parquet files:
 
 ```bash
 pip install ondine[parquet]
@@ -107,7 +99,7 @@ pip install ondine[parquet]
 
 ### TUI (Terminal User Interface)
 
-For the interactive terminal dashboard:
+Interactive terminal dashboard:
 
 ```bash
 pip install ondine[tui]
@@ -117,7 +109,7 @@ pip install ondine[tui]
 
 ### Performance (uvloop)
 
-For faster async I/O on Linux and macOS:
+Faster async I/O on Linux and macOS:
 
 ```bash
 pip install ondine[performance]
@@ -127,7 +119,7 @@ pip install ondine[performance]
 
 ### Knowledge Base / RAG
 
-For PDF ingestion and embedding-based knowledge stores:
+PDF ingestion and embedding-based knowledge stores:
 
 ```bash
 pip install ondine[knowledge]
@@ -137,7 +129,7 @@ pip install ondine[knowledge]
 
 ### Zep (Long-Term Memory)
 
-For Zep Cloud-backed memory and conversation history:
+Zep Cloud-backed memory and conversation history:
 
 ```bash
 pip install ondine[zep]
@@ -147,7 +139,7 @@ pip install ondine[zep]
 
 ### Azure (Managed Identity)
 
-Required when using Azure OpenAI with Managed Identity authentication:
+Required for Azure OpenAI with Managed Identity authentication:
 
 ```bash
 pip install ondine[azure]
@@ -171,8 +163,6 @@ pip install ondine[all,mlx,observability]
 
 ## Verify Installation
 
-Check that Ondine is installed correctly:
-
 ```python
 import ondine
 
@@ -188,7 +178,7 @@ ondine --version
 
 ## API Keys Setup
 
-Ondine requires API keys for LLM providers. Set them as environment variables:
+Set provider keys as environment variables:
 
 ### OpenAI
 
@@ -234,7 +224,7 @@ export GROQ_API_KEY="gsk_..."  # pragma: allowlist secret
 
 ### Environment File
 
-For convenience, create a `.env` file in your project root:
+Or put everything in a `.env` file at your project root:
 
 ```bash
 # .env
@@ -243,11 +233,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 GROQ_API_KEY=gsk_...
 ```
 
-Ondine automatically loads `.env` files using python-dotenv.
+Ondine loads `.env` files automatically via python-dotenv.
 
 ## Upgrade
-
-To upgrade to the latest version:
 
 ```bash
 pip install --upgrade ondine
@@ -257,7 +245,7 @@ pip install --upgrade ondine
 
 ### Import Error: No module named 'ondine'
 
-Make sure you're in the correct Python environment:
+Verify you're in the right Python environment:
 
 ```bash
 python -c "import sys; print(sys.executable)"
@@ -266,19 +254,11 @@ pip list | grep ondine
 
 ### MLX Installation Issues
 
-MLX only works on Apple Silicon. If you get import errors:
-
-1. Verify you're on Apple Silicon: `uname -m` should show `arm64`
-2. Install Xcode Command Line Tools: `xcode-select --install`
-3. Try reinstalling: `pip uninstall mlx mlx-lm && pip install ondine[mlx]`
+MLX only works on Apple Silicon. If imports fail, check three things: `uname -m` should print `arm64`, Xcode Command Line Tools must be installed (`xcode-select --install`), and a clean reinstall often fixes stale state: `pip uninstall mlx mlx-lm && pip install ondine[mlx]`.
 
 ### API Key Not Found
 
-If you get authentication errors:
-
-1. Check environment variables: `echo $OPENAI_API_KEY`
-2. Verify `.env` file is in the correct directory
-3. Restart your Python session after setting environment variables
+Authentication errors usually mean the key isn't in scope. Run `echo $OPENAI_API_KEY` to confirm the variable is set, check that your `.env` file is in the project root, and restart your Python session after any changes.
 
 ## Next Steps
 

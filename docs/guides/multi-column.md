@@ -1,10 +1,10 @@
 # Multi-Column Processing
 
-Generate multiple output columns from a single LLM call using JSON parsing.
+One LLM call can populate several output columns at once. Instead of running separate pipelines for brand, category, and price, you ask the model to return a JSON object and let Ondine split it into columns. This cuts API calls proportionally: three output columns from one call means one-third the cost.
 
 ## Basic Usage
 
-Use JSON parsing to extract multiple fields:
+Define your output columns in `from_csv`, then tell the model to return matching JSON keys:
 
 ```python
 from ondine import PipelineBuilder
@@ -38,7 +38,7 @@ result = pipeline.execute()
 
 ## With Pydantic Validation
 
-For type-safe validation:
+JSON parsing alone does not enforce types. If the model returns `"price": "twenty bucks"`, you will not know until downstream code breaks. Pydantic catches this at parse time:
 
 ```python
 from pydantic import BaseModel
@@ -61,7 +61,7 @@ pipeline = (
 
 ## Multiple Input Columns
 
-Use multiple input columns in your prompt:
+You can feed several columns into the prompt template. Each `{placeholder}` maps to a column name from `input_columns`:
 
 ```python
 pipeline = (

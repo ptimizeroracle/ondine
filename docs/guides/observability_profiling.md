@@ -1,42 +1,38 @@
-# Ondine Observability & Profiling
+# Observability & Profiling
 
-This guide explains how to profile your Ondine pipelines and trace execution using OpenTelemetry and Langfuse (Self-Hosted).
+Profile your Ondine pipelines and trace execution with OpenTelemetry and self-hosted Langfuse. The entire stack runs locally; no data leaves your machine.
 
 ## Quick Start (Docker)
 
-We provide a fully self-hosted observability stack using Docker. No data leaves your machine.
+Start the stack (Jaeger + Langfuse + Python app):
 
-1.  **Start the Stack** (Jaeger + Langfuse + Python App):
-    ```bash
-    docker compose -f docker/docker-compose.yml up -d
-    ```
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
 
-2.  **Configure Langfuse (One-time Setup)**:
-    *   Go to [http://localhost:3000](http://localhost:3000).
-    *   Create an account (email/password).
-    *   Create a new project.
-    *   Go to **Settings -> API Keys** and create new keys.
-    *   Copy `Public Key` and `Secret Key`.
-    *   Add them to your `.env` file:
-        ```bash
-        LANGFUSE_PUBLIC_KEY="pk-lf-..."
-        LANGFUSE_SECRET_KEY="sk-lf-..."
-        LANGFUSE_HOST="http://localhost:3000"
-        ```
+Then configure Langfuse (one-time). Open [http://localhost:3000](http://localhost:3000), create an account, create a project, and grab your API keys from **Settings > API Keys**. Drop them into `.env`:
 
-3.  **Run Profiling**:
-    ```bash
-    ./docker/profile.sh path/to/your_script.py
-    ```
+```bash
+LANGFUSE_PUBLIC_KEY="pk-lf-..."
+LANGFUSE_SECRET_KEY="sk-lf-..."
+LANGFUSE_HOST="http://localhost:3000"
+```
 
-4.  **View Results**:
-    *   **Performance**: Open `profile_your_script.html` in your browser.
-    *   **Infrastructure Traces**: [http://localhost:16686](http://localhost:16686) (Jaeger).
-    *   **LLM Analytics**: [http://localhost:3000](http://localhost:3000) (Langfuse).
+Run profiling against any script:
+
+```bash
+./docker/profile.sh path/to/your_script.py
+```
+
+View results in three places:
+
+- **Performance profile**: Open `profile_your_script.html` in your browser.
+- **Infrastructure traces**: [http://localhost:16686](http://localhost:16686) (Jaeger).
+- **LLM analytics**: [http://localhost:3000](http://localhost:3000) (Langfuse).
 
 ## Configuration
 
-Enable observability in your pipeline with `.with_observer()`:
+Wire observability into your pipeline with `.with_observer()`:
 
 ```python
 from ondine import PipelineBuilder
@@ -68,7 +64,7 @@ pipeline = (
 
 ## Troubleshooting
 
-- **Langfuse not loading**: It takes ~30s to start the first time. Check logs: `docker compose -f docker/docker-compose.yml logs -f langfuse-server`.
-- **Database Connection Errors**: If you see connection refused errors for Clickhouse or Postgres, try restarting the stack: `docker compose -f docker/docker-compose.yml restart`.
-- **Missing Traces**: Ensure your `.env` file is present in the project root when running the profile script.
-- **Docker Version**: We pin Langfuse to version 2 (`langfuse/langfuse:2`) to ensure stability with the local simplified Clickhouse setup.
+- **Langfuse not loading**: First boot takes about 30 seconds. Check logs with `docker compose -f docker/docker-compose.yml logs -f langfuse-server`.
+- **Database connection errors**: Connection refused from Clickhouse or Postgres usually clears after a restart: `docker compose -f docker/docker-compose.yml restart`.
+- **Missing traces**: Make sure your `.env` file sits in the project root when running the profile script.
+- **Docker version**: Langfuse is pinned to v2 (`langfuse/langfuse:2`) for stability with the local Clickhouse setup.
