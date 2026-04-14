@@ -2084,14 +2084,7 @@
 <li>IDE autocomplete for response fields</li>
 <li>Validation errors caught early</li>
 </ul>
-<!-- IMAGE_PLACEHOLDER
-title: Structured Output Validation Flow
-type: flowchart
-description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Top-to-bottom flow with 4 stages. Stage 1: "Raw LLM Response" box (gray left-accent) containing example JSON string '{"brand": "Apple", "model": "iPhone 15 Pro", "price": 999.99}'. Arrow down to Stage 2: "Pydantic Model" box (blue left-accent) showing the class definition with fields and types — brand: str, model: str, price: float, condition: str. Arrow splits into two paths at a diamond labeled "Validation". Left path (green arrow, labeled "Pass"): leads to "Typed Object" box (green left-accent) showing ProductInfo(brand="Apple", ...) with a checkmark icon. Right path (red arrow, labeled "Fail"): leads to "Validation Error" box (red left-accent) showing "price: expected float, got 'expensive'" with an X icon, then a dashed arrow labeled "retry or default" loops back up to Stage 1. Keep the layout clean, generous whitespace.
-placement: full-width
-alt_text: Flowchart showing how LLM raw JSON response passes through Pydantic model validation, producing either a typed object on success or a validation error with retry on failure.
--->
-<p><img alt="Structured Output Validation Flow" src="images/structured-output-validation-flow.png" /></p>
+<p><img alt="Structured Output Validation Flow" src="../images/structured-output.png" /></p>
 <h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
 <h3 id="1-define-your-pydantic-model">1. Define Your Pydantic Model<a class="headerlink" href="#1-define-your-pydantic-model" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
