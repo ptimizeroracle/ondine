@@ -42,6 +42,7 @@
 * [CLI](guides/cli.md)
 * [Observability & Profiling](guides/observability_profiling.md)
 * [Azure Authentication](guides/azure-managed-identity.md)
+* [Examples](examples.md)
 
 ## Community
 
