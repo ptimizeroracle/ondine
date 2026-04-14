@@ -8,15 +8,15 @@ LLM routing lets one pipeline spread requests across multiple model deployments 
 
 A single provider has real limits. Rate limits throttle throughput. Outages halt processing. Pricing rarely fits every workload. A router absorbs all of that:
 
-- **Failover** — Groq starts erroring? Requests automatically shift to OpenAI.
-- **Load balancing** — spread 1,000 concurrent requests across three deployments instead of hammering one.
-- **Cost optimization** — route to the cheapest provider that meets your latency needs.
-- **Resilience** — a circuit breaker pulls failing providers into cooldown instead of retrying forever.
+- **Failover** -- Groq starts erroring? Requests automatically shift to OpenAI.
+- **Load balancing** -- spread 1,000 concurrent requests across three deployments instead of hammering one.
+- **Cost optimization** -- route to the cheapest provider that meets your latency needs.
+- **Resilience** -- a circuit breaker pulls failing providers into cooldown instead of retrying forever.
 
 <!-- IMAGE_PLACEHOLDER
 title: Multi-Provider Routing Flow
 type: flowchart
-description: A top-to-bottom flowchart showing the full request lifecycle through the router. Nodes and edges: (1) "Pipeline Request" box at top feeds into (2) "Cache Check" diamond. HIT branch (green, dashed) skips to "Return Cached Response" at bottom right. MISS branch continues to (3) "Router" box (large, emphasized). From the Router, an arrow labeled with the active routing_strategy name goes to (4) a "Strategy Selection" step that fans out to three provider boxes arranged horizontally: "Provider A (Groq)", "Provider B (OpenAI)", "Provider C (Together AI)" — each with a small status indicator (green circle = healthy, red circle = cooldown). A solid arrow from Strategy Selection points to whichever provider is selected. From the selected provider, a "Success" arrow (green) goes down to "Return Response + store in cache". A "Failure" arrow (red) loops back to the Router with label "retry (num_retries)" and an additional red arrow from the Router to a "Circuit Breaker" box with label "after allowed_fails failures" which sets the failing provider's indicator to red and label "cooldown_time seconds". Show the retry loop clearly with a curved arrow.
+description: A top-to-bottom flowchart showing the full request lifecycle through the router. Nodes and edges: (1) "Pipeline Request" box at top feeds into (2) "Cache Check" diamond. HIT branch (green, dashed) skips to "Return Cached Response" at bottom right. MISS branch continues to (3) "Router" box (large, emphasized). From the Router, an arrow labeled with the active routing_strategy name goes to (4) a "Strategy Selection" step that fans out to three provider boxes arranged horizontally: "Provider A (Groq)", "Provider B (OpenAI)", "Provider C (Together AI)", each with a small status indicator (green circle = healthy, red circle = cooldown). A solid arrow from Strategy Selection points to whichever provider is selected. From the selected provider, a "Success" arrow (green) goes down to "Return Response + store in cache". A "Failure" arrow (red) loops back to the Router with label "retry (num_retries)" and an additional red arrow from the Router to a "Circuit Breaker" box with label "after allowed_fails failures" which sets the failing provider's indicator to red and label "cooldown_time seconds". Show the retry loop clearly with a curved arrow.
 placement: full-width
 alt_text: Flowchart showing a pipeline request passing through an optional cache check, then into the router which uses the configured strategy to select among multiple providers, with retry logic and a circuit breaker that puts failing providers into cooldown.
 -->
@@ -242,14 +242,14 @@ After **3 consecutive failures** (configurable via `allowed_fails`), the deploym
 ### Tuning the circuit breaker
 
 ```python
-# More tolerant — allow more failures before cooldown
+# More tolerant -- allow more failures before cooldown
 .with_router(
     model_list=[...],
     allowed_fails=5,
     cooldown_time=120,   # Longer cooldown
 )
 
-# Stricter — pull a deployment faster
+# Stricter -- pull a deployment faster
 .with_router(
     model_list=[...],
     allowed_fails=1,
@@ -408,6 +408,6 @@ If you skip `model_id`, the router falls back to `model_name` as the label.
 
 ## Related
 
-- [Caching](caching.md) — disk and Redis response caching, rate limiting
-- [Cost Control](cost-control.md) — budget limits, prefix caching, token optimization
-- [Execution Modes](execution-modes.md) — concurrency and streaming configuration
+- [Caching](caching.md) -- disk and Redis response caching, rate limiting
+- [Cost Control](cost-control.md) -- budget limits, prefix caching, token optimization
+- [Execution Modes](execution-modes.md) -- concurrency and streaming configuration

@@ -60,7 +60,7 @@ Disk caching fits local development best. You rerun the same pipeline while twea
 
 ```python
 # First run: 1,000 rows × $0.00015/1K tokens ≈ $0.15
-# Second run (same inputs): $0.00 — all hits from cache
+# Second run (same inputs): $0.00 -- all hits from cache
 
 pipeline = (
     PipelineBuilder.create()
@@ -75,7 +75,7 @@ pipeline = (
 result = pipeline.execute()
 print(f"First run cost: ${result.costs.total_cost:.4f}")
 
-# Run again — cache hits, zero cost
+# Run again -- cache hits, zero cost
 result2 = pipeline.execute()
 print(f"Second run cost: ${result2.costs.total_cost:.4f}")  # $0.0000
 ```
@@ -119,13 +119,13 @@ Use Redis when multiple workers or processes need the same cache. Disk cache liv
 Pick a TTL based on how fast your inputs change:
 
 ```python
-# Short TTL — data changes daily (e.g., news classification)
+# Short TTL -- data changes daily (e.g., news classification)
 .with_redis_cache(ttl=86400)  # 24 hours
 
-# Long TTL — stable reference data (e.g., product taxonomy)
+# Long TTL -- stable reference data (e.g., product taxonomy)
 .with_redis_cache(ttl=604800)  # 7 days
 
-# Minimum TTL — for testing or debugging only
+# Minimum TTL -- for testing or debugging only
 .with_redis_cache(ttl=300)  # 5 minutes
 ```
 
@@ -290,6 +290,6 @@ Cache hits bypass rate limiting entirely. No API call, no throttle. For repeated
 
 ## Related
 
-- [Cost Control](cost-control.md) — prefix caching, budget limits, and token optimization
-- [Routing](routing.md) — load balancing and failover across multiple providers
-- [Execution Modes](execution-modes.md) — concurrency and streaming configuration
+- [Cost Control](cost-control.md) -- prefix caching, budget limits, and token optimization
+- [Routing](routing.md) -- load balancing and failover across multiple providers
+- [Execution Modes](execution-modes.md) -- concurrency and streaming configuration

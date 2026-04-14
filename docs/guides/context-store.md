@@ -16,7 +16,7 @@ Attach a context store and each row flows through up to six stages:
 <!-- IMAGE_PLACEHOLDER
 title: Anti-Hallucination Pipeline Lifecycle
 type: data-flow
-description: A left-to-right pipeline diagram showing six stages as rounded boxes connected by arrows, with a feedback loop. Stage 1 "Evidence Priming" (dashed border, labeled "optional, pre-LLM") — inside label "search store for prior validated answers, write to _evidence_context". Arrow labeled "primed row" points right to Stage 2 "LLM Inference" (solid blue box) — label "model generates response, informed by evidence". Arrow labeled "raw response" points right to Stage 3 "Grounding Verification" (dashed border, labeled "optional, post-LLM") — inside show a comparison icon with labels "response vs source text", "TF-IDF cosine similarity (or dense embeddings)", and three outcome branches below: "flag" (yellow), "retry" (orange, loops back to Stage 2 with a curved arrow), "skip" (red, arrow to a trash icon). Arrow labeled "grounded response" points right to Stage 4 "Contradiction Detection" (dashed border, labeled "optional") — inside label "compare with prior rows sharing same key columns", output "contradiction_flag". Arrow points right to Stage 5 "Confidence Scoring" (dashed border, labeled "optional") — inside label "composite of grounding score + evidence support count", output "confidence_score". Arrow points right to Stage 6 "Storage" (green cylinder) — label "validated response stored as evidence record". A large curved feedback arrow goes from Stage 6 back to Stage 1, labeled "evidence available for next run". Use blue for the LLM box, green for storage, dashed gray borders for optional stages.
+description: A left-to-right pipeline diagram showing six stages as rounded boxes connected by arrows, with a feedback loop. Stage 1 "Evidence Priming" (dashed border, labeled "optional, pre-LLM") -- inside label "search store for prior validated answers, write to _evidence_context". Arrow labeled "primed row" points right to Stage 2 "LLM Inference" (solid blue box) -- label "model generates response, informed by evidence". Arrow labeled "raw response" points right to Stage 3 "Grounding Verification" (dashed border, labeled "optional, post-LLM") -- inside show a comparison icon with labels "response vs source text", "TF-IDF cosine similarity (or dense embeddings)", and three outcome branches below: "flag" (yellow), "retry" (orange, loops back to Stage 2 with a curved arrow), "skip" (red, arrow to a trash icon). Arrow labeled "grounded response" points right to Stage 4 "Contradiction Detection" (dashed border, labeled "optional") -- inside label "compare with prior rows sharing same key columns", output "contradiction_flag". Arrow points right to Stage 5 "Confidence Scoring" (dashed border, labeled "optional") -- inside label "composite of grounding score + evidence support count", output "confidence_score". Arrow points right to Stage 6 "Storage" (green cylinder) -- label "validated response stored as evidence record". A large curved feedback arrow goes from Stage 6 back to Stage 1, labeled "evidence available for next run". Use blue for the LLM box, green for storage, dashed gray borders for optional stages.
 placement: full-width
 alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: evidence priming, LLM inference, grounding verification, contradiction detection, confidence scoring, and storage, with a feedback loop from storage back to evidence priming for subsequent runs.
 -->
@@ -33,7 +33,7 @@ The default. Compiles to a native extension (`ondine._engine`) backed by SQLite 
 ```python
 from ondine.context import RustContextStore
 
-# Persistent database — survives between runs
+# Persistent database -- survives between runs
 store = RustContextStore("evidence.db")
 
 # In-memory (Rust speed, no persistence)
@@ -383,7 +383,7 @@ data = pd.DataFrame({
         "Organic Fuji Apples 3lb Bag",
         "Kirkland Signature Almond Butter 27oz",
         "Blue Diamond Roasted Almonds 16oz",
-        "Organic Fuji Apples 3lb Bag",  # duplicate — should match first row
+        "Organic Fuji Apples 3lb Bag",  # duplicate -- should match first row
     ],
 })
 
@@ -452,7 +452,7 @@ Here's what the anti-hallucination stack adds to your output DataFrame:
     from ondine import PipelineBuilder
     from ondine.context import ZepContextStore
 
-    # Shared graph — persists across pipeline runs
+    # Shared graph -- persists across pipeline runs
     store = ZepContextStore(graph_id="my-project-evidence")
 
     pipeline = (
@@ -477,9 +477,9 @@ But watch out: `ZepContextStore` doesn't implement `ground()` or `add_contradict
 <!-- IMAGE_PLACEHOLDER
 title: Context Store Backend Comparison
 type: architecture
-description: A three-column comparison diagram showing the three store backends side by side. Each column is a tall rounded rectangle with a header bar. Left column header "RustContextStore" (blue) — inside list vertically: icon of a gear labeled "Native Rust extension + SQLite", icon of a disk labeled "Persistent (file) or in-memory", icon of a search lens labeled "FTS5 BM25 + dense vectors (RRF)", checkmark icons for "ground()", "add_contradiction()", "search()", "store()". Caption below: "Best for: production, multi-run accumulation". Middle column header "ZepContextStore" (purple) — inside: icon of a cloud labeled "Zep Cloud hosted", icon of a graph labeled "Knowledge graph with entity extraction", icon of a search lens labeled "Graph-aware semantic search + cross-encoder reranking", checkmark for "search()", "store()", X marks for "ground() (no-op)", "add_contradiction() (no-op)". Caption: "Best for: managed cloud, entity relationships". Right column header "InMemoryContextStore" (gray) — inside: icon of RAM labeled "Pure Python, no dependencies", icon of a clock labeled "Ephemeral — lost on exit", icon of a search lens labeled "TF-IDF search only", checkmark for "ground()", "add_contradiction()", "search()", "store()". Caption: "Best for: tests, CI, quick prototypes". Draw a dashed arrow from ZepContextStore to RustContextStore labeled "pair for full grounding support" to illustrate the caveat mentioned in the docs.
+description: A three-column comparison diagram showing the three store backends side by side. Each column is a tall rounded rectangle with a header bar. Left column header "RustContextStore" (blue) -- inside list vertically: icon of a gear labeled "Native Rust extension + SQLite", icon of a disk labeled "Persistent (file) or in-memory", icon of a search lens labeled "FTS5 BM25 + dense vectors (RRF)", checkmark icons for "ground()", "add_contradiction()", "search()", "store()". Caption below: "Best for: production, multi-run accumulation". Middle column header "ZepContextStore" (purple) -- inside: icon of a cloud labeled "Zep Cloud hosted", icon of a graph labeled "Knowledge graph with entity extraction", icon of a search lens labeled "Graph-aware semantic search + cross-encoder reranking", checkmark for "search()", "store()", X marks for "ground() (no-op)", "add_contradiction() (no-op)". Caption: "Best for: managed cloud, entity relationships". Right column header "InMemoryContextStore" (gray) -- inside: icon of RAM labeled "Pure Python, no dependencies", icon of a clock labeled "Ephemeral -- lost on exit", icon of a search lens labeled "TF-IDF search only", checkmark for "ground()", "add_contradiction()", "search()", "store()". Caption: "Best for: tests, CI, quick prototypes". Draw a dashed arrow from ZepContextStore to RustContextStore labeled "pair for full grounding support" to illustrate the caveat mentioned in the docs.
 placement: full-width
-alt_text: Side-by-side comparison of the three context store backends — RustContextStore (persistent, full-featured), ZepContextStore (cloud-hosted with entity extraction but no grounding), and InMemoryContextStore (ephemeral pure-Python fallback) — showing their capabilities, storage model, and search features.
+alt_text: Side-by-side comparison of the three context store backends -- RustContextStore (persistent, full-featured), ZepContextStore (cloud-hosted with entity extraction but no grounding), and InMemoryContextStore (ephemeral pure-Python fallback) -- showing their capabilities, storage model, and search features.
 -->
 ![Context Store Backend Comparison](images/context-store-backend-comparison.png)
 

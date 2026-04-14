@@ -177,7 +177,7 @@ Not every task needs GPT-4:
 # $0.0001/1K tokens (300x cheaper)
 .with_llm(provider="openai", model="gpt-4o-mini")
 
-# $0 — runs on your laptop
+# $0 -- runs on your laptop
 .with_llm(provider="mlx", model="mlx-community/Qwen2.5-7B-Instruct-4bit")
 ```
 
@@ -186,7 +186,7 @@ Not every task needs GPT-4:
 Every token in your prompt gets billed. Be concise:
 
 ```python
-# 47 tokens — verbose
+# 47 tokens -- verbose
 prompt = """
 You are a helpful assistant specialized in text summarization.
 Please carefully read the following text and provide a comprehensive
