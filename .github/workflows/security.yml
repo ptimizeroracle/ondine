@@ -29,7 +29,7 @@ jobs:
 
     - name: Run pip-audit (vulnerability scanner)
       run: |
-        uv run pip-audit --desc || true
+        uv run pip-audit --desc
 
   code-scan:
     name: Code Security Scan
@@ -51,7 +51,7 @@ jobs:
 
     - name: Run bandit security scan
       run: |
-        uv run bandit -r ondine/ -c pyproject.toml || true
+        uv run bandit -r ondine/ -c pyproject.toml
 
   secrets-scan:
     name: Scan for Leaked Secrets
@@ -63,7 +63,7 @@ jobs:
         fetch-depth: 0
 
     - name: TruffleHog OSS
-      uses: trufflesecurity/trufflehog@main
+      uses: trufflesecurity/trufflehog@v3.88.0
       with:
         path: ./
         extra_args: --only-verified
@@ -88,4 +88,4 @@ jobs:
 
     - name: Check licenses
       run: |
-        uv run pip-licenses --format=markdown || true
+        uv run pip-licenses --format=markdown
