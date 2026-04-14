@@ -1,4 +1,4 @@
-# Summary
+# Table of contents
 
 ## Getting Started
 
@@ -6,26 +6,32 @@
 * [Quickstart](getting-started/quickstart.md)
 * [Core Concepts](getting-started/core-concepts.md)
 
-## Guides
+## Processing
 
 * [Execution Modes](guides/execution-modes.md)
-* [Structured Output](guides/structured-output.md)
-* [Cost Control](guides/cost-control.md)
 * [Batch Processing](guides/batch-processing.md)
 * [Multi-Column Processing](guides/multi-column.md)
 * [Pipeline Composition](guides/pipeline-composition.md)
-* [Observability](guides/observability_profiling.md)
-* [Azure Managed Identity](guides/azure-managed-identity.md)
-* [Caching](guides/caching.md)
-* [Routing & Load Balancing](guides/routing.md)
-* [Checkpointing & Recovery](guides/checkpointing.md)
-* [Error Handling](guides/error-handling.md)
-* [Command-Line Interface](guides/cli.md)
+* [Structured Output](guides/structured-output.md)
 
-## Knowledge & Grounding
+## Quality & Safety
 
 * [Knowledge Base / RAG](guides/knowledge-base-rag.md)
 * [Context Store & Anti-Hallucination](guides/context-store.md)
+* [Error Handling](guides/error-handling.md)
+* [Checkpointing & Recovery](guides/checkpointing.md)
+
+## Performance
+
+* [Cost Control](guides/cost-control.md)
+* [Caching & Rate Limiting](guides/caching.md)
+* [Routing & Load Balancing](guides/routing.md)
+
+## Operations
+
+* [CLI Reference](guides/cli.md)
+* [Observability](guides/observability_profiling.md)
+* [Azure Managed Identity](guides/azure-managed-identity.md)
 
 ## Providers
 
