@@ -174,10 +174,10 @@ shell:
     @echo "🐍 Starting Python shell..."
     @export $(grep -v '^#' .env | xargs) && uv run python -c "import ondine; from ondine import PipelineBuilder; print('Ondine loaded! Use PipelineBuilder to get started.'); import IPython; IPython.embed()"
 
-# Generate documentation
+# Documentation is hosted on GitBook (syncs from docs/ on main)
 docs:
-    @echo "📚 Generating documentation..."
-    @echo "TODO: Add sphinx or mkdocs setup"
+    @echo "📚 Docs live on GitBook — push to main and they auto-sync."
+    @echo "   https://atik-1.gitbook.io/ondine/"
 
 # Run end-to-end test with real API
 e2e-test:
