@@ -1,17 +1,17 @@
 # Routing
 
-LLM routing lets one pipeline spread requests across multiple model deployments — different providers, models, or API keys — with automatic failover, load balancing, and circuit breaking. Ondine wraps this in `with_router()`, which configures a [LiteLLM Router](https://docs.litellm.ai/docs/routing) under the hood.
+LLM routing lets one pipeline spread requests across multiple model deployments (different providers, models, or API keys) with automatic failover, load balancing, and circuit breaking. `with_router()` configures a [LiteLLM Router](https://docs.litellm.ai/docs/routing) under the hood.
 
 ---
 
 ## What LLM Routing Solves
 
-A single provider has real limits. Rate limits throttle your throughput. Outages halt processing. Pricing may not fit your workload. A router abstracts all of that:
+A single provider has real limits. Rate limits throttle throughput. Outages halt processing. Pricing rarely fits every workload. A router absorbs all of that:
 
 - **Failover** — Groq starts erroring? Requests automatically shift to OpenAI.
 - **Load balancing** — spread 1,000 concurrent requests across three deployments instead of hammering one.
 - **Cost optimization** — route to the cheapest provider that meets your latency needs.
-- **Resilience** — a built-in circuit breaker pulls failing providers into cooldown instead of retrying forever.
+- **Resilience** — a circuit breaker pulls failing providers into cooldown instead of retrying forever.
 
 <!-- IMAGE_PLACEHOLDER
 title: Multi-Provider Routing Flow
@@ -58,7 +58,7 @@ def with_router(
 
 ## The `model_list` Format
 
-Each entry in `model_list` is one deployment. The `model_name` field is the shared logical name the router uses for load balancing — if multiple entries share the same `model_name`, they're treated as interchangeable replicas.
+Each entry in `model_list` represents one deployment. The `model_name` field is the logical name the router uses for load balancing. Multiple entries sharing the same `model_name` are treated as interchangeable replicas.
 
 ```python
 {
@@ -72,7 +72,7 @@ Each entry in `model_list` is one deployment. The `model_name` field is the shar
 }
 ```
 
-Quick note: deployments with *different* `model_name` values don't get load-balanced against each other — they're separate pools. For automatic failover, all deployments need the same `model_name`.
+Deployments with *different* `model_name` values don't get load-balanced against each other; they're separate pools. For automatic failover, all deployments need the same `model_name`.
 
 ---
 
@@ -80,7 +80,7 @@ Quick note: deployments with *different* `model_name` values don't get load-bala
 
 ### Failover between two providers
 
-The simplest setup. Two deployments, same `model_name`. The router splits traffic between them and fails over automatically if one goes down.
+Two deployments, same `model_name`. The router splits traffic between them and fails over if one goes down.
 
 ```python
 import os
@@ -116,7 +116,7 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-With the default `simple-shuffle` strategy and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures, puts Groq into a 60-second cooldown, and all remaining requests go to OpenAI until Groq recovers.
+With `simple-shuffle` and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures and puts Groq into a 60-second cooldown. All remaining requests go to OpenAI until Groq recovers.
 
 ---
 
@@ -156,7 +156,7 @@ alt_text: Visual comparison of four routing strategies showing how simple-shuffl
 
 ### Simple shuffle (default)
 
-Random selection, equal probability. No external state needed. This is the one you'll use 90% of the time during development.
+Random selection, equal probability. No external state needed. You'll use this one most of the time during development.
 
 ```python
 .with_router(
@@ -167,7 +167,7 @@ Random selection, equal probability. No external state needed. This is the one y
 
 ### Latency-based routing
 
-Sends each request to the deployment with the lowest recorded average latency. Needs Redis to share latency data across workers.
+Sends each request to whichever deployment has the lowest recorded average latency. Requires Redis to share latency data across workers.
 
 ```python
 .with_router(
@@ -235,13 +235,9 @@ Picks the cheapest deployment using LiteLLM's cost database. Costs need to be de
 
 ## Circuit Breaker / Resilience
 
-The circuit breaker is on by default. It stops a failing provider from soaking up requests during an outage.
+The circuit breaker is on by default. It keeps a failing provider from absorbing requests during an outage.
 
-**How it works:**
-- After **3 consecutive failures**, the deployment goes into cooldown.
-- Cooldown lasts **60 seconds**.
-- During cooldown, requests go to healthy deployments only.
-- After cooldown, the deployment gets re-admitted and monitored again.
+After **3 consecutive failures** (configurable via `allowed_fails`), the deployment enters cooldown for **60 seconds** (`cooldown_time`). During cooldown, only healthy deployments receive traffic. Once the window expires, the deployment is re-admitted and monitored again.
 
 ### Tuning the circuit breaker
 
@@ -271,7 +267,7 @@ The circuit breaker is on by default. It stops a failing provider from soaking u
 
 ## Multi-Provider Load Balancing
 
-For high-throughput pipelines, spread load across three or more deployments. Each one can have its own per-deployment rate limit (`rpm`) in `litellm_params`.
+For high-throughput pipelines, spread load across three or more deployments. Each can carry its own per-deployment rate limit (`rpm`) in `litellm_params`.
 
 ```python
 import os
@@ -330,7 +326,7 @@ print(f"Total cost: ${result.costs.total_cost:.4f}")
 
 ## Combining Router with Redis Caching
 
-In production, pair the router with `with_redis_cache()` so you don't waste API calls on duplicate inputs. The cache gets checked *before* the router picks a deployment, so a cache hit never touches any provider.
+Pair the router with `with_redis_cache()` so duplicate inputs skip the API entirely. The cache is checked *before* the router picks a deployment, so a hit never touches any provider.
 
 ```python
 import os
@@ -391,7 +387,7 @@ pipeline = (
 
 ## Deployment Distribution Tracking
 
-Ondine uses an internal `DeploymentTracker` to map LiteLLM's internal deployment hash IDs back to the friendly `model_id` values from your `model_list`. This drives the progress display during execution, showing you which provider handled each request.
+Ondine uses an internal `DeploymentTracker` to map LiteLLM's opaque deployment hash IDs back to the `model_id` values from your `model_list`. This drives the progress display during execution, showing which provider handled each request.
 
 To get readable labels in the progress UI, set `model_id` on each entry:
 

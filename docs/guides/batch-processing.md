@@ -1,13 +1,14 @@
 # Multi-Row Batching Guide
 
-Process N rows in a single API call to achieve 100× speedup for large datasets.
+The single biggest throughput lever in Ondine. One flag turns 69 hours of sequential API calls into 42 minutes.
 
-## Overview
+## Why Batching Matters
 
-Multi-row batching aggregates multiple prompts into a single API call, dramatically reducing:
-- **API calls**: 100× fewer (5M → 50K with batch_size=100)
-- **Processing time**: 100× faster (69 hours → 42 minutes)
-- **Rate limit issues**: Virtually eliminated
+Every API call carries fixed overhead: TLS handshake, request serialization, queue wait, response parsing. At batch_size=1, a 5M-row dataset fires 5 million round-trips. Set batch_size=100, and you collapse that to 50,000 calls. The arithmetic is simple; the speedup is real:
+
+- **API calls**: 100× fewer (5M down to 50K at batch_size=100)
+- **Wall-clock time**: 69 hours down to 42 minutes
+- **Rate limits**: practically a non-issue
 
 <!-- IMAGE_PLACEHOLDER
 title: Multi-Row Batching Flow
@@ -72,39 +73,28 @@ Batch response:
 
 ## Choosing Batch Size
 
-### Recommended Batch Sizes
+### Recommended Sizes by Task
 
-| Use Case | Batch Size | Reason |
-|----------|------------|--------|
-| Simple classification | 100-500 | Short prompts, low failure risk |
-| Sentiment analysis | 50-100 | Medium complexity |
-| Text summarization | 10-50 | Longer outputs, higher risk |
-| Complex extraction | 10-20 | Complex prompts, careful parsing |
+| Use Case | Batch Size | Why |
+|----------|------------|-----|
+| Simple classification | 100-500 | Short prompts, low parse-failure risk |
+| Sentiment analysis | 50-100 | Medium token load |
+| Text summarization | 10-50 | Long outputs eat context fast |
+| Complex extraction | 10-20 | Parsing gets fragile at scale |
 
-### Factors to Consider
+### What Constrains You
 
-**1. Model Context Window**
-- GPT-4o/GPT-4o-mini: 128K tokens → batch_size up to 500
-- Claude Sonnet: 200K tokens → batch_size up to 800
-- Llama 3.1: 131K tokens → batch_size up to 500
+**Context window.** Each row's prompt and response tokens must fit inside the model's window, multiplied by batch size. GPT-4o and GPT-4o-mini top out around 128K tokens (batch_size ~500). Claude Sonnet gives you 200K (batch_size ~800). Llama 3.1 sits at 131K (~500). Ondine validates this automatically, but understanding the math prevents surprises.
 
-Ondine automatically validates batch size against context limits.
+**Prompt length.** A 20-token classification prompt lets you batch 500 rows without stress. A 500-token extraction prompt with few-shot examples? Keep it under 50. The relationship is roughly inverse-linear.
 
-**2. Prompt Complexity**
-- Simple prompts (20 tokens): Larger batches (100-500)
-- Medium prompts (100 tokens): Medium batches (50-100)
-- Complex prompts (500+ tokens): Smaller batches (10-50)
-
-**3. Failure Tolerance**
-- Larger batches = higher risk of partial failures
-- Start with batch_size=10, increase gradually
-- Monitor partial failure rate
+**Failure risk.** Larger batches mean more rows lost when a batch fails to parse. Start at batch_size=10 for new tasks, then ratchet up once parse-error rates look stable.
 
 ## Batch Strategies
 
 ### JSON Strategy (Default)
 
-Formats batches as JSON arrays:
+JSON is the default because it works. Pydantic validates every field, catches malformed responses, and handles multi-field outputs cleanly. The tradeoff: roughly 200 extra tokens per batch for structural formatting. For most workloads, that overhead is negligible compared to the call-reduction savings.
 
 ```python
 pipeline = (
@@ -115,18 +105,9 @@ pipeline = (
 )
 ```
 
-**Pros:**
-- Most reliable (Pydantic validation)
-- Handles complex outputs
-- Automatic error detection
-
-**Cons:**
-- ~200 token overhead per batch
-- Requires LLM to follow JSON format
-
 ### CSV Strategy
 
-A more compact format suited for simple, single-output use cases:
+If you only need one output column and want to shave tokens, CSV drops the JSON scaffolding. It is lighter, but you lose Pydantic validation and multi-field support. Good for binary classification. Bad for anything with commas in the output.
 
 ```python
 pipeline = (
@@ -137,19 +118,11 @@ pipeline = (
 )
 ```
 
-**Pros:**
-- More compact than JSON (lower token overhead)
-- Simpler output format for single-column results
-
-**Cons:**
-- Less reliable for complex or multi-field outputs
-- No Pydantic validation
-
 ## Error Handling
 
 ### Partial Failures
 
-If some rows fail to parse, Ondine handles gracefully:
+When the LLM drops a few rows from its response (it happens), Ondine recovers what it can:
 
 ```python
 # Batch with 100 rows
@@ -167,7 +140,7 @@ If some rows fail to parse, Ondine handles gracefully:
 
 ### Complete Failures
 
-If entire batch fails to parse:
+Sometimes the LLM ignores your formatting instructions entirely:
 
 ```python
 # Batch response: "I cannot provide results in JSON format"
@@ -187,30 +160,20 @@ If entire batch fails to parse:
 
 | Batch Size | API Calls | Time | Speedup | Cost Overhead |
 |------------|-----------|------|---------|---------------|
-| 1 (default) | 5,000,000 | ~69 hours | 1× | 0% |
-| 10 | 500,000 | ~7 hours | 10× | ~2% |
-| 100 | 50,000 | ~42 minutes | 100× | ~5% |
-| 500 | 10,000 | ~8 minutes | 500× | ~10% |
+| 1 (default) | 5,000,000 | ~69 hours | 1x | 0% |
+| 10 | 500,000 | ~7 hours | 10x | ~2% |
+| 100 | 50,000 | ~42 minutes | 100x | ~5% |
+| 500 | 10,000 | ~8 minutes | 500x | ~10% |
 
-**Cost overhead**: JSON formatting adds ~200 tokens per batch
+The cost overhead comes from JSON formatting: roughly 200 extra tokens per batch. At batch_size=100, that 5% token increase buys you a 100x speedup. The math speaks for itself.
 
-### Real-World Example
+### Worked Example: 10-Row Sentiment Job
 
-**Dataset**: 10 rows, sentiment classification
-
-**Without batching**:
-- API calls: 10
-- Duration: ~15 seconds
-- Tokens: 210 (21 per row)
-
-**With batching (batch_size=5)**:
-- API calls: 2 (5× reduction!)
-- Duration: ~6 seconds (2.5× faster)
-- Tokens: 250 (25 per row, ~20% overhead)
+Without batching, 10 rows means 10 API calls, ~15 seconds, and 210 tokens (21 per row). Set batch_size=5 and you get 2 calls, ~6 seconds, and 250 tokens (25 per row). That is a 20% token increase for a 2.5x wall-clock reduction. On a 5M-row dataset, the same ratio holds but the absolute savings are measured in days, not seconds.
 
 ## Combining with Prefix Caching
 
-For maximum cost savings, combine both techniques:
+Batching cuts calls. Prefix caching cuts tokens. Stack them:
 
 ```python
 # Shared context (cached across all rows)
@@ -228,10 +191,7 @@ pipeline = (
 )
 ```
 
-**Combined savings:**
-- Prefix caching: 40-50% cost reduction
-- Multi-row batching: 100× fewer API calls
-- **Total**: 90%+ cost reduction + 100× speedup!
+Prefix caching saves 40-50% on token cost. Batching eliminates 99% of API calls. Together, you can hit 90%+ total cost reduction while running 100x faster.
 
 ## CLI Configuration
 
@@ -254,43 +214,25 @@ Run with:
 ondine process --config config.yaml
 ```
 
-## Best Practices
+## Practical Advice
 
-1. **Start small**: Begin with batch_size=10, increase gradually
-2. **Monitor failures**: Check for `[PARSE_ERROR]` in results
-3. **Validate context**: Ondine auto-validates, but check logs for warnings
-4. **Combine techniques**: Use with prefix caching for maximum savings
-5. **Test first**: Run on 100-1000 rows before scaling to millions
+Don't jump straight to batch_size=500. Start at 10, run a few hundred rows, and check for `[PARSE_ERROR]` markers in the output. If the failure rate stays under 1%, double the batch size and retest. Keep an eye on context-window warnings in the logs, especially when prompts are long or outputs are verbose.
+
+Before scaling to millions of rows, validate on 1,000 rows. That gives you a reliable parse-failure rate and accurate per-row timing to extrapolate from. Pair batching with prefix caching from the start; there is no reason to leave that savings on the table.
 
 ## Troubleshooting
 
-### Issue: Batch parsing failures
+### Many rows showing `[PARSE_ERROR]`
 
-**Symptom**: Many rows with `[PARSE_ERROR]`
+The LLM is failing to produce valid structured output. Drop batch_size to 10-20 and add an explicit JSON example to your prompt. If failures persist, the prompt itself is likely ambiguous. Simplify.
 
-**Solutions:**
-- Reduce batch_size (try 10-20)
-- Simplify prompt instructions
-- Add more explicit JSON format examples
-- Check LLM is following instructions
+### Context window exceeded warnings
 
-### Issue: Context window exceeded
+Your batch_size times per-row token count exceeds the model's limit. Either reduce batch_size, switch to a model with a larger context window, or trim your prompt.
 
-**Symptom**: Warning logs about batch size validation
+### Not seeing the expected speedup
 
-**Solutions:**
-- Reduce batch_size
-- Use model with larger context window
-- Simplify prompts to reduce tokens
-
-### Issue: Slower than expected
-
-**Symptom**: Not seeing 100× speedup
-
-**Solutions:**
-- Check batch_size is actually set (print `pipeline.specifications.prompt.batch_size`)
-- Verify batch aggregation logs appear
-- Check if rate limiting is bottleneck (increase rate_limit_rpm)
+First confirm batching is actually active: print `pipeline.specifications.prompt.batch_size` and verify it is not 1. Check the logs for batch aggregation messages. If those look right, the bottleneck is probably rate limiting. Bump `rate_limit_rpm` and rerun.
 
 ## Examples
 
@@ -323,29 +265,30 @@ Set batch formatting strategy.
 
 **Raises:** ValueError if strategy not supported
 
-## Performance Tips
+## Stacking with Other Features
 
-1. **Combine with concurrency**: Use both for maximum throughput
-   ```python
-   .with_batch_size(100)  # 100 rows per call
-   .with_concurrency(10)  # 10 concurrent calls
-   # = 1000 rows processed simultaneously!
-   ```
+Batching pairs well with concurrency. Set batch_size=100 and concurrency=10, and you push 1,000 rows through the pipeline simultaneously:
 
-2. **Use with streaming**: Process results as they arrive
-   ```python
-   .with_batch_size(100)
-   .with_streaming(chunk_size=10000)
-   ```
+```python
+.with_batch_size(100)  # 100 rows per call
+.with_concurrency(10)  # 10 concurrent calls
+# = 1000 rows processed simultaneously!
+```
 
-3. **Enable prefix caching**: Reduce token costs
-   ```python
-   .with_batch_size(100)
-   .with_system_prompt("...")  # Cached
-   ```
+For datasets that do not fit in memory, add streaming so results flush to disk as batches complete:
+
+```python
+.with_batch_size(100)
+.with_streaming(chunk_size=10000)
+```
+
+And prefix caching, as covered above, reduces per-batch token cost:
+
+```python
+.with_batch_size(100)
+.with_system_prompt("...")  # Cached
+```
 
 ## Limitations
 
-- Batch size limited by model context window
-- Requires LLM to follow JSON format instructions
-- Larger batches = higher risk of partial failures
+Batch size is bounded by the model's context window. The LLM must follow JSON (or CSV) formatting instructions, and larger batches increase the blast radius of a single parse failure. These are real constraints, not edge cases.

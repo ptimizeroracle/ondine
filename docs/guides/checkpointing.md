@@ -1,6 +1,6 @@
 # Checkpointing
 
-Checkpointing saves your pipeline's state to disk as it runs. Crash, network blip, Ctrl+C — doesn't matter. You pick up from the last saved position instead of row zero.
+Checkpointing saves pipeline state to disk as it runs. Crash, network blip, Ctrl+C. You pick up from the last saved position instead of row zero, and every LLM call you already paid for stays paid for.
 
 ## Quick Reference
 
@@ -22,26 +22,26 @@ alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at ro
 -->
 ![Checkpoint Resume Lifecycle](images/checkpoint-resume-lifecycle.png)
 
-The `StateManager` periodically serialises execution context — last processed row index, accumulated cost, completed responses — into a compressed JSON file:
+The `StateManager` periodically serialises execution context (last processed row index, accumulated cost, completed responses) into a compressed JSON file:
 
 ```
 .checkpoints/checkpoint_<session-uuid>.json.gz
 ```
 
-When execution fails, you get a ready-to-paste resume call in the logs:
+When execution fails, the logs hand you a ready-to-paste resume call:
 
 ```
 Pipeline failed. Checkpoint saved.
 Resume with: pipeline.execute(resume_from=UUID('e650ee2a-0c71-4761-ac3f-bdab8ecd920b'))
 ```
 
-Copy-paste that, and the pipeline skips everything already done. Zero additional LLM cost for completed rows.
+Paste that line back in and the pipeline skips everything already done. No duplicate LLM spend.
 
 ## Builder Methods
 
 ### `with_checkpoint_dir(directory: str)`
 
-Where checkpoint files go. Directory gets created if it doesn't exist.
+Sets the directory for checkpoint files. Created automatically if missing.
 
 ```python
 pipeline = (
@@ -67,7 +67,7 @@ alt_text: Sequence diagram showing the StateManager saving checkpoints to disk a
 
 ### `with_checkpoint_interval(rows: int)`
 
-How often a checkpoint is written. Lower = less re-work on failure, but more disk I/O.
+Controls how many rows pass between writes. Lower values mean less re-work after a crash but more disk I/O. For most jobs the default of 500 is fine.
 
 ```python
 pipeline = (
@@ -82,7 +82,7 @@ pipeline = (
 
 **Default:** `500` rows.
 
-Here's what works in practice:
+Rough sizing guide:
 
 | Dataset Size | Recommended Interval |
 |-------------|---------------------|
@@ -95,8 +95,8 @@ Here's what works in practice:
 
 Controls whether checkpoint files get deleted after a successful run.
 
-- `True` (default) — deletes checkpoints once the pipeline returns successfully.
-- `False` — keeps them around. You want this when downstream code (writing to a database, pushing to S3) might fail after the pipeline itself finishes. Lets you resume without re-running LLM calls.
+- `True` (default) -- deletes checkpoints once the pipeline returns successfully.
+- `False` -- keeps them. Use this when downstream code (database writes, S3 uploads) might fail after the pipeline itself finishes. The checkpoint lets you resume without re-running LLM calls.
 
 ```python
 pipeline = (
@@ -111,13 +111,13 @@ pipeline = (
 
 ## Resuming a Failed Pipeline
 
-Pipeline fails, you get a UUID in the logs. Pass it to `execute()`:
+When a pipeline fails it prints a session UUID. Pass that UUID back to `execute()`:
 
 ```python
 from uuid import UUID
 from ondine import PipelineBuilder
 
-# Original pipeline definition — must be identical to the failed run
+# Original pipeline definition -- must be identical to the failed run
 pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
@@ -144,7 +144,7 @@ result = await pipeline.execute_async(
 
 ### Overnight Batch Job
 
-Long-running job? Checkpoint frequently. Keep checkpoints after success in case the DB write blows up.
+For long-running jobs, checkpoint frequently and keep the files after success. If the DB write blows up at 3 AM you still have every LLM response on disk.
 
 ```python
 from ondine import PipelineBuilder
@@ -171,7 +171,7 @@ write_to_database(result.to_pandas())   # If this fails, you can resume
 
 ### Auto-Resume Script
 
-Wrap `execute()` to capture the session ID on failure so you can re-run automatically:
+Wrap `execute()` so you can capture the session ID on failure and re-run without manual copy-paste:
 
 ```python
 import logging
@@ -210,7 +210,7 @@ result = run()
 
 ### Listing Checkpoints
 
-Use `LocalFileCheckpointStorage` to see what's available before deciding which to resume:
+`LocalFileCheckpointStorage` lets you browse available checkpoints before deciding which to resume:
 
 ```python
 from pathlib import Path
@@ -240,14 +240,14 @@ print(f"Deleted {deleted} old checkpoint files.")
 
 ## When NOT to Use Checkpointing
 
-**Small datasets (< 1K rows).** Pipeline finishes fast; checkpointing just adds overhead.
+**Small datasets (< 1K rows).** The pipeline finishes in seconds. Checkpointing adds overhead with no real safety gain.
 
-**Idempotent pipelines that are cheap to rerun.** If re-processing from scratch costs less than managing checkpoint state, skip it.
+**Cheap, idempotent pipelines.** If re-processing from scratch costs less than thinking about checkpoint state, just rerun.
 
-**Streaming mode.** With `execute_stream()`, think about checkpointing at the chunk level rather than the row level.
+**Streaming mode.** `execute_stream()` delivers results incrementally, so checkpointing belongs at the chunk level, not the row level.
 
 ## Related
 
-- [Execution Modes](execution-modes.md) — choosing between standard, async, and streaming
-- [Cost Control](cost-control.md) — budget limits to pair with long-running jobs
-- [Error Handling](error-handling.md) — retry policies for transient failures
+- [Execution Modes](execution-modes.md) -- choosing between standard, async, and streaming
+- [Cost Control](cost-control.md) -- budget limits to pair with long-running jobs
+- [Error Handling](error-handling.md) -- retry policies for transient failures

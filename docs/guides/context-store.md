@@ -1,10 +1,10 @@
 # Context Store and Anti-Hallucination
 
-The context store gives your pipeline memory. Each LLM output gets stored as an evidence record that future runs can retrieve, verify against source text, and check for contradictions. You wire up the pieces you need -- priming, grounding, contradiction detection, confidence scoring -- and skip what you don't.
+The context store gives your pipeline memory. Every LLM output becomes an evidence record. Future runs retrieve it, verify it against source text, check for contradictions. Wire up the pieces you need -- priming, grounding, contradiction detection, confidence scoring -- and ignore the rest.
 
 ## How it works
 
-Attach a context store to a pipeline and each row flows through up to six stages:
+Attach a context store and each row flows through up to six stages:
 
 1. **Evidence priming** (optional, pre-LLM) -- searches the store for prior validated answers relevant to the current row. Top-k results land in `_evidence_context`.
 2. **LLM inference** -- the model generates a response, optionally informed by primed evidence.
@@ -28,7 +28,7 @@ alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: eviden
 
 ### RustContextStore
 
-The default. Compiles to a native extension (`ondine._engine`) backed by SQLite with FTS5 full-text search. Hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, contradiction tracking.
+The default. Compiles to a native extension (`ondine._engine`) backed by SQLite with FTS5 full-text search. You get hybrid search (TF-IDF sparse + optional dense embeddings via Reciprocal Rank Fusion), persistent storage across runs, and contradiction tracking.
 
 ```python
 from ondine.context import RustContextStore
@@ -40,13 +40,13 @@ store = RustContextStore("evidence.db")
 store = RustContextStore(":memory:")
 ```
 
-Use this for production workloads, multi-run datasets, anything where evidence should accumulate between runs.
+This is what you want for production. Multi-run datasets, accumulated evidence, the works.
 
-Requires the compiled Rust extension. `pip install ondine` handles it -- a Rust toolchain is only needed when building from source.
+Requires the compiled Rust extension. `pip install ondine` handles it -- you only need a Rust toolchain when building from source.
 
 ### ZepContextStore
 
-Cloud-hosted knowledge graph backed by [Zep Cloud](https://www.getzep.com/). Zep extracts entities and relationships from stored text automatically, giving you graph-aware semantic search with cross-encoder reranking.
+Cloud-hosted knowledge graph backed by [Zep Cloud](https://www.getzep.com/). Zep extracts entities and relationships from stored text automatically, so you get graph-aware semantic search with cross-encoder reranking out of the box.
 
 ```python
 from ondine.context import ZepContextStore
@@ -58,17 +58,17 @@ store = ZepContextStore(graph_id="my-pipeline-run")
 store = ZepContextStore(graph_id="my-pipeline-run", api_key="zep-...")
 ```
 
-Each `graph_id` is an isolated namespace. Share a graph across pipeline runs for cross-run memory, or use separate graphs for isolation. Defaults to a random UUID if you don't specify one.
+Each `graph_id` is an isolated namespace. Share one across pipeline runs for cross-run memory, or use separate graphs to keep experiments from contaminating each other. Defaults to a random UUID if you don't specify one.
 
-Good for managed cloud storage, persistent knowledge graphs, or when you want Zep's entity/relationship extraction.
+Best fit: managed cloud storage, persistent knowledge graphs, or cases where Zep's entity/relationship extraction does the heavy lifting for you.
 
 Requires `pip install ondine[zep]` and a `ZEP_API_KEY` environment variable (or explicit `api_key`).
 
-`ZepContextStore.available` returns `False` if the client couldn't initialize (missing package or bad key). The store degrades gracefully -- `search()` returns an empty list -- so your pipeline keeps running even without a valid Zep connection.
+`ZepContextStore.available` returns `False` if the client couldn't initialize (missing package or bad key). It degrades gracefully -- `search()` returns an empty list -- so your pipeline won't crash just because Zep is down.
 
 ### InMemoryContextStore
 
-Pure-Python fallback. No external dependencies. Same TF-IDF algorithm as the Rust backend, just slower. Everything vanishes when the process exits.
+Pure-Python fallback. Zero external dependencies. Same TF-IDF algorithm as the Rust backend, just slower. Everything vanishes when the process exits.
 
 ```python
 from ondine.context import InMemoryContextStore
@@ -76,7 +76,7 @@ from ondine.context import InMemoryContextStore
 store = InMemoryContextStore()
 ```
 
-Use it for unit tests, CI without a Rust toolchain, quick prototyping.
+Good for unit tests, CI where you can't compile Rust, quick prototyping. Nothing more.
 
 ---
 
@@ -152,7 +152,7 @@ store.close()
 
 ### with_context_store()
 
-Attaches a context store to the pipeline. Every other anti-hallucination method needs a store and will call this automatically if you haven't set one.
+Attaches a context store to the pipeline. Every other anti-hallucination method needs a store. If you forget this call, the builder adds one for you.
 
 ```python
 def with_context_store(
@@ -160,7 +160,7 @@ def with_context_store(
 ) -> PipelineBuilder
 ```
 
-- `store` -- A `ContextStore` instance. Pass `None` and the builder auto-detects: tries `RustContextStore` (in-memory) first, falls back to `InMemoryContextStore` if the Rust extension isn't available.
+- `store` -- A `ContextStore` instance. Pass `None` and the builder picks for you: it tries `RustContextStore` (in-memory) first, then falls back to `InMemoryContextStore` if the Rust extension isn't available.
 
 ```python
 from ondine import PipelineBuilder
@@ -176,13 +176,13 @@ pipeline = (
 )
 ```
 
-If you want evidence to persist across runs, pass an explicit store with a file path. The auto-detected store uses `":memory:"` and throws everything away on exit.
+Here's the thing: if you want evidence to persist across runs, pass an explicit store with a file path. The auto-detected store uses `":memory:"` and throws everything away on exit.
 
 ---
 
 ### with_evidence_priming()
 
-Enriches each row with prior validated answers before LLM inference. Searches the store using the configured query columns, writes top-k results to `_evidence_context` and `_evidence_count`. The prompt formatter picks up `_evidence_context` automatically if your template references it.
+Before LLM inference, this searches the store for prior validated answers that match the current row. Top-k results land in `_evidence_context` and `_evidence_count`. Reference `_evidence_context` in your prompt template and the formatter picks it up automatically.
 
 ```python
 def with_evidence_priming(
@@ -195,7 +195,7 @@ def with_evidence_priming(
 
 - `query_columns` -- Input columns to concatenate as the search query. Defaults to the pipeline's input columns.
 - `top_k` -- Max evidence records retrieved per row.
-- `min_score` -- Minimum relevance score (0.0--1.0). Results below this get discarded so you don't inject noise.
+- `min_score` -- Minimum relevance score (0.0--1.0). Anything below this gets thrown out. Low-scoring evidence is just noise in your prompt.
 
 First run? The store is empty, so priming is a no-op. Evidence accumulates as grounding and verification store validated claims. Second run onward is where you see the benefit.
 
@@ -226,7 +226,7 @@ The `_evidence_context` column looks like this:
 
 ### with_grounding()
 
-Verifies each LLM response against its source text after inference. Adds `grounding_score` (float, 0--1) and `grounding_flag` (bool, `True` when below threshold).
+Post-inference reality check. Compares each LLM response against its source text and scores the similarity. Adds `grounding_score` (float, 0--1) and `grounding_flag` (bool, `True` when below threshold).
 
 ```python
 def with_grounding(
@@ -241,7 +241,7 @@ def with_grounding(
   - `"flag"` (default) -- adds the score and flag columns, keeps going.
   - `"retry"` -- re-prompts the LLM for that row.
   - `"skip"` -- drops the ungrounded row entirely.
-- `embed_fn` -- Optional callable: `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is `max(tfidf_score, embedding_score)` -- embeddings can rescue claims that TF-IDF misses due to vocabulary mismatch.
+- `embed_fn` -- Optional callable: `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is `max(tfidf_score, embedding_score)`. This matters because embeddings catch semantic matches that TF-IDF misses when the vocabulary differs.
 
 <!-- IMAGE_PLACEHOLDER
 title: Grounding Verification Flow
@@ -289,7 +289,7 @@ pipeline = (
 )
 ```
 
-**Threshold cheat sheet:**
+**How strict is strict?**
 
 | Threshold | What happens |
 |---|---|
@@ -302,7 +302,7 @@ pipeline = (
 
 ### with_contradiction_detection()
 
-Flags rows whose output conflicts with a previous row sharing the same key column values. Adds a `contradiction_flag` (bool) column.
+Catches inconsistency. If two rows share the same key column values but the model produced different outputs, something is wrong. Adds a `contradiction_flag` (bool) column.
 
 ```python
 def with_contradiction_detection(
@@ -314,7 +314,7 @@ def with_contradiction_detection(
 
 - `key_columns` -- Columns identifying the same entity (e.g., `["product_id"]`). Rows with matching values here get compared. Defaults to input columns.
 - `value_columns` -- Columns holding outputs to compare. Defaults to output columns.
-- `tolerance` -- Differences at or below this value aren't flagged. `None` means exact string equality. Handy for numeric outputs -- `tolerance=1` on a 0--5 rating scale ignores +/-1 differences.
+- `tolerance` -- Differences at or below this value aren't flagged. `None` means exact string equality. For numeric outputs, set `tolerance=1` on a 0--5 rating scale and +/-1 differences stop triggering false alarms.
 
 ```python
 pipeline = (
@@ -332,13 +332,13 @@ pipeline = (
 )
 ```
 
-`contradiction_flag = True` means this row's output differs from a previous row with the same `product_id`. Could be LLM inconsistency. Could be genuinely different items sharing an ID. Investigate.
+`contradiction_flag = True` means this row's output differs from a previous row with the same `product_id`. Maybe the model is being flaky. Maybe two genuinely different items share an ID. Either way, look at it.
 
 ---
 
 ### with_confidence_scoring()
 
-Adds a `confidence_score` column (float, 0--1) derived from grounding similarity and evidence support count.
+Rolls grounding similarity and evidence support count into a single number. Adds a `confidence_score` column (float, 0--1).
 
 ```python
 def with_confidence_scoring(
@@ -417,7 +417,7 @@ print(result.data[
 ])
 ```
 
-Columns the anti-hallucination stack adds:
+Here's what the anti-hallucination stack adds to your output DataFrame:
 
 | Column | Type | When present | Description |
 |---|---|---|---|
@@ -466,9 +466,9 @@ Columns the anti-hallucination stack adds:
     )
     ```
 
-Zep graphs get created on first use. Storing to the same `graph_id` across runs accumulates evidence over time. Use a unique `graph_id` per project or experiment to keep things separate.
+Zep graphs get created on first use. Same `graph_id` across runs means evidence accumulates. Different `graph_id` per experiment keeps things clean.
 
-One caveat: `ZepContextStore` doesn't implement `ground()` or `add_contradiction()` -- those are no-ops. If you need full grounding and contradiction support with cloud persistence, pair `ZepContextStore` for storage/search with `RustContextStore` for grounding, or just use `RustContextStore` for everything.
+But watch out: `ZepContextStore` doesn't implement `ground()` or `add_contradiction()`. Those calls are no-ops. If you need full grounding and contradiction support with cloud persistence, pair `ZepContextStore` for storage/search with `RustContextStore` for grounding. Or just use `RustContextStore` for everything.
 
 ---
 

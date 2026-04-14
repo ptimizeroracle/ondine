@@ -1,12 +1,12 @@
-# Quickstart Guide
+# Quickstart
 
-Get started with Ondine in 5 minutes. This guide walks you through your first pipeline.
+Build your first Ondine pipeline in under five minutes.
 
 ## Prerequisites
 
 - Python 3.10+
 - Ondine installed (`pip install ondine`)
-- OpenAI API key (or another LLM provider)
+- An API key for OpenAI or another LLM provider
 
 ## Your First Pipeline
 
@@ -41,7 +41,7 @@ data.to_csv("products.csv", index=False)
 
 ### 3. Quick API (Simplest)
 
-The fastest way to process data:
+Fewest lines of code to get results:
 
 ```python
 from ondine import QuickPipeline
@@ -72,7 +72,7 @@ Cost: $0.0012
 
 ### 4. Builder API (More Control)
 
-For explicit configuration:
+When you need to pin temperature, set concurrency, or name your output columns explicitly:
 
 ```python
 from ondine import PipelineBuilder
@@ -182,7 +182,7 @@ result = pipeline.execute()
 
 ## Understanding the Results
 
-The `execute()` method returns an `ExecutionResult` object:
+`execute()` returns an `ExecutionResult` with the processed DataFrame, metrics, and cost breakdown:
 
 ```python
 result = pipeline.execute()
@@ -204,7 +204,7 @@ print(result.costs.output_tokens)       # Output tokens generated
 
 ## Cost Estimation
 
-Always estimate costs before processing large datasets:
+Estimate costs before processing large datasets. A 100k-row job on GPT-4o can run into real money; five seconds of estimation saves you from a surprise invoice:
 
 ```python
 pipeline = PipelineBuilder.create()...build()
@@ -225,7 +225,7 @@ else:
 
 ## Error Handling
 
-Ondine automatically retries failed requests:
+Failed requests are retried automatically with exponential backoff:
 
 ```python
 from ondine import PipelineBuilder
@@ -249,7 +249,7 @@ if result.metrics.failed_rows > 0:
 
 ## Checkpointing
 
-For long-running jobs, enable checkpointing to resume on crashes:
+Long-running jobs should checkpoint so a crash at row 9,500 of 10,000 doesn't force a full restart:
 
 ```python
 pipeline = (
@@ -267,9 +267,7 @@ result = pipeline.execute()
 
 ## Next Steps
 
-Now that you have a working pipeline, explore:
-
-- [Core Concepts](core-concepts.md) - Understand the architecture
+- [Core Concepts](core-concepts.md) - How the pipeline architecture fits together
 - [Execution Modes](../guides/execution-modes.md) - Async and streaming execution
 - [Structured Output](../guides/structured-output.md) - Type-safe Pydantic models
 - [Cost Control](../guides/cost-control.md) - Budget limits and optimization
