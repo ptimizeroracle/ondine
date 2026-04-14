@@ -1,8 +1,8 @@
-# Execution Modes
+# Async & Streaming
 
-Ondine supports three execution modes optimized for different use cases. Choosing the right mode impacts performance, memory usage, and throughput.
+Three execution modes. Which one depends on dataset size and how much you care about speed vs. memory.
 
-## Overview
+## At a Glance
 
 | Mode | Best For | Memory Usage | Throughput | Complexity |
 |------|----------|--------------|------------|------------|
@@ -12,40 +12,9 @@ Ondine supports three execution modes optimized for different use cases. Choosin
 
 ![Execution Modes Comparison](images/execution-modes.png)
 
-## Standard Execution (Default)
+## Standard (Default)
 
-Synchronous, single-threaded processing. The simplest mode.
-
-### Usage
-
-```python
-from ondine import PipelineBuilder
-
-pipeline = PipelineBuilder.create().from_csv(...).build()
-result = pipeline.execute()
-```
-
-### Characteristics
-
-- **Execution:** Sequential row-by-row or batch-by-batch
-- **Memory:** Loads entire dataset into memory
-- **Concurrency:** None (single-threaded)
-- **Return:** Complete `ExecutionResult` with full DataFrame
-
-### When to Use
-
-- Dataset fits comfortably in memory (< 50K rows typical)
-- Straightforward processing without complex coordination
-- Debugging or testing pipelines
-- Simple scripts and notebooks
-
-### When NOT to Use
-
-- Dataset is large (> 100K rows)
-- Need maximum throughput
-- Memory is constrained
-
-### Example
+Sequential, single-threaded. Call `.execute()`, get an `ExecutionResult` back. Nothing to configure.
 
 ```python
 from ondine import PipelineBuilder
@@ -59,53 +28,15 @@ pipeline = (
     .build()
 )
 
-# Simple synchronous execution
 result = pipeline.execute()
 print(f"Processed {result.metrics.processed_rows} rows")
 ```
 
-## Async Execution (Concurrent)
+Loads the entire dataset into memory, processes rows one batch at a time. Good for anything under 50K rows — scripts, notebooks, debugging. If the dataset is bigger or you need speed, keep reading.
 
-Asynchronous processing with configurable concurrency. Maximizes throughput.
+## Async
 
-### Usage
-
-```python
-from ondine import PipelineBuilder
-
-pipeline = (
-    PipelineBuilder.create()
-    .from_csv(...)
-    .with_async_execution(max_concurrency=10)
-    .build()
-)
-
-result = await pipeline.execute_async()
-```
-
-### Characteristics
-
-- **Execution:** Concurrent async/await with controlled parallelism
-- **Memory:** Loads entire dataset into memory
-- **Concurrency:** Configurable (e.g., 10-50 concurrent requests)
-- **Return:** Complete `ExecutionResult` with full DataFrame
-
-### When to Use
-
-- Need high throughput (processing many rows quickly)
-- LLM API supports async (most modern APIs do)
-- Running in async context (FastAPI, aiohttp, async scripts)
-- Dataset fits in memory but need speed
-- Provider has high rate limits
-
-### When NOT to Use
-
-- Running in synchronous context (use standard mode instead)
-- Dataset is very large (> 100K rows) - consider streaming
-- Provider has strict rate limits (async may hit limits faster)
-- Memory is constrained
-
-### Example
+Same memory profile as standard, but fires multiple API calls at once. A 10K-row job that takes 120s sequentially drops to ~15s with 20 concurrent requests.
 
 ```python
 import asyncio
@@ -117,19 +48,19 @@ async def process_data():
         .from_csv("large_data.csv", input_columns=["text"], output_columns=["result"])
         .with_prompt("Analyze: {text}")
         .with_llm(provider="openai", model="gpt-4o-mini")
-        .with_async_execution(max_concurrency=20)  # 20 concurrent requests
-        .with_rate_limit(100)  # Respect API limits
+        .with_async_execution(max_concurrency=20)
+        .with_rate_limit(100)  # respect API limits
         .build()
     )
 
     result = await pipeline.execute_async()
-    print(f"Processed {result.metrics.processed_rows} rows")
-    print(f"Time: {result.metrics.elapsed_time:.2f}s")
+    print(f"Processed {result.metrics.processed_rows} rows in {result.metrics.elapsed_time:.1f}s")
     return result
 
-# Run async pipeline
 result = asyncio.run(process_data())
 ```
+
+One caveat: more concurrency means you hit rate limits faster. Start low, increase gradually. If the provider throttles you, you'll see 429s in the logs.
 
 ### Concurrency Guidelines
 
@@ -142,55 +73,14 @@ result = asyncio.run(process_data())
 | Azure OpenAI | 10-30 (varies by deployment) |
 | Local MLX | 1 (no concurrency benefit) |
 
-## Streaming Execution (Memory-Efficient)
+## Streaming
 
-Process data in chunks with constant memory footprint. Best for very large datasets.
+Standard and async both load the full dataset into memory. That breaks once you hit 100K+ rows. Streaming processes fixed-size chunks: only 1-2 chunks in memory at any point.
 
-### Usage
-
-```python
-from ondine import PipelineBuilder
-
-pipeline = (
-    PipelineBuilder.create()
-    .from_csv(...)
-    .with_streaming(chunk_size=1000)
-    .build()
-)
-
-for chunk_result in pipeline.execute_stream():
-    # Process each chunk as it completes
-    print(f"Processed chunk: {len(chunk_result.data)} rows")
-    chunk_result.data.to_csv("output.csv", mode="a", header=False)
-```
-
-### Characteristics
-
-- **Execution:** Processes data in fixed-size chunks
-- **Memory:** Constant footprint (1-2 chunks in memory max)
-- **Concurrency:** Can combine with async for concurrent chunks
-- **Return:** Iterator yielding `ExecutionResult` per chunk
-
-### When to Use
-
-- Large datasets (100K+ rows)
-- Limited memory (processing datasets larger than available RAM)
-- Need constant memory footprint
-- Want early/incremental results
-- Processing takes hours/days
-
-### When NOT to Use
-
-- Dataset under 50K rows (overhead not justified)
-- Need entire dataset in memory for post-processing
-- Pipeline has dependencies between rows
-- Checkpointing is sufficient for your use case
-
-### Example
+The tradeoff: you get an iterator of `ExecutionResult` objects (one per chunk) instead of a single result. Write output incrementally — don't collect everything into a list and defeat the purpose.
 
 ```python
 from ondine import PipelineBuilder
-import pandas as pd
 
 pipeline = (
     PipelineBuilder.create()
@@ -201,27 +91,19 @@ pipeline = (
     )
     .with_prompt("Summarize: {text}")
     .with_llm(provider="openai", model="gpt-4o-mini")
-    .with_streaming(chunk_size=5000)  # Process 5K rows at a time
+    .with_streaming(chunk_size=5000)
     .build()
 )
 
-# Process in streaming fashion
-all_results = []
+total_cost = 0.0
 for i, chunk_result in enumerate(pipeline.execute_stream()):
-    print(f"Chunk {i+1}: {len(chunk_result.data)} rows, "
-          f"Cost: ${chunk_result.costs.total_cost:.4f}")
+    total_cost += chunk_result.costs.total_cost
+    print(f"Chunk {i+1}: {len(chunk_result.data)} rows, running cost: ${total_cost:.4f}")
 
-    # Write incrementally
     mode = "w" if i == 0 else "a"
-    header = i == 0
-    chunk_result.data.to_csv("output.csv", mode=mode, header=header, index=False)
+    chunk_result.data.to_csv("output.csv", mode=mode, header=(i == 0), index=False)
 
-    all_results.append(chunk_result)
-
-# Aggregate metrics
-total_rows = sum(r.metrics.processed_rows for r in all_results)
-total_cost = sum(r.costs.total_cost for r in all_results)
-print(f"Total: {total_rows} rows, ${total_cost:.2f}")
+print(f"Done. ${total_cost:.2f} total.")
 ```
 
 ### Chunk Size Guidelines
@@ -322,30 +204,17 @@ Memory = Base + (Chunk Size × Row Size)
 
 Example: 1K chunk × 10KB/row = ~10MB (constant)
 
-## Performance Tips
+## Practical Tips
 
-### For All Modes
+Regardless of mode: enable [checkpointing](checkpointing.md) and set a [budget cap](cost-control.md). Failures happen. You don't want to re-process 80K rows because row 80,001 hit a rate limit.
 
-1. **Use appropriate batch size**: Larger batches = fewer API calls
-2. **Enable checkpointing**: Resume on failures
-3. **Set rate limits**: Respect provider limits
-4. **Monitor costs**: Use budget controls
+**Async specifically:** start at `max_concurrency=10`, bump it up in increments. If you jump straight to 100, most providers will throttle you and your effective throughput drops. Each concurrent request holds its response in memory too, so watch your footprint on large outputs.
 
-### For Async Mode
+**Streaming specifically:** pick a chunk size that balances progress granularity vs. overhead. A 500K-row dataset with `chunk_size=100` means 5,000 chunk iterations — that's a lot of overhead for small gains. See the chunk size table above.
 
-1. **Tune concurrency**: Start low, increase gradually
-2. **Respect rate limits**: Too much concurrency can trigger rate limiting
-3. **Monitor memory**: Each concurrent request consumes memory
+## Related
 
-### For Streaming Mode
-
-1. **Choose appropriate chunk size**: Balance memory vs. overhead
-2. **Write incrementally**: Don't accumulate all results in memory
-3. **Enable checkpointing per chunk**: More frequent checkpoints
-
-## Related Examples
-
-- [`examples/07_async_execution.py`](../../examples/07_async_execution.py) - Async processing
-- [`examples/08_streaming_large_files.py`](../../examples/08_streaming_large_files.py) - Streaming
-- [Cost Control Guide](cost-control.md) - Budget management
-- [API Reference](../api/pipeline.md) - Complete API docs
+- [`examples/07_async_execution.py`](../../examples/07_async_execution.py) -- Async processing
+- [`examples/08_streaming_large_files.py`](../../examples/08_streaming_large_files.py) -- Streaming
+- [Cost Estimation & Budgets](cost-control.md) -- Budget management
+- [API Reference](../api/pipeline.md) -- Complete API docs

@@ -1,28 +1,14 @@
-# Structured Output with Pydantic
+# Structured Output (Pydantic)
 
-Ondine provides type-safe structured output parsing using Pydantic models. This ensures LLM responses conform to your expected schema with automatic validation.
+LLMs return strings. You need typed data. Define a Pydantic model, and Ondine validates every response against it — wrong types, missing fields, and constraint violations get caught before they reach your code.
 
-## Why Use Structured Output?
-
-**Without structured output:**
 ```python
-# Response: "The brand is Apple and model is iPhone 15 Pro"
-# Manual parsing required, error-prone, no type safety
+# Without: "The brand is Apple and model is iPhone 15 Pro"
+# (now go parse that yourself)
+
+# With: ProductInfo(brand="Apple", model="iPhone 15 Pro", price=999.99, condition="new")
+# (typed, validated, IDE-autocomplete, done)
 ```
-
-**With structured output:**
-```python
-# Response automatically validated and parsed to:
-ProductInfo(brand="Apple", model="iPhone 15 Pro", price=999.99, condition="new")
-```
-
-**Benefits:**
-
-- Type safety with Pydantic validation
-- Automatic JSON parsing and error handling
-- Schema enforcement (required fields, types, constraints)
-- IDE autocomplete for response fields
-- Validation errors caught early
 
 ![Structured Output Validation Flow](images/structured-output.png)
 
@@ -283,14 +269,15 @@ except ValidationError as e:
     # Handle validation failures
 ```
 
-## Prompt Engineering for Structured Output
+## Getting the LLM to Return Clean JSON
 
-### Best Practices
+The parser does validation, but the LLM still needs to produce valid JSON in the first place. Two things help more than anything else:
 
-1. **Show example JSON in prompt:**
+**Show the exact shape you expect.** Don't describe the format — show it:
+
 ```python
 prompt = """
-Extract product info as JSON:
+Extract product info and return JSON:
 {{
   "brand": "Apple",
   "model": "iPhone 15",
@@ -301,62 +288,36 @@ Description: {description}
 """
 ```
 
-2. **Specify field constraints:**
-```python
-prompt = """
-Analyze sentiment and return JSON:
-{{
-  "label": "positive|negative|neutral",
-  "confidence": 0.0-1.0,
-  "keywords": ["word1", "word2"]
-}}
+**Set temperature to 0.** Creative responses and structured data don't mix:
 
-Text: {text}
-"""
-```
-
-3. **Use low temperature:**
 ```python
 .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
 ```
 
-4. **Include field descriptions:**
+Also worth doing: put constraint hints in your `Field` descriptions. The LLM sees the schema if the provider supports function calling, and good descriptions act like inline instructions:
+
 ```python
 class Product(BaseModel):
     brand: str = Field(..., description="Manufacturer name (e.g., Apple, Samsung)")
     price: float = Field(..., description="Price in USD, numeric only")
 ```
 
-## JSON vs Pydantic Parser
+## JSON Parser vs. Pydantic Parser
 
-### JSON Parser (Simple)
+Two parsers, different guarantees:
 
 ```python
 from ondine.stages.parser_factory import JSONParser
-
-# Just parses JSON, no validation
-.with_parser(JSONParser())
-```
-
-**Use when:**
-- Schema is simple and flexible
-- Don't need type validation
-- Rapid prototyping
-
-### Pydantic Parser (Type-Safe)
-
-```python
 from ondine.stages.response_parser_stage import PydanticParser
 
-# Parses AND validates against schema
+# JSONParser: parses JSON, no validation. Fast prototyping.
+.with_parser(JSONParser())
+
+# PydanticParser: parses AND validates against your model. Production use.
 .with_parser(PydanticParser(MyModel, strict=True))
 ```
 
-**Use when:**
-- Need type safety and validation
-- Schema has constraints (ranges, patterns)
-- Production applications
-- API responses
+Use `JSONParser` when you're exploring and the schema might change. Switch to `PydanticParser` once the schema stabilizes and you need guarantees.
 
 ## Advanced Patterns
 
