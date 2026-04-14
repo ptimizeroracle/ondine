@@ -1,6 +1,6 @@
 # Examples
 
-Runnable scripts covering every major feature. Clone the repo, set your API keys, pick one.
+37 scripts you can run right now. Each one demonstrates a single feature, start to finish.
 
 ```bash
 git clone https://github.com/ptimizeroracle/ondine.git
@@ -9,7 +9,11 @@ pip install -e ".[all]"
 export OPENAI_API_KEY="your-key"
 ```
 
+Pick a script, run it, read the code. Fastest way to learn.
+
 ## Getting Started
+
+Three scripts, three minutes. Go from zero to a working pipeline.
 
 | # | Script | What it does |
 |---|---|---|
@@ -19,6 +23,8 @@ export OPENAI_API_KEY="your-key"
 
 ## Cost & Performance
 
+Where the money savings happen. Batching alone can cut your bill 100x.
+
 | # | Script | What it does |
 |---|---|---|
 | 04 | [`04_with_cost_control.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/04_with_cost_control.py) | Budget limits, cost estimation, rate limiting, checkpointing |
@@ -27,12 +33,16 @@ export OPENAI_API_KEY="your-key"
 
 ## Execution Modes
 
+Async for speed, streaming for memory. Or both.
+
 | # | Script | What it does |
 |---|---|---|
 | 07 | [`07_async_execution.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/07_async_execution.py) | Concurrent async processing with configurable parallelism |
 | 08 | [`08_streaming_large_files.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/08_streaming_large_files.py) | Stream 100K+ rows with constant memory |
 
 ## Providers
+
+OpenAI, Groq, Azure, local MLX, or roll your own. Same pipeline API regardless.
 
 | # | Script | What it does |
 |---|---|---|
@@ -45,6 +55,8 @@ export OPENAI_API_KEY="your-key"
 
 ## Observability
 
+Logging, OpenTelemetry, Langfuse. Pick one or stack all three.
+
 | # | Script | What it does |
 |---|---|---|
 | 15 | [`15_observability_logging.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/15_observability_logging.py) | Structured logging setup |
@@ -53,6 +65,8 @@ export OPENAI_API_KEY="your-key"
 | 18 | [`18_observability_multi.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/18_observability_multi.py) | Multiple observability backends at once |
 
 ## Advanced
+
+Custom stages, plugin architecture, RAG, anti-hallucination. The deep end.
 
 | # | Script | What it does |
 |---|---|---|
@@ -66,7 +80,7 @@ export OPENAI_API_KEY="your-key"
 
 ## YAML Configs
 
-These configs work with `06_from_config_file.py` or the CLI (`ondine process --config`):
+Skip Python entirely. Define your pipeline in YAML, run it with `06_from_config_file.py` or the CLI (`ondine process --config`):
 
 | Config | Provider |
 |---|---|
