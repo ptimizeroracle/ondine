@@ -17,7 +17,7 @@ description: Enterprise Stripe/Vercel design (grid background, left-accent-bar c
 placement: full-width
 alt_text: Side-by-side comparison of four execution modes: Standard (sequential), Async (concurrent), Streaming (memory-efficient), and Streaming+Async (combined), showing memory usage, speed, and best use cases.
 -->
-![Execution Modes Comparison](guides/images/execution-modes-comparison.png)
+![Execution Modes Comparison](images/execution-modes-comparison.png)
 
 ## Standard Execution (Default)
 

@@ -16,7 +16,7 @@ description: Left-to-right data flow with enterprise Stripe/Vercel design langua
 placement: full-width
 alt_text: Data flow diagram showing how multi-row batching combines 5 rows into 1 API call through batch aggregation, sends to LLM, then disaggregates the response back into 5 individual results.
 -->
-![Multi-Row Batching Flow](guides/images/multi-row-batching-flow.png)
+![Multi-Row Batching Flow](images/multi-row-batching-flow.png)
 
 ## Quick Start
 

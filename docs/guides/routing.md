@@ -20,7 +20,7 @@ description: A top-to-bottom flowchart showing the full request lifecycle throug
 placement: full-width
 alt_text: Flowchart showing a pipeline request passing through an optional cache check, then into the router which uses the configured strategy to select among multiple providers, with retry logic and a circuit breaker that puts failing providers into cooldown.
 -->
-![Multi-Provider Routing Flow](guides/images/multi-provider-routing-flow.png)
+![Multi-Provider Routing Flow](images/multi-provider-routing-flow.png)
 
 ---
 
@@ -152,7 +152,7 @@ description: A visual grid with four columns, one per key strategy. Each column 
 placement: full-width
 alt_text: Visual comparison of four routing strategies showing how simple-shuffle picks randomly, latency-based picks the fastest provider, usage-based picks the least utilized, and cost-based picks the cheapest.
 -->
-![Routing Strategy Comparison](guides/images/routing-strategy-comparison.png)
+![Routing Strategy Comparison](images/routing-strategy-comparison.png)
 
 ### Simple shuffle (default)
 
