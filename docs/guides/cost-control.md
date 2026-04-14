@@ -1,102 +1,12 @@
-# Cost Control
+# Cost Estimation & Budgets
 
-Ondine provides comprehensive cost management features to prevent budget overruns and optimize spending on LLM APIs.
+LLM APIs bill per token, and it adds up fast. A 5M-row dataset through GPT-4 can easily cost hundreds of dollars. Ondine gives you three levers: **estimate before you run**, **cap spending with hard budgets**, and **cut costs with batching and caching**.
 
-<!-- IMAGE_PLACEHOLDER
-title: Cost Control Budget Lifecycle
-type: flowchart
-description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Top-to-bottom flow showing budget enforcement during pipeline execution. Top: "Pipeline Start" pill (green). Arrow down to "estimate_cost()" box (blue left-accent) with label "pre-flight cost check". Arrow splits at diamond "Within budget?". Yes arrow → "Execute Pipeline" box (blue). Inside execution box, show a progress bar filling left to right with three threshold markers: 75% (yellow warning icon, label "Warning logged"), 90% (orange alert icon, label "Alert logged"), 100% (red stop icon, label "BudgetExceeded raised"). Arrow from execution to "Cost Report" box (green left-accent) showing breakdown: "tokens: input/output, cost: by stage, savings: from cache hits". No arrow from diamond → "Abort" box (red left-accent, label "adjust budget or optimize before running"). Keep it tall and narrow, generous vertical spacing.
-placement: full-width
-alt_text: Flowchart showing cost control lifecycle: pre-flight estimation, budget check, execution with 75%/90%/100% threshold warnings, and final cost reporting.
--->
 ![Cost Control Budget Lifecycle](images/cost-control-budget-lifecycle.png)
 
-## Cost Optimization Strategies
+## Estimate Before You Spend
 
-### 1. Multi-Row Batching (100× Speedup) - NEW!
-
-Process N rows in a single API call to reduce API calls by 100×:
-
-```python
-# Traditional: 5M rows = 5M API calls (~69 hours)
-pipeline = (
-    PipelineBuilder.create()
-    .from_csv("data.csv", input_columns=["text"])
-    .with_prompt("Classify: {text}")
-    .with_llm(provider="openai", model="gpt-4o-mini")
-    .build()
-)
-
-# With batching: 5M rows = 50K API calls (~42 minutes, 100× faster!)
-pipeline = (
-    PipelineBuilder.create()
-    .from_csv("data.csv", input_columns=["text"])
-    .with_prompt("Classify: {text}")
-    .with_batch_size(100)  # Process 100 rows per API call!
-    .with_llm(provider="openai", model="gpt-4o-mini")
-    .build()
-)
-```
-
-**Benefits:**
-- 100× fewer API calls
-- 100× faster processing
-- Same token cost, eliminates API overhead
-- Automatic context window validation
-
-**Recommended batch sizes:**
-- Simple prompts: 50-500 rows/batch
-- Complex prompts: 10-50 rows/batch
-- Start with 10, increase based on results
-
-See `examples/21_multi_row_batching.py` for complete examples.
-
-### 2. Prefix Caching (40-50% Cost Reduction) - NEW!
-
-Cache static system prompts to reduce costs by 40-50%:
-
-```python
-# Without caching: Pay full price for system prompt every row
-pipeline = (
-    PipelineBuilder.create()
-    .with_prompt("You are a classifier. Classify: {text}")
-    .with_llm(provider="openai", model="gpt-4o-mini")
-    .build()
-)
-
-# With caching: System prompt cached, only pay for dynamic content
-pipeline = (
-    PipelineBuilder.create()
-    .with_prompt("Classify: {text}")  # Dynamic part
-    .with_system_prompt("You are a classifier.")  # Cached!
-    .with_llm(provider="openai", model="gpt-4o-mini")
-    .build()
-)
-```
-
-**Benefits:**
-- 40-50% cost reduction on cached tokens
-- 80-85% latency reduction
-- Automatic (OpenAI, Anthropic)
-
-**Combine Both for Maximum Savings:**
-```python
-# Prefix caching + Multi-row batching = 90%+ cost reduction!
-pipeline = (
-    PipelineBuilder.create()
-    .with_prompt("Classify: {text}")
-    .with_system_prompt("You are a classifier.")  # Cached
-    .with_batch_size(100)  # 100× fewer API calls
-    .with_llm(provider="openai", model="gpt-4o-mini")
-    .build()
-)
-```
-
----
-
-## Pre-Execution Cost Estimation
-
-Always estimate costs before processing large datasets:
+Always check the price tag first:
 
 ```python
 from ondine import PipelineBuilder
@@ -109,7 +19,6 @@ pipeline = (
     .build()
 )
 
-# Get cost estimate
 estimate = pipeline.estimate_cost()
 
 print(f"Total rows: {estimate.total_rows}")
@@ -118,9 +27,11 @@ print(f"Estimated cost: ${estimate.total_cost:.4f}")
 print(f"Cost per row: ${estimate.cost_per_row:.6f}")
 ```
 
+If the number looks wrong, fix the prompt or switch models before burning real money.
+
 ## Budget Limits
 
-Set maximum budget to prevent overspending:
+Hard caps. The pipeline stops when the budget runs out:
 
 ```python
 from decimal import Decimal
@@ -134,141 +45,148 @@ pipeline = (
     .build()
 )
 
-# Execution stops if budget exceeded
 result = pipeline.execute()
 ```
 
-## Real-Time Cost Tracking
+During execution, Ondine tracks spend against three thresholds: 75% (warning logged), 90% (alert logged), 100% (`BudgetExceeded` raised, pipeline stops). Pair this with [checkpointing](checkpointing.md) so you can resume after adjusting the budget.
 
-Monitor costs during execution:
+---
 
-```python
-result = pipeline.execute()
+## Cutting Costs
 
-# View detailed costs
-print(f"Total cost: ${result.costs.total_cost:.4f}")
-print(f"Input tokens: {result.costs.input_tokens:,}")
-print(f"Output tokens: {result.costs.output_tokens:,}")
-print(f"Total tokens: {result.costs.total_tokens:,}")
-print(f"Cost per row: ${result.costs.total_cost / result.metrics.processed_rows:.6f}")
-```
+Six techniques, ranked by impact.
 
-## Cost Optimization Strategies
+### 1. Multi-Row Batching
 
-### 1. Use Prefix Caching (50-90% Cost Reduction) ⭐
-
-**Prefix caching** is the most effective cost optimization technique, reducing costs by 50-90% by caching static system prompts.
-
-OpenAI and Anthropic automatically cache system messages and reuse them across requests, charging only for dynamic content after the first request.
-
-#### How It Works
-
-Separate your prompt into two parts:
-- **System prompt** (static, cached): Instructions, context, examples
-- **User prompt** (dynamic, per-row): The actual data to process
+The biggest win. Instead of one API call per row, pack 100 rows into a single call:
 
 ```python
-# ❌ WITHOUT caching (old approach)
+# Without batching: 5M rows = 5M API calls (~69 hours)
 pipeline = (
     PipelineBuilder.create()
-    .from_csv("reviews.csv", input_columns=["text"], output_columns=["sentiment"])
+    .from_csv("data.csv", input_columns=["text"])
+    .with_prompt("Classify: {text}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .build()
+)
+
+# With batching: 5M rows = 50K API calls (~42 minutes)
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("data.csv", input_columns=["text"])
+    .with_prompt("Classify: {text}")
+    .with_batch_size(100)  # 100 rows per API call
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .build()
+)
+```
+
+Token cost stays the same, but you eliminate API call overhead entirely. Start with `batch_size=10` and scale up:
+
+- Simple classification prompts: 50-500 rows/batch
+- Complex extraction prompts: 10-50 rows/batch
+
+See `examples/21_multi_row_batching.py` for the full walkthrough.
+
+### 2. Prefix Caching
+
+Separate your static instructions from per-row data. Providers cache the static part and only charge for the dynamic portion:
+
+```python
+# Bad: system instructions baked into every prompt
+pipeline = (
+    PipelineBuilder.create()
     .with_prompt("""You are a sentiment classifier.
 Classify as: positive, negative, or neutral.
 Return only the label.
 
 Review: {text}
-Sentiment:""")  # System message embedded → sent every time → full cost
+Sentiment:""")  # Entire prompt sent every time
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
 )
 
-# ✅ WITH caching (new approach)
+# Good: system prompt cached by the provider
 pipeline = (
     PipelineBuilder.create()
-    .from_csv("reviews.csv", input_columns=["text"], output_columns=["sentiment"])
-    .with_prompt("Review: {text}\nSentiment:")  # Only dynamic content
+    .with_prompt("Review: {text}\nSentiment:")           # Dynamic only
     .with_system_prompt("""You are a sentiment classifier.
 Classify as: positive, negative, or neutral.
-Return only the label.""")  # Cached by provider!
+Return only the label.""")                                # Cached
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
 )
 ```
 
-#### Cost Comparison
+Real numbers for 5,000 rows with a 500-token system prompt:
 
-For 5,000 rows with a 500-token system prompt:
+| Approach | Tokens billed | Cost (GPT-4o-mini) | Savings |
+|---|---|---|---|
+| Without caching | 2.75M | $0.41 | -- |
+| With caching | 250K | $0.04 | **90%** |
 
-| Approach | Tokens | Cost (GPT-4o-mini) | Savings |
-|----------|--------|-------------------|---------|
-| **Without caching** | 2.75M tokens | $0.41 | - |
-| **With caching** | 250K tokens | $0.04 | **90%** |
+Provider support varies:
 
-#### Provider Support
+| Provider | Caching | Savings on cached tokens | Latency drop |
+|---|---|---|---|
+| OpenAI | Automatic | 50% | ~50% |
+| Anthropic | Automatic | 90% | ~85% |
+| Azure OpenAI | Automatic | 50% | ~50% |
+| Groq | Not supported | -- | -- |
 
-| Provider | Caching Support | Cost Reduction | Latency Reduction |
-|----------|----------------|----------------|-------------------|
-| **OpenAI** | ✅ Automatic | 50% on cached tokens | ~50% |
-| **Anthropic** | ✅ Automatic | 90% on cached tokens | 85% |
-| **Groq** | ❌ Not supported | - | - |
-| **Azure OpenAI** | ✅ Automatic | 50% on cached tokens | ~50% |
-
-#### Best Practices
-
-1. **Keep system prompts static** - No per-row variables
-2. **Put all dynamic content in user prompt** - Use template variables
-3. **Use consistent system prompts** - Caching works across requests
-4. **Monitor token usage** - Verify caching is working
-
-#### Alternative Syntax
-
-You can also set the system message in `with_prompt()`:
-
-```python
-.with_prompt(
-    template="Review: {text}\nSentiment:",
-    system_message="You are a sentiment classifier..."
-)
-```
-
-Both approaches work identically - choose based on preference.
-
-#### Verification
-
-Check that caching is working by monitoring token counts:
+Verify it's working by checking average tokens per row after execution:
 
 ```python
 result = pipeline.execute()
-
-# First few rows: ~550 tokens/row (system + user)
-# Remaining rows: ~50 tokens/row (user only, system cached)
-avg_tokens = result.costs.total_tokens / result.metrics.processed_rows
-print(f"Average tokens/row: {avg_tokens:.0f}")  # Should be ~50-100 with caching
+avg = result.costs.total_tokens / result.metrics.processed_rows
+print(f"Avg tokens/row: {avg:.0f}")  # Should be ~50-100, not ~550
 ```
 
-See [`examples/20_prefix_caching.py`](../../examples/20_prefix_caching.py) for a complete working example.
+See [`examples/20_prefix_caching.py`](../../examples/20_prefix_caching.py) for a working example.
 
----
+### 3. Combine Batching + Caching
 
-### 2. Choose Cost-Effective Models
+Stack them. This is where the real savings hit:
 
 ```python
-# Expensive: GPT-4
-.with_llm(provider="openai", model="gpt-4")  # ~$0.03/1K tokens
-
-# Cost-effective: GPT-4o-mini
-.with_llm(provider="openai", model="gpt-4o-mini")  # ~$0.0001/1K tokens
-
-# Free: Local MLX (Apple Silicon)
-.with_llm(provider="mlx", model="mlx-community/Qwen2.5-7B-Instruct-4bit")  # $0
+pipeline = (
+    PipelineBuilder.create()
+    .with_prompt("Classify: {text}")
+    .with_system_prompt("You are a classifier.")  # Cached
+    .with_batch_size(100)                          # 100x fewer calls
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .build()
+)
 ```
 
-### 2. Optimize Prompts
+### 4. Pick Cheaper Models
 
-Shorter prompts = lower costs:
+Not every task needs GPT-4:
+
+| Provider | Model | Cost (per 1M tokens) | Best for |
+|---|---|---|---|
+| OpenAI | gpt-4o-mini | $0.15 | General-purpose |
+| Groq | llama-3.3-70b | $0.05-0.10 | Speed + cost |
+| Together.AI | various | $0.20-0.60 | Open models |
+| Local MLX | any | $0 | Apple Silicon, privacy |
 
 ```python
-# Expensive: Verbose prompt
+# $0.03/1K tokens
+.with_llm(provider="openai", model="gpt-4")
+
+# $0.0001/1K tokens (300x cheaper)
+.with_llm(provider="openai", model="gpt-4o-mini")
+
+# $0 — runs on your laptop
+.with_llm(provider="mlx", model="mlx-community/Qwen2.5-7B-Instruct-4bit")
+```
+
+### 5. Write Shorter Prompts
+
+Every token in your prompt gets billed. Be concise:
+
+```python
+# 47 tokens — verbose
 prompt = """
 You are a helpful assistant specialized in text summarization.
 Please carefully read the following text and provide a comprehensive
@@ -279,62 +197,61 @@ Text: {text}
 Please provide your summary below:
 """
 
-# Cost-effective: Concise prompt
+# 7 tokens
 prompt = "Summarize in 1 sentence: {text}"
 ```
 
-### 3. Use Temperature=0 for Deterministic Tasks
-
-Lower temperature often produces shorter, more focused responses:
-
-```python
-.with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
-```
-
-### 4. Set Max Tokens
-
-Limit response length:
+Also: set `temperature=0.0` for deterministic tasks (shorter, more focused output) and cap response length with `max_tokens`:
 
 ```python
 .with_llm(
     provider="openai",
     model="gpt-4o-mini",
-    max_tokens=100  # Limit response to 100 tokens
+    temperature=0.0,
+    max_tokens=100
 )
 ```
 
-### 5. Batch Processing
+### 6. Response Caching
 
-Process multiple items per request when possible:
+If your dataset has duplicate inputs, don't pay twice. See the [Caching guide](caching.md) for disk and Redis caching.
 
-```python
-.with_batch_size(100)  # Process 100 rows per batch
-```
+---
 
-### 6. Use Cheaper Providers
+## Cost Tracking
 
-Consider alternative providers for cost savings:
-
-| Provider | Cost (per 1M tokens) | Speed |
-|----------|---------------------|-------|
-| OpenAI GPT-4o-mini | $0.15 | Fast |
-| Groq (Llama) | $0.05-0.10 | Very Fast |
-| Together.AI | $0.20-0.60 | Fast |
-| Local MLX | $0 | Medium |
-
-## Cost Reporting
-
-### Summary Report
+### During Execution
 
 ```python
 result = pipeline.execute()
 
-print("\n=== Cost Summary ===")
-print(f"Rows processed: {result.metrics.processed_rows}")
 print(f"Total cost: ${result.costs.total_cost:.4f}")
-print(f"Average cost/row: ${result.costs.total_cost / result.metrics.processed_rows:.6f}")
 print(f"Input tokens: {result.costs.input_tokens:,}")
 print(f"Output tokens: {result.costs.output_tokens:,}")
+print(f"Cost per row: ${result.costs.total_cost / result.metrics.processed_rows:.6f}")
+```
+
+### Across Multiple Runs
+
+```python
+from ondine.utils import CostTracker
+
+tracker = CostTracker()
+
+for config in pipeline_configs:
+    pipeline = build_pipeline(config)
+    result = pipeline.execute()
+
+    tracker.add(
+        provider=config["provider"],
+        model=config["model"],
+        cost=result.costs.total_cost,
+        tokens=result.costs.total_tokens,
+    )
+
+summary = tracker.summary()
+print(f"Total spend: ${summary['total_cost']:.2f}")
+print(f"Total tokens: {summary['total_tokens']:,}")
 ```
 
 ### Export to CSV
@@ -342,7 +259,6 @@ print(f"Output tokens: {result.costs.output_tokens:,}")
 ```python
 import pandas as pd
 
-# Create cost report
 cost_report = pd.DataFrame([{
     "date": pd.Timestamp.now(),
     "rows": result.metrics.processed_rows,
@@ -350,16 +266,15 @@ cost_report = pd.DataFrame([{
     "input_tokens": result.costs.input_tokens,
     "output_tokens": result.costs.output_tokens,
     "provider": "openai",
-    "model": "gpt-4o-mini"
+    "model": "gpt-4o-mini",
 }])
 
-# Append to running cost log
 cost_report.to_csv("cost_log.csv", mode="a", header=False, index=False)
 ```
 
 ## Budget-Aware Workflows
 
-### Estimate Before Execution
+### Estimate-Then-Execute Pattern
 
 ```python
 def safe_execute(pipeline, max_cost=10.0):
@@ -375,10 +290,12 @@ def safe_execute(pipeline, max_cost=10.0):
 result = safe_execute(pipeline, max_cost=5.0)
 ```
 
-### Incremental Processing with Cost Checks
+### Streaming with Cost Checks
+
+For large datasets, stream chunks and bail if costs climb too high:
 
 ```python
-from ondine import PipelineBuilder
+from decimal import Decimal
 
 pipeline = (
     PipelineBuilder.create()
@@ -391,43 +308,16 @@ pipeline = (
 total_cost = 0.0
 for chunk_result in pipeline.execute_stream():
     total_cost += chunk_result.costs.total_cost
-    print(f"Chunk cost: ${chunk_result.costs.total_cost:.4f}, "
-          f"Total so far: ${total_cost:.4f}")
+    print(f"Chunk: ${chunk_result.costs.total_cost:.4f}, "
+          f"Running total: ${total_cost:.4f}")
 
     if total_cost > 15.0:
         print("Approaching budget limit, stopping")
         break
 ```
 
-## Cost Tracking Across Runs
-
-Track costs across multiple pipeline runs:
-
-```python
-from ondine.utils import CostTracker
-
-tracker = CostTracker()
-
-# Run multiple pipelines
-for config in pipeline_configs:
-    pipeline = build_pipeline(config)
-    result = pipeline.execute()
-
-    tracker.add(
-        provider=config["provider"],
-        model=config["model"],
-        cost=result.costs.total_cost,
-        tokens=result.costs.total_tokens
-    )
-
-# View summary
-summary = tracker.summary()
-print(f"Total spend: ${summary['total_cost']:.2f}")
-print(f"Total tokens: {summary['total_tokens']:,}")
-```
-
 ## Related
 
-- [Execution Modes](execution-modes.md) - Choose efficient execution strategy
-- [API Reference: CostTracker](../api/utils.md#costtracker)
-- [Structured Output](structured-output.md) - Optimize response parsing
+- [Caching](caching.md) -- disk and Redis response caching
+- [Execution Modes](execution-modes.md) -- async and streaming for large datasets
+- [Routing](routing.md) -- multi-provider load balancing and cost-based routing
