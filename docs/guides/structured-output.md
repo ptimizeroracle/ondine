@@ -24,6 +24,15 @@ ProductInfo(brand="Apple", model="iPhone 15 Pro", price=999.99, condition="new")
 - IDE autocomplete for response fields
 - Validation errors caught early
 
+<!-- IMAGE_PLACEHOLDER
+title: Structured Output Validation Flow
+type: flowchart
+description: Enterprise Stripe/Vercel design (grid background, left-accent-bar cards, 1px connectors, #0F172A/#64748B typography). Top-to-bottom flow with 4 stages. Stage 1: "Raw LLM Response" box (gray left-accent) containing example JSON string '{"brand": "Apple", "model": "iPhone 15 Pro", "price": 999.99}'. Arrow down to Stage 2: "Pydantic Model" box (blue left-accent) showing the class definition with fields and types — brand: str, model: str, price: float, condition: str. Arrow splits into two paths at a diamond labeled "Validation". Left path (green arrow, labeled "Pass"): leads to "Typed Object" box (green left-accent) showing ProductInfo(brand="Apple", ...) with a checkmark icon. Right path (red arrow, labeled "Fail"): leads to "Validation Error" box (red left-accent) showing "price: expected float, got 'expensive'" with an X icon, then a dashed arrow labeled "retry or default" loops back up to Stage 1. Keep the layout clean, generous whitespace.
+placement: full-width
+alt_text: Flowchart showing how LLM raw JSON response passes through Pydantic model validation, producing either a typed object on success or a validation error with retry on failure.
+-->
+![Structured Output Validation Flow](guides/images/structured-output-validation-flow.png)
+
 ## Basic Usage
 
 ### 1. Define Your Pydantic Model
@@ -102,7 +111,7 @@ class Review(BaseModel):
     rating: int = Field(..., ge=1, le=5, description="Rating from 1-5")
     sentiment: str = Field(..., pattern="^(positive|negative|neutral)$")
     summary: str = Field(..., min_length=10, max_length=200)
-    
+
     @validator('rating')
     def rating_must_match_sentiment(cls, v, values):
         sentiment = values.get('sentiment')
@@ -386,11 +395,11 @@ from pydantic import BaseModel, validator
 class Price(BaseModel):
     amount: float
     currency: str = "USD"
-    
+
     @validator('amount')
     def round_price(cls, v):
         return round(v, 2)
-    
+
     @property
     def formatted(self) -> str:
         return f"${self.amount:.2f}"
@@ -497,4 +506,3 @@ logging.basicConfig(level=logging.DEBUG)
 - [Example: 03_structured_output.py](../../examples/03_structured_output.py)
 - [Cost Control](cost-control.md) - Optimize costs
 - [Multi-Column Processing](multi-column.md) - Multiple outputs
-

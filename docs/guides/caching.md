@@ -15,7 +15,7 @@ description: A left-to-right flowchart showing the lifecycle of a single pipelin
 placement: full-width
 alt_text: Flowchart showing how a request is hashed, checked against the cache, and either returned immediately on a hit or sent to the LLM API on a miss before the response is stored and returned.
 -->
-![Cache Lookup Request Flow](images/cache-lookup-request-flow.png)
+![Cache Lookup Request Flow](guides/images/cache-lookup-request-flow.png)
 
 ---
 
@@ -174,7 +174,7 @@ description: A side-by-side architecture comparison with two panels. LEFT PANEL 
 placement: full-width
 alt_text: Architecture diagram comparing disk caching with a single process writing to local filesystem versus Redis caching with multiple distributed workers sharing a centralized Redis server with TTL-based expiry.
 -->
-![Disk vs Redis Cache Architecture](images/disk-vs-redis-cache-architecture.png)
+![Disk vs Redis Cache Architecture](guides/images/disk-vs-redis-cache-architecture.png)
 
 **Disk** when you're working locally and want zero-infrastructure caching that sticks around forever.
 

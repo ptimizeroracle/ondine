@@ -20,7 +20,7 @@ description: A left-to-right pipeline diagram showing six stages as rounded boxe
 placement: full-width
 alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: evidence priming, LLM inference, grounding verification, contradiction detection, confidence scoring, and storage, with a feedback loop from storage back to evidence priming for subsequent runs.
 -->
-![Anti-Hallucination Pipeline Lifecycle](images/anti-hallucination-pipeline-lifecycle.png)
+![Anti-Hallucination Pipeline Lifecycle](guides/images/anti-hallucination-pipeline-lifecycle.png)
 
 ---
 
@@ -250,7 +250,7 @@ description: A top-to-bottom flowchart showing how grounding verification decide
 placement: full-width
 alt_text: Flowchart showing grounding verification: LLM response is scored against source text via TF-IDF and optional dense embeddings, then compared to the threshold. Grounded responses pass through; ungrounded ones are flagged, retried, or skipped depending on the configured action.
 -->
-![Grounding Verification Flow](images/grounding-verification-flow.png)
+![Grounding Verification Flow](guides/images/grounding-verification-flow.png)
 
 ```python
 # Basic grounding with flag action
@@ -481,7 +481,7 @@ description: A three-column comparison diagram showing the three store backends 
 placement: full-width
 alt_text: Side-by-side comparison of the three context store backends — RustContextStore (persistent, full-featured), ZepContextStore (cloud-hosted with entity extraction but no grounding), and InMemoryContextStore (ephemeral pure-Python fallback) — showing their capabilities, storage model, and search features.
 -->
-![Context Store Backend Comparison](images/context-store-backend-comparison.png)
+![Context Store Backend Comparison](guides/images/context-store-backend-comparison.png)
 
 | Requirement | Backend |
 |---|---|

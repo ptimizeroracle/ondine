@@ -41,7 +41,7 @@ description: A left-to-right data flow diagram showing the document ingestion pi
 placement: full-width
 alt_text: Data flow diagram showing the RAG ingestion pipeline: documents are loaded, optionally OCR-processed, split into semantic chunks, embedded as dense vectors, and stored in SQLite with both BM25 and vector indexes.
 -->
-![RAG Ingestion Pipeline](images/rag-ingestion-pipeline.png)
+![RAG Ingestion Pipeline](guides/images/rag-ingestion-pipeline.png)
 
 ## Installation
 
@@ -110,7 +110,7 @@ description: A left-to-right sequence diagram showing how with_knowledge_base() 
 placement: full-width
 alt_text: Sequence diagram showing how the pipeline builder retrieves knowledge base context for each row, injects it into the prompt template as _kb_context, sends to the LLM, and optionally evaluates the response.
 -->
-![Pipeline Builder RAG Integration](images/pipeline-builder-rag-integration.png)
+![Pipeline Builder RAG Integration](guides/images/pipeline-builder-rag-integration.png)
 
 ## KnowledgeStore
 
@@ -486,7 +486,7 @@ description: A top-to-bottom flowchart showing the full search path. Start with 
 placement: full-width
 alt_text: Flowchart showing the RAG search flow: user query optionally passes through query transformation, then hybrid search combines BM25 and dense vector retrieval via RRF, optionally reranks with a cross-encoder, and returns top-K results.
 -->
-![RAG Search Flow](images/rag-search-flow.png)
+![RAG Search Flow](guides/images/rag-search-flow.png)
 
 ## OCR Support
 
