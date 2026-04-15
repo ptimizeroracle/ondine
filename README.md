@@ -3,7 +3,7 @@
 
   # LLM Dataset Engine
 
-  **Run any LLM on every row of your data — structured columns back, cost control built in.**
+  **Run any LLM on every row of your data. Structured columns out. Cost control built in.**
 
   [![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
   [![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
@@ -17,11 +17,11 @@
 
 </div>
 
-> **For data engineers, data analysts, and data scientists** who need to run LLM inference across tabular datasets, Ondine is an open-source batch processing engine that turns any DataFrame into structured columns. Feed it a CSV or DataFrame, pick any LLM, get your output columns back — with checkpointing, cost control, retries, and anti-hallucination built in.
+> **For data engineers, data analysts, and data scientists.** Feed Ondine a CSV or DataFrame, pick any LLM, get structured columns back. Checkpointing, cost control, retries, and anti-hallucination are built in — not bolted on.
 
 ## Features
 
-- **Quick API**: 3-line setup with smart defaults — auto-detects columns, provider, and parser
+- **Quick API**: 3-line setup with smart defaults (auto-detects columns, provider, and parser)
 - **Checkpointing**: Crashes at row 8,000? Resume from row 8,000. Zero data loss.
 - **Cost Control**: Pre-execution estimation, hard budget cap, real-time tracking
 - **Structured Output**: Multi-column extraction with forced JSON parsing and automatic re-prompt on failure
@@ -29,7 +29,6 @@
 - **Prefix Caching**: 40-50% cost reduction by caching system prompts across large runs
 - **Observability**: Progress bars, structured logging, metrics, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
-- **Fault Tolerant**: Zero data loss on crashes, resume from checkpoint
 - **100+ Providers**: Native LiteLLM integration supporting OpenAI, Azure, Anthropic, Groq, Cerebras, Moonshot, and 100+ others
 - **Smart Routing**: Built-in LiteLLM Router with **latency-based routing** (fastest wins) and automatic failover for high availability
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
