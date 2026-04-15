@@ -170,7 +170,9 @@ JSON Array:"""
                     item_copy = dict(item)
                     item_id = item_copy.pop("id")
                     result_data = item_copy if item_copy else None
-                    items.append(BatchItem(id=int(item_id), result=result_data))
+                    items.append(
+                        BatchItem(id=int(item_id), input=None, result=result_data)
+                    )
                 else:
                     # PREFERRED: Position-based matching (no id needed!)
                     # User's 'id' field (if any) is preserved as business data
@@ -178,7 +180,7 @@ JSON Array:"""
                         result_data = item["result"]
                     else:
                         result_data = item  # Entire item is the result (user's fields)
-                    items.append(BatchItem(id=idx + 1, result=result_data))
+                    items.append(BatchItem(id=idx + 1, input=None, result=result_data))
 
             batch_result = BatchResult(results=items)
         except Exception as e:

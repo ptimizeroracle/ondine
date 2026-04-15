@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ondine.core.specifications import PipelineSpecifications
 

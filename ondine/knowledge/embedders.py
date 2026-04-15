@@ -43,7 +43,7 @@ class SentenceTransformerEmbedder:
             return self._model
         from sentence_transformers import SentenceTransformer
 
-        self._model = SentenceTransformer(self._model_name)
+        self._model = SentenceTransformer(self._model_name)  # type: ignore[assignment]
         logger.info("Loaded embedding model: %s", self._model_name)
         return self._model
 

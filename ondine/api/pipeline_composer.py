@@ -50,6 +50,7 @@ class PipelineComposer:
             - Path: Lazy loading, memory efficient
             - DataFrame: Already loaded, faster iteration
         """
+        self.input_path: str | None
         if isinstance(input_data, str | Path):
             self.input_path = str(input_data)
             self.input_df = None  # Lazy load
@@ -198,6 +199,8 @@ class PipelineComposer:
         """
         # Lazy load if needed
         if self.input_df is None:
+            if self.input_path is None:
+                raise ValueError("input_path must be set before executing")
             logger.info(f"Loading input data from {self.input_path}")
             # Use DataReader adapter for consistent file loading
             from ondine.adapters.data_io import create_data_reader
@@ -215,7 +218,7 @@ class PipelineComposer:
 
             # Create reader and load data
             reader = create_data_reader(
-                source_type=source_type, source_path=self.input_path
+                source_type=source_type, source_path=Path(self.input_path)
             )
             self.input_df = reader.read()
 
@@ -318,7 +321,7 @@ class PipelineComposer:
         Design Note:
             This enables pure YAML workflows without Python code.
         """
-        import yaml
+        import yaml  # type: ignore[import-untyped]
 
         from ondine.config import ConfigLoader
 

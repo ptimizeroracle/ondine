@@ -11,7 +11,7 @@ try:
 
     _PROMETHEUS_AVAILABLE = True
 except ImportError as exc:
-    Counter = Gauge = Histogram = start_http_server = None  # type: ignore[assignment]
+    Counter = Gauge = Histogram = start_http_server = None  # type: ignore[assignment,misc]
     _PROMETHEUS_AVAILABLE = False
     _PROMETHEUS_IMPORT_ERROR = exc
 

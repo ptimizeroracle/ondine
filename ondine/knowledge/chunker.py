@@ -85,7 +85,8 @@ class SemanticChunker:
             if self._model is None:
                 from sentence_transformers import SentenceTransformer
 
-                self._model = SentenceTransformer(self._model_name)
+                self._model = SentenceTransformer(self._model_name)  # type: ignore[assignment]
+            assert self._model is not None
             return self._model.encode(sentences, show_progress_bar=False)
         except ImportError:
             logger.info(

@@ -260,7 +260,7 @@ def _get_actual_model(model: str, router_model_list: list | None) -> str:
     """Extract the actual model name from router config if available."""
     if router_model_list and len(router_model_list) > 0:
         # Get the first deployment's actual model
-        return router_model_list[0].get("litellm_params", {}).get("model", model)
+        return str(router_model_list[0].get("litellm_params", {}).get("model", model))
     return model
 
 
@@ -286,8 +286,8 @@ def _extract_provider(model: str) -> str | None:
         "command": "cohere",
     }
 
-    for pattern, provider in provider_patterns.items():
-        if pattern in model_lower and provider:
-            return provider
+    for pattern, p in provider_patterns.items():
+        if pattern in model_lower and p:
+            return p
 
     return None

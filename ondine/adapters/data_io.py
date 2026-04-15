@@ -8,6 +8,7 @@ Adapter pattern.
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -352,7 +353,7 @@ def create_data_reader(
     source_type: DataSourceType,
     source_path: Path | None = None,
     dataframe: pd.DataFrame | None = None,
-    **kwargs: any,
+    **kwargs: Any,
 ) -> DataReader:
     """
     Factory function to create appropriate data reader.

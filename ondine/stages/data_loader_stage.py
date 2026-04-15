@@ -179,7 +179,7 @@ class DataLoaderStage(PipelineStage[DatasetSpec, DataContainer]):
         result = ValidationResult(is_valid=True)
 
         # Check file exists for file sources
-        if spec.source_path and not spec.source_path.exists():
+        if spec.source_path and not Path(spec.source_path).exists():
             result.add_error(f"Source file not found: {spec.source_path}")
 
         # Check input columns specified

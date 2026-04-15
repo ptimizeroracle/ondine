@@ -149,6 +149,18 @@ class ProgressTracker(ABC):
             result: ExecutionResult with metrics, costs, duration, etc.
         """
 
+    def ensure_deployment_task(
+        self,
+        stage_name: str,
+        deployment_id: str,
+        total_rows: int,
+        label_info: str = "",
+    ) -> None:
+        """Register a deployment sub-task for progress tracking.
+
+        Default implementation is a no-op; concrete trackers override.
+        """
+
     @abstractmethod
     def __enter__(self) -> "ProgressTracker":
         """Context manager entry."""
@@ -187,7 +199,7 @@ class _StdoutCapture:
         return False
 
     def fileno(self) -> int:
-        return self._original.fileno()
+        return int(self._original.fileno())
 
 
 class RichProgressTracker(ProgressTracker):
@@ -672,7 +684,7 @@ class TextualProgressTracker(ProgressTracker):
     def _base_label(deployment: dict, dep_id: str) -> str:
         """Extract a clean base label from deployment config."""
         if "label" in deployment:
-            return deployment["label"]
+            return str(deployment["label"])
         model = deployment.get("model", "")
         if model:
             provider = model.split("/")[0] if "/" in model else ""
@@ -721,7 +733,7 @@ class _TextualStdoutCapture:
         return False
 
     def fileno(self) -> int:
-        return self._original.fileno()
+        return int(self._original.fileno())
 
 
 class LoggingProgressTracker(ProgressTracker):
@@ -920,7 +932,7 @@ class LoggingProgressTracker(ProgressTracker):
     def _base_label(deployment: dict[str, Any], dep_id: str) -> str:
         """Extract a concise display label from deployment metadata."""
         if "label" in deployment:
-            return deployment["label"]
+            return str(deployment["label"])
         model = deployment.get("model", "")
         if model:
             provider = model.split("/")[0] if "/" in model else ""

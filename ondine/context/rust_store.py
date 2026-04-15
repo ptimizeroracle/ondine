@@ -10,6 +10,10 @@ import json
 import logging
 import math
 import uuid
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from ondine.context.protocol import (
     ContextStore,
@@ -64,7 +68,7 @@ class RustContextStore(ContextStore):
             }
         )
 
-        return self._db.store_claim(claim_json)
+        return str(self._db.store_claim(claim_json))
 
     def retrieve(self, claim_id: str) -> EvidenceRecord | None:
         try:
@@ -102,7 +106,7 @@ class RustContextStore(ContextStore):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
-        embed_fn: callable | None = None,
+        embed_fn: Callable[..., Any] | None = None,
     ) -> list[GroundingResult]:
         decision_id = str(uuid.uuid4())
         raw_claims = json.dumps(
@@ -165,7 +169,7 @@ class RustContextStore(ContextStore):
 
     def get_contradictions(self, claim_id: str) -> list[str]:
         result_json = self._db.get_contradictions(claim_id)
-        return json.loads(result_json)
+        return list(json.loads(result_json))
 
     def close(self) -> None:
         self._db = None
@@ -182,7 +186,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def _best_embedding_similarity(
-    embed_fn: callable,
+    embed_fn: Callable[..., Any],
     response_text: str,
     source_sentences: list[str],
 ) -> float:

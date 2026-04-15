@@ -146,7 +146,7 @@ class ErrorEvent:
     span_id: str
     stage_name: str | None = None
     row_index: int | None = None
-    error: Exception = None
+    error: Exception | None = None
     error_type: str = ""
     error_message: str = ""
     stack_trace: str = ""

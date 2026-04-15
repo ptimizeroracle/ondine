@@ -49,9 +49,9 @@ class OpenTelemetryObserver(PipelineObserver):
         """
         super().__init__(config)
 
-        self._tracer = None
-        self._provider = None
-        self._pipeline_span = None
+        self._tracer: Any = None
+        self._provider: Any = None
+        self._pipeline_span: Any = None
         self._stage_spans: dict[str, Any] = {}
 
         try:

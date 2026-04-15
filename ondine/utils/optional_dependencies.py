@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import NoReturn
 
 
 def _matches_missing_dependency(
@@ -27,7 +28,7 @@ def _matches_missing_dependency(
     return False
 
 
-def raise_excel_extra_error(operation: str, exc: Exception) -> None:
+def raise_excel_extra_error(operation: str, exc: Exception) -> NoReturn:
     """Raise a friendly error for missing Excel support dependencies."""
     if _matches_missing_dependency(exc, ("openpyxl", "xlrd")):
         raise ImportError(
@@ -37,7 +38,7 @@ def raise_excel_extra_error(operation: str, exc: Exception) -> None:
     raise exc
 
 
-def raise_parquet_extra_error(operation: str, exc: Exception) -> None:
+def raise_parquet_extra_error(operation: str, exc: Exception) -> NoReturn:
     """Raise a friendly error for missing Parquet support dependencies."""
     if _matches_missing_dependency(exc, ("pyarrow", "fastparquet")):
         raise ImportError(

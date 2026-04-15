@@ -4,7 +4,7 @@ Retry handling with exponential backoff.
 Provides robust retry logic for transient failures.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from tenacity import (
@@ -82,6 +82,7 @@ class RetryHandler:
         self.max_delay = max_delay
         self.exponential_base = exponential_base
 
+        self.retryable_exceptions: tuple[type[Exception], ...]
         if retryable_exceptions is None:
             self.retryable_exceptions = (
                 RetryableError,
@@ -121,7 +122,7 @@ class RetryHandler:
 
         return retryer(func)
 
-    async def execute_async(self, func: Callable[[], T]) -> T:
+    async def execute_async(self, func: Callable[[], Awaitable[T]]) -> T:
         """
         Execute async function with retry logic.
 
@@ -155,4 +156,4 @@ class RetryHandler:
             Delay in seconds
         """
         delay = self.initial_delay * (self.exponential_base ** (attempt - 1))
-        return min(delay, self.max_delay)
+        return float(min(delay, self.max_delay))

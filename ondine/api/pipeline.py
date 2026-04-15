@@ -217,7 +217,8 @@ class Pipeline:
             use_jinja2=self.specifications.processing.use_jinja2,
         )
         batches = formatter.process(
-            (sample_df, self.specifications.prompt), ExecutionContext()
+            (sample_df, self.specifications.prompt),  # type: ignore[arg-type]
+            ExecutionContext(),  # type: ignore[arg-type]
         )
 
         # Create LLM client and estimate
@@ -1112,7 +1113,7 @@ class Pipeline:
         elif chunk_size is None:
             chunk_size = 1000  # Default fallback
 
-        streaming_config = {}
+        streaming_config: dict[str, Any] = {}
         if isinstance(self.specifications.metadata, dict):
             streaming_config = self.specifications.metadata.get("streaming", {}) or {}
         max_pending_chunks = streaming_config.get("max_pending_chunks", 3)

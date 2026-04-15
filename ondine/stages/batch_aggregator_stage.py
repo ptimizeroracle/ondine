@@ -65,7 +65,7 @@ class BatchAggregatorStage(PipelineStage):
         """
         import time
 
-        aggregated_batches = []
+        aggregated_batches: list[PromptBatch] = []
 
         # Calculate total prompts for progress tracking
         total_prompts = sum(len(b.prompts) for b in batches)
@@ -224,7 +224,7 @@ class BatchAggregatorStage(PipelineStage):
 
         return ValidationResult(is_valid=True)
 
-    def estimate_cost(self, input_data: list[PromptBatch], context: Any) -> Any:
+    def estimate_cost(self, input_data: list[PromptBatch]) -> Any:  # type: ignore[override]
         """Estimate cost for batch aggregation.
 
         Args:

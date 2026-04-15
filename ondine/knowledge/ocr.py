@@ -98,7 +98,7 @@ class VisionOCR:
             kwargs["api_key"] = self._api_key
 
         response = litellm.completion(**kwargs)
-        return response.choices[0].message.content.strip()
+        return str(response.choices[0].message.content).strip()
 
     def __repr__(self) -> str:
         return f"VisionOCR(model={self._model!r})"
@@ -131,7 +131,7 @@ class TesseractOCR:
 
         img = Image.open(image_path)
         text = pytesseract.image_to_string(img, lang=self._lang, config=self._config)
-        return text.strip()
+        return str(text).strip()
 
     def __repr__(self) -> str:
         return f"TesseractOCR(lang={self._lang!r})"
@@ -164,7 +164,7 @@ class DocTROCR:
 
         doc = DocumentFile.from_images(image_path)
         result = model(doc)
-        return result.render()
+        return str(result.render())
 
     def _load(self):
         if self._model is not None:

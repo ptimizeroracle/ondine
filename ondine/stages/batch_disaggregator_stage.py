@@ -135,6 +135,9 @@ class BatchDisaggregatorStage(PipelineStage):
                         id_to_json: dict[int, str] = {}
                         for item in items:
                             item_id = getattr(item, "id", None)
+                            if item_id is None:
+                                continue
+                            item_id = int(item_id)
                             if hasattr(item, "result") and item.result is not None:
                                 if hasattr(item.result, "model_dump"):
                                     result_dict = item.result.model_dump()
@@ -293,7 +296,7 @@ class BatchDisaggregatorStage(PipelineStage):
 
         return ValidationResult(is_valid=True)
 
-    def estimate_cost(self, input_data: list[ResponseBatch], context: Any) -> Any:
+    def estimate_cost(self, input_data: list[ResponseBatch]) -> Any:
         """Estimate cost for batch disaggregation.
 
         Args:

@@ -94,7 +94,7 @@ class RowMetadata:
 
     row_index: int
     row_id: Any = None
-    custom: dict[str, Any] = field(default_factory=dict)
+    custom: dict[str, Any] | None = None
 
 
 @dataclass
@@ -249,9 +249,9 @@ class ExecutionResult:
             List of row dictionaries
         """
         if hasattr(self.data, "to_list"):
-            return self.data.to_list()
+            return self.data.to_list()  # type: ignore[no-any-return]
 
-        return self.to_pandas().to_dict(orient="records")
+        return self.to_pandas().to_dict(orient="records")  # type: ignore[no-any-return]
 
     def validate_output_quality(self, output_columns: list[str]) -> "QualityReport":
         """

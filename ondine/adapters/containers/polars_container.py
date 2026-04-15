@@ -73,7 +73,7 @@ class PolarsContainer(BaseDataContainer):
     @property
     def columns(self) -> list[str]:
         """Get column names."""
-        return self._df.columns
+        return list(self._df.columns)
 
     @property
     def schema(self) -> dict[str, type]:
@@ -112,15 +112,15 @@ class PolarsContainer(BaseDataContainer):
 
     def to_list(self) -> list[Row]:
         """Convert to list of dictionaries."""
-        return self._df.to_dicts()
+        return list(self._df.to_dicts())  # type: ignore[no-any-return]
 
     def head(self, n: int = 5) -> list[Row]:
         """Get first n rows."""
-        return self._df.head(n).to_dicts()
+        return list(self._df.head(n).to_dicts())  # type: ignore[no-any-return]
 
     def tail(self, n: int = 5) -> list[Row]:
         """Get last n rows."""
-        return self._df.tail(n).to_dicts()
+        return list(self._df.tail(n).to_dicts())  # type: ignore[no-any-return]
 
     def select(self, columns: list[str]) -> "PolarsContainer":
         """

@@ -60,7 +60,7 @@ class JSONParser(ResponseParser):
     def parse(self, response: str) -> dict[str, Any]:
         """Parse JSON from response."""
         try:
-            return json.loads(response.strip())
+            return json.loads(response.strip())  # type: ignore[no-any-return]
         except json.JSONDecodeError:
             if self.strict:
                 raise
@@ -70,12 +70,12 @@ class JSONParser(ResponseParser):
                 start = response.find("```json") + 7
                 end = response.find("```", start)
                 json_str = response[start:end].strip()
-                return json.loads(json_str)
+                return json.loads(json_str)  # type: ignore[no-any-return]
             if "```" in response:
                 start = response.find("```") + 3
                 end = response.find("```", start)
                 json_str = response[start:end].strip()
-                return json.loads(json_str)
+                return json.loads(json_str)  # type: ignore[no-any-return]
             # Return as raw text if can't parse
             return {"output": response.strip()}
 
@@ -98,7 +98,7 @@ class PydanticParser(ResponseParser):
         self.model = model
         self.strict = strict
 
-    def parse(self, response: str) -> BaseModel:
+    def parse(self, response: str) -> BaseModel:  # type: ignore[override]
         """Parse and validate response with Pydantic model."""
         try:
             # Try to parse as JSON first
@@ -112,7 +112,7 @@ class PydanticParser(ResponseParser):
             if self.strict:
                 raise ValueError(f"Pydantic validation failed: {e}")
             # Return raw data if validation fails
-            return {"output": response.strip(), "validation_error": str(e)}
+            return {"output": response.strip(), "validation_error": str(e)}  # type: ignore[return-value]
 
 
 class RegexParser(ResponseParser):

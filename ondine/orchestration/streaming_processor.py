@@ -298,10 +298,10 @@ class StreamingProcessor:
 
         try:
             while True:
-                result = await results.get()
-                if result is None:
+                chunk_or_none: pl.DataFrame | None = await results.get()
+                if chunk_or_none is None:
                     break
-                yield result
+                yield chunk_or_none
         finally:
             if not producer_task.done():
                 producer_task.cancel()

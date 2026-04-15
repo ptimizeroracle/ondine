@@ -9,6 +9,10 @@ from __future__ import annotations
 import math
 import uuid
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from ondine.context.protocol import (
     ContextStore,
@@ -69,7 +73,7 @@ class InMemoryContextStore(ContextStore):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
-        embed_fn: callable | None = None,
+        embed_fn: Callable[..., Any] | None = None,
     ) -> list[GroundingResult]:
         best_sim = 0.0
         for sentence in source_sentences:
@@ -122,7 +126,7 @@ class InMemoryContextStore(ContextStore):
 
 
 def _best_embedding_similarity(
-    embed_fn: callable,
+    embed_fn: Callable[..., Any],
     response_text: str,
     source_sentences: list[str],
 ) -> float:

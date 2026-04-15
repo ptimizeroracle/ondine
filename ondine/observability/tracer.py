@@ -22,11 +22,11 @@ try:
 
     _OTEL_AVAILABLE = True
 except ImportError as exc:
-    trace = None  # type: ignore[assignment]
-    Resource = None  # type: ignore[assignment]
-    TracerProvider = Any  # type: ignore[assignment]
-    BatchSpanProcessor = None  # type: ignore[assignment]
-    ConsoleSpanExporter = None  # type: ignore[assignment]
+    trace = None  # type: ignore[assignment,misc]
+    Resource = None  # type: ignore[assignment,misc]
+    TracerProvider = Any  # type: ignore[assignment,misc]
+    BatchSpanProcessor = None  # type: ignore[assignment,misc]
+    ConsoleSpanExporter = None  # type: ignore[assignment,misc]
     _OTEL_AVAILABLE = False
     _OTEL_IMPORT_ERROR = exc
 

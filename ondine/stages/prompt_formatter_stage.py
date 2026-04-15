@@ -55,6 +55,7 @@ class PromptFormatterStage(
         container_or_df, prompt_spec = input_data
 
         # Auto-wrap pandas DataFrame for backward compatibility
+        container: DataContainer
         try:
             import pandas as pd
 
@@ -63,9 +64,9 @@ class PromptFormatterStage(
 
                 container = PandasContainer(container_or_df)
             else:
-                container = container_or_df
+                container = container_or_df  # type: ignore[assignment]
         except ImportError:
-            container = container_or_df
+            container = container_or_df  # type: ignore[assignment]
 
         prompts: list[str] = []
         metadata_list: list[RowMetadata] = []

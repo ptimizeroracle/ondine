@@ -671,6 +671,10 @@ def resume(
             sys.exit(1)
 
         console.print(f"[cyan]Loading configuration from {config}...[/cyan]")
+        # Re-load specs if not already loaded (config is not None at this point)
+        if specs is None:
+            specs = _load_specs_from_config(config)
+        assert specs is not None
         specs.processing.checkpoint_dir = effective_checkpoint_dir
 
         if input is not None:
