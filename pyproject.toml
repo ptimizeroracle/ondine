@@ -45,7 +45,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/ptimizeroracle/ondine"
 Repository = "https://github.com/ptimizeroracle/ondine"
-Documentation = "https://ptimizeroracle.github.io/ondine"
+Documentation = "https://docs.ondine.dev"
 Issues = "https://github.com/ptimizeroracle/ondine/issues"
 
 [project.optional-dependencies]
