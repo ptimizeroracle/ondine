@@ -28,9 +28,9 @@ jobs:
       run: uv sync --extra dev
 
     - name: Run pip-audit (vulnerability scanner)
-      # TODO: Fix 40 dep vulnerabilities (aiohttp, etc.), then remove || true
+      # GHSA-w8v5-vhqr-4h9v: diskcache advisory with no upstream fix available
       run: |
-        uv run pip-audit --desc || true
+        uv run pip-audit --desc --ignore-vuln GHSA-w8v5-vhqr-4h9v
 
   code-scan:
     name: Code Security Scan

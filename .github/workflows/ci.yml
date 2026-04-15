@@ -250,9 +250,9 @@ jobs:
       run: uv sync --extra dev
 
     - name: Run security scan
-      # TODO: Fix 40 dep vulnerabilities (aiohttp, etc.), then remove || true
+      # GHSA-w8v5-vhqr-4h9v: diskcache advisory with no upstream fix available
       run: |
-        uv run pip-audit || true
+        uv run pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v
 
   claim-verification:
     name: Claim Verification Suite
