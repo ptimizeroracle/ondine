@@ -184,7 +184,9 @@ class MLXClient(LLMClient):
         # Load mlx_lm module (or use injected module for testing)
         if _mlx_lm_module is None:
             try:
-                import mlx_lm as _mlx_lm_module
+                import mlx_lm as _imported_mlx_lm
+
+                _resolved_module: Any = _imported_mlx_lm
             except ImportError as e:
                 raise ImportError(
                     "MLX not installed. Install with:\n"
@@ -193,9 +195,11 @@ class MLXClient(LLMClient):
                     "  pip install mlx mlx-lm\n\n"
                     "Note: MLX only works on Apple Silicon (M1/M2/M3/M4 chips)"
                 ) from e
+        else:
+            _resolved_module = _mlx_lm_module
 
         # Store mlx_lm module for later use
-        self.mlx_lm = _mlx_lm_module
+        self.mlx_lm = _resolved_module
 
         # Load model once (expensive operation, ~1-2 seconds)
         print(f"🔄 Loading MLX model: {spec.model}...")
@@ -338,4 +342,4 @@ def create_llm_client(spec: LLMSpec) -> LLMClient:
     provider_class = ProviderRegistry.get(provider_id)
 
     # Instantiate and return
-    return provider_class(spec)
+    return provider_class(spec)  # type: ignore[no-any-return]

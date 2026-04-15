@@ -9,8 +9,8 @@ The key insight: LLM pipelines are fundamentally row-by-row operations.
 We don't need complex tabular operations - just iteration over rows.
 """
 
-from abc import abstractmethod
-from collections.abc import AsyncIterator, Iterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 # The universal row type - a simple dictionary
@@ -89,14 +89,39 @@ class DataContainer(Protocol):
         """
         ...
 
+    def head(self, n: int = 5) -> list[Row]:
+        """
+        Get first n rows.
 
-class BaseDataContainer:
+        Returns:
+            List of first n rows as dictionaries
+        """
+        ...
+
+
+class BaseDataContainer(ABC):
     """
     Base class for DataContainer implementations.
 
     Provides common functionality and sensible defaults.
     Subclasses must implement __iter__, __len__, and columns.
     """
+
+    @abstractmethod
+    def __iter__(self) -> Iterator[Row]:
+        """Iterate over rows as dictionaries."""
+        ...
+
+    @abstractmethod
+    def __len__(self) -> int:
+        """Return number of rows."""
+        ...
+
+    @property
+    @abstractmethod
+    def columns(self) -> list[str]:
+        """Return list of column names."""
+        ...
 
     @property
     def schema(self) -> dict[str, type]:
@@ -149,7 +174,7 @@ class BaseDataContainer:
         rows = [{k: row[k] for k in columns if k in row} for row in self]
         return DictListContainer(rows, columns=columns)
 
-    def filter(self, predicate: callable) -> "DataContainer":
+    def filter(self, predicate: Callable[[Row], bool]) -> "DataContainer":
         """
         Filter rows by predicate.
 
@@ -164,7 +189,7 @@ class BaseDataContainer:
         rows = [row for row in self if predicate(row)]
         return DictListContainer(rows, columns=self.columns)
 
-    def map(self, func: callable) -> "DataContainer":
+    def map(self, func: Callable[[Row], Row]) -> "DataContainer":
         """
         Apply function to each row.
 

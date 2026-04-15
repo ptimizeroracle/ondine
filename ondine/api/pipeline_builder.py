@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ondine.context.protocol import ContextStore
 
 import pandas as pd  # noqa: TC002
@@ -59,8 +61,8 @@ class PipelineBuilder:
         self._output_spec: OutputSpec | None = None
         self._dataframe: pd.DataFrame | None = None
         self._executor: ExecutionStrategy | None = None
-        self._custom_parser: any | None = None
-        self._custom_llm_client: any | None = None
+        self._custom_parser: Any | None = None
+        self._custom_llm_client: Any | None = None
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
         self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
@@ -456,7 +458,7 @@ class PipelineBuilder:
         max_tokens: int | None = None,
         input_cost_per_1k_tokens: Decimal | None = None,
         output_cost_per_1k_tokens: Decimal | None = None,
-        **kwargs: any,
+        **kwargs: Any,
     ) -> PipelineBuilder:
         """
         Configure LLM provider.
@@ -598,7 +600,7 @@ class PipelineBuilder:
         self._llm_spec = spec
         return self
 
-    def with_custom_llm_client(self, client: any) -> PipelineBuilder:
+    def with_custom_llm_client(self, client: Any) -> PipelineBuilder:
         """
         Provide a custom LLM client instance directly.
 
@@ -802,7 +804,7 @@ class PipelineBuilder:
         self._processing_spec.checkpoint_dir = Path(directory)
         return self
 
-    def with_parser(self, parser: any) -> PipelineBuilder:
+    def with_parser(self, parser: Any) -> PipelineBuilder:
         """
         Configure response parser.
 
@@ -1083,7 +1085,7 @@ class PipelineBuilder:
         return self
 
     def with_observer(
-        self, name: str, config: dict[str, any] | None = None
+        self, name: str, config: dict[str, Any] | None = None
     ) -> PipelineBuilder:
         """
         Add observability observer to the pipeline.
@@ -1094,6 +1096,7 @@ class PipelineBuilder:
         Args:
             name: Observer identifier (e.g., "langfuse", "opentelemetry", "logging")
             config: Observer-specific configuration dictionary
+
 
         Returns:
             Self for chaining
@@ -1536,7 +1539,7 @@ class PipelineBuilder:
         self,
         threshold: float = 0.3,
         action: str = "flag",
-        embed_fn: callable | None = None,
+        embed_fn: Callable[..., Any] | None = None,
     ) -> PipelineBuilder:
         """Enable grounding verification on LLM responses.
 
@@ -1719,6 +1722,11 @@ class PipelineBuilder:
                 model=self._custom_llm_client.model,
                 temperature=self._custom_llm_client.temperature,
                 max_tokens=self._custom_llm_client.max_tokens,
+            )
+
+        if llm_spec is None:
+            raise ValueError(
+                "LLM spec is required. Call with_llm() or with_custom_llm_client() before build()."
             )
 
         specifications = PipelineSpecifications(

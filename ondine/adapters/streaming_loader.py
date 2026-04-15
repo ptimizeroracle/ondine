@@ -146,7 +146,7 @@ class StreamingDataLoader:
         # Then slice into chunks
         try:
             # For very large files, use streaming collect
-            df = self._lazy_frame.collect(streaming=True)
+            df = self._lazy_frame.collect(engine="streaming")
 
             for i in range(0, len(df), self.chunk_size):
                 chunk = df.slice(i, self.chunk_size)
@@ -197,7 +197,8 @@ class StreamingDataLoader:
             ),
             start=1,
         ):
-            chunk = pl.from_arrow(batch)
+            raw = pl.from_arrow(batch)
+            chunk = raw if isinstance(raw, pl.DataFrame) else raw.to_frame()
             logger.debug(
                 f"Yielding Parquet chunk {idx}: {len(chunk)} rows from {self.path.name}"
             )

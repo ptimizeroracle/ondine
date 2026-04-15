@@ -4,6 +4,8 @@ DatasetProcessor - Simplified convenience wrapper.
 For users who just want to process data with minimal configuration.
 """
 
+from typing import Any
+
 import pandas as pd
 
 from ondine.api.pipeline_builder import PipelineBuilder
@@ -33,7 +35,7 @@ class DatasetProcessor:
         input_column: str,
         output_column: str,
         prompt: str,
-        llm_config: dict[str, any],
+        llm_config: dict[str, Any],
     ):
         """
         Initialize dataset processor.

@@ -209,7 +209,7 @@ class KnowledgeStore:
     @property
     def chunk_count(self) -> int:
         """Number of chunks currently stored."""
-        return self._db.chunk_count()
+        return int(self._db.chunk_count())
 
     # ── private: Rust-backed or fallback ──────────────────────────
 
@@ -243,7 +243,7 @@ class KnowledgeStore:
         def _callback(texts: list[str]) -> list[list[float]]:
             return self._embedder.embed(texts)  # type: ignore[union-attr]
 
-        return self._db.embed_pending_chunks(_callback, self._embed_model)
+        return int(self._db.embed_pending_chunks(_callback, self._embed_model))
 
 
 class _InMemoryChunkDB:

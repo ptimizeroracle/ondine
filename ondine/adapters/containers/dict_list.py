@@ -5,7 +5,7 @@ Simple container backed by a list of dictionaries.
 Useful for small datasets, test fixtures, and intermediate results.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from ondine.core.data_container import BaseDataContainer, Row
@@ -128,7 +128,7 @@ class DictListContainer(BaseDataContainer):
         filtered_data = [{k: row.get(k) for k in columns} for row in self._data]
         return DictListContainer(data=filtered_data, columns=columns)
 
-    def filter(self, predicate: callable) -> "DictListContainer":
+    def filter(self, predicate: Callable[[Row], bool]) -> "DictListContainer":
         """
         Filter rows by predicate.
 
@@ -141,7 +141,7 @@ class DictListContainer(BaseDataContainer):
         filtered_data = [row for row in self._data if predicate(row)]
         return DictListContainer(data=filtered_data, columns=self._columns)
 
-    def map(self, func: callable) -> "DictListContainer":
+    def map(self, func: Callable[[Row], Row]) -> "DictListContainer":
         """
         Apply function to each row.
 
@@ -165,7 +165,9 @@ class DictListContainer(BaseDataContainer):
         Returns:
             New container with sorted rows
         """
-        sorted_data = sorted(self._data, key=lambda r: r.get(key), reverse=reverse)
+        sorted_data = sorted(
+            self._data, key=lambda r: (r.get(key) is None, r.get(key)), reverse=reverse
+        )
         return DictListContainer(data=sorted_data, columns=self._columns)
 
     def head(self, n: int = 5) -> list[Row]:

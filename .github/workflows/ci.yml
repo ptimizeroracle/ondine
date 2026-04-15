@@ -156,9 +156,8 @@ jobs:
         uv run ruff check ondine/ tests/
 
     - name: Run type checker
-      # TODO: Fix ~40 pre-existing mypy errors, then remove || true
       run: |
-        uv run mypy ondine/ || true
+        uv run mypy ondine/
 
     - name: Run unit tests
       env:

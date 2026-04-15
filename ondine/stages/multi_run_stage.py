@@ -56,15 +56,17 @@ class FirstSuccessStrategy(AggregationStrategy[T]):
         for result in results:
             if result is not None:
                 return result
-        return results[0] if results else None
+        if results:
+            return results[0]
+        raise RuntimeError("No results to aggregate")
 
 
-class AllStrategy(AggregationStrategy[T]):
+class AllStrategy(AggregationStrategy[list[T]]):
     """Returns all results as list (no aggregation)."""
 
-    def aggregate(self, results: list[T]) -> list[T]:
-        """Return all results."""
-        return results
+    def aggregate(self, results: list[list[T]]) -> list[T]:  # type: ignore[override]
+        """Return all results flattened."""
+        return [item for sublist in results for item in sublist]
 
 
 class AverageStrategy(AggregationStrategy[float]):
@@ -134,14 +136,14 @@ class MultiRunStage(PipelineStage[TInput, TOutput]):
             )
 
         # Aggregate results
-        aggregated = self.aggregation_strategy.aggregate(results)
+        aggregated = self.aggregation_strategy.aggregate(results)  # type: ignore[arg-type]
 
         self.logger.info(
             f"Aggregated {len(results)} results using "
             f"{self.aggregation_strategy.__class__.__name__}"
         )
 
-        return aggregated
+        return aggregated  # type: ignore[return-value]
 
     def validate_input(self, input_data: TInput) -> ValidationResult:
         """Delegate validation to wrapped stage."""

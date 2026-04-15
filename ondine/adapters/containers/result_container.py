@@ -8,7 +8,7 @@ with conversion to various formats (Pandas, Polars, CSV, etc.).
 import csv
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -268,7 +268,7 @@ class ResultContainerImpl(BaseDataContainer):
         filtered_data = [{k: row.get(k) for k in columns} for row in self._data]
         return ResultContainerImpl(data=filtered_data, columns=columns)
 
-    def filter(self, predicate: callable) -> "ResultContainerImpl":
+    def filter(self, predicate: Callable[[Row], bool]) -> "ResultContainerImpl":
         """
         Filter rows by predicate.
 

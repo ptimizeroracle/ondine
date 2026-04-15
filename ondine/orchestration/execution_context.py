@@ -151,6 +151,7 @@ class ExecutionContext:
 
     # Progress tracking
     current_stage_index: int = 0
+    current_stage: str = ""
     last_processed_row: int = 0
     total_rows: int = 0
 
@@ -177,6 +178,10 @@ class ExecutionContext:
     # Distributed tracing
     trace_id: str = field(default_factory=lambda: str(uuid4()))
     span_id: str = field(default_factory=lambda: str(uuid4()))
+
+    # Progress tracker (set by pipeline, not serialized)
+    _progress_tracker_ref: Any = field(default=None, repr=False, compare=False)
+    progress_tracker: Any = field(default=None, repr=False, compare=False)
 
     def update_stage(self, stage_index: int) -> None:
         """Update current stage."""

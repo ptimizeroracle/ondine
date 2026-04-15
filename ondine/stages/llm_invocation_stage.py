@@ -128,7 +128,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
     ) -> list[ResponseBatch]:
         """Async implementation of process()."""
         # Initialize global connection pool
-        await self.llm_client.start()
+        await self.llm_client.start()  # type: ignore[attr-defined]
 
         try:
             # Setup deployment tracker from Router config
@@ -174,7 +174,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             return response_batches
         finally:
             # Cleanup global connection pool
-            await self.llm_client.stop()
+            await self.llm_client.stop()  # type: ignore[attr-defined]
 
     def _get_router_model_list(self) -> list[dict] | None:
         """Get model list from Router if available."""
@@ -193,12 +193,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 return await self._process_single_item(idx, item, context)
 
         if self.concurrency <= 1:
-            responses = []
+            sequential_responses: list[LLMResponse] = []
             for idx, item in enumerate(items):
-                responses.append(await _process_one(idx, item))
+                sequential_responses.append(await _process_one(idx, item))
 
             self._log_distribution_summary()
-            return responses
+            return sequential_responses
 
         task_map = {
             asyncio.create_task(_process_one(idx, item)): idx
@@ -324,10 +324,10 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
             # Invoke LLM
             if self.output_cls:
-                return await self.llm_client.structured_invoke_async(
+                return await self.llm_client.structured_invoke_async(  # type: ignore[attr-defined,no-any-return]
                     prompt, self.output_cls, system_message=system_message
                 )
-            return await self.llm_client.ainvoke(prompt, system_message=system_message)
+            return await self.llm_client.ainvoke(prompt, system_message=system_message)  # type: ignore[attr-defined,no-any-return]
 
         return await self.retry_handler.execute_async(_invoke)
 
@@ -336,7 +336,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         try:
             if hasattr(response, "metadata") and isinstance(response.metadata, dict):
                 if "model_id" in response.metadata:
-                    return response.metadata["model_id"]
+                    return str(response.metadata["model_id"])
             return None
         except Exception:
             return None
@@ -415,7 +415,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 metadata={"error": str(error), "action": "skipped"},
             )
         if decision.action == ErrorAction.USE_DEFAULT:
-            return decision.default_value
+            return decision.default_value  # type: ignore[no-any-return]
         # FAIL action
         raise error
 

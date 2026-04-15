@@ -5,6 +5,7 @@ Provides status information for operational monitoring.
 """
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ondine.api.pipeline import Pipeline
@@ -40,7 +41,7 @@ class HealthCheck:
         """
         self.last_check = datetime.now()
 
-        status = {
+        status: dict[str, Any] = {
             "status": "healthy",
             "timestamp": self.last_check.isoformat(),
             "pipeline_id": str(self.pipeline.id),
@@ -52,7 +53,9 @@ class HealthCheck:
             llm_spec = self.pipeline.specifications.llm
             status["checks"]["llm_provider"] = {
                 "status": "ok",
-                "provider": llm_spec.provider.value,
+                "provider": llm_spec.provider.value
+                if hasattr(llm_spec.provider, "value")
+                else str(llm_spec.provider),
                 "model": llm_spec.model,
             }
         except Exception as e:
@@ -68,7 +71,7 @@ class HealthCheck:
             source_exists = True
 
             if dataset_spec.source_path:
-                source_exists = dataset_spec.source_path.exists()
+                source_exists = Path(dataset_spec.source_path).exists()
 
             status["checks"]["data_source"] = {
                 "status": "ok" if source_exists else "warning",
@@ -109,7 +112,7 @@ class HealthCheck:
             True if healthy
         """
         status = self.check()
-        return status["status"] == "healthy"
+        return bool(status["status"] == "healthy")
 
     def get_readiness(self) -> dict[str, Any]:
         """

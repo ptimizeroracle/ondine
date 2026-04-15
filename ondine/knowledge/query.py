@@ -203,6 +203,6 @@ def resolve_query_transform(
                 f"Unknown query-transform strategy {spec!r}. "
                 f"Available: {', '.join(sorted(_STRATEGY_MAP))}"
             )
-        return cls()
+        return cls()  # type: ignore[no-any-return]
 
-    return spec  # already a QueryTransformer-compatible object
+    return spec  # type: ignore[no-any-return]  # already a QueryTransformer-compatible object

@@ -118,6 +118,7 @@ class PipelineExecutor:
 
             # Mark completion
             self.state = ExecutionState.COMPLETED
+            assert self.context is not None
             self.context.end_time = datetime.now()
 
             # Create result
@@ -229,10 +230,19 @@ class PipelineExecutor:
         if not self.context:
             raise RuntimeError("No execution context available")
 
+        from ondine.core.models import CostEstimate
+
         return ExecutionResult(
             data=data,
             metrics=self.context.get_stats(),
-            costs=self.context.accumulated_cost,
+            costs=CostEstimate(
+                total_cost=self.context.accumulated_cost,
+                total_tokens=self.context.accumulated_tokens,
+                input_tokens=0,
+                output_tokens=0,
+                rows=self.context.total_rows,
+                confidence="actual",
+            ),
             execution_id=self.context.session_id,
             start_time=self.context.start_time,
             end_time=self.context.end_time,

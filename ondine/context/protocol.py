@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass
@@ -76,7 +80,7 @@ class ContextStore(ABC):
         response_text: str,
         source_sentences: list[str],
         threshold: float = 0.3,
-        embed_fn: callable | None = None,
+        embed_fn: Callable[..., Any] | None = None,
     ) -> list[GroundingResult]:
         """Ground an LLM response against source sentences.
 

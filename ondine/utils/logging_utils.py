@@ -107,13 +107,13 @@ def configure_logging(
                 structlog.dev.ConsoleRenderer(colors=True, pad_level=False)
             )
         except ImportError:
-            # Fallback to custom renderer
-            from ondine.utils.logging_utils import _compact_console_renderer
-
-            processors.append(_compact_console_renderer)
+            # Fallback to structlog's built-in renderer
+            processors.append(
+                structlog.dev.ConsoleRenderer(colors=False, pad_level=False)
+            )
 
     structlog.configure(
-        processors=processors,
+        processors=processors,  # type: ignore[arg-type]
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, level.upper())
         ),
@@ -143,7 +143,7 @@ def get_logger(name: str) -> structlog.BoundLogger:
     if not _logging_configured:
         configure_logging()
 
-    return structlog.get_logger(name)
+    return structlog.get_logger(name)  # type: ignore[no-any-return]
 
 
 def sanitize_for_logging(data: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +165,7 @@ def sanitize_for_logging(data: dict[str, Any]) -> dict[str, Any]:
         "credential",
     }
 
-    sanitized = {}
+    sanitized: dict[str, Any] = {}
     for key, value in data.items():
         key_lower = key.lower()
         if any(sensitive in key_lower for sensitive in sensitive_keys):

@@ -48,7 +48,7 @@ class AsyncExecutor(ExecutionStrategy):
         self.logger = logger
         self.semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         stages: list[PipelineStage],
         context: ExecutionContext,
@@ -138,7 +138,9 @@ class AsyncExecutor(ExecutionStrategy):
 
             self.logger.info(f"Completed async stage: {stage.name}")
 
-        return current_data
+        return (
+            current_data if isinstance(current_data, pd.DataFrame) else pd.DataFrame()
+        )
 
     async def _invoke_llm_batch_async(self, prompts: list[str], llm_client):
         """

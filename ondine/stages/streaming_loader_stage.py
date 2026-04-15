@@ -6,6 +6,7 @@ Implements streaming pattern for datasets that don't fit in memory.
 
 from collections.abc import Iterator
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -38,7 +39,7 @@ class StreamingDataLoaderStage(PipelineStage[DatasetSpec, Iterator[pd.DataFrame]
         # Create appropriate reader
         reader = create_data_reader(
             source_type=spec.source_type,
-            source_path=spec.source_path,
+            source_path=Path(spec.source_path) if spec.source_path else None,
             delimiter=spec.delimiter,
             encoding=spec.encoding,
             sheet_name=spec.sheet_name,
@@ -54,7 +55,7 @@ class StreamingDataLoaderStage(PipelineStage[DatasetSpec, Iterator[pd.DataFrame]
         result = ValidationResult(is_valid=True)
 
         # Check file exists for file sources
-        if spec.source_path and not spec.source_path.exists():
+        if spec.source_path and not Path(spec.source_path).exists():
             result.add_error(f"Source file not found: {spec.source_path}")
 
         # Check columns specified

@@ -153,7 +153,7 @@ if AIRFLOW_AVAILABLE:
 
 else:
     # Airflow not installed
-    class LLMTransformOperator:
+    class LLMTransformOperator:  # type: ignore[no-redef]
         """Placeholder when Airflow not installed."""
 
         def __init__(self, *args, **kwargs):

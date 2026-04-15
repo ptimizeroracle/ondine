@@ -170,7 +170,7 @@ class LocalFileCheckpointStorage(CheckpointStorage):
                 with open(checkpoint_path) as f:
                     checkpoint_data = json.load(f)
 
-            return checkpoint_data.get("data")
+            return checkpoint_data.get("data")  # type: ignore[no-any-return]
         except Exception:
             return None
 

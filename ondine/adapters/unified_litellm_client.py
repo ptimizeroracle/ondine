@@ -52,7 +52,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _schema_cache: dict[int, dict] = {}
-_prepared_model_cache: dict[int, type] = {}
+_prepared_model_cache: dict[int, Any] = {}
 _json_schema_patched = False
 _json_schema_lock = threading.Lock()
 
@@ -129,6 +129,8 @@ from ondine.utils.retry_handler import NetworkError
 from ondine.utils.retry_handler import RateLimitError as OndineRateLimitError
 
 if TYPE_CHECKING:
+    from litellm import Router
+
     from ondine.observability.dispatcher import ObserverDispatcher
 
 # CRITICAL: Suppress Pydantic serialization warnings at module level
@@ -231,7 +233,7 @@ class UnifiedLiteLLMClient(LLMClient):
         logging.getLogger("pydantic._internal").setLevel(logging.CRITICAL)
 
         # Router support (optional)
-        self.router = None
+        self.router: Router | None = None
         if hasattr(spec, "router_config") and spec.router_config:
             self._init_router(spec.router_config)
 
@@ -502,7 +504,7 @@ class UnifiedLiteLLMClient(LLMClient):
                     self._emit_cooldown_event(deployment, exception)
                 return result
 
-            self.router.deployment_callback_on_failure = wrapped_failure_callback
+            self.router.deployment_callback_on_failure = wrapped_failure_callback  # type: ignore[method-assign]
 
     def _emit_cooldown_event(
         self,
@@ -707,7 +709,7 @@ class UnifiedLiteLLMClient(LLMClient):
         # Call LiteLLM (Router or direct)
         try:
             if self.router:
-                response = await self.router.acompletion(**call_kwargs)
+                response = await self.router.acompletion(**call_kwargs)  # type: ignore[arg-type,call-overload]
             else:
                 response = await litellm.acompletion(**call_kwargs)
         except Exception as e:
@@ -727,7 +729,7 @@ class UnifiedLiteLLMClient(LLMClient):
 
         # Extract Router deployment info (if available)
         # LiteLLM Router stores actual deployment ID in _hidden_params
-        metadata = {}
+        metadata: dict[str, Any] = {}
         if self.router:
             # Try multiple methods to extract deployment info
             if hasattr(response, "_hidden_params") and response._hidden_params:
@@ -986,7 +988,7 @@ class UnifiedLiteLLMClient(LLMClient):
                 # estimation since raw completion metadata is not returned here.
                 if call_kwargs["max_tokens"] is None:
                     call_kwargs["max_tokens"] = 1024
-                result = await self.instructor_client.create(**call_kwargs)
+                result = await self.instructor_client.create(**call_kwargs)  # type: ignore[arg-type]
             # Try to get raw response for metadata extraction
             # Instructor >= 1.0.0 supports create_with_completion
             elif hasattr(
@@ -996,12 +998,12 @@ class UnifiedLiteLLMClient(LLMClient):
                     result,
                     raw_response,
                 ) = await self.instructor_client.chat.completions.create_with_completion(
-                    **call_kwargs
+                    **call_kwargs  # type: ignore[arg-type]
                 )
             else:
                 # Fallback for older versions
                 result = await self.instructor_client.chat.completions.create(
-                    **call_kwargs
+                    **call_kwargs  # type: ignore[arg-type]
                 )
         except Exception as e:
             raise self._map_provider_error(e)
@@ -1035,7 +1037,7 @@ class UnifiedLiteLLMClient(LLMClient):
         latency_ms = (time.time() - start) * 1000
 
         # Extract Router deployment info (Instructor path)
-        metadata = {}
+        metadata: dict[str, Any] = {}
         if self.router:
             # Use raw_response if available
             source = raw_response if raw_response else result

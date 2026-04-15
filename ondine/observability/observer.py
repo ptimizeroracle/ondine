@@ -24,9 +24,9 @@ try:
     from opentelemetry import trace  # noqa: TC002
     from opentelemetry.trace import Status, StatusCode
 except ImportError as exc:
-    trace = None  # type: ignore[assignment]
-    Status = None  # type: ignore[assignment]
-    StatusCode = None  # type: ignore[assignment]
+    trace = None  # type: ignore[assignment,misc]
+    Status = None  # type: ignore[assignment,misc]
+    StatusCode = None  # type: ignore[assignment,misc]
     _OTEL_IMPORT_ERROR = exc
 
 
@@ -80,7 +80,7 @@ class TracingObserver(ExecutionObserver):
 
         # Add attributes
         span.set_attribute("ondine.total_rows", context.total_rows)
-        span.set_attribute("ondine.session_id", context.session_id)
+        span.set_attribute("ondine.session_id", str(context.session_id))
 
         # Store span for later
         self._spans["pipeline"] = span

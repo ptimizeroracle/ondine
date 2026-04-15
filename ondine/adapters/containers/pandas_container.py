@@ -123,15 +123,15 @@ class PandasContainer(BaseDataContainer):
 
     def to_list(self) -> list[Row]:
         """Convert to list of dictionaries."""
-        return self._df.to_dict(orient="records")
+        return list(self._df.to_dict(orient="records"))  # type: ignore[no-any-return]
 
     def head(self, n: int = 5) -> list[Row]:
         """Get first n rows."""
-        return self._df.head(n).to_dict(orient="records")
+        return list(self._df.head(n).to_dict(orient="records"))  # type: ignore[no-any-return]
 
     def tail(self, n: int = 5) -> list[Row]:
         """Get last n rows."""
-        return self._df.tail(n).to_dict(orient="records")
+        return list(self._df.tail(n).to_dict(orient="records"))  # type: ignore[no-any-return]
 
     def select(self, columns: list[str]) -> "PandasContainer":
         """
