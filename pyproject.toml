@@ -249,8 +249,10 @@ verbose = 1
 # Force minimum safe versions for transitive dependencies flagged by pip-audit
 override-dependencies = [
     "filelock>=3.20.3",
+    "nbconvert>=7.17.0",
     "pygments>=2.20.0",
     "requests>=2.33.0",
+    "tornado>=6.5.5",
     "urllib3>=2.6.3",
     "virtualenv>=20.36.1",
     "pip>=25.3",
