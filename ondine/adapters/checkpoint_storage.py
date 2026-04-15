@@ -7,7 +7,7 @@ failures.
 
 import gzip
 import json
-import pickle
+import pickle  # nosec B403 — checkpoint files are local-only, not user-supplied
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
@@ -162,7 +162,7 @@ class LocalFileCheckpointStorage(CheckpointStorage):
         try:
             if not self.use_json:
                 with open(checkpoint_path, "rb") as f:
-                    checkpoint_data = pickle.load(f)
+                    checkpoint_data = pickle.load(f)  # nosec B301
             elif checkpoint_path.suffix == ".gz":
                 with gzip.open(checkpoint_path, "rb") as f:
                     checkpoint_data = json.loads(f.read().decode("utf-8"))
