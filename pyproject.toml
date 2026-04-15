@@ -23,10 +23,10 @@ classifiers = [
 
 dependencies = [
     # Core LLM integration (using LiteLLM native + Instructor)
-    "litellm>=1.80.0,!=1.82.7,!=1.82.8",
+    "litellm>=1.83.0",
     "instructor>=1.0.0",
     "diskcache>=5.6.0", # For LiteLLM Disk caching
-    "aiohttp>=3.9.0", # For high-performance connection pooling
+    "aiohttp>=3.13.4", # For high-performance connection pooling
     # Data processing
     "pandas>=1.5.0",
     "polars>=0.20.0",
@@ -50,7 +50,7 @@ Issues = "https://github.com/ptimizeroracle/ondine/issues"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.8.0",
@@ -244,6 +244,17 @@ ignore-semiprivate = true
 fail-under = 80  # Require 80% docstring coverage
 exclude = ["tests", "build", "dist"]
 verbose = 1
+
+[tool.uv]
+# Force minimum safe versions for transitive dependencies flagged by pip-audit
+override-dependencies = [
+    "filelock>=3.20.3",
+    "pygments>=2.20.0",
+    "requests>=2.33.0",
+    "urllib3>=2.6.3",
+    "virtualenv>=20.36.1",
+    "pip>=25.3",
+]
 
 [dependency-groups]
 dev = [
