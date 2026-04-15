@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write  # Required for Sigstore signing
 
 jobs:
   build-and-publish:
@@ -95,6 +96,16 @@ jobs:
         ls target/wheels/*.whl
         echo "✅ Package verification complete"
 
+    - name: Generate SBOM
+      run: |
+        pip install cyclonedx-bom
+        cyclonedx-py environment -o sbom.json --format json
+
+    - name: Sign artifacts with Sigstore
+      uses: sigstore/gh-action-sigstore-python@v3
+      with:
+        inputs: target/wheels/*.whl
+
     - name: Publish to PyPI
       env:
         MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
@@ -108,3 +119,10 @@ jobs:
         name: dist-packages
         path: target/wheels/
         retention-days: 30
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: sbom.json
+        retention-days: 90

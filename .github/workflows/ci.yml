@@ -153,9 +153,10 @@ jobs:
 
     - name: Run linter
       run: |
-        uv run ruff check ondine/ tests/ || true
+        uv run ruff check ondine/ tests/
 
     - name: Run type checker
+      # TODO: Fix ~40 pre-existing mypy errors, then remove || true
       run: |
         uv run mypy ondine/ || true
 
@@ -249,8 +250,48 @@ jobs:
       run: uv sync --extra dev
 
     - name: Run security scan
+      # TODO: Fix 40 dep vulnerabilities (aiohttp, etc.), then remove || true
       run: |
         uv run pip-audit || true
+
+  claim-verification:
+    name: Claim Verification Suite
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies + build Rust extension
+      run: |
+        uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge
+        uv pip install maturin
+        uv run maturin develop
+
+    - name: Run claim verification tests
+      run: |
+        uv run pytest tests/verification/ -v --tb=short -o addopts=""
+
+    - name: Verify all 83 claims have tests
+      run: |
+        uv run python tools/verify_claims_coverage.py
 
   build:
     name: Build Package

@@ -1,0 +1,11 @@
+# Default owner for everything
+* @ptimizeroracle
+
+# Rust components
+/crates/ @ptimizeroracle
+
+# CI/CD
+/.github/workflows/ @ptimizeroracle
+
+# Documentation
+/docs/ @ptimizeroracle
