@@ -52,7 +52,7 @@ result = pipeline.execute()
 ```python
 .with_llm(
     provider="openai",
-    model="llama2",
+    model="llama-4-scout",
     api_base="http://localhost:11434/v1",
     api_key="ollama"  # Any non-empty string
 )

@@ -21,7 +21,7 @@ pipeline = (
     .with_prompt("Process: {text}")
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="your-deployment-name",
         api_version="2024-02-15-preview"
@@ -45,7 +45,7 @@ pipeline = (
     .with_prompt("Process: {text}")
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="your-deployment-name",
         use_managed_identity=True  # No API key needed!
@@ -77,7 +77,7 @@ The deployment name in Azure OpenAI maps to the model:
 ```python
 .with_llm(
     provider="azure_openai",
-    model="gpt-4",  # Your base model
+    model="gpt-5.4",  # Your base model
     azure_deployment="my-gpt4-deployment",  # Your Azure deployment name
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version="2024-02-15-preview"

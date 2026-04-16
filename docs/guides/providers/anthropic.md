@@ -32,7 +32,7 @@ result = pipeline.execute()
 ## Available Models
 
 - `claude-sonnet-4-20250514` - Most capable (recommended)
-- `claude-3-opus-20240229` - Most capable, legacy
+- `claude-opus-4.6` - Most capable, legacy
 
 ## Configuration Options
 

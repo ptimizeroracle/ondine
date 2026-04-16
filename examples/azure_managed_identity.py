@@ -28,7 +28,7 @@ def main():
         .with_prompt("Summarize: {text}")
         .with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             use_managed_identity=True,  # Keyless authentication!

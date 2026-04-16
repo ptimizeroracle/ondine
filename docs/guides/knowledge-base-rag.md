@@ -518,7 +518,7 @@ kb = KnowledgeStore("knowledge.db", ocr="vision")
 Any litellm model name works too:
 
 ```python
-kb = KnowledgeStore("knowledge.db", ocr="anthropic/claude-3-5-sonnet-20241022")
+kb = KnowledgeStore("knowledge.db", ocr="anthropic/claude-sonnet-4.6")
 ```
 
 ### TesseractOCR (local, offline)

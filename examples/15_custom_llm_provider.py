@@ -67,7 +67,7 @@ class ReplicateClient(LLMClient):
         # Call Replicate API
         # Example using Llama 2 model
         output = self.client.run(
-            self.model,  # e.g., "meta/llama-2-70b-chat"
+            self.model,  # e.g., "meta-llama/Llama-4-Maverick"
             input={
                 "prompt": prompt,
                 "max_new_tokens": max_tokens,
@@ -142,7 +142,7 @@ Role:"""
         )
         .with_llm(
             provider="replicate",  # ← Our custom provider!
-            model="meta/llama-2-70b-chat",
+            model="meta-llama/Llama-4-Maverick",
             api_key=os.getenv("REPLICATE_API_TOKEN"),
             temperature=0.0,
             max_tokens=20,
