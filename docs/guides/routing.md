@@ -303,7 +303,7 @@ pipeline = (
                 "model_name": "classifier",
                 "model_id": "together-secondary",
                 "litellm_params": {
-                    "model": "together_ai/togethercomputer/llama-2-70b-chat",
+                    "model": "together_ai/meta-llama/Llama-4-Maverick",
                     "api_key": os.getenv("TOGETHER_API_KEY"),
                     "rpm": 60,
                 },

@@ -29,7 +29,7 @@ result = pipeline.execute()
 - `gpt-4o` - Most capable, balanced performance
 - `gpt-4o-mini` - Fast and cost-effective (recommended)
 - `gpt-4-turbo` - Advanced reasoning
-- `gpt-3.5-turbo` - Legacy, cost-effective
+- `gpt-5.4-mini` - Legacy, cost-effective
 
 ## Configuration Options
 

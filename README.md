@@ -452,7 +452,7 @@ pipeline = (
     .with_prompt("Process: {text}")
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-endpoint.openai.azure.com/",
         azure_deployment="your-deployment-name",
         api_version="2024-02-15-preview"
@@ -470,7 +470,7 @@ pipeline = (
     .with_prompt("Analyze: {text}")
     .with_llm(
         provider="anthropic",
-        model="claude-3-opus-20240229",
+        model="claude-opus-4.6",
         temperature=0.0,
         max_tokens=1024
     )

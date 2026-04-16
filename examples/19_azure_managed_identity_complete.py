@@ -76,7 +76,7 @@ Format as JSON:
         )
         .with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             use_managed_identity=True,  # ← Keyless authentication!
@@ -144,7 +144,7 @@ Format as JSON:
         )
         .with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             # No use_managed_identity → falls back to AZURE_OPENAI_API_KEY env var
@@ -198,7 +198,7 @@ def example_pre_fetched_token():
         .with_prompt("Process: {text}")
         .with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             azure_ad_token=azure_ad_token,  # ← Pre-fetched token!
@@ -274,7 +274,7 @@ Format as JSON:
         # Production: Use Managed Identity
         builder.with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             use_managed_identity=True,  # ← Keyless!
@@ -284,7 +284,7 @@ Format as JSON:
         # Development: Use API Key
         builder.with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint="https://your-resource.openai.azure.com/",
             azure_deployment="gpt-4-deployment",
             # Falls back to AZURE_OPENAI_API_KEY env var
@@ -336,7 +336,7 @@ def example_multi_region():
         .with_prompt("Process: {text}")
         .with_llm(
             provider="azure_openai",
-            model="gpt-4",
+            model="gpt-5.4",
             azure_endpoint=endpoint,  # ← Region-specific
             azure_deployment="gpt-4-deployment",
             use_managed_identity=True,

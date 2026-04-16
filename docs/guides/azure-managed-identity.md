@@ -48,7 +48,7 @@ pipeline = (
     .with_prompt("Process: {text}")
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="gpt-4-deployment",
         use_managed_identity=True  # ← No API key needed!
@@ -96,7 +96,7 @@ Format as JSON: {{"category": "...", "features": "..."}}
 """)
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="gpt-4-deployment",
         use_managed_identity=True,
@@ -127,7 +127,7 @@ if is_azure:
     # Production: Use Managed Identity
     builder.with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="gpt-4-deployment",
         use_managed_identity=True
@@ -136,7 +136,7 @@ else:
     # Development: Use API Key
     builder.with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint="https://your-resource.openai.azure.com/",
         azure_deployment="gpt-4-deployment"
         # Falls back to AZURE_OPENAI_API_KEY env var
@@ -170,7 +170,7 @@ prompt:
 
 llm:
   provider: "azure_openai"
-  model: "gpt-4"
+  model: "gpt-5.4"
   azure_endpoint: "https://your-resource.openai.azure.com/"
   azure_deployment: "gpt-4-deployment"
   use_managed_identity: true  # ← Keyless authentication!
@@ -212,7 +212,7 @@ prompt:
 
 llm:
   provider: "azure_openai"
-  model: "gpt-4"
+  model: "gpt-5.4"
   azure_endpoint: "https://your-resource.openai.azure.com/"
   azure_deployment: "gpt-4-deployment"
   # No use_managed_identity → falls back to AZURE_OPENAI_API_KEY
@@ -322,7 +322,7 @@ pipeline = (
     .from_csv("data.csv", ...)
     .with_llm(
         provider="azure_openai",
-        model="gpt-4",
+        model="gpt-5.4",
         azure_endpoint=endpoint,  # Region-specific
         azure_deployment="gpt-4-deployment",
         use_managed_identity=True

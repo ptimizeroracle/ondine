@@ -172,7 +172,7 @@ Not every task needs GPT-4:
 
 ```python
 # $0.03/1K tokens
-.with_llm(provider="openai", model="gpt-4")
+.with_llm(provider="openai", model="gpt-5.4")
 
 # $0.0001/1K tokens (300x cheaper)
 .with_llm(provider="openai", model="gpt-4o-mini")
