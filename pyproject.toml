@@ -43,7 +43,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ptimizeroracle/ondine"
+Homepage = "https://ondine.dev"
 Repository = "https://github.com/ptimizeroracle/ondine"
 Documentation = "https://docs.ondine.dev"
 Issues = "https://github.com/ptimizeroracle/ondine/issues"
