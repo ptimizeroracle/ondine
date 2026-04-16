@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" width="480" height="160">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600&amp;display=swap');
+    </style>
+  </defs>
+  <!-- Transparent background version -->
+  <text
+    x="240"
+    y="115"
+    text-anchor="middle"
+    font-family="Nunito, 'Varela Round', 'Trebuchet MS', sans-serif"
+    font-weight="600"
+    font-size="96"
+    letter-spacing="-1"
+    fill="#2dd4bf"
+  >ondine</text>
+</svg>
