@@ -3,11 +3,19 @@
 Provides realistic data generators matching Ondine's internal types.
 All fixtures produce data shapes identical to what pipeline stages
 receive during real execution.
+
+Requires pytest-benchmark (install via: uv sync --group perf).
+Entire directory skipped when pytest-benchmark is not available.
 """
 
 import asyncio
 from decimal import Decimal
 from typing import Any
+
+import pytest
+
+# Skip all benchmark tests if pytest-benchmark is not installed
+pytest.importorskip("pytest_benchmark")
 
 import pytest
 
