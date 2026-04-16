@@ -1,16 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" width="480" height="160">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" width="520" height="160">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600&amp;display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700&amp;display=swap');
     </style>
   </defs>
-  <!-- Transparent background version -->
+  <!-- Ripple rings around the "o" -->
+  <circle cx="148" cy="88" r="56" fill="none" stroke="#2dd4bf" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="148" cy="88" r="46" fill="none" stroke="#2dd4bf" stroke-width="1.8" opacity="0.65"/>
+  <!-- Text: ondine -->
   <text
-    x="240"
-    y="115"
+    x="280"
+    y="118"
     text-anchor="middle"
     font-family="Nunito, 'Varela Round', 'Trebuchet MS', sans-serif"
-    font-weight="600"
+    font-weight="700"
     font-size="96"
     letter-spacing="-1"
     fill="#2dd4bf"
