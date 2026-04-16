@@ -1,7 +1,7 @@
 """Tests for ConcurrencyController."""
 
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -79,14 +79,15 @@ class TestConcurrencyController:
         controller.release()
 
     async def test_rate_limiter_called(self):
-        """Test that rate limiter is called during acquire."""
+        """Test that rate limiter acquire_async is called during acquire."""
         mock_limiter = MagicMock()
+        mock_limiter.acquire_async = AsyncMock(return_value=True)
         controller = ConcurrencyController(max_concurrent=5, rate_limiter=mock_limiter)
 
         await controller.acquire()
         controller.release()
 
-        mock_limiter.acquire.assert_called_once()
+        mock_limiter.acquire_async.assert_called_once()
 
     def test_repr(self):
         """Test string representation."""

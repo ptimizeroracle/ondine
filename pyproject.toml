@@ -215,10 +215,11 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=ondine --cov-report=term-missing"
+addopts = "-v"
 asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "benchmark: marks tests as performance benchmarks (run with '--benchmark-only')",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

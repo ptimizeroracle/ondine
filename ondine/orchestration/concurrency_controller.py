@@ -65,9 +65,8 @@ class ConcurrencyController:
         await self._semaphore.acquire()
         try:
             if self._rate_limiter:
-                # RateLimiter.acquire() is sync, but we're in async context
-                # This is fine - it's a quick token bucket check
-                self._rate_limiter.acquire()
+                # Use async path to avoid blocking the event loop
+                await self._rate_limiter.acquire_async()
         except Exception:
             self._semaphore.release()
             raise
