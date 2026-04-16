@@ -13,6 +13,8 @@
   [![Tests](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml)
   [![Documentation](https://img.shields.io/badge/docs-docs.ondine.dev-blue.svg)](https://docs.ondine.dev)
 
+  **[ondine.dev](https://ondine.dev)** · **[Documentation](https://docs.ondine.dev)** · **[PyPI](https://pypi.org/project/ondine/)**
+
   <img src="assets/images/demo.gif" alt="Ondine Demo" width="700"/>
 
 </div>
