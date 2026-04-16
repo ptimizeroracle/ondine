@@ -378,19 +378,38 @@ impl EvidenceGraph {
         source: &str,
         metadata_json: &str,
     ) -> Result<(), EvidenceError> {
+        use rusqlite::OptionalExtension;
+
+        // INSERT OR REPLACE does DELETE+INSERT and allocates a fresh
+        // rowid, so any stale FTS entry at the old rowid must be
+        // cleared before we insert the new one — otherwise both text
+        // versions stay searchable and the FTS index becomes
+        // inconsistent. We look up the prior rowid via the primary-key
+        // index on kb_chunks (O(1)) and delete from FTS by rowid, which
+        // is the only indexed access path on an external-content FTS5
+        // table.
+        let existing_rowid: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT rowid FROM kb_chunks WHERE chunk_id = ?1",
+                [chunk_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(old_rowid) = existing_rowid {
+            self.conn.execute(
+                "DELETE FROM kb_chunks_fts WHERE rowid = ?1",
+                [old_rowid],
+            )?;
+        }
         self.conn.execute(
             "INSERT OR REPLACE INTO kb_chunks (chunk_id, text, source, metadata) VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![chunk_id, text, source, metadata_json],
         )?;
-
-        let rowid: i64 = self.conn.query_row(
-            "SELECT rowid FROM kb_chunks WHERE chunk_id = ?1",
-            [chunk_id],
-            |row| row.get(0),
-        )?;
+        let new_rowid = self.conn.last_insert_rowid();
         self.conn.execute(
-            "INSERT OR REPLACE INTO kb_chunks_fts(rowid, chunk_id, text) VALUES (?1, ?2, ?3)",
-            rusqlite::params![rowid, chunk_id, text],
+            "INSERT INTO kb_chunks_fts(rowid, chunk_id, text) VALUES (?1, ?2, ?3)",
+            rusqlite::params![new_rowid, chunk_id, text],
         )?;
         Ok(())
     }
@@ -414,24 +433,40 @@ impl EvidenceGraph {
 
         let tx = self.conn.transaction()?;
         {
+            use rusqlite::OptionalExtension;
+
+            // See store_chunk: the FTS index only has an index on rowid,
+            // so we look up the existing rowid via the primary-key
+            // index on kb_chunks (O(1)) and delete from FTS by rowid
+            // when a chunk is being replaced. Skipping the lookup for
+            // pure inserts keeps bulk ingest linear.
+            let mut lookup_stmt =
+                tx.prepare("SELECT rowid FROM kb_chunks WHERE chunk_id = ?1")?;
+            let mut fts_delete_stmt =
+                tx.prepare("DELETE FROM kb_chunks_fts WHERE rowid = ?1")?;
             let mut insert_stmt = tx.prepare(
                 "INSERT OR REPLACE INTO kb_chunks (chunk_id, text, source, metadata) \
                  VALUES (?1, ?2, ?3, ?4)",
             )?;
-            let mut fts_stmt = tx.prepare(
-                "INSERT OR REPLACE INTO kb_chunks_fts (rowid, chunk_id, text) \
+            let mut fts_insert_stmt = tx.prepare(
+                "INSERT INTO kb_chunks_fts (rowid, chunk_id, text) \
                  VALUES (?1, ?2, ?3)",
             )?;
 
             for (chunk_id, text, source, metadata_json) in chunks.iter() {
+                let existing_rowid: Option<i64> = lookup_stmt
+                    .query_row([chunk_id], |row| row.get(0))
+                    .optional()?;
+                if let Some(old_rowid) = existing_rowid {
+                    fts_delete_stmt.execute([old_rowid])?;
+                }
                 insert_stmt.execute(rusqlite::params![
                     chunk_id, text, source, metadata_json
                 ])?;
-                // INSERT OR REPLACE either inserts (new rowid) or deletes
-                // then inserts (fresh rowid). Either way, last_insert_rowid
-                // gives the correct current rowid — no SELECT needed.
-                let rowid = tx.last_insert_rowid();
-                fts_stmt.execute(rusqlite::params![rowid, chunk_id, text])?;
+                let new_rowid = tx.last_insert_rowid();
+                fts_insert_stmt.execute(rusqlite::params![
+                    new_rowid, chunk_id, text
+                ])?;
             }
         }
         tx.commit()?;

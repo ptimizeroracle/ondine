@@ -99,12 +99,38 @@ def test_store_chunks_batch_empty_list_is_noop(db: _engine.EvidenceDB) -> None:
 def test_store_chunks_batch_duplicate_id_replaces(
     db: _engine.EvidenceDB,
 ) -> None:
-    """INSERT OR REPLACE semantics — second insert wins, count stays 1."""
+    """INSERT OR REPLACE semantics — second insert wins, count stays 1.
+
+    Also guards against orphaned FTS5 rows: when the primary-key upsert
+    changes the rowid (as with INSERT OR REPLACE), the old FTS entry at
+    the previous rowid must be removed, otherwise the old text stays
+    searchable.
+    """
     cid = str(uuid.uuid4())
-    db.store_chunks_batch([(cid, "old", "a.pdf", "{}")])
-    db.store_chunks_batch([(cid, "new", "a.pdf", "{}")])
+    db.store_chunks_batch([(cid, "alpha quokka", "a.pdf", "{}")])
+    db.store_chunks_batch([(cid, "bravo narwhal", "a.pdf", "{}")])
 
     assert db.chunk_count() == 1
-    raw = db.query_chunks("new", 1)
-    results = json.loads(raw)
-    assert results[0][1] == "new"
+    new_hits = json.loads(db.query_chunks("narwhal", 5))
+    assert len(new_hits) == 1
+    assert new_hits[0][1] == "bravo narwhal"
+
+    # Old text must not remain searchable via the FTS index.
+    stale_hits = json.loads(db.query_chunks("quokka", 5))
+    assert stale_hits == []
+
+
+def test_store_chunk_single_path_also_clears_stale_fts(
+    db: _engine.EvidenceDB,
+) -> None:
+    """The per-row store_chunk had the same FTS-orphan bug. Guard
+    against regression here by re-using the single-row API."""
+    cid = str(uuid.uuid4())
+    db.store_chunk(cid, "alpha quokka", "a.pdf", "{}")
+    db.store_chunk(cid, "bravo narwhal", "a.pdf", "{}")
+
+    assert db.chunk_count() == 1
+    assert json.loads(db.query_chunks("quokka", 5)) == []
+    hits = json.loads(db.query_chunks("narwhal", 5))
+    assert len(hits) == 1
+    assert hits[0][1] == "bravo narwhal"
