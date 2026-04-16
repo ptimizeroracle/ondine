@@ -154,6 +154,13 @@ kb.ingest_text(text: str, source: str = "inline", metadata: dict | None = None) 
 
 All three return the number of chunks stored.
 
+All ingestion methods transparently use a single-transaction bulk path
+when more than one chunk is produced. On-disk KBs see roughly **7× faster
+ingest for 10K-chunk workloads** versus the per-row path that preceded
+v1.8.0. No API change is required to benefit — the optimization is
+applied automatically whenever a document yields multiple chunks or
+`ingest_documents` receives multiple `Document` objects.
+
 ### Search
 
 ```python

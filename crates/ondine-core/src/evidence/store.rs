@@ -395,6 +395,49 @@ impl EvidenceGraph {
         Ok(())
     }
 
+    /// Bulk-insert KB chunks in a single transaction with prepared statements.
+    ///
+    /// Semantically equivalent to calling `store_chunk` for each element,
+    /// including the FTS5 index update. Performance wins:
+    /// - one transaction (vs N autocommits)
+    /// - prepared statements cached across rows
+    /// - one FFI crossing for the whole batch
+    ///
+    /// Returns the number of chunks written. An empty input is a no-op.
+    pub fn store_chunks_batch(
+        &mut self,
+        chunks: &[(String, String, String, String)],
+    ) -> Result<usize, EvidenceError> {
+        if chunks.is_empty() {
+            return Ok(0);
+        }
+
+        let tx = self.conn.transaction()?;
+        {
+            let mut insert_stmt = tx.prepare(
+                "INSERT OR REPLACE INTO kb_chunks (chunk_id, text, source, metadata) \
+                 VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            let mut fts_stmt = tx.prepare(
+                "INSERT OR REPLACE INTO kb_chunks_fts (rowid, chunk_id, text) \
+                 VALUES (?1, ?2, ?3)",
+            )?;
+
+            for (chunk_id, text, source, metadata_json) in chunks.iter() {
+                insert_stmt.execute(rusqlite::params![
+                    chunk_id, text, source, metadata_json
+                ])?;
+                // INSERT OR REPLACE either inserts (new rowid) or deletes
+                // then inserts (fresh rowid). Either way, last_insert_rowid
+                // gives the correct current rowid — no SELECT needed.
+                let rowid = tx.last_insert_rowid();
+                fts_stmt.execute(rusqlite::params![rowid, chunk_id, text])?;
+            }
+        }
+        tx.commit()?;
+        Ok(chunks.len())
+    }
+
     /// Embed KB chunks that don't have embeddings yet.
     pub fn embed_pending_chunks(&self, model_name: &str) -> Result<usize, EvidenceError> {
         let callback = match &self.embed_callback {

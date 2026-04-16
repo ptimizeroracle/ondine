@@ -145,6 +145,27 @@ impl EvidenceDB {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("store_chunk error: {e}")))
     }
 
+    /// Bulk-insert KB chunks in one transaction.
+    ///
+    /// Accepts a list of ``(chunk_id, text, source, metadata_json)`` 4-tuples.
+    /// Semantically equivalent to calling ``store_chunk`` for each element,
+    /// but amortises the FFI crossing and runs a single SQLite transaction
+    /// with cached prepared statements. Returns the number of rows written.
+    fn store_chunks_batch(
+        &self,
+        py: Python<'_>,
+        chunks: Vec<(String, String, String, String)>,
+    ) -> PyResult<usize> {
+        py.allow_threads(|| {
+            let mut graph = self.inner.lock().unwrap();
+            graph.store_chunks_batch(&chunks).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "store_chunks_batch error: {e}"
+                ))
+            })
+        })
+    }
+
     /// Hybrid search over KB chunks. Returns JSON array of
     /// [chunk_id, text, source, metadata_json, score] tuples.
     #[pyo3(signature = (question, limit = 5))]
