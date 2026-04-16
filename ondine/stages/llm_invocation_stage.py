@@ -123,10 +123,29 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             nest_asyncio.apply()
             return asyncio.run(self._process_async(batches, context))
 
+    async def process_async(
+        self, batches: list[PromptBatch], context: Any
+    ) -> list[ResponseBatch]:
+        """Async entry point for pipelined execution.
+
+        Unlike process(), this does NOT call asyncio.run() — it expects
+        to be called from within an already-running event loop. Use this
+        when the LLM stage is part of an async pipeline where other
+        coroutines (e.g. CPU prep for the next chunk) must run concurrently.
+
+        Behavioral contract: identical output to process() for the same input.
+        """
+        if "token_tracking" not in context.intermediate_data:
+            context.intermediate_data["token_tracking"] = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+        return await self._process_async(batches, context)
+
     async def _process_async(
         self, batches: list[PromptBatch], context: Any
     ) -> list[ResponseBatch]:
-        """Async implementation of process()."""
+        """Internal async implementation — shared by process() and process_async()."""
         # Initialize global connection pool
         await self.llm_client.start()  # type: ignore[attr-defined]
 
@@ -317,10 +336,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             system_message = metadata.custom.get("system_message")
 
         async def _invoke() -> LLMResponse:
-            # Rate limiting (run in executor since it's blocking)
+            # Rate limiting (async-native, no thread pool needed)
             if self.rate_limiter:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, self.rate_limiter.acquire)
+                await self.rate_limiter.acquire_async()
 
             # Invoke LLM
             if self.output_cls:

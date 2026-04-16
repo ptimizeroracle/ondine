@@ -1388,6 +1388,80 @@ class Pipeline:
 
         return result
 
+    def execute_stream_pipelined(
+        self,
+        chunk_size: int = 10000,
+    ) -> Iterator[ExecutionResult]:
+        """Execute pipeline with 1-chunk lookahead overlap.
+
+        While the LLM processes chunk N, CPU stages (format, aggregate)
+        prepare chunk N+1. This overlaps I/O wait with CPU work, yielding
+        measurable speedup when LLM latency dominates (the common case).
+
+        Same output as execute_stream() — behavioral contract is identical.
+        The only difference is wall-clock performance.
+
+        Args:
+            chunk_size: Rows per chunk. Each chunk is an independent
+                mini-pipeline that flows through all stages.
+
+        Yields:
+            ExecutionResult for each completed chunk.
+        """
+        import asyncio
+
+        async def _run_pipelined() -> list[ExecutionResult]:
+            return [r async for r in self._execute_stream_pipelined_async(chunk_size)]
+
+        return iter(asyncio.run(_run_pipelined()))
+
+    async def _execute_stream_pipelined_async(
+        self,
+        chunk_size: int,
+    ) -> AsyncIterator[ExecutionResult]:
+        """Async pipelined streaming — 1-chunk lookahead.
+
+        Overlaps chunk processing: while chunk N executes (mostly LLM I/O),
+        chunk N+1's _process_chunk_async is launched concurrently. Since CPU
+        stages are fast and LLM is I/O-bound, the CPU prep for N+1 runs
+        during N's network wait.
+
+        Uses the existing _process_chunk_async — no stage reconstruction.
+        """
+        import asyncio
+
+        df = self.dataframe
+        if df is None or df.empty:
+            return
+
+        chunks = [df.iloc[i : i + chunk_size] for i in range(0, len(df), chunk_size)]
+        execution_id = uuid4()
+
+        self.logger.info(
+            f"Pipelined streaming: {len(df)} rows in {len(chunks)} chunks "
+            f"of {chunk_size}"
+        )
+
+        pending_task: asyncio.Task | None = None
+
+        for chunk_index, chunk_df in enumerate(chunks):
+            # Launch this chunk's full pipeline as async task
+            task = asyncio.create_task(
+                self._process_chunk_async(chunk_df, execution_id, chunk_index)
+            )
+
+            # If previous chunk is in flight, await it and yield
+            if pending_task is not None:
+                result = await pending_task
+                yield result
+
+            pending_task = task
+
+        # Drain the last chunk
+        if pending_task is not None:
+            result = await pending_task
+            yield result
+
     def _execute_stage(
         self, stage: Any, input_data: Any, context: ExecutionContext
     ) -> Any:

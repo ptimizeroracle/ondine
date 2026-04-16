@@ -2,8 +2,10 @@
 Token bucket rate limiter for API calls.
 
 Implements token bucket algorithm for rate limiting.
+Supports both sync (threading.Lock) and async (asyncio.Lock) paths.
 """
 
+import asyncio
 import threading
 import time
 
@@ -85,6 +87,46 @@ class RateLimiter:
         with self.lock:
             self._refill()
             return self.tokens
+
+    async def acquire_async(
+        self, tokens: int = 1, timeout: float | None = None
+    ) -> bool:
+        """Acquire tokens asynchronously without blocking the event loop.
+
+        Drop-in async replacement for acquire(). Uses asyncio.sleep()
+        instead of time.sleep() so other coroutines can run while waiting.
+
+        Args:
+            tokens: Number of tokens to acquire.
+            timeout: Maximum wait time in seconds (None = wait forever).
+
+        Returns:
+            True if tokens acquired, False if timeout.
+
+        Raises:
+            ValueError: If tokens > capacity.
+        """
+        if tokens > self.capacity:
+            raise ValueError(
+                f"Requested {tokens} tokens exceeds capacity {self.capacity}"
+            )
+
+        deadline = None if timeout is None else time.time() + timeout
+
+        while True:
+            with self.lock:
+                self._refill()
+
+                if self.tokens >= tokens:
+                    self.tokens -= tokens
+                    return True
+
+            # Check timeout
+            if deadline is not None and time.time() >= deadline:
+                return False
+
+            # Yield to event loop instead of blocking thread
+            await asyncio.sleep(0.05)
 
     def reset(self) -> None:
         """Reset rate limiter to full capacity."""
