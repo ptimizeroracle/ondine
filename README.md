@@ -3,7 +3,7 @@
 
   # LLM Dataset Engine
 
-  **Batch process millions of rows with LLMs — 100x fewer API calls, 40-50% cost savings, 99.9% completion rate**
+  **Run any LLM on every row of your data. Structured columns out. Cost control built in.**
 
   [![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
   [![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
@@ -11,25 +11,26 @@
   [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
   [![GitHub stars](https://img.shields.io/github/stars/ptimizeroracle/ondine.svg?style=social)](https://github.com/ptimizeroracle/ondine)
   [![Tests](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml)
-  [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-blue.svg)](https://ptimizeroracle.github.io/ondine)
+  [![Documentation](https://img.shields.io/badge/docs-docs.ondine.dev-blue.svg)](https://docs.ondine.dev)
+
+  **[ondine.dev](https://ondine.dev)** · **[Documentation](https://docs.ondine.dev)** · **[PyPI](https://pypi.org/project/ondine/)**
 
   <img src="assets/images/demo.gif" alt="Ondine Demo" width="700"/>
 
 </div>
 
-> **For data engineers and ML practitioners** who need to process millions of tabular rows with LLMs, Ondine is an open-source SDK that delivers **100x fewer API calls** via multi-row batching and **40-50% cost reduction** via prefix caching — with cost estimation, budget limits, checkpointing, and 100+ provider support built in.
+> **For data engineers, data analysts, and data scientists.** Feed Ondine a CSV or DataFrame, pick any LLM, get structured columns back. Checkpointing, cost control, retries, and anti-hallucination are built in — not bolted on.
 
 ## Features
 
-- **Quick API**: 3-line hello world with smart defaults and auto-detection
-- **Simple API**: Fluent builder pattern for full control when needed
-- **Multi-Row Batching**: Process N rows per API call for 100× speedup (NEW!)
-- **Prefix Caching**: 40-50% cost reduction by caching system prompts across millions of rows
-- **Reliability**: Automatic retries, checkpointing, error policies (99.9% completion rate)
-- **Cost Control**: Pre-execution estimation, budget limits, real-time tracking
+- **Quick API**: 3-line setup with smart defaults (auto-detects columns, provider, and parser)
+- **Checkpointing**: Crashes at row 8,000? Resume from row 8,000. Zero data loss.
+- **Cost Control**: Pre-execution estimation, hard budget cap, real-time tracking
+- **Structured Output**: Multi-column extraction with forced JSON parsing and automatic re-prompt on failure
+- **Multi-Row Batching**: Process N rows per API call — 100× fewer calls, same token cost
+- **Prefix Caching**: 40-50% cost reduction by caching system prompts across large runs
 - **Observability**: Progress bars, structured logging, metrics, cost reports
 - **Extensibility**: Plugin architecture, custom stages, multiple LLM providers
-- **Fault Tolerant**: Zero data loss on crashes, resume from checkpoint
 - **100+ Providers**: Native LiteLLM integration supporting OpenAI, Azure, Anthropic, Groq, Cerebras, Moonshot, and 100+ others
 - **Smart Routing**: Built-in LiteLLM Router with **latency-based routing** (fastest wins) and automatic failover for high availability
 - **Local Inference**: Run models locally with MLX (Apple Silicon) or Ollama - 100% free, private, offline-capable
@@ -100,13 +101,12 @@ print(f"Total cost: ${result.costs.total_cost:.4f}")
 | Feature | Ondine | LangChain | DSPy | Custom Scripts |
 |---------|--------|-----------|------|----------------|
 | **Purpose-built for tabular data** | ✅ | ❌ General purpose | ❌ Prompt optimization | ⚠️ Manual |
-| **Multi-row batching (100x fewer calls)** | ✅ Built-in | ❌ | ❌ | ⚠️ DIY |
-| **Prefix caching (40-50% savings)** | ✅ Automatic | ❌ | ❌ | ⚠️ DIY |
-| **Pre-run cost estimation** | ✅ | ❌ | ❌ | ❌ |
-| **Budget limits & real-time tracking** | ✅ | ❌ | ❌ | ❌ |
 | **Checkpointing & resume** | ✅ Automatic | ❌ | ❌ | ⚠️ DIY |
+| **Hard budget cap** | ✅ | ❌ | ❌ | ❌ |
+| **Pre-run cost estimation** | ✅ | ❌ | ❌ | ❌ |
+| **Structured output (forced JSON)** | ✅ Via Instructor | ✅ | ✅ | ⚠️ DIY |
+| **Multi-row batching** | ✅ Built-in | ❌ | ❌ | ⚠️ DIY |
 | **100+ LLM providers** | ✅ Via LiteLLM | ✅ Via LangChain Hub | ⚠️ Limited | ⚠️ Manual |
-| **Structured output (Pydantic)** | ✅ Via Instructor | ✅ | ✅ | ⚠️ DIY |
 | **Setup complexity** | `pip install ondine` | Complex chains | Research-oriented | Significant engineering |
 
 ## Installation
@@ -178,7 +178,7 @@ export HUGGING_FACE_HUB_TOKEN="your-token-here"  # For model downloads
 
 ## Documentation
 
-**Complete documentation is available at: https://ptimizeroracle.github.io/ondine**
+**Complete documentation is available at: https://docs.ondine.dev**
 
 The documentation includes:
 - Installation and setup guides
@@ -1036,7 +1036,7 @@ uv run pytest tests/test_pipeline.py
 
 ## Documentation
 
-**Full documentation**: https://ptimizeroracle.github.io/ondine
+**Full documentation**: https://docs.ondine.dev
 
 Additional resources:
 - **README.md** (this file): Quick start and usage guide
