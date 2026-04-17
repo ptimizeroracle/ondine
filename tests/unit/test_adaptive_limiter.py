@@ -74,11 +74,38 @@ async def test_limit_shrinks_on_explicit_rate_limit() -> None:
 @pytest.mark.asyncio
 async def test_limit_never_drops_below_min() -> None:
     """Regression: repeated 429s must not collapse the limit to zero
-    (would deadlock the pipeline)."""
-    lim = AdaptiveLimiter(min_limit=2, max_limit=20, initial_limit=10)
+    (would deadlock the pipeline). Uses an injected clock that
+    advances past the cooldown window on every call so each 429
+    contributes an effective shrink — the point of this test is the
+    floor, not the debounce."""
+    ticks = [0.0]
+
+    def clock() -> float:
+        ticks[0] += 1.0  # well past _RATE_LIMIT_COOLDOWN_S
+        return ticks[0]
+
+    lim = AdaptiveLimiter(min_limit=2, max_limit=20, initial_limit=10, monotonic=clock)
     for _ in range(50):
         lim.on_rate_limit(retry_after_s=1.0)
     assert lim.current_limit == 2
+
+
+@pytest.mark.asyncio
+async def test_close_bursts_of_429s_debounce_to_one_shrink() -> None:
+    """Regression (CodeRabbit #141): N workers retrying M times each
+    must not collapse the limit by 0.9^(N*M) for one logical upstream
+    overload. A burst of 429s arriving within the cooldown window
+    compounds to one shrink."""
+    # Fixed clock — all calls appear simultaneous.
+    lim = AdaptiveLimiter(
+        min_limit=1, max_limit=20, initial_limit=10, monotonic=lambda: 1.0
+    )
+    for _ in range(20):
+        lim.on_rate_limit(retry_after_s=0.0)
+    # One effective shrink: 10 * 0.9 = 9.0
+    assert lim.current_limit == 9
+    # But the counter still reflects every hit for observability.
+    assert lim.snapshot()["rate_limit_hits"] == 20
 
 
 @pytest.mark.asyncio

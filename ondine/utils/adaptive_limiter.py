@@ -55,6 +55,15 @@ _SMOOTHING = 0.2
 _RATE_LIMIT_SHRINK = 0.9
 _RTT_NOLOAD_DECAY = 0.95  # slowly forgive the no-load estimate
 
+# Minimum gap between effective shrink events. A single upstream
+# overload typically produces a burst of 429s within a few hundred
+# milliseconds — across retries of one request and across concurrent
+# workers. Without a cooldown, N workers retrying M times each apply
+# N*M shrinks for what is logically one capacity event, overshooting
+# the adaptation. The cooldown still counts every 429 for
+# observability; only the shrink arithmetic is deduplicated.
+_RATE_LIMIT_COOLDOWN_S = 0.2
+
 
 class AdaptiveLimiter:
     """Condition-based in-flight cap with Gradient2 adaptation.
@@ -89,6 +98,10 @@ class AdaptiveLimiter:
         self._rtt_smoothed: float | None = None
         self._monotonic = monotonic or time.monotonic
         self._cond = asyncio.Condition()
+        # Timestamp of the last effective shrink; used to debounce
+        # bursts of 429s that represent one logical overload event.
+        # Initialised to -inf so the very first 429 always shrinks.
+        self._last_shrink_monotonic: float = float("-inf")
 
     # ── public properties ─────────────────────────────────────────
 
@@ -140,13 +153,24 @@ class AdaptiveLimiter:
     def on_rate_limit(self, retry_after_s: float) -> None:
         """Signal that the server issued an explicit 429.
 
-        The limit shrinks by ``_RATE_LIMIT_SHRINK``. ``retry_after_s``
-        is currently unused by the limiter itself (the token bucket
-        owns that signal) but is accepted here for symmetry and
-        future use.
+        Increments the 429 counter unconditionally for observability.
+        Applies the ``_RATE_LIMIT_SHRINK`` multiplier only if the
+        previous shrink was more than ``_RATE_LIMIT_COOLDOWN_S`` ago,
+        so a burst of 429s from retries of a single request (or from
+        concurrent workers hitting the same upstream overload) is
+        treated as one logical capacity event instead of compounding
+        shrinks per individual hit.
+
+        ``retry_after_s`` is currently unused by the limiter itself
+        (the token bucket owns that signal) but is accepted here for
+        symmetry and future use.
         """
         del retry_after_s  # reserved; see docstring
         self._rate_limit_hits += 1
+        now = self._monotonic()
+        if now - self._last_shrink_monotonic < _RATE_LIMIT_COOLDOWN_S:
+            return
+        self._last_shrink_monotonic = now
         self._limit = max(
             float(self._min),
             self._limit * _RATE_LIMIT_SHRINK,
