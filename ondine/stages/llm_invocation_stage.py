@@ -62,6 +62,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         max_retries: int = 3,
         output_cls: type[BaseModel] | None = None,
         budget_controller: Any | None = None,
+        adaptive_concurrency: bool = False,
     ):
         """
         Initialize LLM invocation stage.
@@ -97,7 +98,11 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         )
 
         # Extracted components
-        self._concurrency_ctrl = ConcurrencyController(concurrency, rate_limiter)
+        self._concurrency_ctrl = ConcurrencyController(
+            concurrency,
+            rate_limiter,
+            adaptive=adaptive_concurrency,
+        )
         self._batch_processor = BatchProcessor()
 
     def process(self, batches: list[PromptBatch], context: Any) -> list[ResponseBatch]:
@@ -340,12 +345,25 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             if self.rate_limiter:
                 await self.rate_limiter.acquire_async()
 
-            # Invoke LLM
-            if self.output_cls:
-                return await self.llm_client.structured_invoke_async(  # type: ignore[attr-defined,no-any-return]
-                    prompt, self.output_cls, system_message=system_message
+            try:
+                # Invoke LLM
+                if self.output_cls:
+                    return await self.llm_client.structured_invoke_async(  # type: ignore[attr-defined,no-any-return]
+                        prompt, self.output_cls, system_message=system_message
+                    )
+                return await self.llm_client.ainvoke(  # type: ignore[attr-defined,no-any-return]
+                    prompt, system_message=system_message
                 )
-            return await self.llm_client.ainvoke(prompt, system_message=system_message)  # type: ignore[attr-defined,no-any-return]
+            except RateLimitError as rl_err:
+                # Server-sourced backoff: signal the concurrency
+                # controller so every concurrent caller observes the
+                # 429, then re-raise so the retry handler can
+                # schedule the next attempt. See
+                # ConcurrencyController.on_rate_limit for semantics.
+                self._concurrency_ctrl.on_rate_limit(
+                    getattr(rl_err, "retry_after_s", None)
+                )
+                raise
 
         return await self.retry_handler.execute_async(_invoke)
 

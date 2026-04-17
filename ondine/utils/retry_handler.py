@@ -25,9 +25,22 @@ class RetryableError(Exception):
 
 
 class RateLimitError(RetryableError):
-    """Rate limit exceeded error."""
+    """Rate limit exceeded error.
 
-    pass
+    When the upstream provider sent a usable ``Retry-After`` (or
+    equivalent) header, ``retry_after_s`` carries the parsed value
+    in seconds. ``None`` means "no hint, fall back to exponential
+    backoff".
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        retry_after_s: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
 
 
 class NetworkError(RetryableError):
