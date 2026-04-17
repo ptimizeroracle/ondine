@@ -76,6 +76,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             max_retries: Maximum retry attempts
             output_cls: Optional Pydantic model for structured output
             budget_controller: Optional budget controller for mid-run enforcement
+            adaptive_concurrency: Opt-in Gradient2-based adaptive cap.
+                When False (default), behaviour is byte-identical to
+                prior versions; when True, the effective in-flight
+                limit shrinks on 429/RTT inflation and grows on
+                saturation + near-baseline RTT, bounded above by
+                ``concurrency`` and below by 1.
         """
         super().__init__("LLMInvocation")
         self.llm_client = llm_client
@@ -209,11 +215,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
     async def _process_all_concurrent(
         self, items: list, context: Any
     ) -> list[LLMResponse]:
-        """Process all prompt items concurrently using asyncio."""
-        semaphore = asyncio.Semaphore(self.concurrency)
+        """Process all prompt items concurrently using asyncio.
+
+        Admission is gated through the concurrency controller so that
+        adaptive mode actually limits in-flight work. In the default
+        (non-adaptive) mode, throttle() is a bounded asyncio.Semaphore
+        — behaviour identical to the original implementation; in
+        adaptive mode, it routes through the Gradient2 limiter and
+        feeds RTT observations back for shrink/grow decisions.
+        """
 
         async def _process_one(idx: int, item) -> LLMResponse:
-            async with semaphore:
+            async with self._concurrency_ctrl.throttle():
                 return await self._process_single_item(idx, item, context)
 
         if self.concurrency <= 1:
@@ -341,10 +354,12 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             system_message = metadata.custom.get("system_message")
 
         async def _invoke() -> LLMResponse:
-            # Rate limiting (async-native, no thread pool needed)
-            if self.rate_limiter:
-                await self.rate_limiter.acquire_async()
-
+            # Note: admission + rate limiting are both handled by the
+            # concurrency controller's throttle() wrapper in
+            # _process_all_concurrent. We intentionally do NOT acquire
+            # the rate limiter again here — double-acquiring on
+            # retries would cause the second attempt to wait on its
+            # own already-drained bucket and time out.
             try:
                 # Invoke LLM
                 if self.output_cls:

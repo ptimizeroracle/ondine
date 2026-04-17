@@ -120,6 +120,22 @@ def test_parses_anthropic_reset_iso8601_timestamp(
     assert parser.parse(headers) == pytest.approx(12.0, abs=1.0)
 
 
+def test_parses_anthropic_reset_with_z_utc_suffix(
+    parser: RetryAfterParser,
+    now_wall: datetime,
+) -> None:
+    """Regression (CodeRabbit #141): real Anthropic responses send
+    the UTC suffix as ``Z`` (e.g. ``2026-04-17T12:05:30Z``). Python
+    3.10's ``datetime.fromisoformat`` rejects that literal; the
+    parser must normalise it so behaviour is uniform across 3.10-3.13.
+    """
+    future = now_wall + timedelta(seconds=18)
+    # Replace +00:00 with the Z form real servers emit.
+    header = future.isoformat().replace("+00:00", "Z")
+    headers = {"anthropic-ratelimit-tokens-reset": header}
+    assert parser.parse(headers) == pytest.approx(18.0, abs=1.0)
+
+
 # ── groq/openai human-duration form ────────────────────────────────────
 
 

@@ -116,15 +116,19 @@ class ConcurrencyController:
             raise
 
     def release(self) -> None:
-        """Release a concurrency slot.
+        """Release a concurrency slot (fixed-semaphore mode only).
 
-        Only valid in fixed-semaphore mode — the adaptive path uses
-        :meth:`throttle` which handles release internally.
+        In adaptive mode, release is handled internally by
+        :meth:`throttle`; calling this method there is a programming
+        error and raises ``RuntimeError`` rather than silently
+        scheduling a fire-and-forget task whose failures would be
+        swallowed.
         """
         if self._limiter is not None:
-            # Best-effort fire-and-forget for legacy callers.
-            asyncio.ensure_future(self._limiter_release_raw())
-            return
+            raise RuntimeError(
+                "release() is unsupported in adaptive mode; use "
+                "throttle() as an async context manager."
+            )
         assert self._semaphore is not None
         self._semaphore.release()
 
@@ -132,13 +136,17 @@ class ConcurrencyController:
     async def throttle(self):
         """Bounded-concurrency + rate-limit context manager.
 
-        In adaptive mode, RTT is measured across the yield and fed
-        into the Gradient2 loop.
+        In adaptive mode the token bucket is acquired **before**
+        entering the admission slot so bucket-wait time does not
+        contaminate the RTT observation fed into Gradient2. Only
+        the yielded region measures true upstream latency.
         """
         if self._limiter is not None:
+            # Acquire the bucket first so only the actual upstream
+            # call contributes to the RTT sample.
+            if self._rate_limiter:
+                await self._rate_limiter.acquire_async()
             async with self._limiter.slot(rtt_source=_noop_rtt):
-                if self._rate_limiter:
-                    await self._rate_limiter.acquire_async()
                 yield
             return
 

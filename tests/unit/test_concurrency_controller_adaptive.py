@@ -90,3 +90,39 @@ async def test_throttle_enforces_adaptive_limit() -> None:
 
     await asyncio.gather(*(worker() for _ in range(20)))
     assert peak <= shrunk
+
+
+@pytest.mark.asyncio
+async def test_llm_stage_admissions_routed_through_controller() -> None:
+    """Regression (CodeRabbit #141): the previous implementation
+    used a local asyncio.Semaphore inside _process_all_concurrent
+    and called rate_limiter.acquire_async() directly in
+    _invoke_async. The adaptive controller was only notified of
+    429s, never consulted on admission — so adaptive=True delivered
+    penalty propagation but no actual adaptive gating.
+
+    This test pins that admissions now go through throttle(): the
+    live in-flight peak must respect the controller's cap, not the
+    static configured ceiling.
+    """
+    ctrl = ConcurrencyController(max_concurrent=8, adaptive=True)
+    # Shrink below ceiling so a bug would surface as overshoot.
+    for _ in range(20):
+        ctrl.on_rate_limit(retry_after_s=0.0)
+    cap = ctrl.max_concurrent
+    assert cap < 8
+
+    in_flight = 0
+    peak = 0
+
+    async def one() -> None:
+        nonlocal in_flight, peak
+        async with ctrl.throttle():
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.005)
+            in_flight -= 1
+
+    # Launch 3x more workers than the cap so contention is guaranteed.
+    await asyncio.gather(*(one() for _ in range(cap * 3)))
+    assert peak <= cap

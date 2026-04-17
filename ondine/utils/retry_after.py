@@ -119,8 +119,16 @@ class RetryAfterParser:
         return self._delta_from_now(when)
 
     def _parse_iso_absolute(self, value: str) -> float | None:
+        # Python 3.10's datetime.fromisoformat rejects the "Z" UTC
+        # suffix used by Anthropic's anthropic-ratelimit-*-reset
+        # headers; 3.11+ accepts it. Normalise explicitly so the
+        # parser behaves uniformly across supported Pythons
+        # (3.10-3.13).
+        candidate = value
+        if candidate.endswith(("Z", "z")):
+            candidate = candidate[:-1] + "+00:00"
         try:
-            when = datetime.fromisoformat(value)
+            when = datetime.fromisoformat(candidate)
         except ValueError:
             return None
         if when.tzinfo is None:
