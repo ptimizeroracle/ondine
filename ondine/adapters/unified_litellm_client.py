@@ -621,7 +621,11 @@ class UnifiedLiteLLMClient(LLMClient):
             or "429" in error_str
             or isinstance(error, litellm.RateLimitError)
         ):
-            return OndineRateLimitError(str(error))
+            retry_after_s = _extract_retry_after(error)
+            return OndineRateLimitError(
+                str(error),
+                retry_after_s=retry_after_s,
+            )
 
         # 5. Check for Authentication errors (Fatal)
         auth_patterns = [
@@ -1121,3 +1125,54 @@ class UnifiedLiteLLMClient(LLMClient):
             )
         except Exception:  # nosec B110
             pass
+
+
+# Module-level singleton — stateless parser, safe to share.
+_RETRY_AFTER_PARSER = None
+
+
+def _extract_retry_after(error: Exception) -> float | None:
+    """Best-effort extraction of a Retry-After delay from a LiteLLM
+    exception.
+
+    LiteLLM surfaces the upstream HTTP response in several places
+    depending on version and error path; we probe the known ones and
+    degrade to ``None`` (fall back to exponential backoff) on
+    anything unexpected. Never raises — an error mapper that itself
+    raises is a footgun.
+    """
+    global _RETRY_AFTER_PARSER
+    if _RETRY_AFTER_PARSER is None:
+        from ondine.utils.retry_after import RetryAfterParser
+
+        _RETRY_AFTER_PARSER = RetryAfterParser()
+
+    try:
+        headers = _pluck_headers(error)
+    except Exception:  # nosec B110 — defensive
+        return None
+    if not headers:
+        return None
+    try:
+        return _RETRY_AFTER_PARSER.parse(headers)
+    except Exception:  # nosec B110 — defensive
+        return None
+
+
+def _pluck_headers(error: Exception) -> dict[str, str] | None:
+    """Look for response headers on a LiteLLM/OpenAI exception."""
+    # Newer LiteLLM stores the raw response headers here.
+    direct = getattr(error, "litellm_response_headers", None)
+    if direct:
+        return dict(direct)
+    # OpenAI-style: error.response.headers
+    response = getattr(error, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", None)
+        if headers:
+            return dict(headers)
+    # Some wrappers nest the inner exception.
+    inner = getattr(error, "__cause__", None)
+    if inner is not None and inner is not error:
+        return _pluck_headers(inner)
+    return None
