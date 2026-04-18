@@ -74,7 +74,7 @@ local now = tonumber(ARGV[4])
 
 local penalty_until = tonumber(redis.call('GET', KEYS[2]))
 if penalty_until ~= nil and now < penalty_until then
-    return {0, tostring(0)}
+    return {0, '0'}
 end
 
 local bucket = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
@@ -85,24 +85,40 @@ local tokens_requested = tonumber(ARGV[3])
 local stored_tokens = tonumber(bucket[1])
 local stored_ts = tonumber(bucket[2])
 
--- Fresh bucket, or caller clock went backwards: start at full.
-if stored_tokens == nil or stored_ts == nil or now < stored_ts then
+-- Only the fresh-key path resets to capacity. When the caller's
+-- clock is behind the stored ts (multi-host skew or slightly stale
+-- time.time() across processes), we clamp elapsed to zero — never
+-- reset the bucket. A bucket reset on skew caused a critical bug
+-- where two contending processes each kept draining a freshly
+-- refilled bucket.
+if stored_tokens == nil or stored_ts == nil then
     stored_tokens = capacity
     stored_ts = now
 end
 
--- Refill based on elapsed time, capped at capacity.
 local elapsed = now - stored_ts
+if elapsed < 0 then
+    -- Caller slightly behind: don't rewind stored_ts, don't refill.
+    elapsed = 0
+    now = stored_ts
+end
 local refilled = math.min(capacity, stored_tokens + elapsed * refill_rate)
 
+-- Serialise ts with fixed-point format so Lua never emits
+-- scientific notation (e.g., 1.7765e+09) which combined with
+-- 6-digit caller timestamps produced the skew-triggered reset bug.
+-- Microsecond precision (%.6f) is sufficient for token-bucket
+-- semantics.
+local ts_str = string.format('%.6f', now)
+
 if tokens_requested > 0 and refilled < tokens_requested then
-    redis.call('HMSET', KEYS[1], 'tokens', refilled, 'ts', now)
+    redis.call('HMSET', KEYS[1], 'tokens', tostring(refilled), 'ts', ts_str)
     redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[5]))
     return {0, tostring(refilled)}
 end
 
 local remaining = refilled - tokens_requested
-redis.call('HMSET', KEYS[1], 'tokens', remaining, 'ts', now)
+redis.call('HMSET', KEYS[1], 'tokens', tostring(remaining), 'ts', ts_str)
 redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[5]))
 return {1, tostring(remaining)}
 """

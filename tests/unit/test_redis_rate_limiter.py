@@ -157,6 +157,41 @@ async def test_scopes_are_isolated(aredis_client, clock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_caller_clock_skew_does_not_reset_bucket(aredis_client, clock) -> None:
+    """Regression (real-Redis E2E): the Lua script once reset the
+    bucket whenever caller's ``now`` was less than ``stored_ts``
+    (triggered by Lua's default number-to-string conversion
+    emitting scientific notation for large timestamps and losing
+    round-trip precision under multi-process calls). Two contending
+    processes then each saw a freshly-full bucket on every backward
+    tick, letting them drain far more than capacity.
+
+    This test pins the fix: a backward tick must clamp elapsed to
+    zero, never reset tokens to capacity.
+    """
+    rl = RedisRateLimiter(
+        requests_per_minute=60,
+        burst_size=4,
+        redis_client=aredis_client,
+        scope="skew-1",
+        monotonic=clock,
+    )
+    # Drain the bucket to (nearly) zero.
+    for _ in range(4):
+        assert await rl.acquire_async() is True
+    assert await rl.acquire_async(timeout=0.1) is False
+
+    # Simulate a second caller whose wallclock is 2 ms behind the
+    # one that wrote stored_ts (exactly what we saw on real Redis
+    # between two subprocesses).
+    clock.advance(-0.002)
+
+    # The bucket must stay empty — a bug here would return True
+    # because the limiter reset to capacity.
+    assert await rl.acquire_async(timeout=0.1) is False
+
+
+@pytest.mark.asyncio
 async def test_requesting_more_than_capacity_raises(aredis_client, clock) -> None:
     """Regression: asking for more tokens than the bucket holds is
     a caller bug that would deadlock forever if we silently retried.
