@@ -684,16 +684,7 @@ class Pipeline:
         ):
             llm_client.set_observer_dispatcher(context.observer_dispatcher)
 
-        rate_limiter = (
-            RateLimiter(
-                specs.processing.rate_limit_rpm,
-                burst_size=min(
-                    20, specs.processing.concurrency
-                ),  # Limit burst to prevent rate limit errors
-            )
-            if specs.processing.rate_limit_rpm
-            else None
-        )
+        rate_limiter = _build_rate_limiter(specs.processing)
         retry_handler = RetryHandler(
             max_attempts=specs.processing.max_retries,
             initial_delay=specs.processing.retry_delay,
@@ -1625,3 +1616,38 @@ class Pipeline:
             # (Don't stop early - use all attempts to get closest to 100%)
 
         return result
+
+
+def _build_rate_limiter(processing_spec):
+    """Assemble the rate limiter for a pipeline run.
+
+    When ``rate_limit_rpm`` is unset, returns ``None`` — no throttle.
+
+    When ``rate_limit_rpm`` is set but ``rate_limit_redis_url`` is
+    not, returns the in-process :class:`RateLimiter` (previous
+    default behaviour — byte-identical).
+
+    When both are set, returns a :class:`RedisRateLimiter` whose
+    fallback is the in-process limiter at the same rpm, so one
+    Redis outage cannot deadlock the pipeline.
+    """
+    rpm = processing_spec.rate_limit_rpm
+    if not rpm:
+        return None
+
+    burst = min(20, processing_spec.concurrency)
+    local = RateLimiter(rpm, burst_size=burst)
+
+    redis_url = getattr(processing_spec, "rate_limit_redis_url", None)
+    if not redis_url:
+        return local
+
+    from ondine.utils.redis_rate_limiter import RedisRateLimiter
+
+    return RedisRateLimiter(
+        requests_per_minute=rpm,
+        redis_url=redis_url,
+        scope=processing_spec.rate_limit_scope,
+        burst_size=burst,
+        fallback=local,
+    )
