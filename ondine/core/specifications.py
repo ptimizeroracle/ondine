@@ -427,6 +427,23 @@ class ProcessingSpec(BaseModel):
     rate_limit_rpm: int | None = Field(
         default=None, gt=0, description="Requests per minute limit"
     )
+    rate_limit_redis_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional Redis URL (redis://host:port/db). When set, the "
+            "rate limiter shares one token bucket across every worker "
+            "pointed at the same scope — the canonical solution when "
+            "multiple Ondine jobs target the same provider API key."
+        ),
+    )
+    rate_limit_scope: str = Field(
+        default="default",
+        description=(
+            "Bucket scope for the distributed rate limiter. Workers "
+            "that must share a budget use the same scope; typical "
+            "format is 'provider:model' or 'provider:model:tier'."
+        ),
+    )
     max_budget: Decimal | None = Field(
         default=None, gt=0, description="Maximum budget in USD"
     )
