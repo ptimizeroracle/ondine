@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0](https://github.com/ptimizeroracle/ondine/compare/v1.7.0...v1.8.0) (2026-04-18)
+
+
+### Features
+
+* add feature verification suite and harden CI/CD for OSS release ([bf3bfb5](https://github.com/ptimizeroracle/ondine/commit/bf3bfb54ba9a6619de7cfd32b9e962238fbc08f6))
+* feature verification suite + CI/CD hardening for OSS release ([dfad054](https://github.com/ptimizeroracle/ondine/commit/dfad0541ba0d2a29dd140982fea48a52308ca8d9))
+* **perf:** adaptive concurrency + Retry-After honouring ([#141](https://github.com/ptimizeroracle/ondine/issues/141)) ([05776c5](https://github.com/ptimizeroracle/ondine/commit/05776c5ba049567fbff3dab02a3e64dabf21a58a))
+* **perf:** Redis-backed distributed rate limiter (A3) ([#142](https://github.com/ptimizeroracle/ondine/issues/142)) ([01694a5](https://github.com/ptimizeroracle/ondine/commit/01694a593b5a520e5a446ac8af35c2231bfe35c7))
+
+
+### Bug Fixes
+
+* align README pitch with data processing engine positioning ([#133](https://github.com/ptimizeroracle/ondine/issues/133)) ([59ca952](https://github.com/ptimizeroracle/ondine/commit/59ca952a23a0bd97aec287aaa1d300022bf69e4e))
+* **ci:** re-add || true for mypy/pip-audit, fix pre-commit hook ([f25c92e](https://github.com/ptimizeroracle/ondine/commit/f25c92e62c3d519a0152402626c0c3372461607f))
+* correct GitBook structure paths to be relative to repo root ([#113](https://github.com/ptimizeroracle/ondine/issues/113)) ([1963669](https://github.com/ptimizeroracle/ondine/commit/1963669d5e1ba9144960dc6939c2abddae625605))
+* crop excess whitespace from logo PNG ([#138](https://github.com/ptimizeroracle/ondine/issues/138)) ([a3dbe31](https://github.com/ptimizeroracle/ondine/commit/a3dbe31503051bc029a5d3d491af2f81bc6830dc))
+* **deps:** add overrides for tornado/nbconvert, ignore py advisory ([07a60d2](https://github.com/ptimizeroracle/ondine/commit/07a60d208505297407ba0d58614e0aaeff800461))
+* **deps:** resolve 35 pip-audit vulnerabilities, enforce CI audit ([c19d200](https://github.com/ptimizeroracle/ondine/commit/c19d20037567dc4b7f8793eff776dac0d041ab71))
+* revert image paths to file-relative so GitBook renders them ([#120](https://github.com/ptimizeroracle/ondine/issues/120)) ([59a5e7f](https://github.com/ptimizeroracle/ondine/commit/59a5e7f0eefe9e42d3cd1d8a05691d639a566e31))
+* **security:** suppress bandit pickle warnings in checkpoint_storage ([e9ea808](https://github.com/ptimizeroracle/ondine/commit/e9ea808c9f2389a182f360720d6275e764e90174))
+* **types,ci:** resolve all mypy errors and fix pre-commit hook ([#131](https://github.com/ptimizeroracle/ondine/issues/131)) ([ebd03a5](https://github.com/ptimizeroracle/ondine/commit/ebd03a5695aa91f44704888e61af45a71954edf0))
+
+
+### Performance Improvements
+
+* **kb:** bulk-ingest path for KB chunks (~7x faster on disk) ([#139](https://github.com/ptimizeroracle/ondine/issues/139)) ([0fb44c9](https://github.com/ptimizeroracle/ondine/commit/0fb44c968bba31beb4779b2221b6eebde534d0c5))
+* pipelined streaming execution (1.85x speedup) ([#136](https://github.com/ptimizeroracle/ondine/issues/136)) ([a979e79](https://github.com/ptimizeroracle/ondine/commit/a979e794678e20fd19a68d16f167d9edb486489b))
+
+
+### Documentation
+
+* add 17 architecture and flow diagrams ([#116](https://github.com/ptimizeroracle/ondine/issues/116)) ([da8622b](https://github.com/ptimizeroracle/ondine/commit/da8622bdd91ac7a749c2962ca1aa357d44bdb489))
+* add enterprise execution-modes and structured-output diagrams ([c5cba52](https://github.com/ptimizeroracle/ondine/commit/c5cba52b39cef964e7d0845f0b6dfa656a7d9ed9))
+* add enterprise execution-modes and structured-output diagrams ([4e2ce57](https://github.com/ptimizeroracle/ondine/commit/4e2ce574bc59cf5fc93c0887b6cfeb23a676e992))
+* add Examples catalog page (37 scripts) ([9081e98](https://github.com/ptimizeroracle/ondine/commit/9081e9827493c279541ae4e7e21b2eaea921879c))
+* add Examples page listing all 37 runnable scripts ([5f30fca](https://github.com/ptimizeroracle/ondine/commit/5f30fca24e3078c9ee5cd6389b775af9a9cd1590))
+* expand documentation coverage from 40% to 80%+ ([#114](https://github.com/ptimizeroracle/ondine/issues/114)) ([c0348f4](https://github.com/ptimizeroracle/ondine/commit/c0348f42b60bcc47c79410e7c21017fc84cfe79d))
+* fix GitBook image paths + add 4 diagram placeholders ([#119](https://github.com/ptimizeroracle/ondine/issues/119)) ([ed68f3e](https://github.com/ptimizeroracle/ondine/commit/ed68f3ee9ac65dfb42b97920a79253190d190b45))
+* generate missing diagram placeholders for cost control and batch processing ([ce678d8](https://github.com/ptimizeroracle/ondine/commit/ce678d85f79610e684d35816c040c4d7408bc546))
+* humanize cost-control, execution-modes, structured-output ([7e1160d](https://github.com/ptimizeroracle/ondine/commit/7e1160ddbc4bfeb9eeebffb99664c6236b610c70))
+* humanize flagged guides (cost-control, execution-modes, structured-output) ([370f711](https://github.com/ptimizeroracle/ondine/commit/370f711bd007ff853bc94f36a3807e2f67d257a7))
+* kill all 59 em-dashes ([95f0789](https://github.com/ptimizeroracle/ondine/commit/95f078980d6b0edf720833848ff6afaa81f793bb))
+* reorganize navigation for clarity ([#118](https://github.com/ptimizeroracle/ondine/issues/118)) ([5087a18](https://github.com/ptimizeroracle/ondine/commit/5087a18298222b7db7c7ae84498aaf386eabbbf9))
+* replace all em-dashes with double hyphens ([312a3ac](https://github.com/ptimizeroracle/ondine/commit/312a3ac1900fbbc2b158607df90360d4d521a1c4))
+* restructure nav and titles for OSS growth ([e7c4bf6](https://github.com/ptimizeroracle/ondine/commit/e7c4bf6c7f29c9d228e9bec886127b2f8463e6b3))
+* restructure nav for OSS growth (outcome-oriented titles) ([e628135](https://github.com/ptimizeroracle/ondine/commit/e6281353bda60d72a5f24328818795ab7b6e04a4))
+* SPICE authenticity pass — all 13 remaining guides ([632c2ed](https://github.com/ptimizeroracle/ondine/commit/632c2ed88cd5826b518d8579c0e2d5880874b73c))
+* SPICE authenticity pass across all 13 remaining guides ([e18ea03](https://github.com/ptimizeroracle/ondine/commit/e18ea03dfebc52120cbb67f42c89cad59a9c00aa))
+* SPICE pass on examples page ([487f85c](https://github.com/ptimizeroracle/ondine/commit/487f85c81be4c206cf376c37bb86a69cea7baf9b))
+* SPICE pass on examples page ([afa6c13](https://github.com/ptimizeroracle/ondine/commit/afa6c13cc48cf24f6d3c48d7355b83b2f0c20d11))
+* update model names to 2026 versions ([#140](https://github.com/ptimizeroracle/ondine/issues/140)) ([0ff622a](https://github.com/ptimizeroracle/ondine/commit/0ff622a16f0298d9fd17de969159389d00b4e90b))
+
 ## [1.7.0](https://github.com/ptimizeroracle/ondine/compare/v1.6.2...v1.7.0) (2026-03-30)
 
 
