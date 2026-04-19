@@ -186,6 +186,11 @@ class SqliteResponseCache(ResponseCache):
         # WAL survives a hard kill with every committed txn intact.
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
+        # Multiple processes/connections may share the same responses.db
+        # (e.g. pipelined streaming spins one sub-pipeline per chunk, each
+        # opening its own connection). Wait up to 5s for the writer lock
+        # instead of erroring with "database is locked".
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.execute(_SCHEMA)
 
     def append(
