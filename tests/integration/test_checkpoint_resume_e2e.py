@@ -91,7 +91,23 @@ def test_checkpoint_resume_restores_partial_progress_without_reprocessing(mock_g
             checkpoint_payload = json.loads(cp.read_text())
         checkpoint_data = checkpoint_payload["data"]
         assert checkpoint_data["last_processed_row"] == 1
-        assert len(checkpoint_data["intermediate_data"]["completed_responses"]) == 2
+
+        # Completed LLM responses live in the durable SQLite response
+        # cache (``responses.db``) next to the checkpoint, not inline in
+        # the JSON blob. This split is the whole point of A4: the
+        # checkpoint stays small, responses stream row-by-row into a
+        # crash-atomic backing store.
+        from uuid import UUID as _UUID
+
+        from ondine.adapters.response_cache import SqliteResponseCache
+
+        cache = SqliteResponseCache(checkpoint_dir / "responses.db")
+        try:
+            rows = list(cache.iter_completed(_UUID(checkpoint_data["session_id"])))
+            assert len(rows) == 2
+            assert [r[0] for r in rows] == [0, 1]
+        finally:
+            cache.close()
 
         resumed = (
             PipelineBuilder.create()
@@ -177,8 +193,20 @@ def test_checkpoint_contains_completed_response_records(mock_get):
                 checkpoint_data = json.loads(f.read().decode("utf-8"))["data"]
         else:
             checkpoint_data = json.loads(checkpoint_file.read_text())["data"]
-        completed = checkpoint_data["intermediate_data"]["completed_responses"]
 
-        assert len(completed) == 1
-        assert completed[0]["text"] == "value_0"
-        assert completed[0]["row_metadata"]["row_index"] == 0
+        # Verify completed-response persistence via the durable cache
+        # rather than the JSON blob. The checkpoint JSON only carries
+        # counters (last_processed_row, accumulated_cost, ...) now.
+        from uuid import UUID as _UUID
+
+        from ondine.adapters.response_cache import SqliteResponseCache
+
+        cache = SqliteResponseCache(checkpoint_dir / "responses.db")
+        try:
+            rows = list(cache.iter_completed(_UUID(checkpoint_data["session_id"])))
+            assert len(rows) == 1
+            row_index, response, _ = rows[0]
+            assert row_index == 0
+            assert response.text == "value_0"
+        finally:
+            cache.close()
