@@ -63,16 +63,16 @@ Ondine auto-detects the input column from `{review}`, picks a JSON parser for mu
 
 ## The 5 dimensions
 
-### 1. INPUTS — make the prompt richer
+### 1. INPUTS: make the prompt richer
 
 Feed the LLM more than raw column text. Pull context from documents, images, and prior runs.
 
 - **Knowledge Base (RAG)**: ingest PDFs, Markdown, HTML, images via OCR. Hybrid BM25 + dense search with optional cross-encoder reranker. HyDE / multi-query / step-back query transforms.
-- **OCR**: three pluggable backends — multimodal Vision LLM, Tesseract (offline), DocTR.
+- **OCR**: three pluggable backends: multimodal Vision LLM, Tesseract (offline), DocTR.
 - **Multi-column placeholders**: use any number of input columns in one prompt (`{col_a}`, `{col_b}`).
 - **Jinja2 templates** + system prompts for richer prompt shaping.
 
-### 2. OUTPUTS — constrain what comes back
+### 2. OUTPUTS: constrain what comes back
 
 Stop parsing strings. Get typed columns, validated against your schema, verified against your evidence.
 
@@ -80,7 +80,7 @@ Stop parsing strings. Get typed columns, validated against your schema, verified
 - **Multi-column parsing**: one prompt → N typed columns.
 - **Grounding verification (Context Store)**: each LLM answer checked against an evidence graph built from your dataset. Rust + SQLite + FTS5 backend. Contradictions flagged, not silently returned.
 
-### 3. EXECUTION — run N rows reliably
+### 3. EXECUTION: run N rows reliably
 
 Production plumbing that `df.apply()` doesn't give you.
 
@@ -92,7 +92,7 @@ Production plumbing that `df.apply()` doesn't give you.
 - **Retry-After** parsing across 5 header shapes (OpenAI / Anthropic / Groq / RFC 7231 / ms-delta).
 - **Distributed rate limiting** via Redis (atomic Lua token bucket, cluster-aware).
 
-### 4. OBSERVATION — see what happened
+### 4. OBSERVATION: see what happened
 
 On by default. Integrates with the observability stack you already run.
 
@@ -102,7 +102,7 @@ On by default. Integrates with the observability stack you already run.
 - **Prometheus** metrics export (request count, duration histogram, cost gauge).
 - **Decimal precision** for cost tracking (no floating-point surprises).
 
-### 5. PROVIDERS — any LLM backend
+### 5. PROVIDERS: any LLM backend
 
 - **100+ providers** via LiteLLM. Swap with a string.
 - **Router** with latency-based failover and automatic provider selection.
