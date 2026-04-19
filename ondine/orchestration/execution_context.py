@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 from ondine.core.models import ProcessingStats
 
 if TYPE_CHECKING:
+    from ondine.adapters.response_cache import ResponseCache
     from ondine.observability.dispatcher import ObserverDispatcher
     from ondine.orchestration.observers import ExecutionObserver
 
@@ -182,6 +183,14 @@ class ExecutionContext:
     # Progress tracker (set by pipeline, not serialized)
     _progress_tracker_ref: Any = field(default=None, repr=False, compare=False)
     progress_tracker: Any = field(default=None, repr=False, compare=False)
+
+    # Durable LLM-response cache for crash-safe resume.
+    # Set by the pipeline; NOT serialized into checkpoint JSON — the
+    # cache is its own on-disk artifact (a SQLite file next to the
+    # checkpoint) and the pipeline reattaches it by path on resume.
+    response_cache: ResponseCache | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def update_stage(self, stage_index: int) -> None:
         """Update current stage."""

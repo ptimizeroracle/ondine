@@ -296,10 +296,9 @@ class Pipeline:
             raise ValueError(f"Pipeline validation failed: {validation.errors}")
 
         # Create or restore execution context
+        checkpoint_dir = Path(self.specifications.processing.checkpoint_dir)
         state_manager = StateManager(
-            storage=LocalFileCheckpointStorage(
-                self.specifications.processing.checkpoint_dir
-            ),
+            storage=LocalFileCheckpointStorage(checkpoint_dir),
             checkpoint_interval=self.specifications.processing.checkpoint_interval,
         )
 
@@ -315,7 +314,15 @@ class Pipeline:
             # Create new context
             context = ExecutionContext(pipeline_id=self.id)
 
-        context.intermediate_data.setdefault("completed_responses", [])
+        # Attach durable response cache. Co-located with the checkpoint
+        # directory so a user who copies/backs-up the checkpoint dir
+        # gets the response history along with it. The cache is the
+        # source of truth for resume — the JSON checkpoint only carries
+        # counters.
+        from ondine.adapters.response_cache import SqliteResponseCache
+
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
 
         # Add default observers if none specified
@@ -412,6 +419,8 @@ class Pipeline:
 
             if self.specifications.processing.cleanup_on_success:
                 state_manager.cleanup_checkpoints(context.session_id)
+                if context.response_cache is not None:
+                    context.response_cache.clear(context.session_id)
 
             # Notify legacy observers of completion.
             # When the progress tracker will emit its own summary report,
@@ -509,6 +518,15 @@ class Pipeline:
                 context.observer_dispatcher.close_all()
 
             raise
+        finally:
+            # Release the response-cache connection. On error paths
+            # the SQLite file stays on disk so the next process can
+            # resume from it; we just let go of the handle.
+            if context is not None and context.response_cache is not None:
+                try:
+                    context.response_cache.close()
+                except Exception:  # nosec B110
+                    pass
 
     def _execute_stages(
         self, context: ExecutionContext, state_manager: StateManager
@@ -1011,8 +1029,47 @@ class Pipeline:
     def _restore_completed_response_batches(
         self, context: ExecutionContext
     ) -> list[ResponseBatch]:
-        """Rebuild response batches from checkpoint-safe completed response records."""
+        """Rebuild response batches from the durable response cache
+        (or, for pipelines without a cache, from the legacy inline
+        checkpoint list).
+
+        ``structured_result`` is always ``None`` on the restored
+        responses: resume crosses a process boundary and the parsed
+        Pydantic object cannot survive serialization. Downstream
+        disaggregator code re-parses from ``text`` when needed.
+        """
         restored_batches: list[ResponseBatch] = []
+
+        if context.response_cache is not None:
+            for idx, (row_index, cached, meta) in enumerate(
+                context.response_cache.iter_completed(context.session_id)
+            ):
+                response = LLMResponse(
+                    text=cached.text,
+                    tokens_in=cached.tokens_in,
+                    tokens_out=cached.tokens_out,
+                    model=cached.model,
+                    cost=cached.cost,
+                    latency_ms=cached.latency_ms,
+                    metadata=cached.metadata,
+                )
+                metadata = RowMetadata(
+                    row_index=row_index,
+                    row_id=meta.row_id,
+                    custom=meta.custom,
+                )
+                restored_batches.append(
+                    ResponseBatch(
+                        responses=[response],
+                        metadata=[metadata],
+                        tokens_used=response.tokens_in + response.tokens_out,
+                        cost=response.cost,
+                        batch_id=idx,
+                        latencies_ms=[response.latency_ms],
+                    )
+                )
+            return restored_batches
+
         for idx, record in enumerate(
             context.intermediate_data.get("completed_responses", [])
         ):
