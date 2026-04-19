@@ -102,7 +102,7 @@ jobs:
         cyclonedx-py environment -o sbom.json --format json
 
     - name: Sign artifacts with Sigstore
-      uses: sigstore/gh-action-sigstore-python@v3
+      uses: sigstore/gh-action-sigstore-python@v3.3.0
       with:
         inputs: target/wheels/*.whl
 
