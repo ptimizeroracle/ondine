@@ -155,12 +155,12 @@ Every chained method maps to one of the five dimensions. See [docs.ondine.dev](h
 
 Same primitive. The use case lives in the prompt.
 
-| Domain | Prompt pattern |
-|--------|----------------|
-| Product enrichment | `"Enrich description from: {facets}, {spec_pdf_context}, {image_ocr}"` |
-| Document extraction | `"Extract brand, category, risk_score from: {contract_text}"` |
-| Algorithm evaluation | `"Score this swap: {product_A} → {product_B}, given {context}"` |
-| Classification | `"Classify {review} into one of {taxonomy}"` |
+| Transform | Prompt pattern |
+|-----------|----------------|
+| Classification | `"Classify {text} into one of {labels}"` |
+| Extraction | `"Extract name, date, amount from: {document}"` |
+| Scoring | `"Score {item} against {criteria} on 1–10"` |
+| Comparison | `"Is {a} equivalent to {b}? Return yes/no + reason."` |
 | Translation | `"Translate {text} from {src_lang} to {tgt_lang}"` |
 | Summarization | `"Summarize {document} in 3 bullets"` |
 
