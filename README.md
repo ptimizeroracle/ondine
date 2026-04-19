@@ -24,9 +24,15 @@
 Ondine makes LLM calls a first-class DataFrame operation. Define a column with natural language. Ondine computes it at production scale.
 
 ```python
-df["sentiment"] = Ondine(
-    prompt="Classify the tone of: {review}",
-    model="gpt-5.4-mini",
+from ondine import PipelineBuilder
+
+df = (
+    PipelineBuilder.create()
+    .from_dataframe(df, input_columns=["review"], output_columns=["sentiment"])
+    .with_prompt("Classify the tone of: {review}")
+    .with_llm(provider="openai", model="gpt-5.4-mini")
+    .build()
+    .execute().data
 )
 ```
 
@@ -45,21 +51,26 @@ Python 3.10+. Works with any LLM through [LiteLLM](https://github.com/BerriAI/li
 ## 30-second quickstart
 
 ```python
-from ondine import QuickPipeline
+from ondine import PipelineBuilder
 
-pipeline = QuickPipeline.create(
-    data="reviews.csv",
-    prompt="Classify sentiment and extract the key topic from: {review}",
-    output_columns=["sentiment", "topic"],
-    model="gpt-5.4-mini",
-    max_budget=5.00,
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("reviews.csv",
+              input_columns=["review"],
+              output_columns=["sentiment", "topic"])
+    .with_prompt("Classify sentiment and extract the key topic from: {review}")
+    .with_llm(provider="openai", model="gpt-5.4-mini")
+    .with_max_budget(5.00)
+    .build()
 )
 
 result = pipeline.execute()
 print(f"Processed {result.metrics.processed_rows} rows · ${result.costs.total_cost:.2f}")
 ```
 
-Ondine auto-detects the input column from `{review}`, picks a JSON parser for multi-column outputs, enforces the schema, writes checkpoints, tracks cost.
+One builder chain: input columns, prompt, model, budget cap. Multi-column outputs get a JSON parser; schema enforcement, checkpointing, and cost tracking are on by default.
+
+Prefer a one-liner? `QuickPipeline.create(...)` wraps the same builder with sensible defaults (see [examples/](examples/)).
 
 ## The 5 dimensions
 
