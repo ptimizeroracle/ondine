@@ -419,31 +419,59 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 response.tokens_out
             )
 
-            # Persist completed responses incrementally so checkpoints can resume
-            # without redoing already finished LLM calls.
-            completed_responses = context.intermediate_data.setdefault(
-                "completed_responses", []
-            )
-            completed_responses.append(
-                {
-                    "text": response.text,
-                    "tokens_in": response.tokens_in,
-                    "tokens_out": response.tokens_out,
-                    "model": response.model,
-                    "cost": str(response.cost),
-                    "latency_ms": response.latency_ms,
-                    "metadata": response.metadata or {},
-                    "row_metadata": {
-                        "row_index": metadata.row_index,
-                        "row_id": metadata.row_id,
-                        "custom": metadata.custom or {},
-                    },
-                    # Keep in-memory reference so the disaggregator can use the
-                    # fast Pydantic path instead of fragile JSON text parsing.
-                    # This field is NOT serialized to disk checkpoints.
-                    "_structured_result": response.structured_result,
-                }
-            )
+            # Persist completed responses incrementally so checkpoints can
+            # resume without redoing already finished LLM calls. Prefer the
+            # durable ``response_cache`` (SQLite, row-level atomic) when the
+            # pipeline attached one; fall back to the inline-list format for
+            # configurations that did not opt into a checkpoint directory.
+            if context.response_cache is not None:
+                from ondine.adapters.response_cache import (
+                    CachedResponse,
+                    CachedRowMetadata,
+                )
+
+                context.response_cache.append(
+                    context.session_id,
+                    metadata.row_index,
+                    CachedResponse(
+                        text=response.text,
+                        tokens_in=response.tokens_in,
+                        tokens_out=response.tokens_out,
+                        model=response.model,
+                        cost=response.cost,
+                        latency_ms=response.latency_ms,
+                        metadata=response.metadata or {},
+                    ),
+                    CachedRowMetadata(
+                        row_index=metadata.row_index,
+                        row_id=metadata.row_id,
+                        custom=metadata.custom or {},
+                    ),
+                )
+            else:
+                completed_responses = context.intermediate_data.setdefault(
+                    "completed_responses", []
+                )
+                completed_responses.append(
+                    {
+                        "text": response.text,
+                        "tokens_in": response.tokens_in,
+                        "tokens_out": response.tokens_out,
+                        "model": response.model,
+                        "cost": str(response.cost),
+                        "latency_ms": response.latency_ms,
+                        "metadata": response.metadata or {},
+                        "row_metadata": {
+                            "row_index": metadata.row_index,
+                            "row_id": metadata.row_id,
+                            "custom": metadata.custom or {},
+                        },
+                        # Keep in-memory reference so the disaggregator can use the
+                        # fast Pydantic path instead of fragile JSON text parsing.
+                        # This field is NOT serialized to disk checkpoints.
+                        "_structured_result": response.structured_result,
+                    }
+                )
 
             if self.budget_controller:
                 self.budget_controller.check_budget(context.accumulated_cost)
