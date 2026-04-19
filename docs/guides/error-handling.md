@@ -163,6 +163,12 @@ With `retry_delay=1.0` and `max_retries=5`:
 
 Cap is 60 seconds no matter the multiplier.
 
+### Honouring `Retry-After`
+
+When a provider returns HTTP 429 with a `Retry-After` header (either a seconds count or an HTTP date), Ondine parses it and waits **at least** that long before the next attempt. This is automatic — no configuration needed. The exponential backoff above is still applied on top, so you'll never sleep *less* than the server asked for.
+
+What this buys you: on shared API keys (OpenAI/Anthropic tier limits, Groq free tier), the server often tells you the exact moment the window reopens. Honouring it avoids the usual "hammer until unblocked" pattern that wastes retry budget and triggers stricter throttling.
+
 ## Two Levels of Retry
 
 <!-- IMAGE_PLACEHOLDER
@@ -321,6 +327,31 @@ pipeline = (
 
 result = pipeline.execute()
 ```
+
+## Distributed Rate Limiting (Redis)
+
+`with_rate_limit(rpm)` gives you an in-process token bucket. That's enough for a single pipeline but breaks down when several jobs share one API key — each job runs its own bucket, so N parallel workers allow N×rpm against the provider.
+
+Pass a `redis_url` and a `scope` to share one bucket across every worker pointed at it:
+
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_dataframe(df, input_columns=["text"], output_columns=["result"])
+    .with_prompt("Process: {text}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .with_rate_limit(
+        100,
+        redis_url="redis://localhost:6379/0",
+        scope="openai:gpt-4o-mini",
+    )
+    .build()
+)
+```
+
+Workers that must share a budget use the **same** `scope`. Typical format: `"provider:model"` or `"provider:model:tier"`. Two jobs with different scopes get independent buckets even on the same Redis.
+
+**Fallback behaviour.** If Redis becomes unreachable mid-run, the limiter automatically falls back to an in-process bucket at the same `rpm`. A Redis outage cannot deadlock the pipeline — it just loses the cross-worker coordination until Redis returns.
 
 ## Non-Retryable Errors
 

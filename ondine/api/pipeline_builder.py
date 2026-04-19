@@ -701,7 +701,13 @@ class PipelineBuilder:
         self._processing_spec.cleanup_on_success = enabled
         return self
 
-    def with_rate_limit(self, rpm: int) -> PipelineBuilder:
+    def with_rate_limit(
+        self,
+        rpm: int,
+        *,
+        redis_url: str | None = None,
+        scope: str | None = None,
+    ) -> PipelineBuilder:
         """
         Configure rate limiting.
 
@@ -710,26 +716,43 @@ class PipelineBuilder:
 
         Args:
             rpm: Requests per minute (typical: 20-60 for free tiers, 100+ for paid)
+            redis_url: Optional ``redis://host:port/db`` URL. When set, workers
+                sharing the same Redis + ``scope`` share one token bucket —
+                the canonical solution when multiple Ondine jobs target the
+                same provider API key. Falls back to an in-process limiter
+                at the same ``rpm`` if Redis is unreachable.
+            scope: Bucket scope for the distributed limiter. Workers that
+                must share a budget use the same scope (e.g.
+                ``"openai:gpt-4o"`` or ``"anthropic:sonnet:tier2"``).
+                Ignored when ``redis_url`` is not set.
 
         Returns:
             Self for chaining
 
         Example:
             ```python
-            # OpenAI free tier (60 RPM limit)
+            # Single-process: in-memory token bucket
             builder.with_rate_limit(50)
 
-            # Groq free tier (30 RPM limit)
-            builder.with_rate_limit(25)
-
-            # Paid tier with high limits
-            builder.with_rate_limit(100)
+            # Multi-process: one shared bucket across every worker
+            # pointed at the same Redis + scope
+            builder.with_rate_limit(
+                100,
+                redis_url="redis://localhost:6379/0",
+                scope="openai:gpt-4o-mini",
+            )
             ```
 
         Note:
-            Rate limiting is applied per pipeline execution, not globally.
+            Without ``redis_url``, rate limiting is per-process. Each
+            pipeline instance gets its own token bucket, so N parallel
+            jobs effectively allow N×rpm against your provider.
         """
         self._processing_spec.rate_limit_rpm = rpm
+        if redis_url is not None:
+            self._processing_spec.rate_limit_redis_url = redis_url
+        if scope is not None:
+            self._processing_spec.rate_limit_scope = scope
         return self
 
     def with_max_retries(self, retries: int) -> PipelineBuilder:

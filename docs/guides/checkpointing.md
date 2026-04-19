@@ -22,11 +22,20 @@ alt_text: Flowchart showing the checkpoint-resume lifecycle: execute, fail at ro
 -->
 ![Checkpoint Resume Lifecycle](images/checkpoint-resume-lifecycle.png)
 
-The `StateManager` periodically serialises execution context (last processed row index, accumulated cost, completed responses) into a compressed JSON file:
+The `StateManager` periodically serialises execution context (last processed row index, accumulated cost, aggregate counters) into a compressed JSON file, and every completed LLM response streams row-by-row into a SQLite database next to it:
 
 ```
-.checkpoints/checkpoint_<session-uuid>.json.gz
+.checkpoints/checkpoint_<session-uuid>.json.gz   # counters, small
+.checkpoints/responses.db                         # one row per completed LLM call
 ```
+
+**Why two files?** The JSON blob used to also carry every completed response inline — that rewrote a ~100MB file every checkpoint window (O(N²) IO on long runs) and could be truncated mid-write by a `kill -9`. The SQLite file uses WAL mode and appends one row per response atomically, so:
+
+- A hard kill between any two rows leaves **every completed row intact**. No partial writes.
+- Checkpoint windows stay small — only counters are rewritten.
+- Resume reads responses back in `row_index` order regardless of worker completion order.
+
+The `responses.db` is managed for you. It's cleared automatically on successful completion (unless you disable cleanup) and reattached by path when you resume.
 
 When execution fails, the logs hand you a ready-to-paste resume call:
 
