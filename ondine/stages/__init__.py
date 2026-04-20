@@ -26,13 +26,6 @@ Core stages (in typical execution order)
   single ``DataContainer``.
 - ``ResultWriterStage`` -- Write final results to CSV or other sinks.
 
-Multi-run & aggregation
------------------------
-- ``MultiRunStage`` -- Run a sub-pipeline multiple times and aggregate
-  results via a configurable ``AggregationStrategy``:
-  ``ConsensusStrategy``, ``FirstSuccessStrategy``, ``AllStrategy``,
-  ``AverageStrategy``.
-
 Response parsers
 ----------------
 - ``ResponseParser`` (ABC), ``RawTextParser``, ``JSONParser``,
@@ -87,14 +80,6 @@ from ondine.stages.data_loader_stage import DataLoaderStage
 from ondine.stages.evidence_retrieval_stage import EvidenceRetrievalStage
 from ondine.stages.knowledge_retrieval_stage import KnowledgeRetrievalStage
 from ondine.stages.llm_invocation_stage import LLMInvocationStage
-from ondine.stages.multi_run_stage import (
-    AggregationStrategy,
-    AllStrategy,
-    AverageStrategy,
-    ConsensusStrategy,
-    FirstSuccessStrategy,
-    MultiRunStage,
-)
 from ondine.stages.parser_factory import create_response_parser
 from ondine.stages.pipeline_stage import PipelineStage
 from ondine.stages.prompt_formatter_stage import (
@@ -120,18 +105,12 @@ __all__ = [
     "LLMInvocationStage",
     "ResponseParserStage",
     "ResultWriterStage",
-    "MultiRunStage",
     "ResponseParser",
     "RawTextParser",
     "JSONParser",
     "PydanticParser",
     "RegexParser",
     "create_response_parser",
-    "AggregationStrategy",
-    "ConsensusStrategy",
-    "FirstSuccessStrategy",
-    "AllStrategy",
-    "AverageStrategy",
     # Knowledge retrieval
     "KnowledgeRetrievalStage",
     # Evidence priming
