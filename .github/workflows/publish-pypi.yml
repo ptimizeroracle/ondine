@@ -3,7 +3,7 @@ name: Release to PyPI
 # ──────────────────────────────────────────────────────────────────────────
 # Publishing pipeline:
 #   resolve-tag → build-sdist  ┐
-#                              ├─► verify-matrix-complete (20 wheels gate)
+#                              ├─► verify-matrix-complete (16 wheels gate)
 #                 build-wheels ┘                 ↓
 #                                          publish-testpypi
 #                                                ↓
@@ -92,7 +92,7 @@ jobs:
           if-no-files-found: error
 
   # ────────────────────────────────────────────────────────────────────
-  # 3. Binary wheels — 5 platforms × 4 Python versions = 20 wheels
+  # 3. Binary wheels — 4 platforms × 4 Python = 16 wheels (Mac is universal2)
   # ────────────────────────────────────────────────────────────────────
   build-wheels:
     needs: resolve-tag
@@ -101,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
         python: ["3.10", "3.11", "3.12", "3.13"]
         include:
           - os: ubuntu-latest
@@ -110,10 +110,8 @@ jobs:
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             manylinux: auto
-          - os: macos-13
-            target: x86_64-apple-darwin
           - os: macos-14
-            target: aarch64-apple-darwin
+            target: universal2-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
@@ -159,7 +157,7 @@ jobs:
   # ────────────────────────────────────────────────────────────────────
   verify-matrix-complete:
     needs: [build-sdist, build-wheels]
-    name: Verify 20 wheels + 1 sdist
+    name: Verify 16 wheels + 1 sdist
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -178,17 +176,17 @@ jobs:
           echo "────────────────────────────────────────"
           ls -la dist/
           echo "────────────────────────────────────────"
-          echo "Wheels: $WHEEL_COUNT  (expected 20)"
+          echo "Wheels: $WHEEL_COUNT  (expected 16)"
           echo "Sdist:  $SDIST_COUNT  (expected 1)"
-          if [ "$WHEEL_COUNT" -ne 20 ]; then
-            echo "::error::Matrix incomplete — expected exactly 20 wheels, got $WHEEL_COUNT"
+          if [ "$WHEEL_COUNT" -ne 16 ]; then
+            echo "::error::Matrix incomplete — expected exactly 16 wheels, got $WHEEL_COUNT"
             exit 1
           fi
           if [ "$SDIST_COUNT" -ne 1 ]; then
             echo "::error::Expected 1 sdist, got $SDIST_COUNT"
             exit 1
           fi
-          echo "✅ 20 wheels + 1 sdist present"
+          echo "✅ 16 wheels + 1 sdist present"
 
   # ────────────────────────────────────────────────────────────────────
   # 5. Upload to TestPyPI as smoke-test target
@@ -230,10 +228,11 @@ jobs:
       matrix:
         include:
           - { os: macos-14,         python: "3.10" }
+          - { os: macos-14,         python: "3.12" }
           - { os: macos-14,         python: "3.13" }
-          - { os: macos-13,         python: "3.11" }
           - { os: windows-latest,   python: "3.10" }
           - { os: windows-latest,   python: "3.13" }
+          - { os: ubuntu-24.04-arm, python: "3.11" }
           - { os: ubuntu-24.04-arm, python: "3.12" }
     steps:
       - uses: actions/setup-python@v5
