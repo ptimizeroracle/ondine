@@ -143,13 +143,15 @@ jobs:
       - name: Self-test wheel — Rust extension imports
         shell: bash
         working-directory: ${{ runner.temp }}
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           python -m pip install --upgrade pip
           python -m pip install --find-links "$GITHUB_WORKSPACE/dist" "ondine==${{ needs.resolve-tag.outputs.version }}"
           python -c "
           from ondine._engine import EvidenceDB
           db = EvidenceDB(':memory:')
-          print('✅ ondine._engine loads on ${{ matrix.os }} py${{ matrix.python }}')
+          print('OK ondine._engine loads on ${{ matrix.os }} py${{ matrix.python }}')
           "
 
   # ────────────────────────────────────────────────────────────────────
@@ -260,11 +262,13 @@ jobs:
 
       - name: Verify Rust extension loads (regression gate)
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           python -c "
           from ondine._engine import EvidenceDB
           db = EvidenceDB(':memory:')
-          print('✅ ${{ matrix.os }} py${{ matrix.python }}: wheel installed + Rust extension works')
+          print('OK ${{ matrix.os }} py${{ matrix.python }}: wheel installed + Rust extension works')
           "
 
   # ────────────────────────────────────────────────────────────────────
