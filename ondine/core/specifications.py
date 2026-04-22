@@ -444,6 +444,17 @@ class ProcessingSpec(BaseModel):
             "format is 'provider:model' or 'provider:model:tier'."
         ),
     )
+    adaptive_concurrency: bool = Field(
+        default=False,
+        description=(
+            "Opt-in Gradient2-based adaptive concurrency cap. When "
+            "enabled, the effective in-flight limit shrinks on 429/RTT "
+            "inflation and grows on saturation with near-baseline RTT, "
+            "bounded above by ``concurrency`` and below by 1. Default "
+            "is off — fixed semaphore behaviour, byte-identical to "
+            "prior versions."
+        ),
+    )
     max_budget: Decimal | None = Field(
         default=None, gt=0, description="Maximum budget in USD"
     )

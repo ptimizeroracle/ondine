@@ -169,6 +169,39 @@ When a provider returns HTTP 429 with a `Retry-After` header (either a seconds c
 
 What this buys you: on shared API keys (OpenAI/Anthropic tier limits, Groq free tier), the server often tells you the exact moment the window reopens. Honouring it avoids the usual "hammer until unblocked" pattern that wastes retry budget and triggers stricter throttling.
 
+### Adaptive Concurrency
+
+`with_concurrency(N)` sets a fixed in-flight cap. That's the right default — simple, predictable, and fine when you already know the provider's rate limit. But it's brittle when the limit is opaque, changes during a job (tier promotion, shared-key contention), or differs per model.
+
+`with_adaptive_concurrency()` opts in to a [Gradient2](https://github.com/Netflix/concurrency-limits)-style controller that probes the real ceiling:
+
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("prompts.csv", input_columns=["text"], output_columns=["label"])
+    .with_prompt("Classify: {text}")
+    .with_llm(model="openai/gpt-4o-mini")
+    .with_concurrency(20)              # upper bound
+    .with_adaptive_concurrency()       # shrink on 429 / RTT inflation, grow on saturation
+    .build()
+)
+```
+
+Semantics:
+
+* The effective in-flight cap starts at `with_concurrency(...)` and is bounded by it — adaptive never goes *above* your ceiling.
+* On 429 responses or RTT inflation vs the measured baseline, the cap shrinks.
+* On sustained saturation (in-flight == cap) with near-baseline RTT, the cap grows.
+* Floor is 1; the pipeline never stalls.
+
+When to enable:
+* Running against a provider whose rate limit you don't know precisely.
+* Sharing an API key with other jobs (adaptive also cooperates well with `rate_limit_redis_url=...` below).
+* You'd rather over-provision the ceiling and let the controller find the sweet spot than tune `with_concurrency(...)` by hand.
+
+When to leave off (the default):
+* You've measured the provider and a fixed cap is working. Adaptive adds a small CPU cost per request and slight latency variance from probing. Not worth it if you don't need it.
+
 ## Two Levels of Retry
 
 <!-- IMAGE_PLACEHOLDER

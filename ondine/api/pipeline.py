@@ -719,6 +719,7 @@ class Pipeline:
             if specs.metadata
             else None,
             budget_controller=budget_controller,
+            adaptive_concurrency=specs.processing.adaptive_concurrency,
         )
         # Stage 3: Execute LLM invocation
         response_batches = (

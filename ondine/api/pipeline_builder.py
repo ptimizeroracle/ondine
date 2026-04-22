@@ -669,6 +669,36 @@ class PipelineBuilder:
         self._processing_spec.concurrency = threads
         return self
 
+    def with_adaptive_concurrency(self, enabled: bool = True) -> PipelineBuilder:
+        """Opt-in adaptive in-flight cap (Gradient2 algorithm).
+
+        When enabled, the effective concurrency shrinks on 429 / RTT
+        inflation and grows on saturation with near-baseline RTT. The
+        ceiling is ``with_concurrency(...)``; the floor is 1. Use this
+        when the provider's rate limits are opaque or variable and
+        you'd rather let Ondine probe for the sweet spot than pick
+        a fixed number.
+
+        Default is off — behaviour is byte-identical to prior versions.
+
+        Args:
+            enabled: ``True`` to turn on, ``False`` to turn off. Passing
+                ``False`` is useful to undo an earlier call on the same
+                builder.
+
+        Returns:
+            Self for chaining.
+
+        Example:
+            ```python
+            # Let Ondine find the right concurrency under a flaky
+            # third-party API — upper bound still 20.
+            builder.with_concurrency(20).with_adaptive_concurrency()
+            ```
+        """
+        self._processing_spec.adaptive_concurrency = enabled
+        return self
+
     def with_checkpoint_interval(self, rows: int) -> PipelineBuilder:
         """
         Configure checkpoint frequency.
