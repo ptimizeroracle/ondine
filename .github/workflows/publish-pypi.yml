@@ -133,23 +133,31 @@ jobs:
           manylinux: ${{ matrix.manylinux || '' }}
           sccache: true
 
-      - name: Self-test wheel — Rust extension imports
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --find-links dist "ondine==${{ needs.resolve-tag.outputs.version }}"
-          python -c "
-          from ondine._engine import EvidenceDB
-          db = EvidenceDB(':memory:')
-          print('✅ ondine._engine loads on ${{ matrix.os }} py${{ matrix.python }}')
-          "
-
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.os }}-py${{ matrix.python }}
           path: dist/*.whl
           retention-days: 90
           if-no-files-found: error
+
+      - name: Inspect wheel contents
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m zipfile -l dist/*.whl | head -50
+          echo "────────────────────────────────────────"
+          echo "Looking for _engine extension:"
+          python -m zipfile -l dist/*.whl | grep -i "_engine" || echo "::warning::no _engine file found in wheel"
+
+      - name: Self-test wheel — Rust extension imports
+        shell: bash
+        run: |
+          python -m pip install --find-links dist "ondine==${{ needs.resolve-tag.outputs.version }}"
+          python -c "
+          from ondine._engine import EvidenceDB
+          db = EvidenceDB(':memory:')
+          print('✅ ondine._engine loads on ${{ matrix.os }} py${{ matrix.python }}')
+          "
 
   # ────────────────────────────────────────────────────────────────────
   # 4. Matrix completeness gate — block if any wheel silently dropped
