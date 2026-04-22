@@ -151,8 +151,9 @@ jobs:
 
       - name: Self-test wheel — Rust extension imports
         shell: bash
+        working-directory: ${{ runner.temp }}
         run: |
-          python -m pip install --find-links dist "ondine==${{ needs.resolve-tag.outputs.version }}"
+          python -m pip install --find-links ${{ github.workspace }}/dist "ondine==${{ needs.resolve-tag.outputs.version }}"
           python -c "
           from ondine._engine import EvidenceDB
           db = EvidenceDB(':memory:')
