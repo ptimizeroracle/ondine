@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1](https://github.com/ptimizeroracle/ondine/compare/v1.9.0...v1.9.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **ci:** drop unsupported --format flag from cyclonedx-py ([#157](https://github.com/ptimizeroracle/ondine/issues/157)) ([3b190cc](https://github.com/ptimizeroracle/ondine/commit/3b190cc2a171185f64e3b017ea6a4270c8797869))
+
 ## [1.9.0](https://github.com/ptimizeroracle/ondine/compare/v1.8.1...v1.9.0) (2026-04-22)
 
 
