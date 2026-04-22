@@ -202,11 +202,9 @@ jobs:
           pattern: wheel-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
-        with:
-          name: sdist
-          path: dist
-      - name: Upload to TestPyPI
+      # sdist intentionally skipped: TestPyPI smoke-test uses --only-binary,
+      # so only wheels matter. Prod publish uploads both.
+      - name: Upload wheels to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
