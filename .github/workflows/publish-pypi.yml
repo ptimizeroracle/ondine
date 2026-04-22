@@ -207,12 +207,12 @@ jobs:
           name: sdist
           path: dist
       - name: Upload to TestPyPI
-        uses: PyO3/maturin-action@v1
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          command: upload
-          args: --repository-url https://test.pypi.org/legacy/ --skip-existing dist/*
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
 
   # ────────────────────────────────────────────────────────────────────
   # 6. Smoke test — install from TestPyPI on platforms that were broken
@@ -298,12 +298,11 @@ jobs:
           inputs: ./dist/*.whl ./dist/*.tar.gz
 
       - name: Upload to PyPI
-        uses: PyO3/maturin-action@v1
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          command: upload
-          args: --skip-existing dist/*.whl dist/*.tar.gz
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
 
       - name: Archive signed release
         uses: actions/upload-artifact@v4
