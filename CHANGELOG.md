@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0](https://github.com/ptimizeroracle/ondine/compare/v1.8.1...v1.9.0) (2026-04-22)
+
+
+### Features
+
+* **api:** wire with_adaptive_concurrency() end-to-end ([#152](https://github.com/ptimizeroracle/ondine/issues/152)) ([8950435](https://github.com/ptimizeroracle/ondine/commit/8950435adf96a09f263644cb3dee274520a3f1cf))
+
+
+### Bug Fixes
+
+* **ci:** pin sigstore action to v3.3.0 ([#147](https://github.com/ptimizeroracle/ondine/issues/147)) ([8ea1b3d](https://github.com/ptimizeroracle/ondine/commit/8ea1b3d34664b9714f11f45d9bdeb1c048bfaaf8))
+* **deps:** bump python-dotenv to &gt;=1.2.2 (GHSA-mf9w-mj56-hr94) ([#156](https://github.com/ptimizeroracle/ondine/issues/156)) ([894e432](https://github.com/ptimizeroracle/ondine/commit/894e4321ee8c4e50908c421d62eab39e28a34107))
+
+
+### Documentation
+
+* **readme:** use real PipelineBuilder API in hero + quickstart ([#151](https://github.com/ptimizeroracle/ondine/issues/151)) ([a250df1](https://github.com/ptimizeroracle/ondine/commit/a250df1fadbfd974a04423e48d2ec66ea7c5d8e5))
+
 ## [1.8.1](https://github.com/ptimizeroracle/ondine/compare/v1.8.0...v1.8.1) (2026-04-19)
 
 
