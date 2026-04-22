@@ -295,12 +295,21 @@ jobs:
         with:
           inputs: ./dist/*.whl ./dist/*.tar.gz
 
+      - name: Move sigstore bundles out of upload dir
+        run: |
+          mkdir -p signatures
+          mv dist/*.sigstore.json signatures/ || true
+          ls -la dist/ signatures/
+
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
+
+      - name: Restore sigstore bundles for archive
+        run: mv signatures/*.sigstore.json dist/ || true
 
       - name: Archive signed release
         uses: actions/upload-artifact@v4
