@@ -99,7 +99,7 @@ jobs:
     - name: Generate SBOM
       run: |
         pip install cyclonedx-bom
-        cyclonedx-py environment -o sbom.json --format json
+        cyclonedx-py environment -o sbom.json
 
     - name: Sign artifacts with Sigstore
       uses: sigstore/gh-action-sigstore-python@v3.3.0
