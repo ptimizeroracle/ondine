@@ -1,0 +1,8 @@
+FROM --platform=linux/amd64 python:3.11-slim
+
+RUN pip install --no-cache-dir "ondine[knowledge]" prefect
+
+WORKDIR /app
+COPY flows/ /app/flows/
+
+CMD ["python", "/app/flows/ondine_etl_flow.py"]
