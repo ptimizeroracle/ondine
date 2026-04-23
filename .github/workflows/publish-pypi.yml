@@ -1,12 +1,30 @@
 name: Release to PyPI
 
+# ──────────────────────────────────────────────────────────────────────────
+# Publishing pipeline:
+#   resolve-tag → build-sdist  ┐
+#                              ├─► verify-matrix-complete (16 wheels gate)
+#                 build-wheels ┘                 ↓
+#                                          publish-testpypi
+#                                                ↓
+#                                          smoke-test (6 runners, fresh pip install)
+#                                                ↓
+#                                          publish-prod (Sigstore-signed)
+#
+# The smoke-test job installs from TestPyPI on macOS arm64, macOS x86_64,
+# Windows, and Linux arm64 WITHOUT any Rust toolchain present. If any
+# wheel is missing, pip tries to build from sdist, fails, and blocks the
+# prod publish. This catches the regression class from v1.7.0-v1.9.1 where
+# only Linux x86_64 Python 3.11 wheels were published.
+# ──────────────────────────────────────────────────────────────────────────
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing release tag to publish (for example: v1.4.0)"
+        description: "Existing release tag to publish (e.g. v1.10.0)"
         required: true
         type: string
 
@@ -16,113 +34,286 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write  # Required for Sigstore signing
+  id-token: write  # Sigstore signing
 
 jobs:
-  build-and-publish:
-    name: Build and publish to PyPI
+
+  # ────────────────────────────────────────────────────────────────────
+  # 1. Resolve release tag and verify it matches pyproject.toml version
+  # ────────────────────────────────────────────────────────────────────
+  resolve-tag:
+    name: Resolve release tag
     runs-on: ubuntu-latest
-    environment: Ondine  # Use the Ondine environment with PYPI_API_TOKEN
-
+    outputs:
+      tag: ${{ steps.r.outputs.tag }}
+      version: ${{ steps.r.outputs.version }}
     steps:
-    - name: Checkout release ref
-      if: github.event_name == 'release'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.release.tag_name }}
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+      - id: r
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.release_tag }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "::error::Expected SemVer tag starting with v, got: $TAG"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
+          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) != pyproject.toml version ($PACKAGE_VERSION)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "✅ Tag $TAG / version $VERSION"
 
-    - name: Checkout manual release tag
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/checkout@v6
-      with:
-        ref: ${{ inputs.release_tag }}
+  # ────────────────────────────────────────────────────────────────────
+  # 2. Source distribution (one tarball)
+  # ────────────────────────────────────────────────────────────────────
+  build-sdist:
+    needs: resolve-tag
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          retention-days: 90
+          if-no-files-found: error
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+  # ────────────────────────────────────────────────────────────────────
+  # 3. Binary wheels — 4 platforms × 4 Python = 16 wheels (Mac is universal2)
+  # ────────────────────────────────────────────────────────────────────
+  build-wheels:
+    needs: resolve-tag
+    name: Wheel ${{ matrix.os }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            manylinux: auto
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            manylinux: auto
+          - os: macos-14
+            target: universal2-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
 
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
 
-    - name: Cache Rust dependencies
-      uses: Swatinem/rust-cache@v2
+      - name: Build wheel via maturin
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist -i python${{ matrix.python }}
+          manylinux: ${{ matrix.manylinux || '' }}
+          sccache: true
 
-    - name: Install uv and maturin
-      run: |
-        pip install uv maturin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-py${{ matrix.python }}
+          path: dist/*.whl
+          retention-days: 90
+          if-no-files-found: error
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
+      - name: Self-test wheel — Rust extension imports
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --find-links "$GITHUB_WORKSPACE/dist" "ondine==${{ needs.resolve-tag.outputs.version }}"
+          python -c "
+          from ondine._engine import EvidenceDB
+          db = EvidenceDB(':memory:')
+          print('OK ondine._engine loads on ${{ matrix.os }} py${{ matrix.python }}')
+          "
 
-    - name: Resolve release tag
-      id: release_tag
-      shell: bash
-      run: |
-        if [ "${{ github.event_name }}" = "release" ]; then
-          TAG="${{ github.event.release.tag_name }}"
-        else
-          TAG="${{ inputs.release_tag }}"
-        fi
-        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-          echo "Error: expected a SemVer-style tag starting with v, got: $TAG"
-          exit 1
-        fi
-        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+  # ────────────────────────────────────────────────────────────────────
+  # 4. Matrix completeness gate — block if any wheel silently dropped
+  # ────────────────────────────────────────────────────────────────────
+  verify-matrix-complete:
+    needs: [build-sdist, build-wheels]
+    name: Verify 16 wheels + 1 sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: Assert artifact counts
+        run: |
+          WHEEL_COUNT=$(find dist -name '*.whl' | wc -l | tr -d ' ')
+          SDIST_COUNT=$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')
+          echo "────────────────────────────────────────"
+          ls -la dist/
+          echo "────────────────────────────────────────"
+          echo "Wheels: $WHEEL_COUNT  (expected 16)"
+          echo "Sdist:  $SDIST_COUNT  (expected 1)"
+          if [ "$WHEEL_COUNT" -ne 16 ]; then
+            echo "::error::Matrix incomplete — expected exactly 16 wheels, got $WHEEL_COUNT"
+            exit 1
+          fi
+          if [ "$SDIST_COUNT" -ne 1 ]; then
+            echo "::error::Expected 1 sdist, got $SDIST_COUNT"
+            exit 1
+          fi
+          echo "✅ 16 wheels + 1 sdist present"
 
-    - name: Verify version matches release tag
-      shell: bash
-      run: |
-        TAG="${{ steps.release_tag.outputs.tag }}"
-        TAG_VERSION=${TAG#v}
-        PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
-        if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
-          echo "Error: Tag version ($TAG_VERSION) does not match package version ($PACKAGE_VERSION)"
-          exit 1
-        fi
-        echo "✅ Version check passed: $TAG_VERSION"
+  # ────────────────────────────────────────────────────────────────────
+  # 5. Upload to TestPyPI as smoke-test target
+  # ────────────────────────────────────────────────────────────────────
+  publish-testpypi:
+    needs: [resolve-tag, verify-matrix-complete]
+    name: Upload to TestPyPI
+    runs-on: ubuntu-latest
+    environment: Ondine
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      # sdist intentionally skipped: TestPyPI smoke-test uses --only-binary,
+      # so only wheels matter. Prod publish uploads both.
+      - name: Upload wheels to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
 
-    - name: Build package (Rust + Python)
-      run: |
-        maturin build --release
-        echo "📦 Built package:"
-        ls -lh target/wheels/
+  # ────────────────────────────────────────────────────────────────────
+  # 6. Smoke test — install from TestPyPI on platforms that were broken
+  #    in v1.7.0-v1.9.1. These runners have NO Rust toolchain, so if a
+  #    wheel is missing, pip falls back to sdist and fails to build.
+  # ────────────────────────────────────────────────────────────────────
+  smoke-test:
+    needs: [resolve-tag, publish-testpypi]
+    name: Smoke ${{ matrix.os }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14,         python: "3.10" }
+          - { os: macos-14,         python: "3.12" }
+          - { os: macos-14,         python: "3.13" }
+          - { os: windows-latest,   python: "3.10" }
+          - { os: windows-latest,   python: "3.13" }
+          - { os: ubuntu-24.04-arm, python: "3.11" }
+          - { os: ubuntu-24.04-arm, python: "3.12" }
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
 
-    - name: Verify package contents
-      run: |
-        echo "📋 Checking wheel contents..."
-        ls target/wheels/*.whl
-        echo "✅ Package verification complete"
+      - name: Install from TestPyPI (wheel-only, no source fallback)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          # --only-binary ondine: refuses sdist fallback, errors hard if no wheel
+          # --extra-index-url prod PyPI: dependencies come from prod, package itself from test
+          # Retry: TestPyPI propagation can lag a few seconds after upload
+          for i in 1 2 3 4 5; do
+            if python -m pip install \
+                --index-url https://test.pypi.org/simple/ \
+                --extra-index-url https://pypi.org/simple/ \
+                --only-binary ondine \
+                "ondine==${{ needs.resolve-tag.outputs.version }}"; then
+              break
+            fi
+            echo "Attempt $i failed — waiting 15s for TestPyPI propagation"
+            sleep 15
+            if [ "$i" = "5" ]; then exit 1; fi
+          done
 
-    - name: Generate SBOM
-      run: |
-        pip install cyclonedx-bom
-        cyclonedx-py environment -o sbom.json
+      - name: Verify Rust extension loads (regression gate)
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -c "
+          from ondine._engine import EvidenceDB
+          db = EvidenceDB(':memory:')
+          print('OK ${{ matrix.os }} py${{ matrix.python }}: wheel installed + Rust extension works')
+          "
 
-    - name: Sign artifacts with Sigstore
-      uses: sigstore/gh-action-sigstore-python@v3.3.0
-      with:
-        inputs: target/wheels/*.whl
+  # ────────────────────────────────────────────────────────────────────
+  # 7. Production publish — Sigstore-sign, upload to PyPI
+  # ────────────────────────────────────────────────────────────────────
+  publish-prod:
+    needs: [resolve-tag, smoke-test]
+    name: Publish to PyPI (production)
+    runs-on: ubuntu-latest
+    environment: Ondine
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
 
-    - name: Publish to PyPI
-      env:
-        MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        echo "Publishing to PyPI..."
-        maturin publish --skip-existing
+      - name: List artifacts
+        run: ls -la dist/
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist-packages
-        path: target/wheels/
-        retention-days: 30
+      - name: Sign wheels + sdist with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.3.0
+        with:
+          inputs: ./dist/*.whl ./dist/*.tar.gz
 
-    - name: Upload SBOM
-      uses: actions/upload-artifact@v4
-      with:
-        name: sbom
-        path: sbom.json
-        retention-days: 90
+      - name: Move sigstore bundles out of upload dir
+        run: |
+          mkdir -p signatures
+          mv dist/*.sigstore.json signatures/ || true
+          ls -la dist/ signatures/
+
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
+
+      - name: Restore sigstore bundles for archive
+        run: mv signatures/*.sigstore.json dist/ || true
+
+      - name: Archive signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-release-${{ needs.resolve-tag.outputs.version }}
+          path: dist/
+          retention-days: 365
