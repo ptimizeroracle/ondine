@@ -20,7 +20,13 @@ warnings.filterwarnings("ignore", message=".*PyTorch.*TensorFlow.*Flax.*")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-__version__ = "1.9.1"
+try:
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("ondine")
+except PackageNotFoundError:  # editable install without metadata
+    __version__ = "0.0.0+local"
 
 # Layer 4: High-Level API
 from ondine.api.dataset_processor import DatasetProcessor
