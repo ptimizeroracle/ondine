@@ -1,0 +1,58 @@
+name: "product_enrichment_pipeline"
+version: "1.0"
+
+dataset:
+  source_type: "csv"
+  source_path: "OVERRIDE_IN_CODE"  # overridden by operator/task
+  input_columns:
+    - "name"
+    - "description"
+  output_columns:
+    - "category"
+    - "sentiment"
+  delimiter: ","
+  encoding: "utf-8"
+
+prompt:
+  template: |
+    Analyze this product and return a JSON object.
+
+    Product name: {name}
+    Description: {description}
+
+    Return ONLY valid JSON in this exact format:
+    {{"category": "<Electronics|Fitness|Kitchen|Office|Nutrition>", "sentiment": "<positive|neutral|negative>"}}
+  system_message: "You are a product catalog expert. Classify products into categories and assess sentiment from descriptions. Always return valid JSON only, no extra text."
+  response_format: "json"
+  json_fields:
+    - "category"
+    - "sentiment"
+
+llm:
+  provider: "openai_compatible"
+  model: "google/gemma-4-31B-it"
+  base_url: "https://api.together.xyz/v1"
+  api_key: "${TOGETHER_API_KEY}"
+  temperature: 0.0
+  max_tokens: 60
+  input_cost_per_1k_tokens: "0.0002"
+  output_cost_per_1k_tokens: "0.0002"
+
+processing:
+  batch_size: 5
+  concurrency: 2
+  max_retries: 2
+  retry_delay: 1.0
+  error_policy: "skip"
+  rate_limit_rpm: 30
+  max_budget: "0.50"
+
+output:
+  destination_type: "csv"
+  destination_path: "OVERRIDE_IN_CODE"  # overridden by operator/task
+  merge_strategy: "replace"
+  atomic_write: true
+
+metadata:
+  project: "ondine-integration-demo"
+  owner: "ondine"

@@ -1,0 +1,6 @@
+FROM --platform=linux/amd64 apache/airflow:2.9.3-python3.11
+
+# Install Ondine inside the Airflow image
+# Uses PyPI x86_64 wheel (ondine ships no aarch64 wheel yet)
+USER airflow
+RUN pip install --no-cache-dir "ondine[knowledge]"

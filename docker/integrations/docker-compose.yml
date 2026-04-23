@@ -1,0 +1,89 @@
+services:
+
+  # ── Apache Airflow ─────────────────────────────────────────────────────────
+  # Usage: docker compose --profile airflow up --build
+  # UI:    http://localhost:8080  (admin / admin)
+  airflow:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    profiles: [airflow]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "ondine-demo-secret-key"  # pragma: allowlist secret
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      # LLM provider key — sourced from .env
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - airflow_db:/opt/airflow
+    ports:
+      - "8080:8080"
+    # airflow standalone: initialises DB, creates admin user, starts webserver+scheduler
+    command: standalone
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Prefect (local runner — no server needed) ──────────────────────────────
+  # Usage: docker compose --profile prefect up --build
+  # Runs the flow once and exits. Check logs for results.
+  prefect-runner:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.prefect
+    profiles: [prefect]
+    environment:
+      PREFECT_API_URL: ""        # empty = local mode (no Prefect server required)
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+    command: python /app/flows/ondine_etl_flow.py
+
+  # ── Prefect Server (optional UI) ──────────────────────────────────────────
+  # Usage: docker compose --profile prefect-ui up
+  # UI:    http://localhost:4200
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    profiles: [prefect-ui]
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  prefect-runner-ui:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.prefect
+    profiles: [prefect-ui]
+    environment:
+      PREFECT_API_URL: "http://prefect-server:4200/api"
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    command: python /app/flows/ondine_etl_flow.py
+
+volumes:
+  airflow_db:
