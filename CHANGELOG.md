@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0](https://github.com/ptimizeroracle/ondine/compare/v1.10.1...v1.11.0) (2026-04-24)
+
+
+### Features
+
+* **integrations:** Airflow + Prefect Docker demo ([#164](https://github.com/ptimizeroracle/ondine/issues/164)) ([c3b68e3](https://github.com/ptimizeroracle/ondine/commit/c3b68e3a4f3aaf8e76da8d60cd131f2d9cca4cfa))
+
+
+### Bug Fixes
+
+* **config:** expand ${ENV_VAR} in YAML/JSON config strings ([#166](https://github.com/ptimizeroracle/ondine/issues/166)) ([#167](https://github.com/ptimizeroracle/ondine/issues/167)) ([cdc14f1](https://github.com/ptimizeroracle/ondine/commit/cdc14f1df30a99bfd9e1d886f91414ecdc71b948))
+
 ## [1.9.1](https://github.com/ptimizeroracle/ondine/compare/v1.9.0...v1.9.1) (2026-04-22)
 
 
