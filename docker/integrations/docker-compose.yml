@@ -10,13 +10,13 @@ services:
       dockerfile: Dockerfile.airflow
     profiles: [airflow]
     environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__WEBSERVER__SECRET_KEY: "ondine-demo-secret-key"  # pragma: allowlist secret
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
       # LLM provider key — sourced from .env
-      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./dags:/opt/airflow/dags
       - ./config:/opt/airflow/config
@@ -44,7 +44,7 @@ services:
     profiles: [prefect]
     environment:
       PREFECT_API_URL: ""        # empty = local mode (no Prefect server required)
-      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./config:/config:ro
       - ./data:/data
@@ -76,7 +76,7 @@ services:
     profiles: [prefect-ui]
     environment:
       PREFECT_API_URL: "http://prefect-server:4200/api"
-      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./config:/config:ro
       - ./data:/data

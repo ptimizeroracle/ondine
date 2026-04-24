@@ -3,7 +3,7 @@ version: "1.0"
 
 dataset:
   source_type: "csv"
-  source_path: "OVERRIDE_IN_CODE"  # overridden by operator/task
+  source_path: "OVERRIDE_IN_CODE"
   input_columns:
     - "name"
     - "description"
@@ -17,26 +17,21 @@ prompt:
   template: |
     Analyze this product and return a JSON object.
 
-    Product name: {name}
-    Description: {description}
+    Product name: {{ name }}
+    Description: {{ description }}
 
     Return ONLY valid JSON in this exact format:
-    {{"category": "<Electronics|Fitness|Kitchen|Office|Nutrition>", "sentiment": "<positive|neutral|negative>"}}
-  system_message: "You are a product catalog expert. Classify products into categories and assess sentiment from descriptions. Always return valid JSON only, no extra text."
+    {"category": "<Electronics|Fitness|Kitchen|Office|Nutrition>", "sentiment": "<positive|neutral|negative>"}
+  system_message: "You are a product catalog expert. Return valid JSON only."
   response_format: "json"
-  json_fields:
-    - "category"
-    - "sentiment"
 
 llm:
-  provider: "openai_compatible"
-  model: "google/gemma-4-31B-it"
-  base_url: "https://api.together.xyz/v1"
-  api_key: "${TOGETHER_API_KEY}"
+  provider: "groq"
+  model: "groq/openai/gpt-oss-20b"
   temperature: 0.0
-  max_tokens: 60
-  input_cost_per_1k_tokens: "0.0002"
-  output_cost_per_1k_tokens: "0.0002"
+  max_tokens: 100
+  input_cost_per_1k_tokens: "0.0001"
+  output_cost_per_1k_tokens: "0.0001"
 
 processing:
   batch_size: 5
@@ -49,7 +44,7 @@ processing:
 
 output:
   destination_type: "csv"
-  destination_path: "OVERRIDE_IN_CODE"  # overridden by operator/task
+  destination_path: "OVERRIDE_IN_CODE"
   merge_strategy: "replace"
   atomic_write: true
 

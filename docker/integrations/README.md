@@ -1,101 +1,45 @@
-# Ondine — Airflow & Prefect Integration Demo
+# Ondine × Airflow / Prefect Docker Demo
 
-Proves `ondine.integrations.airflow.LLMTransformOperator` and
-`ondine.integrations.prefect.llm_transform_task` with a real 10-product ETL pipeline.
+Proves ondine plugs into both Apache Airflow and Prefect for LLM-powered ETL.
 
-## Quick start
+## Setup
 
 ```bash
-cd docker/integrations
-
-# 1. Set your API key
 cp .env.example .env
-# edit .env → add GROQ_API_KEY (free at console.groq.com)
-
-# 2. Run one of the three profiles below
+# Fill in GROQ_API_KEY (free tier at https://console.groq.com)
 ```
 
----
-
-## Prefect — local runner (fastest)
-
-No server. Runs the flow, prints results, exits.
-
-```bash
-docker compose --profile prefect up --build
-```
-
-Expected output in logs:
-```
-── Enrichment Results ─────────────────────────────
-           name       category sentiment
-Wireless Headphones  Electronics  positive
-   Trail Running Shoes   Fitness  positive
-...
-Total rows: 10
-Categories: {'Electronics': 3, 'Fitness': 3, ...}
-```
-
----
-
-## Prefect — with UI
-
-```bash
-docker compose --profile prefect-ui up --build
-# UI → http://localhost:4200
-```
-
----
-
-## Airflow — standalone
-
-Starts webserver + scheduler in one container. Trigger DAG from UI.
+## Run Airflow
 
 ```bash
 docker compose --profile airflow up --build
+# UI: http://localhost:8080  (user: admin, password printed in logs)
 ```
 
-Wait ~90s for startup, then:
+Trigger the `ondine_product_enrichment` DAG from the UI.
 
-1. Open http://localhost:8080 (admin / admin — printed in logs)
-2. Enable DAG `ondine_product_enrichment`
-3. Click **Trigger DAG ▶**
-4. Watch tasks: `extract_validate` → `llm_enrich` → `load_report`
-5. Click `load_report` → **Logs** to see enriched table
+## Run Prefect (one-shot)
 
-Enriched CSV written to `data/products_enriched.csv` (host-mounted).
-
----
-
-## Switching provider
-
-Edit `config/ondine_config.yaml`:
-
-```yaml
-llm:
-  provider: "openai"          # or anthropic, groq
-  model: "gpt-4o-mini"
+```bash
+docker compose --profile prefect up --build
+# Runs once, logs results to stdout, writes data/products_enriched.csv
 ```
 
-Add the matching key in `.env` and restart.
+## Run Prefect with UI
 
----
-
-## File layout
-
+```bash
+docker compose --profile prefect-ui up --build
+# UI: http://localhost:4200
 ```
-docker/integrations/
-  Dockerfile.airflow        # extends apache/airflow:2.9.3, installs ondine
-  Dockerfile.prefect        # python:3.11-slim + ondine + prefect
-  docker-compose.yml        # profiles: airflow | prefect | prefect-ui
-  dags/
-    ondine_etl_dag.py       # 3-task Airflow DAG
-  flows/
-    ondine_etl_flow.py      # 3-task Prefect flow
-  config/
-    ondine_config.yaml      # shared pipeline config (Groq default)
-  data/
-    products.csv            # 10-row sample input
-    products_enriched.csv   # written after run
-  .env.example
-```
+
+## What it does
+
+Reads `data/products.csv` (10 products), calls the LLM for each row to extract:
+- `category` — Electronics | Fitness | Kitchen | Office | Nutrition
+- `sentiment` — positive | neutral | negative
+
+Writes the enriched CSV to `data/products_enriched.csv`.
+
+## Known limitation
+
+`ondine.config.ConfigLoader.from_yaml()` does **not** expand `${ENV_VAR}` in `api_key`. The demo works around this by leaving `api_key` out of `config/ondine_config.yaml` entirely — litellm auto-detects `GROQ_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` from the environment. See [#166](https://github.com/ptimizeroracle/ondine/issues/166).
