@@ -5,6 +5,8 @@ Enables loading pipeline configurations from declarative files.
 """
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +73,23 @@ class ConfigLoader:
         return ConfigLoader._dict_to_specifications(config_dict)
 
     @staticmethod
+    def _expand_env_vars(obj: Any) -> Any:
+        """Recursively expand ${VAR} and $VAR patterns in string values."""
+        if isinstance(obj, str):
+            expanded = os.path.expandvars(obj)
+            unresolved = re.findall(r"\$\{([^}]+)\}", expanded)
+            if unresolved:
+                raise ValueError(
+                    f"Environment variable(s) not set: {', '.join(unresolved)}"
+                )
+            return expanded
+        if isinstance(obj, dict):
+            return {k: ConfigLoader._expand_env_vars(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [ConfigLoader._expand_env_vars(item) for item in obj]
+        return obj
+
+    @staticmethod
     def _dict_to_specifications(config: dict[str, Any]) -> PipelineSpecifications:
         """
         Convert configuration dictionary to PipelineSpecifications.
@@ -83,6 +102,8 @@ class ConfigLoader:
         Returns:
             PipelineSpecifications
         """
+        config = ConfigLoader._expand_env_vars(config)
+
         # Map YAML field names to Pydantic field names
         # YAML uses 'data' but Pydantic expects 'dataset'
         if "data" in config:
