@@ -251,8 +251,15 @@ jobs:
     - name: Run security scan
       # GHSA-w8v5-vhqr-4h9v: diskcache — no upstream fix
       # PYSEC-2022-42969: py (legacy pytest dep) — abandoned, no fix
+      # GHSA-58qw-9mgm-455v: pip itself — no released fix version
+      # GHSA-69w3-r845-3855: transformers Trainer RCE — fix only in 5.0.0rc3 prerelease;
+      #                     ondine does not use Trainer (embedding/tokenization only)
       run: |
-        uv run pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --ignore-vuln PYSEC-2022-42969
+        uv run pip-audit \
+          --ignore-vuln GHSA-w8v5-vhqr-4h9v \
+          --ignore-vuln PYSEC-2022-42969 \
+          --ignore-vuln GHSA-58qw-9mgm-455v \
+          --ignore-vuln GHSA-69w3-r845-3855
 
   claim-verification:
     name: Claim Verification Suite

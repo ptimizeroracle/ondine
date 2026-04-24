@@ -262,6 +262,14 @@ override-dependencies = [
     "aiohttp>=3.13.4",         # 3.13.3 has 4 CVEs (fixed in 3.13.4)
     "python-dotenv>=1.2.2",    # 1.0.1 has GHSA-mf9w-mj56-hr94 (fixed in 1.2.2)
     "pypdf>=6.10.2",           # 6.1.1 has 12 DoS CVEs (fixed in 6.10.2+)
+    "cryptography>=46.0.7",    # GHSA-p423-j2cm-9vmq
+    "marshmallow>=3.26.2",     # GHSA-428g-f7cq-pgp5
+    "mlx>=0.29.4",             # GHSA-j842/w6vg (fixed in 0.29.4)
+    "nltk>=3.9.4",             # GHSA-7p94/gfwx/h8wq (fixed in 3.9.4)
+    "pillow>=12.2.0",          # GHSA-cfh3/whj4 (fixed in 12.2.0)
+    "protobuf>=6.33.5",        # GHSA-7gcm-g887-7qv7
+    "pyjwt>=2.12.0",           # GHSA-752w-5fwx-jx9f
+    "azure-core>=1.38.0",      # GHSA-jm66-cg57-jjv5
 ]
 
 [dependency-groups]
