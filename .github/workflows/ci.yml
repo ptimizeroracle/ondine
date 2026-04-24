@@ -44,13 +44,15 @@ jobs:
 
     - name: Install package profile
       shell: bash
+      # Use `uv pip install` so tool.uv.override-dependencies in pyproject.toml
+      # is respected (raw pip ignores it and hits upstream transitive pin conflicts).
       run: |
         if [ "${{ matrix.profile }}" = "core" ]; then
-          pip install .
+          uv pip install --system .
         elif [ "${{ matrix.profile }}" = "observability" ]; then
-          pip install ".[observability]"
+          uv pip install --system ".[observability]"
         else
-          pip install ".[all]"
+          uv pip install --system ".[all]"
         fi
 
     - name: Smoke test profile

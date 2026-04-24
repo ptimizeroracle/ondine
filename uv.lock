@@ -3630,7 +3630,7 @@ perf = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.13.3" },
+    { name = "aiohttp", specifier = ">=3.13.4" },
     { name = "anthropic", specifier = ">=0.84.0" },
     { name = "azure-identity", marker = "extra == 'all'", specifier = ">=1.15.0" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.15.0" },
