@@ -31,7 +31,7 @@ dependencies = [
     "pandas>=1.5.0",
     "polars>=0.20.0",
     "pydantic>=2.0.0",
-    "python-dotenv>=1.0.1",
+    "python-dotenv>=1.2.2",
     "tqdm>=4.66.0",
     "tenacity>=8.2.0",
     "tiktoken>=0.5.0",
@@ -257,6 +257,11 @@ override-dependencies = [
     "urllib3>=2.6.3",
     "virtualenv>=20.36.1",
     "pip>=25.3",
+    # litellm 1.83.13 hard-pins older transitives with known CVEs.
+    # Override until litellm relaxes the pins upstream.
+    "aiohttp>=3.13.4",         # 3.13.3 has 4 CVEs (fixed in 3.13.4)
+    "python-dotenv>=1.2.2",    # 1.0.1 has GHSA-mf9w-mj56-hr94 (fixed in 1.2.2)
+    "pypdf>=6.10.2",           # 6.1.1 has 12 DoS CVEs (fixed in 6.10.2+)
 ]
 
 [dependency-groups]
