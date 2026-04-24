@@ -72,15 +72,32 @@ class ConfigLoader:
 
         return ConfigLoader._dict_to_specifications(config_dict)
 
+    _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
     @staticmethod
     def _expand_env_vars(obj: Any) -> Any:
-        """Recursively expand ${VAR} and $VAR patterns in string values."""
+        """Recursively expand ${VAR} placeholders in string values.
+
+        Only ${VAR} syntax is expanded — bare $VAR is left untouched so that
+        literal dollar signs in prompts/templates survive. Unset or empty
+        environment variables raise ValueError, failing fast instead of
+        silently producing empty credentials.
+        """
         if isinstance(obj, str):
-            expanded = os.path.expandvars(obj)
-            unresolved = re.findall(r"\$\{([^}]+)\}", expanded)
-            if unresolved:
+            missing: list[str] = []
+
+            def _sub(match: re.Match[str]) -> str:
+                name = match.group(1)
+                value = os.environ.get(name)
+                if not value:
+                    missing.append(name)
+                    return match.group(0)
+                return value
+
+            expanded = ConfigLoader._ENV_VAR_PATTERN.sub(_sub, obj)
+            if missing:
                 raise ValueError(
-                    f"Environment variable(s) not set: {', '.join(unresolved)}"
+                    f"Environment variable(s) not set or empty: {', '.join(sorted(set(missing)))}"
                 )
             return expanded
         if isinstance(obj, dict):
