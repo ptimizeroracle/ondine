@@ -5,6 +5,8 @@ Enables loading pipeline configurations from declarative files.
 """
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +72,40 @@ class ConfigLoader:
 
         return ConfigLoader._dict_to_specifications(config_dict)
 
+    _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+    @staticmethod
+    def _expand_env_vars(obj: Any) -> Any:
+        """Recursively expand ${VAR} placeholders in string values.
+
+        Only ${VAR} syntax is expanded — bare $VAR is left untouched so that
+        literal dollar signs in prompts/templates survive. Unset or empty
+        environment variables raise ValueError, failing fast instead of
+        silently producing empty credentials.
+        """
+        if isinstance(obj, str):
+            missing: list[str] = []
+
+            def _sub(match: re.Match[str]) -> str:
+                name = match.group(1)
+                value = os.environ.get(name)
+                if not value:
+                    missing.append(name)
+                    return match.group(0)
+                return value
+
+            expanded = ConfigLoader._ENV_VAR_PATTERN.sub(_sub, obj)
+            if missing:
+                raise ValueError(
+                    f"Environment variable(s) not set or empty: {', '.join(sorted(set(missing)))}"
+                )
+            return expanded
+        if isinstance(obj, dict):
+            return {k: ConfigLoader._expand_env_vars(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [ConfigLoader._expand_env_vars(item) for item in obj]
+        return obj
+
     @staticmethod
     def _dict_to_specifications(config: dict[str, Any]) -> PipelineSpecifications:
         """
@@ -83,6 +119,8 @@ class ConfigLoader:
         Returns:
             PipelineSpecifications
         """
+        config = ConfigLoader._expand_env_vars(config)
+
         # Map YAML field names to Pydantic field names
         # YAML uses 'data' but Pydantic expects 'dataset'
         if "data" in config:
