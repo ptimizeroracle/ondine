@@ -34,6 +34,9 @@ from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.api.quick import QuickPipeline
 
+# Layer 5: Front doors — thin facades over Layer 4 (no own logic)
+from ondine.api.enrich import enrich
+
 # Context store (pluggable anti-hallucination backends)
 from ondine.context import (
     ContextStore,
@@ -62,6 +65,7 @@ from ondine.core.specifications import (
 
 __all__ = [
     "__version__",
+    "enrich",
     "Pipeline",
     "PipelineBuilder",
     "QuickPipeline",
