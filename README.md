@@ -50,6 +50,8 @@ Python 3.10+. Works with any LLM through [LiteLLM](https://github.com/BerriAI/li
 
 ## 30-second quickstart
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ptimizeroracle/ondine/blob/main/examples/ondine_quickstart.ipynb) · run the notebook below in a free Colab instance with a free Groq key — first output in under 30 seconds.
+
 ```python
 from ondine import PipelineBuilder
 
