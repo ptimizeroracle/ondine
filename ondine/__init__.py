@@ -30,6 +30,7 @@ except PackageNotFoundError:  # editable install without metadata
 
 # Layer 4: High-Level API
 from ondine.api.dataset_processor import DatasetProcessor
+from ondine.api.enrich import enrich
 from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.api.quick import QuickPipeline
@@ -65,6 +66,7 @@ __all__ = [
     "Pipeline",
     "PipelineBuilder",
     "QuickPipeline",
+    "enrich",
     "DatasetProcessor",
     "DatasetSpec",
     "PromptSpec",
