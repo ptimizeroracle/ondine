@@ -494,6 +494,52 @@ def test_pipeline_execute_failure_records_failed_state(
     assert final.status is RunStatus.FAILED
 
 
+# ── regression: update_metrics writes live progress without a transition ──
+
+
+def test_update_metrics_merges_without_changing_status(
+    registry: RunRegistry,
+) -> None:
+    """Regression: the MCP ``ondine_status`` tool reports live rows/cost for a
+    RUNNING job. If update_metrics transitioned status or replaced metrics
+    wholesale, status polling would either break the FSM or lose the fields the
+    terminal transition wrote. Live progress must merge onto the row in place.
+    """
+    handle = registry.create(RunSpec(pipeline_id=str(uuid4())))
+    registry.transition(handle.run_id, RunStatus.RUNNING)
+
+    registry.update_metrics(handle.run_id, {"processed_rows": 42, "cost": "1.25"})
+
+    after = registry.get(handle.run_id)
+    assert after is not None
+    assert after.status is RunStatus.RUNNING  # unchanged
+    assert after.metrics["processed_rows"] == 42
+    assert after.metrics["cost"] == "1.25"
+
+
+def test_update_metrics_is_visible_to_a_second_process(
+    tmp_path: Path,
+) -> None:
+    """Regression: a status poller is a different process opening its own
+    registry handle. If update_metrics were in-memory only, the MCP status tool
+    would never see live progress from the worker thread/process that ran the
+    job. The merge must hit the on-disk row.
+    """
+    registry_a = RunRegistry(tmp_path / "runs.db")
+    handle = registry_a.create(RunSpec(pipeline_id=str(uuid4())))
+    registry_a.transition(handle.run_id, RunStatus.RUNNING)
+    registry_a.update_metrics(handle.run_id, {"processed_rows": 7})
+    registry_a.close()
+
+    registry_b = RunRegistry(tmp_path / "runs.db")
+    try:
+        seen = registry_b.get(handle.run_id)
+        assert seen is not None
+        assert seen.metrics.get("processed_rows") == 7
+    finally:
+        registry_b.close()
+
+
 # ── fixtures ──────────────────────────────────────────────────────────
 
 

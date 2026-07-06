@@ -354,6 +354,52 @@ class RunRegistry:
 
     # ── transition ─────────────────────────────────────────────────
 
+    def update_metrics(
+        self,
+        run_id: UUID,
+        metrics: dict[str, Any],
+    ) -> RunHandle:
+        """Merge ``metrics`` onto the run's row without changing status.
+
+        Distinct from ``transition``: live progress (rows done, cost so far)
+        churns many times per second during a run, while status moves a
+        handful of times across the whole lifetime. Firing observers on every
+        metric write would drown real transition events, and status pollers
+        only re-read the row on demand anyway — so this method persists the
+        merge and returns the updated handle without notifying anyone.
+
+        Raises:
+            KeyError: if ``run_id`` does not exist.
+        """
+        with self._write_lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._conn.execute(
+                    "SELECT metrics FROM runs WHERE run_id = ?", (str(run_id),)
+                ).fetchone()
+                if row is None:
+                    self._conn.execute("ROLLBACK")
+                    raise KeyError(run_id)
+
+                merged = json.loads(row["metrics"] or "{}")
+                merged.update(metrics)
+
+                self._conn.execute(
+                    "UPDATE runs SET metrics = ?, updated_at = ? WHERE run_id = ?",
+                    (json.dumps(merged, default=str), _now_iso(), str(run_id)),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+
+        new_handle = self._fetch(run_id)
+        assert new_handle is not None  # row exists; just updated
+        return new_handle
+
     def transition(
         self,
         run_id: UUID,
