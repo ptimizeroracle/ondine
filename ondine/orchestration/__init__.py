@@ -22,6 +22,14 @@ from ondine.orchestration.progress_tracker import (
     RichProgressTracker,
     create_progress_tracker,
 )
+from ondine.orchestration.run_registry import (
+    REGISTRY_FILENAME,
+    RegistryObserver,
+    RunHandle,
+    RunRegistry,
+    RunSpec,
+    RunStatus,
+)
 from ondine.orchestration.state_manager import StateManager
 from ondine.orchestration.streaming_executor import (
     StreamingExecutor,
@@ -56,6 +64,13 @@ __all__ = [
     "ConcurrencyController",
     "DeploymentTracker",
     "ProgressReporter",
+    # Run registry — persistent cross-process job index
+    "RunRegistry",
+    "RunHandle",
+    "RunSpec",
+    "RunStatus",
+    "RegistryObserver",
+    "REGISTRY_FILENAME",
     # Streaming processing (for large datasets)
     "StreamingProcessor",
     "StreamingStats",

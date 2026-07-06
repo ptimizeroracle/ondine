@@ -39,6 +39,8 @@ from ondine.orchestration import (
     ExecutionStrategy,
     LoggingObserver,
     ProgressBarObserver,
+    RunRegistry,
+    RunStatus,
     StateManager,
     StreamingExecutor,
     SyncExecutor,
@@ -239,7 +241,13 @@ class Pipeline:
             confidence="sample-based",
         )
 
-    def execute(self, resume_from: UUID | None = None) -> ExecutionResult:
+    def execute(
+        self,
+        resume_from: UUID | None = None,
+        *,
+        run_id: UUID | None = None,
+        registry: "RunRegistry | None" = None,
+    ) -> ExecutionResult:
         """
         Execute pipeline end-to-end.
 
@@ -248,6 +256,12 @@ class Pipeline:
 
         Args:
             resume_from: Optional session ID to resume from checkpoint (for fault tolerance)
+            run_id: Optional run registry ID. When provided alongside ``registry``,
+                the run is traced through PENDING -> RUNNING -> SUCCEEDED|FAILED in
+                the registry so external observers (CLI, MCP) can follow progress.
+                Default ``None`` leaves behaviour unchanged — no registry artifact.
+            registry: Optional :class:`~ondine.orchestration.RunRegistry`. Required
+                when ``run_id`` is set; ignored otherwise.
 
         Returns:
             ExecutionResult containing:
@@ -378,6 +392,18 @@ class Pipeline:
         for observer in self.observers:
             observer.on_pipeline_start(self, context)
 
+        # Trace the run in the registry if the caller opted in. We move
+        # PENDING -> RUNNING now so a crash after this line still leaves
+        # a durable RUNNING record for the CLI/MCP to report. The
+        # terminal transition (SUCCEEDED/FAILED) is recorded below.
+        if run_id is not None and registry is not None:
+            try:
+                registry.transition(run_id, RunStatus.RUNNING)
+            except Exception as reg_err:  # noqa: BLE001
+                self.logger.warning(
+                    f"RunRegistry transition to RUNNING failed for {run_id}: {reg_err}"
+                )
+
         try:
             # Execute stages (preprocessing happens inside if enabled)
             result_df = self._execute_stages(context, state_manager)
@@ -473,6 +499,27 @@ class Pipeline:
             if tracker_ref is not None:
                 tracker_ref.show_summary(result)
 
+            # Record terminal success in the registry. We snapshot the
+            # row count and cost so the MCP ``ondine_status`` tool can
+            # report final figures without re-reading the result object.
+            if run_id is not None and registry is not None:
+                try:
+                    registry.transition(
+                        run_id,
+                        RunStatus.SUCCEEDED,
+                        metrics={
+                            "total_rows": int(context.total_rows),
+                            "processed_rows": int(result.metrics.processed_rows),
+                            "failed_rows": int(result.metrics.failed_rows),
+                            "cost": str(result.costs.total_cost),
+                        },
+                    )
+                except Exception as reg_err:  # noqa: BLE001
+                    self.logger.warning(
+                        f"RunRegistry transition to SUCCEEDED failed "
+                        f"for {run_id}: {reg_err}"
+                    )
+
             return result
 
         except KeyboardInterrupt:
@@ -491,6 +538,25 @@ class Pipeline:
                 f"Pipeline failed. Checkpoint saved. "
                 f"Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
             )
+
+            # Record terminal failure in the registry before re-raising.
+            # An operator polling ``ondine status`` must see FAILED, not a
+            # stale RUNNING — otherwise dead runs haunt the dashboard.
+            if run_id is not None and registry is not None:
+                try:
+                    registry.transition(
+                        run_id,
+                        RunStatus.FAILED,
+                        metrics={
+                            "total_rows": int(context.total_rows),
+                            "error": f"{type(e).__name__}: {e}",
+                        },
+                    )
+                except Exception as reg_err:  # noqa: BLE001
+                    self.logger.warning(
+                        f"RunRegistry transition to FAILED failed "
+                        f"for {run_id}: {reg_err}"
+                    )
 
             # Notify legacy observers of error
             for observer in self.observers:
