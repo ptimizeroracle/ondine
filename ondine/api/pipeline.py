@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pandas as pd
@@ -39,12 +39,19 @@ from ondine.orchestration import (
     ExecutionStrategy,
     LoggingObserver,
     ProgressBarObserver,
+    RunHandle,
+    RunRegistry,
+    RunSpec,
+    RunStatus,
     StateManager,
     StreamingExecutor,
     SyncExecutor,
     create_progress_tracker,
 )
 from ondine.orchestration.progress_tracker import NoOpProgressTracker
+
+if TYPE_CHECKING:
+    from ondine.orchestration.backends.provider_batch import ProviderBatchBackend
 from ondine.stages import (
     BatchAggregatorStage,
     BatchDisaggregatorStage,
@@ -239,7 +246,13 @@ class Pipeline:
             confidence="sample-based",
         )
 
-    def execute(self, resume_from: UUID | None = None) -> ExecutionResult:
+    def execute(
+        self,
+        resume_from: UUID | None = None,
+        *,
+        run_id: UUID | None = None,
+        registry: "RunRegistry | None" = None,
+    ) -> ExecutionResult:
         """
         Execute pipeline end-to-end.
 
@@ -248,6 +261,12 @@ class Pipeline:
 
         Args:
             resume_from: Optional session ID to resume from checkpoint (for fault tolerance)
+            run_id: Optional run registry ID. When provided alongside ``registry``,
+                the run is traced through PENDING -> RUNNING -> SUCCEEDED|FAILED in
+                the registry so external observers (CLI, MCP) can follow progress.
+                Default ``None`` leaves behaviour unchanged — no registry artifact.
+            registry: Optional :class:`~ondine.orchestration.RunRegistry`. Required
+                when ``run_id`` is set; ignored otherwise.
 
         Returns:
             ExecutionResult containing:
@@ -378,6 +397,18 @@ class Pipeline:
         for observer in self.observers:
             observer.on_pipeline_start(self, context)
 
+        # Trace the run in the registry if the caller opted in. We move
+        # PENDING -> RUNNING now so a crash after this line still leaves
+        # a durable RUNNING record for the CLI/MCP to report. The
+        # terminal transition (SUCCEEDED/FAILED) is recorded below.
+        if run_id is not None and registry is not None:
+            try:
+                registry.transition(run_id, RunStatus.RUNNING)
+            except Exception as reg_err:  # noqa: BLE001
+                self.logger.warning(
+                    f"RunRegistry transition to RUNNING failed for {run_id}: {reg_err}"
+                )
+
         try:
             # Execute stages (preprocessing happens inside if enabled)
             result_df = self._execute_stages(context, state_manager)
@@ -473,6 +504,27 @@ class Pipeline:
             if tracker_ref is not None:
                 tracker_ref.show_summary(result)
 
+            # Record terminal success in the registry. We snapshot the
+            # row count and cost so the MCP ``ondine_status`` tool can
+            # report final figures without re-reading the result object.
+            if run_id is not None and registry is not None:
+                try:
+                    registry.transition(
+                        run_id,
+                        RunStatus.SUCCEEDED,
+                        metrics={
+                            "total_rows": int(context.total_rows),
+                            "processed_rows": int(result.metrics.processed_rows),
+                            "failed_rows": int(result.metrics.failed_rows),
+                            "cost": str(result.costs.total_cost),
+                        },
+                    )
+                except Exception as reg_err:  # noqa: BLE001
+                    self.logger.warning(
+                        f"RunRegistry transition to SUCCEEDED failed "
+                        f"for {run_id}: {reg_err}"
+                    )
+
             return result
 
         except KeyboardInterrupt:
@@ -491,6 +543,25 @@ class Pipeline:
                 f"Pipeline failed. Checkpoint saved. "
                 f"Resume with: pipeline.execute(resume_from=UUID('{context.session_id}'))"
             )
+
+            # Record terminal failure in the registry before re-raising.
+            # An operator polling ``ondine status`` must see FAILED, not a
+            # stale RUNNING — otherwise dead runs haunt the dashboard.
+            if run_id is not None and registry is not None:
+                try:
+                    registry.transition(
+                        run_id,
+                        RunStatus.FAILED,
+                        metrics={
+                            "total_rows": int(context.total_rows),
+                            "error": f"{type(e).__name__}: {e}",
+                        },
+                    )
+                except Exception as reg_err:  # noqa: BLE001
+                    self.logger.warning(
+                        f"RunRegistry transition to FAILED failed "
+                        f"for {run_id}: {reg_err}"
+                    )
 
             # Notify legacy observers of error
             for observer in self.observers:
@@ -1674,6 +1745,159 @@ class Pipeline:
             # (Don't stop early - use all attempts to get closest to 100%)
 
         return result
+
+    # ── Provider-batch mode (§5): submit + attach ─────────────────
+    #
+    # These two methods split the pipeline into the same shared front
+    # half (Load → Format → Aggregate) and back half (Disaggregate →
+    # Parse → Write) that ``execute()`` runs in one shot, with the
+    # ProviderBatchBackend as the middle. ``submit()`` runs the front
+    # half + ``backend.submit()`` and returns a RunHandle whose
+    # ``provider_job_id`` is durable in the RunRegistry; ``attach()``
+    # resumes from that handle, polls/collects the results, and runs the
+    # back half. The split is what makes batch mode non-blocking.
+
+    def submit(
+        self,
+        *,
+        registry: RunRegistry | None = None,
+    ) -> RunHandle:
+        """Run the front half + submit a provider batch job (non-blocking).
+
+        Loads and formats the data, compiles prompts to a provider
+        JSONL, uploads it, and kicks off the batch job. Returns a
+        :class:`RunHandle` — durable in the ``registry`` — carrying the
+        ``provider_job_id`` so :meth:`attach` (in this or another
+        process) can later poll and collect the results.
+
+        Only valid when ``processing.execution_mode == 'provider_batch'``;
+        live-mode pipelines must use :meth:`execute`.
+
+        Args:
+            registry: Where to persist the run. If omitted, a registry
+                is created in the default checkpoint directory.
+
+        Returns:
+            RunHandle with ``status == SUBMITTED_REMOTE`` and the
+            ``provider_job_id`` populated.
+        """
+        if self.specifications.processing.execution_mode != "provider_batch":
+            raise ValueError(
+                "submit() requires execution_mode='provider_batch'. "
+                "Use execute() for live mode."
+            )
+
+        registry = registry or RunRegistry(
+            Path(self.specifications.processing.checkpoint_dir)
+        )
+        # Front half: produce PromptBatches exactly as execute() does,
+        # but stop before the LLM call.
+        prompts = self._run_front_half()
+        backend = self._build_batch_backend()
+        provider_job_id = backend.submit(prompts)
+
+        run_spec = RunSpec(
+            pipeline_id=str(self.id),
+            dataset=str(
+                self.specifications.dataset.source_path or "dataframe"
+            ),
+            spec_snapshot={
+                "pipeline_id": str(self.id),
+                "execution_mode": "provider_batch",
+                "provider": self._provider_label(),
+                "model": self.specifications.llm.model,
+                "total_prompts": int(sum(len(b.prompts) for b in prompts)),
+            },
+        )
+        handle = registry.create(run_spec)
+        # PENDING → RUNNING → SUBMITTED_REMOTE in one logical hop; the
+        # intermediate RUNNING is skipped because submit() is the whole
+        # front-half run (fast, synchronous), so the externally-visible
+        # state jumps straight to "job is with the provider".
+        registry.transition(handle.run_id, RunStatus.RUNNING)
+        registry.transition(
+            handle.run_id,
+            RunStatus.SUBMITTED_REMOTE,
+            provider_job_id=provider_job_id,
+            metrics={
+                "total_rows": int(sum(len(b.prompts) for b in prompts)),
+                "provider_job_id": provider_job_id,
+            },
+        )
+        return registry.get(handle.run_id)  # type: ignore[return-value]
+
+    @classmethod
+    def attach(
+        cls,
+        run_id: UUID,
+        *,
+        registry: RunRegistry | None = None,
+        checkpoint_dir: str | Path | None = None,
+    ) -> RunHandle:
+        """Resolve an existing batch run for polling/collection.
+
+        Returns the current :class:`RunHandle` for ``run_id`` so a
+        caller (the CLI ``collect`` command, or another process) can
+        inspect status and decide whether to drain the results. This
+        method does NOT block or collect — pair with a poll loop and
+        :meth:`collect_batch` once terminal.
+
+        Args:
+            run_id: The run to attach to (must exist in the registry).
+            registry: Open registry. If omitted, one is opened in
+                ``checkpoint_dir`` (or the default checkpoint dir).
+            checkpoint_dir: Used only when ``registry`` is None.
+        """
+        registry = registry or RunRegistry(
+            Path(checkpoint_dir) if checkpoint_dir else Path(".checkpoints")
+        )
+        handle = registry.get(run_id)
+        if handle is None:
+            raise KeyError(f"No batch run found for run_id={run_id}")
+        return handle
+
+    def _build_batch_backend(self) -> "ProviderBatchBackend":
+        """Construct the ProviderBatchBackend from this pipeline's LLMSpec."""
+        from ondine.orchestration.backends.provider_batch import (
+            ProviderBatchBackend,
+        )
+
+        return ProviderBatchBackend(llm_spec=self.specifications.llm)
+
+    def _provider_label(self) -> str:
+        provider = self.specifications.llm.provider
+        return provider.value if hasattr(provider, "value") else str(provider)
+
+    def _run_front_half(self) -> list:
+        """Execute Load → Format → Aggregate and return the PromptBatches.
+
+        Mirrors the first half of ``_execute_stages_with_tracking`` but
+        stops before the LLM invocation — exactly the boundary where
+        batch mode swaps in the ProviderBatchBackend. Kept separate so
+        the working live path in ``execute()`` is untouched.
+        """
+        specs = self.specifications
+        context = ExecutionContext(pipeline_id=self.id)
+
+        loader = DataLoaderStage(self.dataframe)
+        df = loader.process(specs.dataset, context)
+
+        formatter = PromptFormatterStage(
+            specs.processing.batch_size, use_jinja2=specs.processing.use_jinja2
+        )
+        batches = formatter.process((df, specs.prompt), context)
+
+        if specs.prompt.batch_size > 1:
+            from ondine.strategies.json_batch_strategy import JsonBatchStrategy
+
+            aggregator = BatchAggregatorStage(
+                batch_size=specs.prompt.batch_size,
+                strategy=JsonBatchStrategy(),
+                model=specs.llm.model,
+                validate_context_window=False,
+            )
+            batches = aggregator.process(batches, context)
+        return batches
 
 
 def _build_rate_limiter(processing_spec):

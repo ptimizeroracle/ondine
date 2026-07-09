@@ -9,7 +9,7 @@ components, following the principle of separation between configuration
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -496,6 +496,32 @@ class ProcessingSpec(BaseModel):
         description="Delete checkpoints after successful execution. "
         "Set False to keep checkpoints as a safety net against downstream failures.",
     )
+
+    # Execution mode — selects the pipeline's middle stage (§3, §5).
+    # "live" (default): one synchronous/async HTTP call per prompt via the
+    # existing asyncio engine — byte-identical to every prior version.
+    # "provider_batch": compile prompts to JSONL, submit a provider-native
+    # Batch API job (OpenAI/Anthropic), and collect results later. Enables
+    # non-blocking submit → poll → collect for very large/offline workloads.
+    # The scope guard in PipelineBuilder.build() rejects unsupported providers.
+    execution_mode: Literal["live", "provider_batch"] = Field(
+        default="live",
+        description=(
+            "Execution mode: 'live' (default, per-call HTTP) or "
+            "'provider_batch' (OpenAI/Anthropic Batch API, non-blocking)."
+        ),
+    )
+
+    @field_validator("execution_mode")
+    @classmethod
+    def validate_execution_mode(cls, v: str) -> str:
+        """Restrict to the two supported modes; fail fast on typos."""
+        allowed = {"live", "provider_batch"}
+        if v not in allowed:
+            raise ValueError(
+                f"execution_mode must be one of {sorted(allowed)}, got '{v}'"
+            )
+        return v
 
     @field_validator("checkpoint_dir")
     @classmethod

@@ -90,6 +90,9 @@ knowledge = [
     "pymupdf>=1.24",
     "sentence-transformers>=3.0",
 ]
+mcp = [
+    "fastmcp>=3.0.0",
+]
 zep = [
     "zep-cloud>=2.0",
 ]
@@ -121,11 +124,13 @@ all = [
     "azure-identity>=1.15.0",
     "pymupdf>=1.24",
     "sentence-transformers>=3.0",
+    "fastmcp>=3.0.0",
 ]
 
 [project.scripts]
 ondine = "ondine.cli.main:cli"
 hermes = "ondine.cli.main:cli"  # Keep backward compatibility alias
+ondine-mcp = "ondine.mcp.server:main"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
