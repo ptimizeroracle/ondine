@@ -1045,5 +1045,219 @@ def list_providers():
         sys.exit(1)
 
 
+# ── Provider-batch commands (§5): submit / status / collect ──────────
+
+
+@cli.command()
+@click.option(
+    "--config",
+    "-c",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to YAML/JSON configuration file",
+)
+@click.option(
+    "--input",
+    "-i",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to input data file",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Path for the output file (used later by collect)",
+)
+@click.option(
+    "--checkpoint-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".checkpoints"),
+    help="Directory holding the run registry (default: .checkpoints)",
+)
+def submit(
+    config: Path,
+    input: Path,
+    output: Path | None,
+    checkpoint_dir: Path,
+):
+    """Submit a provider-batch job and return immediately (non-blocking).
+
+    The run is tracked in the registry; poll with ``ondine status`` and
+    drain with ``ondine collect``. Requires execution_mode=provider_batch
+    in the config (or it is forced on automatically).
+    """
+    try:
+        specs = _load_specs_from_config(config)
+        specs.dataset.source_path = input
+        if output is not None:
+            _apply_output_override(specs, output)
+        # Force batch mode — the command exists for batch users.
+        specs.processing.execution_mode = "provider_batch"
+
+        pipeline = Pipeline(specs)
+        from ondine.orchestration import RunRegistry
+
+        registry = RunRegistry(checkpoint_dir)
+        handle = pipeline.submit(registry=registry)
+
+        console.print("[green]✓ Batch job submitted[/green]")
+        console.print(f"  run_id          : [cyan]{handle.run_id}[/cyan]")
+        console.print(
+            f"  provider_job_id : [cyan]{handle.provider_job_id}[/cyan]"
+        )
+        console.print(f"  status          : {handle.status.value}")
+        console.print(
+            "\n  [dim]Poll with: ondine status "
+            f"{handle.run_id}[/dim]\n"
+        )
+    except ValueError as e:
+        console.print(f"[red]❌ {e}[/red]")
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]❌ Error: {e}[/red]")
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("run_id")
+@click.option(
+    "--checkpoint-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".checkpoints"),
+    help="Directory holding the run registry (default: .checkpoints)",
+)
+def status(run_id: str, checkpoint_dir: Path):
+    """Poll the live status of a batch run."""
+    try:
+        from ondine.orchestration import RunRegistry
+
+        registry = RunRegistry(checkpoint_dir)
+        handle = registry.get(UUID(run_id))
+        if handle is None:
+            console.print(f"[red]❌ Unknown run_id: {run_id}[/red]")
+            sys.exit(1)
+
+        metrics = handle.metrics or {}
+        total = metrics.get("total_rows", 0) or 0
+        done = metrics.get("processed_rows", metrics.get("rows_done", 0)) or 0
+        progress_pct = (done / total * 100) if total else 0.0
+
+        table = Table(title=f"Run {run_id}", show_header=True)
+        table.add_column("Field", style="cyan", width=20)
+        table.add_column("Value", style="white", width=40)
+        table.add_row("status", handle.status.value)
+        table.add_row("provider_job_id", str(handle.provider_job_id))
+        table.add_row("progress", f"{progress_pct:.1f}%")
+        table.add_row("rows_done", str(done))
+        table.add_row("total_rows", str(total))
+        table.add_row("cost", str(metrics.get("cost", "0")))
+        table.add_row("updated_at", handle.updated_at)
+        console.print(table)
+    except ValueError as e:
+        console.print(f"[red]❌ {e}[/red]")
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]❌ Error: {e}[/red]")
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("run_id")
+@click.option(
+    "--checkpoint-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".checkpoints"),
+    help="Directory holding the run registry (default: .checkpoints)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write collected results to this file",
+)
+def collect(run_id: str, checkpoint_dir: Path, output: Path | None):
+    """Collect the results of a finished batch run.
+
+    Polls until the provider job is terminal, downloads and decodes the
+    results, then writes them to ``--output`` (if given). Refuses an
+    in-flight run — use ``ondine status`` first.
+    """
+    try:
+        from ondine.orchestration import RunRegistry
+        from ondine.orchestration.run_registry import RunStatus
+
+        registry = RunRegistry(checkpoint_dir)
+        handle = registry.get(UUID(run_id))
+        if handle is None:
+            console.print(f"[red]❌ Unknown run_id: {run_id}[/red]")
+            sys.exit(1)
+
+        if handle.provider_job_id is None:
+            console.print(
+                f"[red]❌ Run {run_id} has no provider_job_id "
+                "(not a batch run).[/red]"
+            )
+            sys.exit(1)
+
+        if handle.status.value not in (
+            "submitted_remote",
+            "succeeded",
+            "failed",
+            "partial",
+        ):
+            console.print(
+                f"[red]❌ Run {run_id} status is {handle.status.value}; "
+                "cannot collect.[/red]"
+            )
+            sys.exit(1)
+
+        # Rebuild the backend from the snapshot so collect works in a
+        # fresh process (the submit process need not still be running).
+        from ondine.core.specifications import LLMSpec
+        from ondine.orchestration.backends.provider_batch import (
+            ProviderBatchBackend,
+        )
+
+        snapshot = handle.spec_snapshot or {}
+        llm_spec = LLMSpec(
+            provider=snapshot.get("provider", "openai"),
+            model=snapshot.get("model", "gpt-4o-mini"),
+        )
+        backend = ProviderBatchBackend(llm_spec=llm_spec)
+
+        console.print(
+            f"[cyan]Collecting results for provider job "
+            f"{handle.provider_job_id}...[/cyan]"
+        )
+        responses = list(backend.collect(handle.provider_job_id))
+        registry.transition(
+            handle.run_id,
+            RunStatus.SUCCEEDED,
+            metrics={
+                "processed_rows": len(responses),
+                "rows_done": len(responses),
+            },
+        )
+
+        console.print(
+            f"[green]✓ Collected {len(responses)} responses[/green]"
+        )
+        if output is not None:
+            import pandas as pd
+
+            df = pd.DataFrame(
+                [{"text": r.text, "tokens_in": r.tokens_in} for r in responses]
+            )
+            df.to_csv(output, index=False)
+            console.print(f"  wrote: [cyan]{output}[/cyan]")
+    except ValueError as e:
+        console.print(f"[red]❌ {e}[/red]")
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]❌ Error: {e}[/red]")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()

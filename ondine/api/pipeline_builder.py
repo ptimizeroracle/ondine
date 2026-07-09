@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -667,6 +667,32 @@ class PipelineBuilder:
             Groq supports high concurrency (~100), while OpenAI free tier is limited to ~5.
         """
         self._processing_spec.concurrency = threads
+        return self
+
+    def with_execution_mode(
+        self, mode: Literal["live", "provider_batch"]
+    ) -> PipelineBuilder:
+        """Select the pipeline's execution mode (§3, §5).
+
+        * ``"live"`` (default) — one HTTP call per prompt through the
+          asyncio engine. Byte-identical to every prior version.
+        * ``"provider_batch"`` — compile prompts to JSONL, submit a
+          provider-native Batch API job (OpenAI/Anthropic), and collect
+          results later via :meth:`Pipeline.submit` /
+          :meth:`Pipeline.attach`. Non-blocking; designed for very large
+          or offline workloads where 50% batch discounts matter.
+
+        The scope guard in :meth:`build` rejects ``provider_batch`` for
+        providers without Batch API support (v1: OpenAI + Anthropic
+        only) so misconfiguration is caught at build time, not mid-run.
+
+        Args:
+            mode: ``"live"`` or ``"provider_batch"``.
+
+        Returns:
+            Self for chaining.
+        """
+        self._processing_spec.execution_mode = mode
         return self
 
     def with_adaptive_concurrency(self, enabled: bool = True) -> PipelineBuilder:
@@ -1781,6 +1807,31 @@ class PipelineBuilder:
             raise ValueError(
                 "LLM spec is required. Call with_llm() or with_custom_llm_client() before build()."
             )
+
+        # Scope guard (§5): provider_batch mode is only supported for
+        # providers with a Batch API backend (v1: OpenAI + Anthropic).
+        # Catching it here — the single user-facing choke point — means a
+        # misconfigured run fails immediately with a clear message rather
+        # than crashing deep in the JSONL submit path later.
+        if self._processing_spec.execution_mode == "provider_batch":
+            from ondine.orchestration.backends.provider_batch import (
+                SUPPORTED_BATCH_PROVIDERS,
+                ProviderBatchBackend,
+            )
+            provider_key = ProviderBatchBackend._provider_key(llm_spec)
+            if provider_key not in SUPPORTED_BATCH_PROVIDERS:
+                provider_label = (
+                    llm_spec.provider.value
+                    if hasattr(llm_spec.provider, "value")
+                    else llm_spec.provider
+                )
+                raise ValueError(
+                    f"execution_mode='provider_batch' is only supported for "
+                    f"{sorted(SUPPORTED_BATCH_PROVIDERS)} in v1, but the "
+                    f"configured provider is '{provider_label}'. Either "
+                    f"switch to an OpenAI/Anthropic provider or use "
+                    f"execution_mode='live'."
+                )
 
         specifications = PipelineSpecifications(
             dataset=self._dataset_spec,

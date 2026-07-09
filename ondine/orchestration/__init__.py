@@ -1,6 +1,12 @@
 """Orchestration engine for pipeline execution control."""
 
 from ondine.orchestration.async_executor import AsyncExecutor
+from ondine.orchestration.backends import (
+    BatchProgress,
+    ExecutionBackend,
+    ProviderBatchBackend,
+    SUPPORTED_BATCH_PROVIDERS,
+)
 from ondine.orchestration.concurrency_controller import ConcurrencyController
 from ondine.orchestration.deployment_tracker import DeploymentTracker
 from ondine.orchestration.execution_context import (
@@ -71,6 +77,11 @@ __all__ = [
     "RunStatus",
     "RegistryObserver",
     "REGISTRY_FILENAME",
+    # Execution backends — pluggable middle of the pipeline (§3, §5)
+    "ExecutionBackend",
+    "BatchProgress",
+    "ProviderBatchBackend",
+    "SUPPORTED_BATCH_PROVIDERS",
     # Streaming processing (for large datasets)
     "StreamingProcessor",
     "StreamingStats",
