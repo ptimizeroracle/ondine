@@ -1200,6 +1200,21 @@ def collect(run_id: str, checkpoint_dir: Path, output: Path | None):
             )
             sys.exit(1)
 
+        # Guard against live-* job ids: live results live only in the
+        # submitting process's memory and cannot be rebuilt in this fresh
+        # collect process (unlike batch jobs, which are reconstructed from
+        # the spec snapshot). Without this guard, collect would rebuild an
+        # empty ProviderBatchBackend, find nothing for the live id, and
+        # silently report "Collected 0 responses".
+        if str(handle.provider_job_id).startswith("live-"):
+            console.print(
+                f"[red]❌ Run {run_id} is a live run (job "
+                f"{handle.provider_job_id}). Live results are returned "
+                "synchronously during execution and cannot be collected "
+                "separately — use the output from the original run.[/red]"
+            )
+            sys.exit(1)
+
         if handle.status.value not in (
             "submitted_remote",
             "succeeded",
