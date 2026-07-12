@@ -2,7 +2,9 @@
 OpenTelemetry tracer setup and management.
 
 Provides simple API for enabling/disabling distributed tracing with
-console or Jaeger exporters.
+console or OTLP exporters. OTLP is the OpenTelemetry standard wire
+protocol and is what Jaeger (and other backends) ingest natively —
+the archived opentelemetry-exporter-jaeger package is no longer used.
 """
 
 from __future__ import annotations
@@ -73,18 +75,21 @@ def enable_tracing(
     Enable distributed tracing (opt-in).
 
     Args:
-        exporter: Exporter type ("console" or "jaeger")
-        endpoint: Jaeger endpoint (required if exporter="jaeger")
+        exporter: Exporter type — "console" or "otlp".
+            ("jaeger" is no longer supported; use "otlp" with a Jaeger
+            backend that ingests OTLP on :4318.)
+        endpoint: OTLP HTTP endpoint URL (required if exporter="otlp").
+            Example: "http://localhost:4318/v1/traces"
         service_name: Service name for traces
 
     Examples:
         >>> # Console exporter (for development)
         >>> enable_tracing(exporter="console")
 
-        >>> # Jaeger exporter (for production)
+        >>> # OTLP exporter (Jaeger, Tempo, etc. over HTTP)
         >>> enable_tracing(
-        ...     exporter="jaeger",
-        ...     endpoint="http://localhost:14268/api/traces"
+        ...     exporter="otlp",
+        ...     endpoint="http://localhost:4318/v1/traces"
         ... )
     """
     global _TRACING_ENABLED, _TRACER_PROVIDER, _TRACER
@@ -108,21 +113,23 @@ def enable_tracing(
     # Configure exporter
     if exporter == "console":
         span_exporter = ConsoleSpanExporter()
-    elif exporter == "jaeger":
+    elif exporter == "otlp":
         if endpoint is None:
-            raise ValueError("endpoint is required for Jaeger exporter")
+            raise ValueError("endpoint is required for OTLP exporter")
         try:
-            from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
         except ImportError as exc:
             raise ImportError(
-                "Jaeger exporter support is not installed. "
+                "OTLP exporter support is not installed. "
                 "Install with: pip install 'ondine[observability]'"
             ) from exc
-        span_exporter = JaegerExporter(
-            collector_endpoint=endpoint,
-        )
+        span_exporter = OTLPSpanExporter(endpoint=endpoint)
     else:
-        raise ValueError(f"Unknown exporter: {exporter}. Use 'console' or 'jaeger'")
+        raise ValueError(
+            f"Unknown exporter: {exporter!r}. Use 'console' or 'otlp'."
+        )
 
     # Add span processor (gracefully handle export failures)
     try:
