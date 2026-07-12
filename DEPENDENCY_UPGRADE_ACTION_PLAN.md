@@ -6,6 +6,17 @@ codebase inspection, and the current test run (1081 passed, 1 failed, 97 skipped
 Priority key: P0 = do before merge, P1 = do this week, P2 = nice-to-have / backlog.
 Effort: S (<30 min), M (1-4 h), L (1+ day).
 
+## Status (updated 2026-07-12)
+
+| # | Action | Priority | Status | Notes |
+|---|--------|----------|--------|-------|
+| 1 | Fix Jaeger observability test | **P0** | ✅ Done | Migrated to OTLP (commit fa7c90d) |
+| 2 | Commit pyproject.toml + uv.lock + docs to main | **P0** | ✅ Done | Commit fa7c90d on this branch |
+| 3 | instructor↔litellm compat smoke test | P1 | ✅ Done | `tests/unit/test_instructor_litellm_compat.py` (3 tests) |
+| 4 | Pandas CoW CI smoke test | P1 | ✅ Done | conftest fixture + `tests/unit/test_pandas_cow_smoke.py` (4 tests) |
+| 5 | Pin Rust toolchain | P1 | ✅ Done | `rust-toolchain.toml` (stable + rustfmt/clippy) |
+| 6-11 | P2 backlog items | P2 | Open | See checklist below |
+
 ---
 
 ## Q1. instructor pins litellm ≤1.82.6 but we use 1.91.1 — safe? Add a compat test?
@@ -259,19 +270,19 @@ Everything else is P1/P2 and can follow after the branch lands on main.
 
 ## Summary Checklist
 
-| # | Action | Priority | Effort |
-|---|---|---|---|
-| 1 | Fix Jaeger observability test (migrate to OTLP or skip+issue) | **P0** | M |
-| 2 | Commit pyproject.toml + uv.lock + analysis docs to main | **P0** | S |
-| 3 | Add instructor↔litellm compat smoke test | P1 | S |
-| 4 | Run integration suite with `copy_on_write=True` (CI toggle) | P1 | M |
-| 5 | Check/add `rust-toolchain.toml` for native build reproducibility | P1 | S |
-| 6 | Add `litellm<2.0` / `pydantic<3.0` upper-bound guardrails | P2 | S |
-| 7 | Document version-skew comment next to litellm/instructor deps | P2 | S |
-| 8 | Add polars 1.0-compat baseline comments in I/O files | P2 | S |
-| 9 | Add CVE-2025-69872 opt-in comment near disk cache call | P2 | S |
-| 10 | No structlog config change needed (weak-ref fix irrelevant) | P2 | — |
-| 11 | No diskcache pin needed (no fix available, opt-in only) | P2 | — |
+| # | Action | Priority | Effort | Status |
+|---|---|---|---|---|
+| 1 | Fix Jaeger observability test (migrate to OTLP or skip+issue) | **P0** | M | ✅ Done |
+| 2 | Commit pyproject.toml + uv.lock + analysis docs to main | **P0** | S | ✅ Done |
+| 3 | Add instructor↔litellm compat smoke test | P1 | S | ✅ Done |
+| 4 | Run integration suite with `copy_on_write=True` (CI toggle) | P1 | M | ✅ Done |
+| 5 | Check/add `rust-toolchain.toml` for native build reproducibility | P1 | S | ✅ Done |
+| 6 | Add `litellm<2.0` / `pydantic<3.0` upper-bound guardrails | P2 | S | Open |
+| 7 | Document version-skew comment next to litellm/instructor deps | P2 | S | Open |
+| 8 | Add polars 1.0-compat baseline comments in I/O files | P2 | S | Open |
+| 9 | Add CVE-2025-69872 opt-in comment near disk cache call | P2 | S | Open |
+| 10 | No structlog config change needed (weak-ref fix irrelevant) | P2 | — | N/A |
+| 11 | No diskcache pin needed (no fix available, opt-in only) | P2 | — | N/A |
 
 ---
 

@@ -1,0 +1,10 @@
+# Pin the Rust toolchain for reproducible native builds.
+#
+# ondine._engine is built via maturin + pyo3 (see pyproject.toml [tool.maturin]).
+# A drifting Rust version can silently break the native module build, so we pin
+# to stable here. CI uses dtolnay/rust-toolchain@stable, which honours this file.
+#
+# Bump the channel date when ready; the lockfile in Cargo.lock is independent.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

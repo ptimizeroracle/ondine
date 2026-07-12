@@ -5,6 +5,7 @@ Provides reusable test fixtures and mocks for the test suite.
 """
 
 import logging
+import os
 import warnings
 from decimal import Decimal
 from typing import Any
@@ -53,6 +54,28 @@ def suppress_litellm_warnings():
     )
     warnings.simplefilter("ignore")
     return
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _pandas_copy_on_write_toggle():
+    """Enable pandas Copy-on-Write when ONDINE_TEST_COW=1.
+
+    CoW becomes the unchangeable default in pandas 3.0. Running the full test
+    suite under CoW surfaces latent SettingWithCopyWarning-style bugs *before*
+    the 3.0 bump forces them. Disabled by default so it does not change normal
+    CI semantics; enable in a dedicated CI job or locally via the env var.
+
+    See DEPENDENCY_UPGRADE_ACTION_PLAN.md (Q3) for the rationale.
+    """
+    if os.getenv("ONDINE_TEST_COW") != "1":
+        yield
+        return
+
+    pd.options.mode.copy_on_write = True
+    try:
+        yield
+    finally:
+        pd.options.mode.copy_on_write = False
 
 
 class MockLLMClient(LLMClient):
