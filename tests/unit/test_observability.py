@@ -41,9 +41,7 @@ class TestTracingSetup:
         )
 
         try:
-            enable_tracing(
-                exporter="otlp", endpoint="http://localhost:4318/v1/traces"
-            )
+            enable_tracing(exporter="otlp", endpoint="http://localhost:4318/v1/traces")
             assert is_tracing_enabled() is True
         finally:
             disable_tracing()

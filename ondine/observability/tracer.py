@@ -127,9 +127,7 @@ def enable_tracing(
             ) from exc
         span_exporter = OTLPSpanExporter(endpoint=endpoint)
     else:
-        raise ValueError(
-            f"Unknown exporter: {exporter!r}. Use 'console' or 'otlp'."
-        )
+        raise ValueError(f"Unknown exporter: {exporter!r}. Use 'console' or 'otlp'.")
 
     # Add span processor (gracefully handle export failures)
     try:
