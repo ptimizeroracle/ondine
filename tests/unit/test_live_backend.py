@@ -40,7 +40,6 @@ from ondine.core.specifications import (
     PromptSpec,
 )
 
-
 # ── protocol conformance ─────────────────────────────────────────────
 
 
@@ -93,7 +92,7 @@ def test_submit_returns_live_prefixed_job_id() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=_two_llm_responses()):
+    with _MockEngine(responses=_two_llm_responses()):
         job_id = backend.submit(_two_prompt_batches())
 
     assert job_id.startswith("live-"), (
@@ -111,7 +110,7 @@ def test_submit_runs_engine_synchronously_and_caches_results() -> None:
 
     expected = _two_llm_responses()
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=expected) as mock_stage:
+    with _MockEngine(responses=expected) as mock_stage:
         job_id = backend.submit(_two_prompt_batches())
 
     # The engine must have actually executed (not been deferred).
@@ -131,7 +130,7 @@ def test_poll_always_reports_terminal() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=_two_llm_responses()):
+    with _MockEngine(responses=_two_llm_responses()):
         job_id = backend.submit(_two_prompt_batches())
 
     progress = backend.poll(job_id)
@@ -151,7 +150,7 @@ def test_collect_yields_one_llmresponse_per_row() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=_two_llm_responses()):
+    with _MockEngine(responses=_two_llm_responses()):
         job_id = backend.submit(_two_prompt_batches())
 
     for r in backend.collect(job_id):
@@ -194,7 +193,7 @@ def test_flatten_handles_raw_string_responses() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=["plain text one", "plain text two"]):
+    with _MockEngine(responses=["plain text one", "plain text two"]):
         job_id = backend.submit(_two_prompt_batches())
 
     collected = list(backend.collect(job_id))
@@ -212,11 +211,25 @@ def test_submit_preserves_response_order() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     ordered = [
-        LLMResponse(text="first", tokens_in=1, tokens_out=1, model="m", cost=Decimal("0"), latency_ms=1.0),
-        LLMResponse(text="second", tokens_in=2, tokens_out=2, model="m", cost=Decimal("0"), latency_ms=2.0),
+        LLMResponse(
+            text="first",
+            tokens_in=1,
+            tokens_out=1,
+            model="m",
+            cost=Decimal("0"),
+            latency_ms=1.0,
+        ),
+        LLMResponse(
+            text="second",
+            tokens_in=2,
+            tokens_out=2,
+            model="m",
+            cost=Decimal("0"),
+            latency_ms=2.0,
+        ),
     ]
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=ordered):
+    with _MockEngine(responses=ordered):
         job_id = backend.submit(_two_prompt_batches())
 
     collected = list(backend.collect(job_id))
@@ -230,7 +243,7 @@ def test_each_submit_returns_distinct_job_id() -> None:
     from ondine.orchestration.backends.live import LiveBackend
 
     backend = LiveBackend(llm_spec=_openai_spec(), specs=_specs(), context=_context())
-    with _mock_engine(responses=_two_llm_responses()):
+    with _MockEngine(responses=_two_llm_responses()):
         job_a = backend.submit(_two_prompt_batches())
         job_b = backend.submit(_two_prompt_batches())
 
@@ -324,8 +337,22 @@ def _two_prompt_batches() -> list[PromptBatch]:
 
 def _two_llm_responses() -> list[LLMResponse]:
     return [
-        LLMResponse(text="A", tokens_in=3, tokens_out=1, model="gpt-4o-mini", cost=Decimal("0"), latency_ms=10.0),
-        LLMResponse(text="B", tokens_in=3, tokens_out=1, model="gpt-4o-mini", cost=Decimal("0"), latency_ms=12.0),
+        LLMResponse(
+            text="A",
+            tokens_in=3,
+            tokens_out=1,
+            model="gpt-4o-mini",
+            cost=Decimal("0"),
+            latency_ms=10.0,
+        ),
+        LLMResponse(
+            text="B",
+            tokens_in=3,
+            tokens_out=1,
+            model="gpt-4o-mini",
+            cost=Decimal("0"),
+            latency_ms=12.0,
+        ),
     ]
 
 
@@ -347,7 +374,7 @@ class _FakeStage:
         self.execute = MagicMock(return_value=[self._batch])
 
 
-class _mock_engine:
+class _MockEngine:
     """Patch create_llm_client + LLMInvocationStage so the live backend
     builds a fake stage returning ``responses``."""
 

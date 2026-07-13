@@ -88,11 +88,11 @@ class ExecutionBackend(Protocol):
     """
 
     @property
-    def llm_spec(self) -> "LLMSpec":
+    def llm_spec(self) -> LLMSpec:
         """The LLM configuration this backend was built with."""
         ...
 
-    def submit(self, prompts: "list[PromptBatch]") -> str:
+    def submit(self, prompts: list[PromptBatch]) -> str:
         """Compile + upload + start the job; return provider_job_id.
 
         Must NOT block on results — the caller relies on the immediate
@@ -104,7 +104,7 @@ class ExecutionBackend(Protocol):
         """Return a provider-agnostic progress snapshot."""
         ...
 
-    def collect(self, provider_job_id: str) -> "Iterator[LLMResponse]":
+    def collect(self, provider_job_id: str) -> Iterator[LLMResponse]:
         """Download finished results and yield decoded LLMResponses.
 
         Only valid once ``poll(...)`` reports ``is_terminal``; calling

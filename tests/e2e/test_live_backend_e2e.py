@@ -96,8 +96,16 @@ def test_live_backend_e2e_deepseek_classification():
     # A 10-row "DataFrame" represented as one PromptBatch — the shape the
     # pipeline's front half (format → aggregate) hands to the middle.
     texts = [
-        "apple", "carrot", "bread", "milk", "chicken",
-        "banana", "spinach", "rice", "cheese", "beef",
+        "apple",
+        "carrot",
+        "bread",
+        "milk",
+        "chicken",
+        "banana",
+        "spinach",
+        "rice",
+        "cheese",
+        "beef",
     ]
     prompts = [specs.prompt.template.format(text=t) for t in texts]
     batch = PromptBatch(
@@ -132,8 +140,9 @@ def test_live_backend_e2e_deepseek_classification():
     )
     for r in collected:
         assert isinstance(r, LLMResponse)
-        assert r.text and r.text.strip(), (
-            f"collected response must be non-empty, got {r.text!r}"
+        assert r.text, f"collected response must be non-empty, got {r.text!r}"
+        assert r.text.strip(), (
+            f"collected response text is only whitespace, got {r.text!r}"
         )
 
     # ── cost guard ──────────────────────────────────────────────────

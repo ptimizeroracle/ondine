@@ -1818,6 +1818,7 @@ class PipelineBuilder:
                 SUPPORTED_BATCH_PROVIDERS,
                 ProviderBatchBackend,
             )
+
             provider_key = ProviderBatchBackend._provider_key(llm_spec)
             if provider_key not in SUPPORTED_BATCH_PROVIDERS:
                 provider_label = (

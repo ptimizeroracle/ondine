@@ -27,19 +27,14 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from ondine.core.models import LLMResponse, PromptBatch, RowMetadata
 from ondine.core.specifications import (
     LLMProvider,
     LLMSpec,
-    PipelineSpecifications,
     ProcessingSpec,
 )
 
@@ -168,9 +163,7 @@ def test_openai_submit_compiles_jsonl_and_returns_job_id() -> None:
     mock_client.batches.create.assert_called_once()
     # The uploaded file content must be valid JSONL with one line per prompt
     uploaded_bytes = mock_client.files.create.call_args.kwargs["file"][1]
-    lines = [
-        ln for ln in uploaded_bytes.read().decode().splitlines() if ln.strip()
-    ]
+    lines = [ln for ln in uploaded_bytes.read().decode().splitlines() if ln.strip()]
     assert len(lines) == 2
     for line in lines:
         record = json.loads(line)
@@ -193,9 +186,7 @@ def test_openai_poll_returns_progress_snapshot() -> None:
     mock_batch = MagicMock()
     mock_batch.id = "batch_abc"
     mock_batch.status = "in_progress"
-    mock_batch.request_counts = MagicMock(
-        total=100, completed=40, failed=2
-    )
+    mock_batch.request_counts = MagicMock(total=100, completed=40, failed=2)
     mock_client.batches.retrieve.return_value = mock_batch
 
     backend = ProviderBatchBackend(llm_spec=_openai_spec(), client=mock_client)
@@ -221,9 +212,7 @@ def test_openai_collect_yields_llm_responses() -> None:
     mock_batch = MagicMock()
     mock_batch.id = "batch_abc"
     mock_batch.status = "completed"
-    mock_batch.request_counts = MagicMock(
-        total=2, completed=2, failed=0
-    )
+    mock_batch.request_counts = MagicMock(total=2, completed=2, failed=0)
     mock_client.batches.retrieve.return_value = mock_batch
 
     result_jsonl = (
@@ -238,9 +227,7 @@ def test_openai_collect_yields_llm_responses() -> None:
                             "prompt_tokens": 10,
                             "completion_tokens": 3,
                         },
-                        "choices": [
-                            {"message": {"content": "positive"}}
-                        ],
+                        "choices": [{"message": {"content": "positive"}}],
                         "model": "gpt-4o-mini",
                     },
                 },
@@ -258,9 +245,7 @@ def test_openai_collect_yields_llm_responses() -> None:
                             "prompt_tokens": 8,
                             "completion_tokens": 3,
                         },
-                        "choices": [
-                            {"message": {"content": "negative"}}
-                        ],
+                        "choices": [{"message": {"content": "negative"}}],
                         "model": "gpt-4o-mini",
                     },
                 },
@@ -320,9 +305,7 @@ def test_anthropic_submit_uses_messages_batch_endpoint() -> None:
     mock_resp.id = "msgbatch_001"
     mock_client.messages.batches.create.return_value = mock_resp
 
-    backend = ProviderBatchBackend(
-        llm_spec=_anthropic_spec(), client=mock_client
-    )
+    backend = ProviderBatchBackend(llm_spec=_anthropic_spec(), client=mock_client)
     job_id = backend.submit(prompts)
 
     assert job_id == "msgbatch_001"

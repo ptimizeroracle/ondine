@@ -48,8 +48,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import uuid
-from collections.abc import Iterator
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -57,6 +55,8 @@ from ondine.orchestration.backends.base import BatchProgress
 from ondine.utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ondine.core.models import LLMResponse, PromptBatch
     from ondine.core.specifications import LLMSpec
 
@@ -66,9 +66,7 @@ logger = get_logger(__name__)
 # here and checked in the constructor (defence in depth) and in
 # PipelineBuilder.build (the user-facing choke point). Adding a provider
 # means adding it here plus the matching _<provider>_ helpers below.
-SUPPORTED_BATCH_PROVIDERS: frozenset[str] = frozenset(
-    {"openai", "anthropic"}
-)
+SUPPORTED_BATCH_PROVIDERS: frozenset[str] = frozenset({"openai", "anthropic"})
 
 # Canonical statuses the backend treats as "done". Kept provider-neutral
 # so poll()/collect() never leak provider vocabulary to callers.
@@ -100,7 +98,7 @@ class ProviderBatchBackend:
 
     def __init__(
         self,
-        llm_spec: "LLMSpec",
+        llm_spec: LLMSpec,
         *,
         client: Any | None = None,
     ) -> None:
@@ -134,11 +132,11 @@ class ProviderBatchBackend:
     # ── ExecutionBackend protocol surface ──────────────────────────
 
     @property
-    def llm_spec(self) -> "LLMSpec":
+    def llm_spec(self) -> LLMSpec:
         """The LLM configuration this backend was built with."""
         return self._llm_spec
 
-    def submit(self, prompts: "list[PromptBatch]") -> str:
+    def submit(self, prompts: list[PromptBatch]) -> str:
         """Compile prompts to JSONL, upload, start the job, return its id.
 
         Non-blocking: returns as soon as the provider acknowledges the
@@ -167,7 +165,7 @@ class ProviderBatchBackend:
             return self._openai_poll(client, provider_job_id)
         return self._anthropic_poll(client, provider_job_id)
 
-    def collect(self, provider_job_id: str) -> "Iterator[LLMResponse]":
+    def collect(self, provider_job_id: str) -> Iterator[LLMResponse]:
         """Download + decode finished results, one LLMResponse per request.
 
         Raises ValueError if the job is not yet terminal — collecting an
@@ -189,15 +187,11 @@ class ProviderBatchBackend:
 
     # ── OpenAI Batch API ───────────────────────────────────────────
 
-    def _openai_submit(
-        self, client: Any, prompts: "list[PromptBatch]"
-    ) -> str:
+    def _openai_submit(self, client: Any, prompts: list[PromptBatch]) -> str:
         """Compile OpenAI-format JSONL, upload file, create batch."""
         jsonl = self._build_openai_jsonl(prompts)
         upload_file = ("requests.jsonl", io.BytesIO(jsonl.encode()), "application/json")
-        file_obj = client.files.create(
-            file=upload_file, purpose="batch"
-        )
+        file_obj = client.files.create(file=upload_file, purpose="batch")
         batch = client.batches.create(
             input_file_id=file_obj.id,
             endpoint="/v1/chat/completions",
@@ -206,9 +200,7 @@ class ProviderBatchBackend:
         )
         return batch.id
 
-    def _openai_poll(
-        self, client: Any, provider_job_id: str
-    ) -> BatchProgress:
+    def _openai_poll(self, client: Any, provider_job_id: str) -> BatchProgress:
         batch = client.batches.retrieve(provider_job_id)
         counts = getattr(batch, "request_counts", None)
         total = int(getattr(counts, "total", 0) or 0)
@@ -226,11 +218,10 @@ class ProviderBatchBackend:
 
     def _openai_collect(
         self, client: Any, provider_job_id: str
-    ) -> "Iterator[LLMResponse]":
+    ) -> Iterator[LLMResponse]:
         batch = client.batches.retrieve(provider_job_id)
-        result_file_id = (
-            getattr(batch, "output_file_id", None)
-            or getattr(batch, "error_file_id", None)
+        result_file_id = getattr(batch, "output_file_id", None) or getattr(
+            batch, "error_file_id", None
         )
         if result_file_id is None:
             return
@@ -243,36 +234,42 @@ class ProviderBatchBackend:
 
     # ── Anthropic Batch API ────────────────────────────────────────
 
-    def _anthropic_submit(
-        self, client: Any, prompts: "list[PromptBatch]"
-    ) -> str:
+    def _anthropic_submit(self, client: Any, prompts: list[PromptBatch]) -> str:
         """Compile Anthropic-format requests, create message batch."""
         requests = self._build_anthropic_requests(prompts)
         batch = client.messages.batches.create(requests=requests)
         return batch.id
 
-    def _anthropic_poll(
-        self, client: Any, provider_job_id: str
-    ) -> BatchProgress:
+    def _anthropic_poll(self, client: Any, provider_job_id: str) -> BatchProgress:
         batch = client.messages.batches.retrieve(provider_job_id)
         # Anthropic exposes counts as result_counts on the batch object.
         counts = getattr(batch, "result_counts", None) or {}
-        total = int(
-            getattr(counts, "processing", 0)
-            + getattr(counts, "succeeded", 0)
-            + getattr(counts, "errored", 0)
-            + getattr(counts, "canceled", 0)
-            + getattr(counts, "expired", 0)
-        ) if not isinstance(counts, dict) else sum(counts.values())
-        succeeded = int(getattr(counts, "succeeded", 0)) if not isinstance(
-            counts, dict
-        ) else int(counts.get("succeeded", 0))
-        errored = int(getattr(counts, "errored", 0)) if not isinstance(
-            counts, dict
-        ) else int(counts.get("errored", 0))
+        total = (
+            int(
+                getattr(counts, "processing", 0)
+                + getattr(counts, "succeeded", 0)
+                + getattr(counts, "errored", 0)
+                + getattr(counts, "canceled", 0)
+                + getattr(counts, "expired", 0)
+            )
+            if not isinstance(counts, dict)
+            else sum(counts.values())
+        )
+        succeeded = (
+            int(getattr(counts, "succeeded", 0))
+            if not isinstance(counts, dict)
+            else int(counts.get("succeeded", 0))
+        )
+        errored = (
+            int(getattr(counts, "errored", 0))
+            if not isinstance(counts, dict)
+            else int(counts.get("errored", 0))
+        )
         return BatchProgress(
             provider_job_id=provider_job_id,
-            status=batch.processing_status if hasattr(batch, "processing_status") else getattr(batch, "status", "unknown"),
+            status=batch.processing_status
+            if hasattr(batch, "processing_status")
+            else getattr(batch, "status", "unknown"),
             total=total,
             completed=succeeded,
             failed=errored,
@@ -282,7 +279,7 @@ class ProviderBatchBackend:
 
     def _anthropic_collect(
         self, client: Any, provider_job_id: str
-    ) -> "Iterator[LLMResponse]":
+    ) -> Iterator[LLMResponse]:
         # Anthropic streams results via the list() iterator.
         results = client.messages.batches.results(provider_job_id)
         for entry in results:
@@ -290,7 +287,7 @@ class ProviderBatchBackend:
 
     # ── JSONL / request compilers ──────────────────────────────────
 
-    def _build_openai_jsonl(self, prompts: "list[PromptBatch]") -> str:
+    def _build_openai_jsonl(self, prompts: list[PromptBatch]) -> str:
         """Flatten PromptBatches into OpenAI Batch JSONL.
 
         One line per prompt row. The ``custom_id`` carries the original
@@ -300,7 +297,7 @@ class ProviderBatchBackend:
         """
         lines: list[str] = []
         for batch in prompts:
-            for prompt_text, meta in zip(batch.prompts, batch.metadata):
+            for prompt_text, meta in zip(batch.prompts, batch.metadata, strict=False):
                 custom_id = f"row-{meta.row_index}"
                 self._custom_ids.append(custom_id)
                 record = {
@@ -319,12 +316,12 @@ class ProviderBatchBackend:
         return "\n".join(lines) + ("\n" if lines else "")
 
     def _build_anthropic_requests(
-        self, prompts: "list[PromptBatch]"
+        self, prompts: list[PromptBatch]
     ) -> list[dict[str, Any]]:
         """Flatten PromptBatches into Anthropic Batch request objects."""
         requests: list[dict[str, Any]] = []
         for batch in prompts:
-            for prompt_text, meta in zip(batch.prompts, batch.metadata):
+            for prompt_text, meta in zip(batch.prompts, batch.metadata, strict=False):
                 custom_id = f"row-{meta.row_index}"
                 self._custom_ids.append(custom_id)
                 requests.append(
@@ -342,7 +339,7 @@ class ProviderBatchBackend:
 
     # ── response decoders ──────────────────────────────────────────
 
-    def _decode_openai_line(self, record: dict[str, Any]) -> "LLMResponse":
+    def _decode_openai_line(self, record: dict[str, Any]) -> LLMResponse:
         """Translate one OpenAI Batch result line into an LLMResponse.
 
         Handles both success (response.body present) and error
@@ -360,7 +357,11 @@ class ProviderBatchBackend:
         text = (
             choices[0]["message"]["content"]
             if choices
-            else (resp.get("error", {}).get("message", "") if isinstance(resp, dict) else "")
+            else (
+                resp.get("error", {}).get("message", "")
+                if isinstance(resp, dict)
+                else ""
+            )
         )
         model = body.get("model", self._llm_spec.model)
         return LLMResponse(
@@ -373,7 +374,7 @@ class ProviderBatchBackend:
             metadata={"custom_id": record.get("custom_id")},
         )
 
-    def _decode_anthropic_entry(self, entry: Any) -> "LLMResponse":
+    def _decode_anthropic_entry(self, entry: Any) -> LLMResponse:
         """Translate one Anthropic Batch result into an LLMResponse."""
         from ondine.core.models import LLMResponse
 
@@ -419,9 +420,7 @@ class ProviderBatchBackend:
     def _anthropic_messages(self, prompt_text: str) -> list[dict[str, str]]:
         return [{"role": "user", "content": prompt_text}]
 
-    def _estimate_cost(
-        self, completed: int, failed: int
-    ) -> Decimal:
+    def _estimate_cost(self, completed: int, failed: int) -> Decimal:
         """Rough running cost from request counts (pre-download).
 
         Used only for the live progress snapshot; the authoritative
@@ -437,10 +436,9 @@ class ProviderBatchBackend:
         """Cost for a single decoded response from LLMSpec pricing."""
         in_rate = self._llm_spec.input_cost_per_1k_tokens or Decimal("0")
         out_rate = self._llm_spec.output_cost_per_1k_tokens or Decimal("0")
-        return (
-            Decimal(tokens_in) * in_rate / Decimal("1000")
-            + Decimal(tokens_out) * out_rate / Decimal("1000")
-        )
+        return Decimal(tokens_in) * in_rate / Decimal("1000") + Decimal(
+            tokens_out
+        ) * out_rate / Decimal("1000")
 
     def _anthropic_is_terminal(self, batch: Any) -> bool:
         """True when the Anthropic batch has stopped processing."""
@@ -452,7 +450,7 @@ class ProviderBatchBackend:
         return status in _TERMINAL_STATUSES or status == ""
 
     @staticmethod
-    def _provider_key(llm_spec: "LLMSpec") -> str:
+    def _provider_key(llm_spec: LLMSpec) -> str:
         """Normalise the provider to a lowercase canonical key.
 
         Handles both the enum form (``LLMProvider.OPENAI``) and the
@@ -522,9 +520,7 @@ class ProviderBatchBackend:
                     "Install with: pip install anthropic"
                 ) from exc
             raise
-        api_key = self._llm_spec.api_key or os.environ.get(
-            "ANTHROPIC_API_KEY"
-        )
+        api_key = self._llm_spec.api_key or os.environ.get("ANTHROPIC_API_KEY")
         return Anthropic(api_key=api_key)
 
 

@@ -1798,9 +1798,7 @@ class Pipeline:
 
         run_spec = RunSpec(
             pipeline_id=str(self.id),
-            dataset=str(
-                self.specifications.dataset.source_path or "dataframe"
-            ),
+            dataset=str(self.specifications.dataset.source_path or "dataframe"),
             spec_snapshot={
                 "pipeline_id": str(self.id),
                 "execution_mode": "provider_batch",

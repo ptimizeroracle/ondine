@@ -193,14 +193,11 @@ class LiveBackend:
         may hold a stale ``live-*`` id from a previous process, in which
         case the results are simply gone.
         """
-        for r in _live_results.get(provider_job_id, []):
-            yield r
+        yield from _live_results.get(provider_job_id, [])
 
     # ── the engine, adapted from the inline pipeline path ────────────
 
-    def _run_engine(
-        self, batches: list[PromptBatch]
-    ) -> list[ResponseBatch]:
+    def _run_engine(self, batches: list[PromptBatch]) -> list[ResponseBatch]:
         """Construct and run LLMInvocationStage exactly as the pipeline did.
 
         Mirrors ``Pipeline._execute_stages_with_tracking`` stage 3:
@@ -308,9 +305,7 @@ def _flatten_to_llm_responses(batches: list[ResponseBatch]) -> list[LLMResponse]
                 out.append(response)
             else:
                 meta = (
-                    batch.metadata[idx].row_index
-                    if idx < len(batch.metadata)
-                    else idx
+                    batch.metadata[idx].row_index if idx < len(batch.metadata) else idx
                 )
                 out.append(
                     LLMResponse(

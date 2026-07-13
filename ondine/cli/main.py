@@ -1103,14 +1103,9 @@ def submit(
 
         console.print("[green]✓ Batch job submitted[/green]")
         console.print(f"  run_id          : [cyan]{handle.run_id}[/cyan]")
-        console.print(
-            f"  provider_job_id : [cyan]{handle.provider_job_id}[/cyan]"
-        )
+        console.print(f"  provider_job_id : [cyan]{handle.provider_job_id}[/cyan]")
         console.print(f"  status          : {handle.status.value}")
-        console.print(
-            "\n  [dim]Poll with: ondine status "
-            f"{handle.run_id}[/dim]\n"
-        )
+        console.print(f"\n  [dim]Poll with: ondine status {handle.run_id}[/dim]\n")
     except ValueError as e:
         console.print(f"[red]❌ {e}[/red]")
         sys.exit(1)
@@ -1195,8 +1190,7 @@ def collect(run_id: str, checkpoint_dir: Path, output: Path | None):
 
         if handle.provider_job_id is None:
             console.print(
-                f"[red]❌ Run {run_id} has no provider_job_id "
-                "(not a batch run).[/red]"
+                f"[red]❌ Run {run_id} has no provider_job_id (not a batch run).[/red]"
             )
             sys.exit(1)
 
@@ -1255,9 +1249,7 @@ def collect(run_id: str, checkpoint_dir: Path, output: Path | None):
             },
         )
 
-        console.print(
-            f"[green]✓ Collected {len(responses)} responses[/green]"
-        )
+        console.print(f"[green]✓ Collected {len(responses)} responses[/green]")
         if output is not None:
             import pandas as pd
 
