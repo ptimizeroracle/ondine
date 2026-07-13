@@ -9,15 +9,15 @@ magic. This is L5 — it owns no logic, only orchestration.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-import pandas as pd
 
 from ondine.api.quick import QuickPipeline
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
     from decimal import Decimal
+    from pathlib import Path
+
+    import pandas as pd
 
 # **options keys that map 1:1 to QuickPipeline.create parameters.
 # Anything not listed here is rejected so the surface stays auditable.
@@ -63,7 +63,6 @@ def enrich(
         ValueError: If the data, prompt, or budget is invalid (raised by
             the underlying pipeline).
     """
-    from decimal import Decimal
 
     # Reject anything outside the allowlist (including reserved internal names
     # like max_budget) before forwarding, so the contract is explicit.

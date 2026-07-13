@@ -7,7 +7,6 @@ injects, and what it returns — without dragging in the real pipeline machinery
 """
 
 from decimal import Decimal
-from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -109,7 +108,9 @@ class TestEnrich:
         captured = {}
         _patch_create(monkeypatch, capture=captured)
 
-        enrich(pd.DataFrame({"text": ["a"]}), prompt="P: {text}", model="claude-3-sonnet")
+        enrich(
+            pd.DataFrame({"text": ["a"]}), prompt="P: {text}", model="claude-3-sonnet"
+        )
 
         assert captured["kwargs"]["model"] == "claude-3-sonnet"
 

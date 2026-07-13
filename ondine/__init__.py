@@ -30,12 +30,12 @@ except PackageNotFoundError:  # editable install without metadata
 
 # Layer 4: High-Level API
 from ondine.api.dataset_processor import DatasetProcessor
-from ondine.api.pipeline import Pipeline
-from ondine.api.pipeline_builder import PipelineBuilder
-from ondine.api.quick import QuickPipeline
 
 # Layer 5: Front doors — thin facades over Layer 4 (no own logic)
 from ondine.api.enrich import enrich
+from ondine.api.pipeline import Pipeline
+from ondine.api.pipeline_builder import PipelineBuilder
+from ondine.api.quick import QuickPipeline
 
 # Context store (pluggable anti-hallucination backends)
 from ondine.context import (
