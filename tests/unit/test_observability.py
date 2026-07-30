@@ -28,8 +28,12 @@ class TestTracingSetup:
         finally:
             disable_tracing()
 
-    def test_enable_tracing_with_jaeger_exporter(self):
-        """Should enable tracing with Jaeger exporter."""
+    def test_enable_tracing_with_otlp_exporter(self):
+        """Should enable tracing with OTLP exporter (replaces archived Jaeger exporter).
+
+        opentelemetry-exporter-jaeger was archived upstream in favor of OTLP;
+        Jaeger all-in-one ingests OTLP on :4318 (see docker/docker-compose.yml).
+        """
         from ondine.observability import (
             disable_tracing,
             enable_tracing,
@@ -37,10 +41,18 @@ class TestTracingSetup:
         )
 
         try:
-            enable_tracing(
-                exporter="jaeger", endpoint="http://localhost:14268/api/traces"
-            )
+            enable_tracing(exporter="otlp", endpoint="http://localhost:4318/v1/traces")
             assert is_tracing_enabled() is True
+        finally:
+            disable_tracing()
+
+    def test_enable_tracing_unknown_exporter_raises(self):
+        """An unknown exporter name should raise ValueError, not silently no-op."""
+        from ondine.observability import disable_tracing, enable_tracing
+
+        try:
+            with pytest.raises(ValueError, match="Unknown exporter"):
+                enable_tracing(exporter="jaeger")
         finally:
             disable_tracing()
 
