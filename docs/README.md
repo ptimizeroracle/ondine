@@ -7,12 +7,13 @@ Ondine is an open-source Python SDK for data engineers and ML practitioners who 
 ## Quick Start
 
 ```python
-from ondine import QuickPipeline
+from ondine import enrich
 
-result = QuickPipeline.create(
-    data="products.csv",
-    prompt="Classify this product into a category: {name} - {description}",
-    model="gpt-4o-mini"
+df = enrich(
+    "products.csv",
+    "Classify this product into a category: {name} - {description}",
+    output_columns=["category"],
+    model="gpt-4o-mini",
 )
 ```
 
@@ -29,8 +30,11 @@ Most teams processing tabular data with LLMs hit the same three walls: **API cos
 
 ## Key Features
 
-- **Quick API** -- 3-line hello world with smart defaults
+- **`enrich()`** -- one-call front door; input type in, same type out
+- **`plan()`** -- draft a pipeline from a plain-language goal, inspect and approve before execution
 - **Builder API** -- Full control over pipeline configuration
+- **MCP server** (`ondine-mcp`) -- expose pipeline runs as MCP tools for agent clients, budget-capped by design
+- **Provider Batch API mode** -- OpenAI/Anthropic native Batch jobs for ~50% provider-advertised savings
 - **100+ LLM providers** via LiteLLM (OpenAI, Anthropic, Groq, Azure, local MLX)
 - **Multi-row batching** -- Process 100 rows per API call
 - **Prefix caching** -- 40-50% cost reduction on repeated prompts

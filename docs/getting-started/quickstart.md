@@ -16,7 +16,7 @@ Create a new Python file and set your API key:
 
 ```python
 import os
-os.environ["OPENAI_API_KEY"] = "sk-..."  # Or use .env file
+os.environ["OPENAI_API_KEY"] = "sk-..."  # Or use .env file  # pragma: allowlist secret
 ```
 
 ### 2. Prepare Sample Data
@@ -39,9 +39,36 @@ data = pd.DataFrame({
 data.to_csv("products.csv", index=False)
 ```
 
-### 3. Quick API (Simplest)
+### 3. `enrich()` (Simplest)
 
-Fewest lines of code to get results:
+One call, no builder chain, no explicit `.execute()`:
+
+```python
+from ondine import enrich
+
+result = enrich(
+    "products.csv",
+    "Extract the brand name from: {product}",
+    output_columns=["brand"],
+    model="gpt-4o-mini",
+)
+
+print(result)
+```
+
+**Output:**
+```
+   product                      brand
+0  iPhone 15 Pro Max 256GB       Apple
+1  Samsung Galaxy S24 Ultra      Samsung
+2  Google Pixel 8 Pro            Google
+```
+
+`enrich()` preserves your input type: a pandas DataFrame in gets pandas back, Polars in gets Polars back, and a file path gets pandas back. Pass `budget=` to cap spend and `schema=` for structured (Pydantic) output. See the [enrich() guide](../guides/enrich.md) for the full option list.
+
+### 4. Quick API (More Explicit)
+
+Same defaults as `enrich()`, but you get the `Pipeline` object back so you can inspect cost, metrics, and call `.execute()` yourself:
 
 ```python
 from ondine import QuickPipeline
@@ -70,7 +97,7 @@ print(f"Cost: ${result.costs.total_cost:.4f}")
 Cost: $0.0012
 ```
 
-### 4. Builder API (More Control)
+### 5. Builder API (Full Control)
 
 When you need to pin temperature, set concurrency, or name your output columns explicitly:
 
@@ -116,7 +143,7 @@ pipeline = QuickPipeline.create(
     prompt="""
     Clean and standardize this text:
     {text}
-    
+
     Remove special characters, fix capitalization, trim whitespace.
     """,
     model="gpt-4o-mini"
@@ -139,7 +166,7 @@ pipeline = (
     )
     .with_prompt("""
     Classify the sentiment of this review as: positive, negative, or neutral
-    
+
     Review: {review_text}
     """)
     .with_llm(provider="openai", model="gpt-4o-mini", temperature=0.0)
@@ -169,7 +196,7 @@ pipeline = (
       "model": "...",
       "price": "..."
     }}
-    
+
     Description: {description}
     """)
     .with_llm(provider="openai", model="gpt-4o-mini")
@@ -268,8 +295,9 @@ result = pipeline.execute()
 ## Next Steps
 
 - [Core Concepts](core-concepts.md) - How the pipeline architecture fits together
+- [enrich() Guide](../guides/enrich.md) - The full option list for the one-call front door
+- [ondine.plan() Guide](../guides/intent-planning.md) - Draft a pipeline from a plain-language goal
 - [Execution Modes](../guides/execution-modes.md) - Async and streaming execution
 - [Structured Output](../guides/structured-output.md) - Type-safe Pydantic models
 - [Cost Control](../guides/cost-control.md) - Budget limits and optimization
 - [API Reference](../api/index.md) - Full API documentation
-

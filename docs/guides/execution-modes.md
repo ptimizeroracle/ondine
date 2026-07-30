@@ -2,6 +2,8 @@
 
 Three execution modes. Which one depends on dataset size and how much you care about speed vs. memory.
 
+> This page covers how Ondine drives **live** calls against a provider (Standard/Async/Streaming). For submitting a job to a provider's own asynchronous Batch API instead -- a different, orthogonal kind of "execution mode" (`with_execution_mode("provider_batch")`) -- see [Provider Batch API Mode](provider-batch.md).
+
 ## At a Glance
 
 | Mode | Best For | Memory Usage | Throughput | Complexity |
