@@ -360,7 +360,7 @@ class MCPService:
         except Exception:  # noqa: BLE001
             # Non-fatal: progress % will just read 0 total until the observer
             # writes the real count. Don't block the run on row-count math.
-            pass
+            logger.debug("Row-count precompute failed for %s", run_id, exc_info=True)
 
         try:
             pipeline.execute(run_id=run_id, registry=self._registry)
@@ -375,7 +375,9 @@ class MCPService:
                     metrics={"error": f"{type(exc).__name__}: {exc}"},
                 )
             except Exception:  # noqa: BLE001
-                pass
+                logger.debug(
+                    "Failed to record terminal state for %s", run_id, exc_info=True
+                )
         finally:
             self._threads.pop(str(run_id), None)
 

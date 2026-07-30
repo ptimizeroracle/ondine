@@ -31,13 +31,16 @@ so no network call is made; everything else is real.
 
 from __future__ import annotations
 
+import json
 import time
 from decimal import Decimal
+from pathlib import PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import pandas as pd
 import pytest
+import yaml
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,7 +54,7 @@ from ondine.mcp.server import MCPService, create_server
 _CONFIG_YAML = """
 dataset:
   source_type: csv
-  source_path: "{input}"
+  source_path: {input}
   input_columns: [text]
   output_columns: [result]
 prompt:
@@ -134,7 +137,35 @@ def service(tmp_path: Path) -> MCPService:
 
 
 def _config_yaml(input_path: Path) -> str:
-    return _CONFIG_YAML.format(input=str(input_path))
+    """Render the config template with the path as a JSON string literal.
+
+    A JSON string literal is also a valid YAML double-quoted scalar with
+    correctly-escaped backslashes, so this renders safely even for Windows
+    paths like ``C:\\Users\\...`` — a bare ``str(path)`` interpolation would
+    break YAML's double-quoted-scalar escaping rules (e.g. ``\\U`` requires 8
+    hex digits) on those paths.
+    """
+    return _CONFIG_YAML.format(input=json.dumps(str(input_path)))
+
+
+# ── regression: fixture YAML survives Windows-style paths ────────────
+
+
+def test_config_yaml_parses_with_windows_style_path() -> None:
+    """Regression for a CI-only failure: on the Windows matrix jobs, temp
+    paths look like ``C:\\Users\\runneradmin\\AppData\\Local\\Temp\\...``. A
+    naive ``str(path)`` interpolation into a double-quoted YAML scalar breaks
+    because ``\\U`` is a YAML escape sequence requiring 8 hex digits, so
+    ``yaml.safe_load`` raised ``ScannerError``. This runs on every platform
+    (not just Windows) by constructing a Windows-shaped path directly, so the
+    regression is caught on Linux/macOS CI too.
+    """
+    windows_path = PureWindowsPath(r"C:\Users\runneradmin\AppData\Local\Temp\in.csv")
+    rendered = _config_yaml(windows_path)  # type: ignore[arg-type]
+
+    config = yaml.safe_load(rendered)
+
+    assert config["dataset"]["source_path"] == str(windows_path)
 
 
 # ── regression: budget is mandatory on ondine_run ────────────────────

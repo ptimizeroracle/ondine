@@ -23,11 +23,14 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from ondine.orchestration.observers import ExecutionObserver
+from ondine.utils import get_logger
 
 if TYPE_CHECKING:
     from ondine.orchestration.execution_context import ExecutionContext
     from ondine.orchestration.run_registry import RunRegistry
     from ondine.stages.pipeline_stage import PipelineStage
+
+logger = get_logger(__name__)
 
 
 class RegistryProgressObserver(ExecutionObserver):
@@ -127,4 +130,4 @@ class RegistryProgressObserver(ExecutionObserver):
             # A registry write failure must never kill the run. The terminal
             # transition (written by Pipeline.execute) is the source of truth
             # for final state; live-progress writes are best-effort.
-            pass
+            logger.debug("Progress write failed for %s", self._run_id, exc_info=True)
