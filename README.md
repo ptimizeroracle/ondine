@@ -3,8 +3,9 @@
 
   # Ondine
 
-  **A prompt is a column.**
-  A new DataFrame primitive for LLMs, with five dimensions of production support.
+  **Batch-process your DataFrames with LLMs, without the boilerplate.**
+
+  Agents reason row-by-row. Ondine computes columns — 100,000 rows for $0.48 (projected), crash-safe, on any of 100+ providers.
 
   [![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
   [![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
@@ -21,24 +22,25 @@
 
 ---
 
-Ondine makes LLM calls a first-class DataFrame operation. Define a column with natural language. Ondine computes it at production scale.
+## The pain
+
+Running an LLM over 10,000 rows should be one call. In practice it becomes a script: loop over rows, parse JSON by hand, retry on 429, recompute what already ran after a crash, and add up the bill in a spreadsheet. Every team writes that script, and rewrites it again for the next dataset.
+
+Ondine replaces that script with one function. You describe the column you want in natural language; Ondine computes it across the whole table — with schema validation, budget caps, crash-safe checkpoints, and cost tracking turned on by default.
 
 ```python
-from ondine import PipelineBuilder
+from ondine import enrich
 
-df = (
-    PipelineBuilder.create()
-    .from_dataframe(df, input_columns=["review"], output_columns=["sentiment"])
-    .with_prompt("Classify the tone of: {review}")
-    .with_llm(provider="openai", model="gpt-5.4-mini")
-    .build()
-    .execute().data
+df = enrich(
+    "reviews.csv",
+    "Classify the tone of: {review}",
+    output_columns=["sentiment"],
+    model="gpt-4o-mini",
+    budget=5.0,
 )
 ```
 
-The LLM stops being a service you call from your pipeline. It becomes a column function inside it.
-
-Everything else in this README is how Ondine makes that primitive production-true across five dimensions: richer inputs (KB/RAG/OCR), constrained outputs (schemas, grounding), reliable execution (checkpoints, budget caps, adaptive concurrency), full observability, and any LLM backend.
+That's the whole interface. The LLM stops being a service you call in a loop. It becomes a column function inside your DataFrame.
 
 ## Install
 
@@ -48,147 +50,154 @@ pip install ondine
 
 Python 3.10+. Works with any LLM through [LiteLLM](https://github.com/BerriAI/litellm): OpenAI, Anthropic, Groq, Mistral, Cerebras, Ollama, MLX, vLLM, SGLang, 100+ others.
 
-## 30-second quickstart
+## Quickstart
+
+Two ways in. `enrich()` for the common case (one prompt, one table, get a table back). `PipelineBuilder` when you need to chain options.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ptimizeroracle/ondine/blob/main/examples/ondine_quickstart.ipynb) · run the notebook below in a free Colab instance with a free Groq key — first output in under 30 seconds.
 
 ```python
-from ondine import PipelineBuilder
+from ondine import enrich, PipelineBuilder
 
-pipeline = (
+# 1. enrich() — the one-liner front door
+df = enrich(
+    "reviews.csv",
+    "Classify sentiment and extract the topic from: {review}",
+    output_columns=["sentiment", "topic"],
+    model="gpt-4o-mini",
+    budget=5.00,
+)
+
+# 2. PipelineBuilder — same engine, explicit control
+result = (
     PipelineBuilder.create()
     .from_csv("reviews.csv",
               input_columns=["review"],
               output_columns=["sentiment", "topic"])
     .with_prompt("Classify sentiment and extract the key topic from: {review}")
-    .with_llm(provider="openai", model="gpt-5.4-mini")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .with_batch_size(50)
     .with_max_budget(5.00)
     .build()
+    .execute()
 )
-
-result = pipeline.execute()
 print(f"Processed {result.metrics.processed_rows} rows · ${result.costs.total_cost:.2f}")
 ```
 
 One builder chain: input columns, prompt, model, budget cap. Multi-column outputs get a JSON parser; schema enforcement, checkpointing, and cost tracking are on by default.
 
-Prefer a one-liner? `QuickPipeline.create(...)` wraps the same builder with sensible defaults (see [examples/](examples/)).
+## When to use Ondine vs an agent
 
-## The 5 dimensions
+Ondine is not an agent framework. Agents and Ondine sit at different layers and compose rather than compete.
 
-### 1. INPUTS: make the prompt richer
+| If your task is... | Use |
+|--------------------|-----|
+| Turn one table into a richer table (classify, extract, score, translate N rows) | **Ondine** |
+| Run the same prompt over a whole column with a budget cap and crash recovery | **Ondine** |
+| Produce eval labels / synthetic data / bulk structured fields at scale | **Ondine** |
+| Reason, branch, call tools, and decide the *next* action per request | **An agent framework** |
+| Hand off the deterministic batch layer your agent's outputs feed into | **Ondine** (the batch layer of an agentic stack) |
 
-Feed the LLM more than raw column text. Pull context from documents, images, and prior runs.
+Rule of thumb: if you know the prompt ahead of time and the data is a table, that's Ondine. If the prompt depends on what the model just decided, that's an agent — and Ondine is the substrate it pushes bulk work onto.
 
-- **Knowledge Base (RAG)**: ingest PDFs, Markdown, HTML, images via OCR. Hybrid BM25 + dense search with optional cross-encoder reranker. HyDE / multi-query / step-back query transforms.
-- **OCR**: three pluggable backends: multimodal Vision LLM, Tesseract (offline), DocTR.
-- **Multi-column placeholders**: use any number of input columns in one prompt (`{col_a}`, `{col_b}`).
-- **Jinja2 templates** + system prompts for richer prompt shaping.
+## Use cases
 
-### 2. OUTPUTS: constrain what comes back
+Same engine every time. The use case lives in the prompt.
 
-Stop parsing strings. Get typed columns, validated against your schema, verified against your evidence.
+### 1. Bulk enrichment
 
-- **Pydantic structured output**: define a model, get typed columns back. Malformed JSON auto-retries up to 3x.
-- **Multi-column parsing**: one prompt → N typed columns.
-- **Grounding verification (Context Store)**: each LLM answer checked against an evidence graph built from your dataset. Rust + SQLite + FTS5 backend. Contradictions flagged, not silently returned.
+Add a column the LLM computes from existing ones. Sentiment, category, PII redaction, language detection — any per-row transform.
 
-### 3. EXECUTION: run N rows reliably
+```python
+from ondine import enrich
 
-Production plumbing that `df.apply()` doesn't give you.
+df = enrich(
+    "support_tickets.csv",
+    "Detect the language of: {message}",
+    output_columns=["language"],
+    model="gpt-4o-mini",
+)
+```
 
-- **Checkpointing** to Parquet after every batch. Durable SQLite response cache for crash-atomic resume (A4, #144).
-- **Hard budget caps**: pre-run cost estimation, live tracking, halts the pipeline at your USD limit.
-- **Multi-row batching**: pack N rows per API call. 200 calls instead of 10,000 at `batch_size=50`.
-- **Prefix caching**: system prompt cached across batches. 40–50% token savings.
-- **Adaptive concurrency**: Netflix Gradient2 algorithm. Shrinks on 429, grows on saturation.
-- **Retry-After** parsing across 5 header shapes (OpenAI / Anthropic / Groq / RFC 7231 / ms-delta).
-- **Distributed rate limiting** via Redis (atomic Lua token bucket, cluster-aware).
+### 2. Structured extraction
 
-### 4. OBSERVATION: see what happened
+Pull typed fields out of free text and validate them against a Pydantic schema. Malformed JSON auto-retries.
 
-On by default. Integrates with the observability stack you already run.
+```python
+from ondine import enrich
+from pydantic import BaseModel
 
-- **ProgressBar + Logging + CostTracking observers** active on every run.
-- **Langfuse** for LLM trace logging.
-- **OpenTelemetry** for distributed tracing.
-- **Prometheus** metrics export (request count, duration histogram, cost gauge).
-- **Decimal precision** for cost tracking (no floating-point surprises).
+class Invoice(BaseModel):
+    vendor: str
+    total: float
+    currency: str
+    due_date: str
 
-### 5. PROVIDERS: any LLM backend
+df = enrich(
+    "invoices.csv",
+    "Extract the vendor, total, currency, and due date from: {raw_text}",
+    output_columns=["vendor", "total", "currency", "due_date"],
+    model="gpt-4o-mini",
+    schema=Invoice,
+    budget=25.00,
+)
+```
 
-- **100+ providers** via LiteLLM. Swap with a string.
-- **Router** with latency-based failover and automatic provider selection.
-- **Local inference**: Ollama, MLX (Apple Silicon), vLLM, SGLang.
-- **Azure Managed Identity** with 3 auth patterns (MI, API key, pre-fetched token).
-- **Custom endpoints**: any OpenAI-compatible API.
+### 3. Agent evaluation
 
-## Beyond the quickstart
+Generate labels, rubric scores, or pass/fail verdicts for eval harnesses — the batch workload that agent frameworks don't ship.
 
 ```python
 from ondine import PipelineBuilder
-from ondine.knowledge import KnowledgeStore
-from ondine.context import RustContextStore
-from pydantic import BaseModel
 
-class ReviewAnalysis(BaseModel):
-    sentiment: str
-    score: int
-    topic: str
-
-kb = KnowledgeStore("knowledge.db")
-kb.ingest("docs/")   # PDFs, MD, HTML, images via OCR
-
-pipeline = (
+result = (
     PipelineBuilder.create()
-    .from_csv("reviews.csv",
-              input_columns=["review"],
-              output_columns=["sentiment", "score", "topic"])
-    .with_knowledge_base(kb, top_k=5, rerank=True, query_transform="hyde")
-    .with_prompt("Context:\n{_kb_context}\n\nAnalyze: {review}")
-    .with_llm(provider="openai", model="gpt-5.4-mini")
-    .with_structured_output(ReviewAnalysis)
-    .with_context_store(RustContextStore("evidence.db"))
-    .with_grounding(threshold=0.3)
-    .with_batch_size(50)
-    .with_max_budget(25.00)
+    .from_csv("agent_traces.csv",
+              input_columns=["trace", "criteria"],
+              output_columns=["score", "reasoning"])
+    .with_prompt("Score this agent trace against the rubric (1-10). "
+                 "Return the score and a one-line justification.\n\n"
+                 "Trace:\n{trace}\n\nRubric:\n{criteria}")
+    .with_llm(provider="openai", model="gpt-4o-mini")
+    .with_max_budget(10.00)
     .with_checkpoint_interval(100)
-    .with_disk_cache(".cache")
-    .with_router(strategy="latency")
-    .with_observer("langfuse")
     .build()
+    .execute()
 )
-
-result = pipeline.execute()
 ```
 
-Every chained method maps to one of the five dimensions. See [docs.ondine.dev](https://docs.ondine.dev) for the full reference.
+### 4. Synthetic data
 
-## What "a prompt is a column" unlocks
+Generate test fixtures, paraphrases, or contrastive examples at scale, then checkpoint so a crash mid-run doesn't lose the work.
 
-Same primitive. The use case lives in the prompt.
+```python
+from ondine import enrich
 
-| Transform | Prompt pattern |
-|-----------|----------------|
-| Classification | `"Classify {text} into one of {labels}"` |
-| Extraction | `"Extract name, date, amount from: {document}"` |
-| Scoring | `"Score {item} against {criteria} on 1–10"` |
-| Comparison | `"Is {a} equivalent to {b}? Return yes/no + reason."` |
-| Translation | `"Translate {text} from {src_lang} to {tgt_lang}"` |
-| Summarization | `"Summarize {document} in 3 bullets"` |
+df = enrich(
+    "seed_prompts.csv",
+    "Write a paraphrase of this prompt in a different tone: {prompt}",
+    output_columns=["paraphrase"],
+    model="gpt-4o-mini",
+    batch_size=50,
+    budget=5.00,
+)
+```
 
 One abstraction. Any transform.
 
-## Compared to alternatives
+## What you get for free
 
-| Tool | Primitive | Why pick Ondine |
-|------|-----------|-----------------|
-| **Instructor** | `f(prompt) → Pydantic` (one call) | Ondine applies that pattern to N rows, with the 5 dimensions |
-| **Pandas-AI** | `df.chat("question")` | Different primitive (query vs. compute) |
-| **LangChain batch** | `chain.batch([...])` | No budget cap, no grounding, no observability defaults |
-| **OpenAI/Anthropic Batch API** | Provider-specific batch | No multi-provider, no grounding, no crash-safety, 24-hour turnaround |
-| **Airflow/Prefect/Dagster** | Workflow orchestrators | Heavy setup, no LLM-specific features. Ondine ships integrations for them. |
-| **Ondine** | `Prompt(columns) → new_columns` | A primitive, not a wrapper |
+The plumbing that `df.apply()` and a hand-rolled loop don't give you — on by default, no config required.
+
+- **Hard budget caps** — pre-run cost estimate, live tracking, halts at your USD limit.
+- **Checkpointing** to Parquet + a durable SQLite response cache, so a crash resumes from the last batch instead of restarting.
+- **Adaptive concurrency** (Netflix Gradient2): shrinks on 429, grows on saturation, with `Retry-After` parsing across provider header shapes.
+- **Multi-row batching**: pack N rows per call. 200 calls instead of 10,000 at `batch_size=50`, with prefix caching for the shared system prompt.
+- **Structured output**: Pydantic schema enforcement with auto-retry on malformed JSON.
+- **Cost tracking** in `Decimal` precision — no floating-point surprises on the invoice.
+- **Any backend** — 100+ providers via LiteLLM, plus local inference (Ollama, MLX, vLLM, SGLang). Swap with a string.
+
+Advanced surfaces — Knowledge Base / RAG, OCR, grounding verification (Rust + SQLite + FTS5), the latency Router, distributed Redis rate limiting, Azure Managed Identity, and observability sinks (Langfuse, OpenTelemetry, Prometheus) — are documented at [docs.ondine.dev](https://docs.ondine.dev).
 
 ## Benchmark: Ondine vs naive loop vs agent-per-row
 
@@ -215,6 +224,8 @@ raw numbers, and reproducibility commands in **[benchmarks/RESULTS.md](benchmark
 
 ## Local inference
 
+No API keys. No telemetry. Fully offline.
+
 ```python
 from ondine import QuickPipeline
 
@@ -235,14 +246,23 @@ pipeline = QuickPipeline.create(
 )
 ```
 
-No API keys. No telemetry. Fully offline.
+## Compared to alternatives
+
+| Tool | What it does | Why pick Ondine |
+|------|-----------|-----------------|
+| **Instructor** | `f(prompt) → Pydantic` (one call) | Ondine applies that pattern to N rows, with budget caps, checkpoints, and adaptive concurrency |
+| **Pandas-AI** | `df.chat("question")` | Different job (query vs. compute) |
+| **LangChain batch** | `chain.batch([...])` | No budget cap, no grounding, no crash-safe resume, no observability defaults |
+| **OpenAI/Anthropic Batch API** | Provider-specific batch | No multi-provider, no grounding, 24-hour turnaround |
+| **Airflow/Prefect/Dagster** | Workflow orchestrators | Heavy setup, no LLM-specific features. Ondine ships integrations for them. |
+| **Agent frameworks** | Decide-the-next-action loop | Different layer. Ondine is the batch substrate agents push bulk work onto. |
 
 ## Documentation
 
-- **[ondine.dev](https://ondine.dev)**: landing page + examples
-- **[docs.ondine.dev](https://docs.ondine.dev)**: full reference, Context Store internals, Builder API, Airflow/Prefect integrations
-- **[examples/](examples/)**: 27 runnable scripts covering every major use case
-- **[CHANGELOG.md](CHANGELOG.md)**: release notes
+- **[ondine.dev](https://ondine.dev)** — landing page + examples
+- **[docs.ondine.dev](https://docs.ondine.dev)** — full reference: `enrich()` / Builder API, Context Store internals, grounding, Airflow/Prefect integrations, observability
+- **[examples/](examples/)** — runnable scripts covering every major use case
+- **[CHANGELOG.md](CHANGELOG.md)** — release notes
 
 ## Contributing
 
@@ -254,11 +274,13 @@ MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- [LiteLLM](https://github.com/BerriAI/litellm): provider routing layer
-- [Instructor](https://python.useinstructor.com/): the single-call pattern Ondine applies at DataFrame scale
-- The Pydantic team: validation backbone
+- [LiteLLM](https://github.com/BerriAI/litellm) — provider routing layer
+- [Instructor](https://python.useinstructor.com/) — the single-call pattern Ondine applies at DataFrame scale
+- The Pydantic team — validation backbone
 
-## Support
+## Who's behind this
+
+Ondine is built and maintained by [ptimizeroracle](https://github.com/ptimizeroracle). It's the batch layer of an agentic stack — designed so the LLM work that doesn't need to branch can run as a column function instead of a script.
 
 - **Issues:** https://github.com/ptimizeroracle/ondine/issues
 - **Discussions:** https://github.com/ptimizeroracle/ondine/discussions
