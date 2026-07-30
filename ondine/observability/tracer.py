@@ -20,6 +20,7 @@ try:
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
         ConsoleSpanExporter,
+        SpanExporter,
     )
 
     _OTEL_AVAILABLE = True
@@ -29,6 +30,7 @@ except ImportError as exc:
     TracerProvider = Any  # type: ignore[assignment,misc]
     BatchSpanProcessor = None  # type: ignore[assignment,misc]
     ConsoleSpanExporter = None  # type: ignore[assignment,misc]
+    SpanExporter = None  # type: ignore[assignment,misc]
     _OTEL_AVAILABLE = False
     _OTEL_IMPORT_ERROR = exc
 
@@ -111,6 +113,7 @@ def enable_tracing(
     provider = TracerProvider(resource=resource)
 
     # Configure exporter
+    span_exporter: SpanExporter
     if exporter == "console":
         span_exporter = ConsoleSpanExporter()
     elif exporter == "otlp":
