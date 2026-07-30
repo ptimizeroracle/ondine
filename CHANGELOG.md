@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+* **api:** add `ondine.enrich()` one-call front door — DataFrame in, typed columns out, input type preserved ([#175](https://github.com/ptimizeroracle/ondine/issues/175)) ([568e136](https://github.com/ptimizeroracle/ondine/commit/568e136a16eb5af11f80847e0e6768a3f80f9c1a))
 * **benchmarks:** 3-arm repositioning benchmark + RESULTS.md ([#176](https://github.com/ptimizeroracle/ondine/issues/176)) ([465286d](https://github.com/ptimizeroracle/ondine/commit/465286d80ba8a1c25ef74d55fdd22728ebadf3a5))
 * **docs:** add Colab quickstart notebook + Open in Colab badge ([#174](https://github.com/ptimizeroracle/ondine/issues/174)) ([a9b8665](https://github.com/ptimizeroracle/ondine/commit/a9b86651115918a7d085070fcbcd37b5e6e12646))
 * **integrations:** Airflow + Prefect Docker demo ([#164](https://github.com/ptimizeroracle/ondine/issues/164)) ([c3b68e3](https://github.com/ptimizeroracle/ondine/commit/c3b68e3a4f3aaf8e76da8d60cd131f2d9cca4cfa))
 * **intent:** add ondine.plan() intent layer ([#181](https://github.com/ptimizeroracle/ondine/issues/181)) ([ddbd5f5](https://github.com/ptimizeroracle/ondine/commit/ddbd5f58c9b609566a8af592bffecf7565074d73))
+* **orchestration:** ProviderBatchBackend + LiveBackend on a unified submit/poll/collect protocol, persistent RunRegistry, and the `ondine-mcp` FastMCP server (4 tools) ([#180](https://github.com/ptimizeroracle/ondine/issues/180)) ([e7e797f](https://github.com/ptimizeroracle/ondine/commit/e7e797f01830c04a671eb01d7192d6032c11a9ed))
 
 
 ### Bug Fixes
