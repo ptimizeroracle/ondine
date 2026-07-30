@@ -1,14 +1,14 @@
 [project]
 name = "ondine"
 version = "1.10.1"
-description = "Ondine - The LLM Dataset Engine. SDK for processing tabular datasets using LLMs with reliability, observability, and cost control"
+description = "Batch-process your DataFrames with LLMs, without the boilerplate."
 requires-python = ">=3.10"
 authors = [
     {name = "Binblok", email = "git@binblok.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
-keywords = ["llm", "dataset", "batch-processing", "data-engineering", "ai", "machine-learning", "data-transformation"]
+keywords = ["agents", "agent-evaluation", "synthetic-data", "data-enrichment", "batch-inference", "structured-output", "mcp"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -55,6 +55,7 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.21",
     "mypy>=2.2.0",
+    "types-PyYAML>=6.0.12",  # stubs for yaml; silences import-untyped in mcp/ + intent/
     "pre-commit>=4.6.0",
     "bandit>=1.9.4",
     "pip-audit>=2.10.1",
