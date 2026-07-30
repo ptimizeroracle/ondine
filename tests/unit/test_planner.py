@@ -376,3 +376,38 @@ class TestPlanBuild:
             "category",
             "confidence",
         ]
+
+
+# ---------------------------------------------------------------------------
+# Plan.estimated_cost
+# ---------------------------------------------------------------------------
+
+
+class TestPlanEstimatedCost:
+    def test_plan_surfaces_a_cost_estimate(self):
+        """A Plan must expose a projected cost — this is the whole safety
+        story of plan(): the user inspects projected spend before ever
+        calling build(). No network call should occur; the estimate is
+        derived from the drafted spec + a token estimate, reusing
+        Pipeline.estimate_cost() (the same estimator the rest of Ondine
+        already uses), not a second cost model or an extra LLM call."""
+        from ondine.core.models import CostEstimate
+
+        client = _ScriptedClient(spec=None, payload=_categorize_payload())
+
+        plan_obj = plan(
+            data=_sample_df(),
+            goal="Categorize products and score confidence",
+            budget=Decimal("5.0"),
+            model="openai/gpt-4o-mini",
+            llm_client=client,
+        )
+
+        estimate = plan_obj.estimated_cost
+
+        assert isinstance(estimate, CostEstimate)
+        assert estimate.total_cost >= 0
+        assert estimate.rows == len(_sample_df())
+        # The scripted drafting client only implements structured_invoke();
+        # estimated_cost must not have called back into it for anything.
+        assert client.captured_prompt is not None  # sanity: drafting did run

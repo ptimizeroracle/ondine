@@ -26,7 +26,7 @@ feeds to :meth:`Plan.build` (which routes through the existing
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
     from ondine.adapters.llm_client import LLMClient
     from ondine.api.pipeline import Pipeline
+    from ondine.core.models import CostEstimate
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +113,9 @@ class Plan:
     :class:`PipelineSpecifications` plus the provenance (goal + rationale)
     so a reviewer can sanity-check *why* each choice was made. Call
     :meth:`preview_yaml` to inspect the configuration, edit it, or pass it
-    through :class:`~ondine.config.config_loader.ConfigLoader`; call
-    :meth:`build` once you are happy.
+    through :class:`~ondine.config.config_loader.ConfigLoader`; check
+    :attr:`estimated_cost` to see the projected spend before committing;
+    call :meth:`build` once you are happy.
 
     The planner never executes anything — building a real
     :class:`~ondine.api.pipeline.Pipeline` is a one-liner the caller owns.
@@ -122,6 +124,26 @@ class Plan:
     specifications: PipelineSpecifications
     goal: str
     rationale: str = ""
+    #: The dataframe planned against, kept so :attr:`estimated_cost` can
+    #: reuse the sample-based estimator without re-reading the source.
+    #: Not part of the public constructor contract — set by :func:`plan`.
+    _dataframe: pd.DataFrame | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def estimated_cost(self) -> CostEstimate:
+        """Projected spend for running this plan, computed up front.
+
+        This is the safety check `plan()` exists for: the user inspects
+        the projected cost before ever calling :meth:`build`. It reuses
+        :meth:`~ondine.api.pipeline.Pipeline.estimate_cost` — the same
+        sample-based token/pricing estimator the rest of Ondine already
+        uses — so there is no second cost model to maintain and no extra
+        LLM call is made (it only counts tokens and looks up pricing).
+        """
+        from ondine.api.pipeline import Pipeline
+
+        pipeline = Pipeline(self.specifications, dataframe=self._dataframe)
+        return pipeline.estimate_cost()
 
     def preview_yaml(self) -> str:
         """Return the drafted spec as YAML for approval-by-inspection.
@@ -370,8 +392,10 @@ def plan(
 
     Returns:
         A :class:`Plan` holding the drafted spec. Call
-        :meth:`Plan.preview_yaml` to inspect it, then :meth:`Plan.build`
-        to get a runnable :class:`~ondine.api.pipeline.Pipeline`.
+        :meth:`Plan.preview_yaml` to inspect it, check
+        :attr:`Plan.estimated_cost` for the projected spend, then
+        :meth:`Plan.build` to get a runnable
+        :class:`~ondine.api.pipeline.Pipeline`.
 
     Raises:
         ValueError: If ``goal`` is empty, ``budget`` is non-positive, the
@@ -428,4 +452,5 @@ def plan(
         specifications=specifications,
         goal=cleaned_goal,
         rationale=draft.rationale,
+        _dataframe=df,
     )
