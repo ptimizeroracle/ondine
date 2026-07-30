@@ -5,7 +5,7 @@
 
   **Batch-process your DataFrames with LLMs, without the boilerplate.**
 
-  Agents reason row-by-row. Ondine computes columns.
+  Agents reason row-by-row. Ondine computes columns — 100,000 rows for $0.48 (projected), crash-safe, on any of 100+ providers.
 
   [![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
   [![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
@@ -100,7 +100,7 @@ Rule of thumb: if you know the prompt ahead of time and the data is a table, tha
 
 ## Use cases
 
-Same primitive. The use case lives in the prompt.
+Same engine every time. The use case lives in the prompt.
 
 ### 1. Bulk enrichment
 
@@ -223,15 +223,14 @@ pipeline = QuickPipeline.create(
 
 ## Compared to alternatives
 
-| Tool | Primitive | Why pick Ondine |
+| Tool | What it does | Why pick Ondine |
 |------|-----------|-----------------|
 | **Instructor** | `f(prompt) → Pydantic` (one call) | Ondine applies that pattern to N rows, with budget caps, checkpoints, and adaptive concurrency |
-| **Pandas-AI** | `df.chat("question")` | Different primitive (query vs. compute) |
+| **Pandas-AI** | `df.chat("question")` | Different job (query vs. compute) |
 | **LangChain batch** | `chain.batch([...])` | No budget cap, no grounding, no crash-safe resume, no observability defaults |
 | **OpenAI/Anthropic Batch API** | Provider-specific batch | No multi-provider, no grounding, 24-hour turnaround |
 | **Airflow/Prefect/Dagster** | Workflow orchestrators | Heavy setup, no LLM-specific features. Ondine ships integrations for them. |
 | **Agent frameworks** | Decide-the-next-action loop | Different layer. Ondine is the batch substrate agents push bulk work onto. |
-| **Ondine** | `Prompt(columns) → new_columns` | A primitive, not a wrapper |
 
 ## Documentation
 

@@ -16,6 +16,7 @@ from pathlib import Path  # noqa: TC003
 from typing import Any  # noqa: TC003
 
 import pandas as pd  # noqa: TC002
+import polars as pl  # noqa: TC002
 
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.api.quick import QuickPipeline
@@ -35,7 +36,7 @@ _ALLOWED_OPTIONS = frozenset(
 
 
 def enrich(
-    data: str | Path | pd.DataFrame,
+    data: str | Path | pd.DataFrame | pl.DataFrame,
     prompt: str,
     output_columns: list[str] | str | None = None,
     *,
@@ -43,7 +44,7 @@ def enrich(
     budget: float | Decimal | str | None = None,
     schema: Any | None = None,
     **options: Any,
-) -> pd.DataFrame:
+) -> pd.DataFrame | pl.DataFrame:
     """Run an LLM over a table and return the enriched DataFrame.
 
     Input columns are read from ``{placeholders}`` in *prompt*; the LLM's
@@ -51,7 +52,9 @@ def enrich(
     cost tracking, retries, and adaptive concurrency are on by default.
 
     Args:
-        data: CSV/Excel/Parquet/JSON path or an in-memory DataFrame.
+        data: CSV/Excel/Parquet/JSON path, or an in-memory pandas or Polars
+            DataFrame. The return type mirrors the input: a DataFrame in
+            gets the same DataFrame flavor back; a path gets pandas back.
         prompt: Prompt template with ``{column}`` placeholders for each
             input column.
         output_columns: Column(s) to populate. Defaults to ``["output"]``.
@@ -64,7 +67,8 @@ def enrich(
             ``temperature``, ``max_tokens``, ``batch_size``, ``concurrency``.
 
     Returns:
-        The enriched pandas DataFrame (input columns + output columns).
+        The enriched DataFrame (input columns + output columns), as pandas
+        or Polars depending on what *data* was.
 
     Raises:
         TypeError: If an option key is not in the allowlist.
@@ -87,12 +91,19 @@ def enrich(
             f"Allowed: {sorted(_ALLOWED_OPTIONS)}."
         )
 
+    # QuickPipeline only understands pandas DataFrames and file paths, so a
+    # Polars input is converted up front; we convert the result back to
+    # Polars at the end to preserve the caller's input type (path in →
+    # pandas out, per the enrich() contract).
+    is_polars_input = isinstance(data, pl.DataFrame)
+    pipeline_data = data.to_pandas() if isinstance(data, pl.DataFrame) else data
+
     # QuickPipeline owns all the smart defaults (provider auto-detect,
     # batch/concurrency sizing, parser selection, retries). We build it
     # first, then layer structured output on top by reconstructing the
     # builder from the resulting specifications — single code path, no fork.
     pipeline = QuickPipeline.create(
-        data=data,
+        data=pipeline_data,
         prompt=prompt,
         model=model,
         output_columns=output_columns,
@@ -108,4 +119,4 @@ def enrich(
         )
 
     result = pipeline.execute()
-    return result.to_pandas()
+    return result.to_polars() if is_polars_input else result.to_pandas()
