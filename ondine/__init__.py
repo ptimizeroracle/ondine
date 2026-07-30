@@ -61,6 +61,9 @@ from ondine.core.specifications import (
     PromptSpec,
 )
 
+# Layer 5: Intent layer (LLM-drafted pipeline planning)
+from ondine.orchestration.intent import Plan, plan
+
 __all__ = [
     "__version__",
     "Pipeline",
@@ -85,6 +88,9 @@ __all__ = [
     "RustContextStore",
     "ZepContextStore",
     "InMemoryContextStore",
+    # Intent layer (v2 front door)
+    "Plan",
+    "plan",
 ]
 
 
