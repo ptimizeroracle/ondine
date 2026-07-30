@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from ondine.core.models import LLMResponse, PromptBatch, ResponseBatch
     from ondine.core.specifications import LLMSpec, PipelineSpecifications
     from ondine.orchestration.execution_context import ExecutionContext
+    from ondine.utils.rate_limiter import RateLimiterProtocol
 
 logger = get_logger(__name__)
 
@@ -76,7 +77,7 @@ _live_results: dict[str, list[LLMResponse]] = {}
 _live_job_counter = itertools.count(1)
 
 
-def _build_rate_limiter(processing_spec: Any) -> RateLimiter | None:
+def _build_rate_limiter(processing_spec: Any) -> RateLimiterProtocol | None:
     """Assemble the rate limiter for a pipeline run.
 
     Moved unchanged from ``ondine.api.pipeline`` so the live backend
@@ -303,25 +304,34 @@ def _flatten_to_llm_responses(batches: list[ResponseBatch]) -> list[LLMResponse]
         for idx, response in enumerate(batch.responses):
             if isinstance(response, LLMResponse):
                 out.append(response)
-            else:
-                meta = (
-                    batch.metadata[idx].row_index if idx < len(batch.metadata) else idx
+                continue
+            # ``batch.responses`` is declared as ``list[str] | list[LLMResponse]``
+            # (a union of list *types*, not a list of a union type), so mypy
+            # cannot distribute the element type across iteration and widens
+            # `response` here to `object`. An explicit isinstance(str) check
+            # (rather than a cast) both narrows correctly for mypy and guards
+            # against a genuinely unexpected element type at runtime.
+            if not isinstance(response, str):
+                raise TypeError(
+                    f"Unexpected response element type {type(response).__name__!r} "
+                    f"in ResponseBatch.responses; expected str or LLMResponse."
                 )
-                out.append(
-                    LLMResponse(
-                        text=response,
-                        tokens_in=0,
-                        tokens_out=0,
-                        model="",
-                        cost=Decimal("0"),
-                        latency_ms=(
-                            batch.latencies_ms[idx]
-                            if idx < len(batch.latencies_ms)
-                            else 0.0
-                        ),
-                        metadata={"row_index": meta},
-                    )
+            meta = batch.metadata[idx].row_index if idx < len(batch.metadata) else idx
+            out.append(
+                LLMResponse(
+                    text=response,
+                    tokens_in=0,
+                    tokens_out=0,
+                    model="",
+                    cost=Decimal("0"),
+                    latency_ms=(
+                        batch.latencies_ms[idx]
+                        if idx < len(batch.latencies_ms)
+                        else 0.0
+                    ),
+                    metadata={"row_index": meta},
                 )
+            )
     return out
 
 

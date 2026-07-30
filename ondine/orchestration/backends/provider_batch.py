@@ -198,7 +198,7 @@ class ProviderBatchBackend:
             completion_window="24h",
             metadata={"source": "ondine"},
         )
-        return batch.id
+        return str(batch.id)
 
     def _openai_poll(self, client: Any, provider_job_id: str) -> BatchProgress:
         batch = client.batches.retrieve(provider_job_id)
@@ -238,7 +238,7 @@ class ProviderBatchBackend:
         """Compile Anthropic-format requests, create message batch."""
         requests = self._build_anthropic_requests(prompts)
         batch = client.messages.batches.create(requests=requests)
-        return batch.id
+        return str(batch.id)
 
     def _anthropic_poll(self, client: Any, provider_job_id: str) -> BatchProgress:
         batch = client.messages.batches.retrieve(provider_job_id)
@@ -300,7 +300,7 @@ class ProviderBatchBackend:
             for prompt_text, meta in zip(batch.prompts, batch.metadata, strict=False):
                 custom_id = f"row-{meta.row_index}"
                 self._custom_ids.append(custom_id)
-                record = {
+                record: dict[str, Any] = {
                     "custom_id": custom_id,
                     "method": "POST",
                     "url": "/v1/chat/completions",
