@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0](https://github.com/ptimizeroracle/ondine/compare/v1.10.1...v1.11.0) (2026-07-30)
+
+
+### Features
+
+* **benchmarks:** 3-arm repositioning benchmark + RESULTS.md ([#176](https://github.com/ptimizeroracle/ondine/issues/176)) ([465286d](https://github.com/ptimizeroracle/ondine/commit/465286d80ba8a1c25ef74d55fdd22728ebadf3a5))
+* **docs:** add Colab quickstart notebook + Open in Colab badge ([#174](https://github.com/ptimizeroracle/ondine/issues/174)) ([a9b8665](https://github.com/ptimizeroracle/ondine/commit/a9b86651115918a7d085070fcbcd37b5e6e12646))
+* **integrations:** Airflow + Prefect Docker demo ([#164](https://github.com/ptimizeroracle/ondine/issues/164)) ([c3b68e3](https://github.com/ptimizeroracle/ondine/commit/c3b68e3a4f3aaf8e76da8d60cd131f2d9cca4cfa))
+* **intent:** add ondine.plan() intent layer ([#181](https://github.com/ptimizeroracle/ondine/issues/181)) ([ddbd5f5](https://github.com/ptimizeroracle/ondine/commit/ddbd5f58c9b609566a8af592bffecf7565074d73))
+
+
+### Bug Fixes
+
+* **config:** expand ${ENV_VAR} in YAML/JSON config strings ([#166](https://github.com/ptimizeroracle/ondine/issues/166)) ([#167](https://github.com/ptimizeroracle/ondine/issues/167)) ([cdc14f1](https://github.com/ptimizeroracle/ondine/commit/cdc14f1df30a99bfd9e1d886f91414ecdc71b948))
+
+
+### Dependencies
+
+* upgrade all dependencies (Jul 2026) + OTLP migration ([#182](https://github.com/ptimizeroracle/ondine/issues/182)) ([6d92c60](https://github.com/ptimizeroracle/ondine/commit/6d92c60c48f23e4d5a2ef61a8d87f5b0140a0d18))
+
+
+### Documentation
+
+* **readme:** R2 rewrite — pain-first, agentic bridge, use-case wedges ([#175](https://github.com/ptimizeroracle/ondine/issues/175)) ([568e136](https://github.com/ptimizeroracle/ondine/commit/568e136a16eb5af11f80847e0e6768a3f80f9c1a))
+
 ## [1.9.1](https://github.com/ptimizeroracle/ondine/compare/v1.9.0...v1.9.1) (2026-04-22)
 
 
