@@ -9,8 +9,11 @@
 
 ## Pipeline Guides
 
+* [enrich() -- One-Call Enrichment](guides/enrich.md)
+* [ondine.plan() -- Intent Layer](guides/intent-planning.md)
 * [Batch Processing](guides/batch-processing.md)
 * [Async & Streaming](guides/execution-modes.md)
+* [Provider Batch API Mode](guides/provider-batch.md)
 * [Multiple Output Columns](guides/multi-column.md)
 * [Structured Output (Pydantic)](guides/structured-output.md)
 * [Pipeline Composition](guides/pipeline-composition.md)
@@ -40,6 +43,7 @@
 ## Reference
 
 * [CLI](guides/cli.md)
+* [MCP Server](guides/mcp-server.md)
 * [Observability & Profiling](guides/observability_profiling.md)
 * [Azure Authentication](guides/azure-managed-identity.md)
 * [Examples](examples.md)
