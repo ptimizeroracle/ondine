@@ -30,6 +30,7 @@ except PackageNotFoundError:  # editable install without metadata
 
 # Layer 4: High-Level API
 from ondine.api.dataset_processor import DatasetProcessor
+from ondine.api.enrich import enrich
 from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
 from ondine.api.quick import QuickPipeline
@@ -60,11 +61,15 @@ from ondine.core.specifications import (
     PromptSpec,
 )
 
+# Layer 5: Intent layer (LLM-drafted pipeline planning)
+from ondine.orchestration.intent import Plan, plan
+
 __all__ = [
     "__version__",
     "Pipeline",
     "PipelineBuilder",
     "QuickPipeline",
+    "enrich",
     "DatasetProcessor",
     "DatasetSpec",
     "PromptSpec",
@@ -83,6 +88,9 @@ __all__ = [
     "RustContextStore",
     "ZepContextStore",
     "InMemoryContextStore",
+    # Intent layer (v2 front door)
+    "Plan",
+    "plan",
 ]
 
 

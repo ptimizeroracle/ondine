@@ -1,13 +1,23 @@
 """
 Langfuse observer for LLM-specific observability.
 
-Uses Langfuse SDK directly (compatible with v2 and v3).
-No dependency on LiteLLM's internal callback mechanism.
+Uses Langfuse SDK directly. No dependency on LiteLLM's internal callback
+mechanism.
+
+Langfuse v3 replaced the v2 `client.trace(...)` / `trace.generation(...)` /
+`trace.span(...)` API with an OpenTelemetry-based model: observations are
+created via `client.start_observation(as_type=...)` (or the equivalent method
+on a parent observation), updated with `.update(...)`, and closed with
+`.end()`. A "trace" is no longer a distinct object — it is simply the root
+observation, optionally pinned to a caller-chosen trace id via
+`trace_context={"trace_id": ...}` (which must be a 32-char lowercase hex
+string, hence the `uuid.UUID(...).hex` conversions below).
 """
 
 import logging
 import os
-from typing import Any
+import uuid
+from typing import TYPE_CHECKING, Any, cast
 
 from ondine.observability.base import PipelineObserver
 from ondine.observability.events import (
@@ -19,6 +29,10 @@ from ondine.observability.events import (
 )
 from ondine.observability.registry import observer
 
+if TYPE_CHECKING:
+    from langfuse import Langfuse, LangfuseSpan
+    from langfuse.types import TraceContext
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +42,7 @@ class LangfuseObserver(PipelineObserver):
     Observer that uses Langfuse SDK directly for LLM observability.
 
     This implementation:
-    - Works with Langfuse v2.x and v3.x
+    - Targets the Langfuse v3+ OTEL-based observation API
     - Does NOT depend on LiteLLM's internal callbacks
     - Receives events from Ondine's ObserverDispatcher
 
@@ -58,6 +72,13 @@ class LangfuseObserver(PipelineObserver):
         """
         super().__init__(config)
 
+        # Quoted (not unwrapped by ruff's UP037): `Langfuse` is only bound as a
+        # local name a few lines below (inside the try block's import), so an
+        # unquoted annotation here trips a "referenced before assignment"
+        # false positive even though annotations aren't evaluated at runtime.
+        self._client: "Langfuse | None" = None  # noqa: UP037
+        self._current_trace: "LangfuseSpan | None" = None  # noqa: UP037
+
         # Initialize Langfuse client directly
         try:
             from langfuse import Langfuse
@@ -70,31 +91,46 @@ class LangfuseObserver(PipelineObserver):
                 host=self.config.get("host")
                 or os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
             )
-            self._current_trace = None
             logger.info("Langfuse observer initialized (direct SDK)")
 
         except ImportError:
             logger.warning(
                 "Langfuse SDK not installed. Install with: pip install langfuse"
             )
-            self._client = None
-            self._current_trace = None
         except Exception as e:
             logger.error(f"Failed to initialize Langfuse client: {e}")
-            self._client = None
-            self._current_trace = None
+
+    @staticmethod
+    def _to_trace_id(value: str) -> str:
+        """
+        Normalize an Ondine trace/run id (a `str(uuid.uuid4())`, with dashes)
+        into the 32-char lowercase hex string Langfuse requires for
+        `trace_context={"trace_id": ...}`. Falls back to the raw value if it
+        isn't a parseable UUID, letting Langfuse's own validation warn.
+        """
+        try:
+            return uuid.UUID(value).hex
+        except ValueError:
+            return value
 
     def on_pipeline_start(self, event: PipelineStartEvent) -> None:
         """
-        Create a new trace for the pipeline run.
+        Create a new root span (the pipeline "trace") for the pipeline run.
         """
         if not self._client:
             return
 
         try:
-            self._current_trace = self._client.trace(
-                id=str(event.run_id),
+            # mypy can't match an inline dict literal against the TraceContext
+            # TypedDict through start_observation's @overload set (spurious
+            # "no overload matches" / NotRequired-key false positive), so we
+            # cast the literal explicitly rather than losing type-checking on
+            # the rest of the call via `Any`.
+            trace_context = cast("TraceContext", {"trace_id": event.run_id.hex})
+            self._current_trace = self._client.start_observation(
                 name="ondine-pipeline",
+                as_type="span",
+                trace_context=trace_context,
                 metadata={
                     "pipeline_id": str(event.pipeline_id),
                     "total_rows": event.total_rows,
@@ -107,68 +143,63 @@ class LangfuseObserver(PipelineObserver):
 
     def on_llm_call(self, event: LLMCallEvent) -> None:
         """
-        Log LLM call as a generation span in Langfuse.
+        Log LLM call as a generation observation in Langfuse.
         """
         if not self._client:
             return
 
         try:
-            # Use current trace if available, otherwise create standalone generation
+            usage_details = {
+                "input": event.input_tokens,
+                "output": event.output_tokens,
+                "total": event.total_tokens,
+            }
+            metadata = {
+                "provider": event.provider,
+                "temperature": event.temperature,
+                "max_tokens": event.max_tokens,
+                "latency_ms": event.latency_ms,
+                "cost": float(event.cost),
+                "row_index": event.row_index,
+                "stage_name": event.stage_name,
+                **event.metadata,
+            }
+
+            # Nest under the current pipeline trace if available, otherwise
+            # start a standalone root generation.
             if self._current_trace:
-                self._current_trace.generation(
+                generation = self._current_trace.start_observation(
                     name=f"llm-{event.model}",
+                    as_type="generation",
                     model=event.model,
                     input=event.prompt,
                     output=event.completion,
-                    usage={
-                        "input": event.input_tokens,
-                        "output": event.output_tokens,
-                        "total": event.total_tokens,
-                    },
-                    metadata={
-                        "provider": event.provider,
-                        "temperature": event.temperature,
-                        "max_tokens": event.max_tokens,
-                        "latency_ms": event.latency_ms,
-                        "cost": float(event.cost),
-                        "row_index": event.row_index,
-                        "stage_name": event.stage_name,
-                        **event.metadata,
-                    },
+                    usage_details=usage_details,
+                    metadata=metadata,
                 )
             else:
-                # Standalone generation (no pipeline trace)
-                trace = self._client.trace(
-                    name=f"llm-call-{event.trace_id[:8]}",
+                # See on_pipeline_start for why this needs an explicit cast.
+                trace_context = cast(
+                    "TraceContext", {"trace_id": self._to_trace_id(event.trace_id)}
                 )
-                trace.generation(
+                generation = self._client.start_observation(
                     name=f"llm-{event.model}",
+                    as_type="generation",
+                    trace_context=trace_context,
                     model=event.model,
                     input=event.prompt,
                     output=event.completion,
-                    usage={
-                        "input": event.input_tokens,
-                        "output": event.output_tokens,
-                        "total": event.total_tokens,
-                    },
-                    metadata={
-                        "provider": event.provider,
-                        "temperature": event.temperature,
-                        "max_tokens": event.max_tokens,
-                        "latency_ms": event.latency_ms,
-                        "cost": float(event.cost),
-                        "row_index": event.row_index,
-                        "stage_name": event.stage_name,
-                        **event.metadata,
-                    },
+                    usage_details=usage_details,
+                    metadata=metadata,
                 )
+            generation.end()
 
         except Exception as e:
             logger.debug(f"Failed to log LLM call to Langfuse: {e}")
 
     def on_pipeline_end(self, event: PipelineEndEvent) -> None:
         """
-        Update trace with final pipeline metrics.
+        Update the root span with final pipeline metrics and close it.
         """
         if not self._client or not self._current_trace:
             return
@@ -185,6 +216,7 @@ class LangfuseObserver(PipelineObserver):
                     "duration_ms": event.total_duration_ms,
                 },
             )
+            self._current_trace.end()
             logger.debug("Updated Langfuse trace with final metrics")
         except Exception as e:
             logger.debug(f"Failed to update Langfuse trace: {e}")
@@ -197,39 +229,32 @@ class LangfuseObserver(PipelineObserver):
             return
 
         try:
-            # Create a span to track the cooldown event
+            metadata = {
+                "provider": event.provider,
+                "deployment_id": event.deployment_id,
+                "reason": event.reason,
+                "cooldown_duration": event.cooldown_duration,
+                "fail_count": event.fail_count,
+                "event_type": "circuit_breaker_triggered",
+                **event.metadata,
+            }
+            # Nest under the current pipeline trace if available, otherwise
+            # create a standalone root span.
             if self._current_trace:
-                self._current_trace.span(
+                span = self._current_trace.start_observation(
                     name="provider-cooldown",
-                    metadata={
-                        "provider": event.provider,
-                        "deployment_id": event.deployment_id,
-                        "reason": event.reason,
-                        "cooldown_duration": event.cooldown_duration,
-                        "fail_count": event.fail_count,
-                        "event_type": "circuit_breaker_triggered",
-                        **event.metadata,
-                    },
+                    as_type="span",
+                    metadata=metadata,
                     level="WARNING",
                 )
             else:
-                # Standalone event
-                trace = self._client.trace(
-                    name=f"provider-cooldown-{event.deployment_id[:8]}",
-                )
-                trace.span(
+                span = self._client.start_observation(
                     name="provider-cooldown",
-                    metadata={
-                        "provider": event.provider,
-                        "deployment_id": event.deployment_id,
-                        "reason": event.reason,
-                        "cooldown_duration": event.cooldown_duration,
-                        "fail_count": event.fail_count,
-                        "event_type": "circuit_breaker_triggered",
-                        **event.metadata,
-                    },
+                    as_type="span",
+                    metadata=metadata,
                     level="WARNING",
                 )
+            span.end()
         except Exception as e:
             logger.debug(f"Failed to log provider cooldown to Langfuse: {e}")
 
@@ -237,22 +262,23 @@ class LangfuseObserver(PipelineObserver):
         """
         Log provider recovery as a span in Langfuse.
         """
-        if not self._client:
+        if not self._client or not self._current_trace:
             return
 
         try:
-            if self._current_trace:
-                self._current_trace.span(
-                    name="provider-recovered",
-                    metadata={
-                        "provider": event.provider,
-                        "deployment_id": event.deployment_id,
-                        "cooldown_duration": event.cooldown_duration,
-                        "event_type": "circuit_breaker_recovered",
-                        **event.metadata,
-                    },
-                    level="DEFAULT",
-                )
+            span = self._current_trace.start_observation(
+                name="provider-recovered",
+                as_type="span",
+                metadata={
+                    "provider": event.provider,
+                    "deployment_id": event.deployment_id,
+                    "cooldown_duration": event.cooldown_duration,
+                    "event_type": "circuit_breaker_recovered",
+                    **event.metadata,
+                },
+                level="DEFAULT",
+            )
+            span.end()
         except Exception as e:
             logger.debug(f"Failed to log provider recovery to Langfuse: {e}")
 

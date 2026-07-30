@@ -297,8 +297,13 @@ class UnifiedLiteLLMClient(LLMClient):
             completion_func = (
                 self.router.acompletion if self.router else litellm.acompletion
             )
+            # completion_func is always a coroutine function (router.acompletion or
+            # litellm.acompletion), so force the AsyncInstructor overload explicitly —
+            # instructor's own runtime detection would infer the same via
+            # inspect.iscoroutinefunction(), but the static overload resolution needs
+            # async_client=True to match the AsyncInstructor type used below.
             self.instructor_client = instructor.from_litellm(
-                completion_func, mode=instructor_mode
+                completion_func, mode=instructor_mode, async_client=True
             )
 
         logger.debug(f"Initialized LiteLLM client: {self.model}")

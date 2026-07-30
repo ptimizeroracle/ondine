@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-07-06T22:55:56",
+  "model": "deepseek/deepseek-chat",
+  "arms": [
+    {
+      "name": "Ondine (batched)",
+      "rows": 30,
+      "wall_time_s": 4.063653440010967,
+      "cost_usd": 0.0001444576,
+      "api_calls": 2,
+      "tokens_in": 1984,
+      "tokens_out": 402,
+      "accuracy": 1.0,
+      "notes": "batch_size=15, concurrency=8"
+    },
+    {
+      "name": "Naive loop",
+      "rows": 30,
+      "wall_time_s": 22.709345445997315,
+      "cost_usd": 0.00022231999999999992,
+      "api_calls": 30,
+      "tokens_in": 1528,
+      "tokens_out": 30,
+      "accuracy": 1.0,
+      "notes": "1 call/row, sequential, no retries, no checkpoint"
+    },
+    {
+      "name": "Agent-per-row (plan\u2192classify\u2192reflect)",
+      "rows": 30,
+      "wall_time_s": 77.25819936499465,
+      "cost_usd": 0.0007365399999999998,
+      "api_calls": 90,
+      "tokens_in": 4749,
+      "tokens_out": 256,
+      "accuracy": 0.9333333333333333,
+      "notes": "3 calls/row, sequential, no retries, no checkpoint"
+    }
+  ],
+  "crash": {
+    "name": "Ondine crash-safety",
+    "total_rows": 100000,
+    "rows_completed_before_crash": 56600,
+    "rows_recovered_after_resume": 100000,
+    "rows_lost": 0,
+    "wall_time_crash_s": 3.787180318002356,
+    "wall_time_resume_s": 3.395898604998365,
+    "notes": "crash at 60% (after 60,000 rows), batch_size=50, session=95cf966d-5f08-4394-8ed9-698a09e6fcd7"
+  },
+  "headline": {
+    "sample_rows": 30,
+    "total_dataset_rows": 100000,
+    "BENCH_ONDINE": {
+      "wall_time_100k_s": 13545.51,
+      "wall_time_100k_human": "3.8h",
+      "api_calls_100k": 6666,
+      "cost_100k_usd": 0.4815
+    },
+    "BENCH_NAIVE": {
+      "wall_time_100k_s": 75697.82,
+      "wall_time_100k_human": "21.0h",
+      "api_calls_100k": 100000,
+      "cost_100k_usd": 0.7411
+    },
+    "BENCH_AGENT": {
+      "wall_time_100k_s": 257527.33,
+      "wall_time_100k_human": "3.0d",
+      "api_calls_100k": 300000,
+      "cost_100k_usd": 2.4551
+    },
+    "BENCH_API_CALL_REDUCTION_VS_NAIVE": "15x fewer calls",
+    "BENCH_CRASH_ROWS_LOST_NAIVE": 60000,
+    "BENCH_CRASH_ROWS_LOST_AGENT": 60000,
+    "BENCH_CRASH_ROWS_RECOVERED_ONDINE": 100000
+  },
+  "git": {
+    "commit": "cdc14f1df30a99bfd9e1d886f91414ecdc71b948",
+    "branch": "rp/benchmark",
+    "dirty": "M .gitignore\n M README.md\n?? benchmarks/RESULTS.md\n?? benchmarks/generate_dataset.py\n?? benchmarks/repositioning.py\n?? benchmarks/results.json"
+  }
+}

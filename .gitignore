@@ -84,3 +84,7 @@ ondine/*.dSYM/
 
 # Agent working files
 .agent/
+
+# Benchmark scratch artifacts (regenerable: checkpoints, generated datasets)
+benchmarks/_crash_run/
+benchmarks/data/

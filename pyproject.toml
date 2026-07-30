@@ -1,14 +1,14 @@
 [project]
 name = "ondine"
 version = "1.10.1"
-description = "Ondine - The LLM Dataset Engine. SDK for processing tabular datasets using LLMs with reliability, observability, and cost control"
+description = "Batch-process your DataFrames with LLMs, without the boilerplate."
 requires-python = ">=3.10"
 authors = [
     {name = "Binblok", email = "git@binblok.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
-keywords = ["llm", "dataset", "batch-processing", "data-engineering", "ai", "machine-learning", "data-transformation"]
+keywords = ["agents", "agent-evaluation", "synthetic-data", "data-enrichment", "batch-inference", "structured-output", "mcp"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -23,23 +23,23 @@ classifiers = [
 
 dependencies = [
     # Core LLM integration (using LiteLLM native + Instructor)
-    "litellm>=1.83.13",
-    "instructor>=1.0.0",
+    "litellm>=1.91.1",
+    "instructor>=1.15.4",
     "diskcache>=5.6.0", # For LiteLLM Disk caching
-    "aiohttp>=3.13.4", # For high-performance connection pooling
+    "aiohttp>=3.14.1", # For high-performance connection pooling
     # Data processing
-    "pandas>=1.5.0",
-    "polars>=0.20.0",
-    "pydantic>=2.0.0",
+    "pandas>=2.3.3",
+    "polars>=1.42.1",
+    "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
-    "tqdm>=4.66.0",
-    "tenacity>=8.2.0",
-    "tiktoken>=0.5.0",
-    "structlog>=23.1.0",
+    "tqdm>=4.68.4",
+    "tenacity>=9.1.4",
+    "tiktoken>=0.13.0",
+    "structlog>=26.1.0",
     "jinja2>=3.1.0",
-    "click>=8.1.0",
-    "rich>=13.0.0",
-    "anthropic>=0.84.0",
+    "click>=8.4.2",
+    "rich>=13.7.0",  # instructor 1.15.4 caps rich<15.0.0
+    "anthropic>=0.116.0",
 ]
 
 [project.urls]
@@ -50,17 +50,17 @@ Issues = "https://github.com/ptimizeroracle/ondine/issues"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.3",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
-    "ruff>=0.8.0",
-    "mypy>=1.13.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.21",
+    "mypy>=2.2.0",
     "types-PyYAML>=6.0.12",  # stubs for yaml; silences import-untyped in mcp/ + intent/
-    "pre-commit>=4.0.0",
-    "bandit>=1.7.0",
-    "pip-audit>=2.7.0",
-    "pip-licenses>=4.3.0",
-    "ipython>=8.20.0",
+    "pre-commit>=4.6.0",
+    "bandit>=1.9.4",
+    "pip-audit>=2.10.1",
+    "pip-licenses>=5.5.5",
+    "ipython>=8.39.0",
     "jupyter>=1.0.0",
     "pydocstyle>=6.3.0",
     "interrogate>=1.7.0",
@@ -104,10 +104,10 @@ azure = [
 observability = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-jaeger>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
     "deprecated>=1.2.0",
     "langfuse>=2.0.0",
-    "prometheus-client>=0.20.0",
+    "prometheus-client>=0.25.0",
 ]
 all = [
     "redis>=5.0.0",
@@ -117,10 +117,10 @@ all = [
     "llama-index>=0.12.0",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-jaeger>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
     "deprecated>=1.2.0",
     "langfuse>=2.0.0",
-    "prometheus-client>=0.20.0",
+    "prometheus-client>=0.25.0",
     "mlx>=0.29.0",
     "mlx-lm>=0.28.0",
     "azure-identity>=1.15.0",
