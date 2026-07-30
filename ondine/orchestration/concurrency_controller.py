@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from ondine.utils.adaptive_limiter import AdaptiveLimiter
 
 if TYPE_CHECKING:
-    from ondine.utils.rate_limiter import RateLimiter
+    from ondine.utils.rate_limiter import RateLimiterProtocol
 
 
 class ConcurrencyController:
@@ -34,7 +34,7 @@ class ConcurrencyController:
     def __init__(
         self,
         max_concurrent: int,
-        rate_limiter: RateLimiter | None = None,
+        rate_limiter: RateLimiterProtocol | None = None,
         *,
         adaptive: bool = False,
         min_concurrent: int = 1,

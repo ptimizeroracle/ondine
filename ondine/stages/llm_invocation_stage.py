@@ -28,11 +28,11 @@ from ondine.stages.batch_processor import BatchProcessor
 from ondine.stages.pipeline_stage import PipelineStage
 from ondine.utils import (
     NetworkError,
-    RateLimiter,
     RateLimitError,
     RetryHandler,
 )
 from ondine.utils.budget_controller import BudgetExceededError
+from ondine.utils.rate_limiter import RateLimiterProtocol
 
 
 class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
@@ -56,7 +56,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         self,
         llm_client: LLMClient,
         concurrency: int = 5,
-        rate_limiter: RateLimiter | None = None,
+        rate_limiter: RateLimiterProtocol | None = None,
         retry_handler: RetryHandler | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.SKIP,
         max_retries: int = 3,

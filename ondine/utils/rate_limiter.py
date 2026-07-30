@@ -8,6 +8,34 @@ Supports both sync (threading.Lock) and async (asyncio.Lock) paths.
 import asyncio
 import threading
 import time
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class RateLimiterProtocol(Protocol):
+    """Structural interface shared by every rate limiter implementation.
+
+    :class:`RateLimiter` (in-process) and
+    :class:`~ondine.utils.redis_rate_limiter.RedisRateLimiter`
+    (Redis-backed) both satisfy this protocol without needing to
+    subclass anything — callers that only need to acquire/penalize
+    tokens (``LLMInvocationStage``, ``ConcurrencyController``) should
+    type against this instead of the concrete in-process class so
+    either implementation can be passed in.
+    """
+
+    def acquire(self, tokens: int = 1, timeout: float | None = None) -> bool: ...
+
+    async def acquire_async(
+        self, tokens: int = 1, timeout: float | None = None
+    ) -> bool: ...
+
+    def penalize(self, delay_seconds: float) -> None: ...
+
+    @property
+    def available_tokens(self) -> float: ...
+
+    def reset(self) -> None: ...
 
 
 class RateLimiter:
