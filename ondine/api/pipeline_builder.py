@@ -82,7 +82,10 @@ class PipelineBuilder:
         return PipelineBuilder()
 
     @staticmethod
-    def from_specifications(specs: PipelineSpecifications) -> PipelineBuilder:
+    def from_specifications(
+        specs: PipelineSpecifications,
+        dataframe: pd.DataFrame | None = None,
+    ) -> PipelineBuilder:
         """
         Create builder from existing specifications.
 
@@ -90,6 +93,11 @@ class PipelineBuilder:
 
         Args:
             specs: Complete pipeline specifications
+            dataframe: Optional in-memory DataFrame to re-attach. Specifications
+                describe *how* to run a pipeline, not the data itself, so a
+                caller rebuilding a pipeline that was constructed from an
+                in-memory frame must pass it back explicitly or the rebuilt
+                pipeline will have no data to load.
 
         Returns:
             PipelineBuilder pre-configured with specs
@@ -105,6 +113,7 @@ class PipelineBuilder:
         builder._llm_spec = specs.llm
         builder._processing_spec = specs.processing
         builder._output_spec = specs.output
+        builder._dataframe = dataframe
         return builder
 
     def from_csv(

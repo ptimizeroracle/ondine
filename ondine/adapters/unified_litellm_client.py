@@ -980,10 +980,18 @@ class UnifiedLiteLLMClient(LLMClient):
         # Prevent models from returning multiple tool calls in a single response.
         # Instructor's parse_tools() asserts exactly one tool call per response;
         # parallel tool calls (common with temperature > 0) trigger an assertion.
-        if self.instructor_client.mode in (
-            instructor.Mode.TOOLS,
-            getattr(instructor.Mode, "TOOLS_STRICT", None),
-            getattr(instructor.Mode, "PARALLEL_TOOLS", None),
+        # instructor >=1.15 normalises from_anthropic(mode=ANTHROPIC_TOOLS) down to
+        # Mode.TOOLS, so the mode check alone would match the native Anthropic
+        # client too. parallel_tool_calls is an OpenAI-only parameter and
+        # AsyncMessages.create() rejects it outright, so exclude that path.
+        if (
+            not self._uses_direct_anthropic_instructor
+            and self.instructor_client.mode
+            in (
+                instructor.Mode.TOOLS,
+                getattr(instructor.Mode, "TOOLS_STRICT", None),
+                getattr(instructor.Mode, "PARALLEL_TOOLS", None),
+            )
         ):
             call_kwargs.setdefault("parallel_tool_calls", False)
 
