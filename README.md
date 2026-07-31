@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo.png" alt="Ondine Logo" width="600"/>
 
   # Ondine
 
@@ -16,7 +16,7 @@
 
   **[ondine.dev](https://ondine.dev)** · **[Docs](https://docs.ondine.dev)** · **[PyPI](https://pypi.org/project/ondine/)**
 
-  <img src="assets/images/demo.gif" alt="Ondine Demo" width="700"/>
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/demo.gif" alt="Ondine Demo" width="700"/>
 
 </div>
 
@@ -204,7 +204,7 @@ Advanced surfaces — Knowledge Base / RAG, OCR, grounding verification (Rust + 
 Three ways to classify the sentiment of 100K product reviews with an LLM.
 Measured on a real API (DeepSeek `deepseek-chat`) over a 30-row sample per arm,
 then extrapolated to 100K from the measured per-row rate. Full methodology,
-raw numbers, and reproducibility commands in **[benchmarks/RESULTS.md](benchmarks/RESULTS.md)**.
+raw numbers, and reproducibility commands in **[benchmarks/RESULTS.md](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md)**.
 
 | Approach | API calls (100K) | Wall-time (projected) | Cost (projected) | Rows lost on crash at 60% |
 |----------|-----------------:|----------------------:|-----------------:|--------------------------:|
@@ -261,16 +261,16 @@ pipeline = QuickPipeline.create(
 
 - **[ondine.dev](https://ondine.dev)** — landing page + examples
 - **[docs.ondine.dev](https://docs.ondine.dev)** — full reference: `enrich()` / Builder API, Context Store internals, grounding, Airflow/Prefect integrations, observability
-- **[examples/](examples/)** — runnable scripts covering every major use case
-- **[CHANGELOG.md](CHANGELOG.md)** — release notes
+- **[examples/](https://github.com/ptimizeroracle/ondine/tree/main/examples)** — runnable scripts covering every major use case
+- **[CHANGELOG.md](https://github.com/ptimizeroracle/ondine/blob/main/CHANGELOG.md)** — release notes
 
 ## Contributing
 
-PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Code style: Black + Ruff. Tests required for new features.
+PRs welcome. See [CONTRIBUTING.md](https://github.com/ptimizeroracle/ondine/blob/main/CONTRIBUTING.md). Code style: Black + Ruff. Tests required for new features.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/ptimizeroracle/ondine/blob/main/LICENSE).
 
 ## Acknowledgments
 
