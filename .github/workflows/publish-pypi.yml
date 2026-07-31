@@ -387,6 +387,11 @@ jobs:
       - name: List artifacts
         run: ls -la dist/
 
+      - name: Validate long_description with twine
+        run: |
+          python -m pip install --upgrade twine
+          twine check --strict dist/*
+
       - name: Sign wheels + sdist with Sigstore
         uses: sigstore/gh-action-sigstore-python@v3.3.0
         with:
