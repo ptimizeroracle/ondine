@@ -19,6 +19,15 @@ name: Release to PyPI
 # ──────────────────────────────────────────────────────────────────────────
 
 on:
+  # Tag pushes are the primary trigger. release-please creates its GitHub
+  # Release with GITHUB_TOKEN, and GitHub refuses to let GITHUB_TOKEN-raised
+  # events start further workflows (the recursion guard) — so `release:
+  # published` never fires for an automated release and publishing silently
+  # never happened. Tag pushes are not subject to that guard.
+  push:
+    tags: ['v*']
+  # Retained for releases published by a human, and as a manual fallback.
+  # Both upload steps set skip-existing: true, so a double trigger is a no-op.
   release:
     types: [published]
   workflow_dispatch:
@@ -50,11 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
       - id: r
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.release_tag }}"
+          TAG="${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}"
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
             echo "::error::Expected SemVer tag starting with v, got: $TAG"
             exit 1
