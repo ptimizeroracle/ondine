@@ -63,7 +63,7 @@ class TestModeDetectionAnthropicUsesOwnModes:
     """Anthropic rejects JSON_SCHEMA — must use ANTHROPIC_TOOLS or ANTHROPIC_JSON."""
 
     def test_anthropic_gets_provider_specific_mode(self):
-        mode = detect_instructor_mode(model="anthropic/claude-3-haiku-20240307")
+        mode = detect_instructor_mode(model="anthropic/claude-haiku-4-5-20251001")
         assert mode not in (instructor.Mode.JSON_SCHEMA, instructor.Mode.TOOLS), (
             f"Anthropic got {mode}; Instructor rejects JSON_SCHEMA and generic TOOLS "
             f"for Anthropic — must use ANTHROPIC_TOOLS or ANTHROPIC_JSON"

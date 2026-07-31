@@ -102,11 +102,11 @@ jobs:
 
     - name: Run linter
       run: |
-        uv run ruff check ondine/ tests/
+        uv run ruff check .
 
     - name: Run formatter check
       run: |
-        uv run ruff format --check ondine/ tests/
+        uv run ruff format --check .
 
     - name: Run unit tests only
       run: |
@@ -155,7 +155,7 @@ jobs:
 
     - name: Run linter
       run: |
-        uv run ruff check ondine/ tests/
+        uv run ruff check .
 
     - name: Run type checker
       run: |

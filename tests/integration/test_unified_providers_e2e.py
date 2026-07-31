@@ -51,7 +51,7 @@ class PriceBatch(BaseModel):
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
         ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
-        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
+        ("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"),
     ],
 )
 def test_providers_single_row_per_api(provider, model, api_key_env):

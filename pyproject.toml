@@ -155,6 +155,7 @@ extend-exclude = [
     "build",
     "dist",
     "*.egg-info",
+    "*.md",  # ruff format's Markdown code-fence formatting isn't part of this repo's workflow
 ]
 
 [tool.ruff.lint]
@@ -199,6 +200,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "PLR2004", "PLR0913"]
 "examples/**/*.py" = ["T201", "S105"]
+"benchmarks/**/*.py" = ["S311"]
 
 [tool.ruff.format]
 quote-style = "double"
