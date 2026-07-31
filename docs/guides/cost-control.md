@@ -153,7 +153,7 @@ pipeline = (
     PipelineBuilder.create()
     .with_prompt("Classify: {text}")
     .with_system_prompt("You are a classifier.")  # Cached
-    .with_batch_size(100)                          # 100x fewer calls
+    .with_batch_size(100)                          # fewer, larger API calls
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
 )

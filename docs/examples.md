@@ -6,7 +6,7 @@
 git clone https://github.com/ptimizeroracle/ondine.git
 cd ondine
 pip install -e ".[all]"
-export OPENAI_API_KEY="your-key"
+export OPENAI_API_KEY="your-key"  # pragma: allowlist secret
 ```
 
 Pick a script, run it, read the code. Fastest way to learn.
@@ -23,13 +23,13 @@ Three scripts, three minutes. Go from zero to a working pipeline.
 
 ## Cost & Performance
 
-Where the money savings happen. Batching alone can cut your bill 100x.
+Where the money savings happen. In our [benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md), batching alone cut API calls ~15x and cost ~35%.
 
 | # | Script | What it does |
 |---|---|---|
 | 04 | [`04_with_cost_control.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/04_with_cost_control.py) | Budget limits, cost estimation, rate limiting, checkpointing |
-| 20 | [`20_prefix_caching.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/20_prefix_caching.py) | System prompt caching for 40-50% cost reduction |
-| 21 | [`21_multi_row_batching.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/21_multi_row_batching.py) | 100 rows per API call, 100x fewer requests |
+| 20 | [`20_prefix_caching.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/20_prefix_caching.py) | System prompt caching to cut token cost on repeated prompts |
+| 21 | [`21_multi_row_batching.py`](https://github.com/ptimizeroracle/ondine/blob/main/examples/21_multi_row_batching.py) | 100 rows per API call, far fewer requests |
 
 ## Execution Modes
 
