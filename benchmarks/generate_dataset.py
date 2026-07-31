@@ -24,8 +24,16 @@ from pathlib import Path
 SEED = 42
 
 PRODUCT_CATEGORIES = [
-    "Electronics", "Books", "Home & Kitchen", "Clothing", "Toys",
-    "Sports", "Beauty", "Grocery", "Tools", "Pet Supplies",
+    "Electronics",
+    "Books",
+    "Home & Kitchen",
+    "Clothing",
+    "Toys",
+    "Sports",
+    "Beauty",
+    "Grocery",
+    "Tools",
+    "Pet Supplies",
 ]
 
 # Review bodies are templated so they look like real reviews but stay
@@ -54,16 +62,70 @@ NEUTRAL_TEMPLATES = [
 ]
 
 PRODUCT_WORDS = {
-    "Electronics": ["USB-C cable", "wireless mouse", "Bluetooth speaker", "noise-cancelling headphones", "smart plug"],
-    "Books": ["cookbook", "mystery novel", "biography", "programming guide", "coffee-table book"],
-    "Home & Kitchen": ["knife set", "air fryer", "cast-iron pan", "bedsheet set", "coffee grinder"],
-    "Clothing": ["winter jacket", "running shoes", "cotton t-shirt", "denim jeans", "wool socks"],
-    "Toys": ["building blocks", "remote-control car", "puzzle set", "action figure", "board game"],
+    "Electronics": [
+        "USB-C cable",
+        "wireless mouse",
+        "Bluetooth speaker",
+        "noise-cancelling headphones",
+        "smart plug",
+    ],
+    "Books": [
+        "cookbook",
+        "mystery novel",
+        "biography",
+        "programming guide",
+        "coffee-table book",
+    ],
+    "Home & Kitchen": [
+        "knife set",
+        "air fryer",
+        "cast-iron pan",
+        "bedsheet set",
+        "coffee grinder",
+    ],
+    "Clothing": [
+        "winter jacket",
+        "running shoes",
+        "cotton t-shirt",
+        "denim jeans",
+        "wool socks",
+    ],
+    "Toys": [
+        "building blocks",
+        "remote-control car",
+        "puzzle set",
+        "action figure",
+        "board game",
+    ],
     "Sports": ["yoga mat", "dumbbell set", "bicycle pump", "jump rope", "water bottle"],
-    "Beauty": ["face moisturizer", "shampoo", "nail polish set", "sunscreen", "hairbrush"],
-    "Grocery": ["coffee beans", "olive oil", "protein bars", "spice rack", "loose-leaf tea"],
-    "Tools": ["cordless drill", "tape measure", "screwdriver set", "utility knife", "level"],
-    "Pet Supplies": ["dog leash", "cat scratching post", "fish tank filter", "bird seed", "hamster bedding"],
+    "Beauty": [
+        "face moisturizer",
+        "shampoo",
+        "nail polish set",
+        "sunscreen",
+        "hairbrush",
+    ],
+    "Grocery": [
+        "coffee beans",
+        "olive oil",
+        "protein bars",
+        "spice rack",
+        "loose-leaf tea",
+    ],
+    "Tools": [
+        "cordless drill",
+        "tape measure",
+        "screwdriver set",
+        "utility knife",
+        "level",
+    ],
+    "Pet Supplies": [
+        "dog leash",
+        "cat scratching post",
+        "fish tank filter",
+        "bird seed",
+        "hamster bedding",
+    ],
 }
 
 
@@ -77,7 +139,11 @@ def make_rows(n: int):
         sentiment = sentiment_pool[0]
         category = rng.choice(PRODUCT_CATEGORIES)
         product = rng.choice(PRODUCT_WORDS[category])
-        star = {"positive": rng.randint(4, 5), "negative": rng.randint(1, 2), "neutral": 3}[sentiment]
+        star = {
+            "positive": rng.randint(4, 5),
+            "negative": rng.randint(1, 2),
+            "neutral": 3,
+        }[sentiment]
         if sentiment == "positive":
             body = rng.choice(POSITIVE_TEMPLATES).format(product=product)
         elif sentiment == "negative":
@@ -98,17 +164,28 @@ def make_rows(n: int):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rows", type=int, default=100_000)
-    parser.add_argument("--out", type=Path, default=Path("benchmarks/data/amazon_reviews_100k.csv"))
+    parser.add_argument(
+        "--out", type=Path, default=Path("benchmarks/data/amazon_reviews_100k.csv")
+    )
     args = parser.parse_args()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["review_id", "title", "review", "category", "ground_truth_sentiment", "ground_truth_stars"]
+    fieldnames = [
+        "review_id",
+        "title",
+        "review",
+        "category",
+        "ground_truth_sentiment",
+        "ground_truth_stars",
+    ]
     with args.out.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         for row in make_rows(args.rows):
             writer.writerow(row)
-    print(f"Wrote {args.rows:,} rows to {args.out} ({args.out.stat().st_size / 1_048_576:.1f} MiB)")
+    print(
+        f"Wrote {args.rows:,} rows to {args.out} ({args.out.stat().st_size / 1_048_576:.1f} MiB)"
+    )
 
 
 if __name__ == "__main__":

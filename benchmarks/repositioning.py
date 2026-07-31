@@ -77,14 +77,13 @@ import dataclasses
 import json
 import os
 import sqlite3
-import statistics
 import subprocess
 import sys
 import time
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -92,10 +91,12 @@ import pandas as pd
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from ondine import PipelineBuilder, QuickPipeline  # noqa: E402
+from ondine import PipelineBuilder  # noqa: E402
 from ondine.adapters.llm_client import LLMClient  # noqa: E402
 from ondine.core.models import LLMResponse  # noqa: E402
-from ondine.core.specifications import LLMSpec  # noqa: E402
+
+if TYPE_CHECKING:
+    from ondine.core.specifications import LLMSpec
 
 PROMPT_TEMPLATE = (
     "Classify the sentiment of this product review as exactly one of: "
@@ -145,7 +146,9 @@ class CrashResult:
 # ---------------------------------------------------------------------------
 
 
-def arm_ondine(df: pd.DataFrame, model: str, api_key: str, batch_size: int) -> ArmResult:
+def arm_ondine(
+    df: pd.DataFrame, model: str, api_key: str, batch_size: int
+) -> ArmResult:
     """Run the Ondine batched pipeline over ``df``."""
     t0 = time.perf_counter()
     pipeline = (
@@ -193,7 +196,9 @@ def arm_naive_loop(df: pd.DataFrame, model: str, api_key: str) -> ArmResult:
     for review in df["review"]:
         resp = litellm.completion(
             model=model,
-            messages=[{"role": "user", "content": PROMPT_TEMPLATE.format(review=review)}],
+            messages=[
+                {"role": "user", "content": PROMPT_TEMPLATE.format(review=review)}
+            ],
             api_key=api_key,
             temperature=0.0,
             max_tokens=5,
@@ -249,22 +254,40 @@ def arm_agent_per_row(df: pd.DataFrame, model: str, api_key: str) -> ArmResult:
         # call 1: plan (extract focus phrase)
         r1 = litellm.completion(
             model=model,
-            messages=[{"role": "user", "content": _AGENT_PLAN_TMPL.format(review=review)}],
-            api_key=api_key, temperature=0.0, max_tokens=20,
+            messages=[
+                {"role": "user", "content": _AGENT_PLAN_TMPL.format(review=review)}
+            ],
+            api_key=api_key,
+            temperature=0.0,
+            max_tokens=20,
         )
         focus = (r1.choices[0].message.content or "").strip()
         # call 2: classify
         r2 = litellm.completion(
             model=model,
-            messages=[{"role": "user", "content": _AGENT_CLASSIFY_TMPL.format(focus=focus, review=review)}],
-            api_key=api_key, temperature=0.0, max_tokens=5,
+            messages=[
+                {
+                    "role": "user",
+                    "content": _AGENT_CLASSIFY_TMPL.format(focus=focus, review=review),
+                }
+            ],
+            api_key=api_key,
+            temperature=0.0,
+            max_tokens=5,
         )
         label = (r2.choices[0].message.content or "").strip().lower()
         # call 3: reflect / validate
         r3 = litellm.completion(
             model=model,
-            messages=[{"role": "user", "content": _AGENT_REFLECT_TMPL.format(label=label, review=review)}],
-            api_key=api_key, temperature=0.0, max_tokens=10,
+            messages=[
+                {
+                    "role": "user",
+                    "content": _AGENT_REFLECT_TMPL.format(label=label, review=review),
+                }
+            ],
+            api_key=api_key,
+            temperature=0.0,
+            max_tokens=10,
         )
         final = (r3.choices[0].message.content or "").strip().lower()
         # the reflection's last word is the (possibly corrected) label
@@ -335,14 +358,18 @@ class CrashAtRatioClient(LLMClient):
     async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         return self._serve(prompt)
 
-    async def structured_invoke_async(self, prompt: str, output_cls: type, **kwargs: Any) -> LLMResponse:
+    async def structured_invoke_async(
+        self, prompt: str, output_cls: type, **kwargs: Any
+    ) -> LLMResponse:
         return self._serve(prompt)
 
     # Sync path (kept for completeness / direct-call tests).
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
         return self._serve(prompt)
 
-    def structured_invoke(self, prompt: str, output_cls: type, **kwargs: Any) -> LLMResponse:
+    def structured_invoke(
+        self, prompt: str, output_cls: type, **kwargs: Any
+    ) -> LLMResponse:
         return self._serve(prompt)
 
     def estimate_tokens(self, text: str) -> int:
@@ -396,7 +423,9 @@ def _register_crash_provider() -> str:
     return pid
 
 
-def arm_crash_safety(total_rows: int, crash_ratio: float, batch_size: int, tmp_dir: Path) -> CrashResult:
+def arm_crash_safety(
+    total_rows: int, crash_ratio: float, batch_size: int, tmp_dir: Path
+) -> CrashResult:
     """Kill the Ondine pipeline at ``crash_ratio`` of progress, then resume.
 
     Uses the deterministic :class:`CrashAtRatioClient` so the crash lands at a
@@ -410,7 +439,9 @@ def arm_crash_safety(total_rows: int, crash_ratio: float, batch_size: int, tmp_d
     process memory, so the same crash point loses 100% of their completed
     work — that contrast is the whole point of the benchmark.
     """
-    df = pd.DataFrame({"review": [f"synthetic review number {i}" for i in range(total_rows)]})
+    df = pd.DataFrame(
+        {"review": [f"synthetic review number {i}" for i in range(total_rows)]}
+    )
     crash_after = int(total_rows * crash_ratio)
     checkpoint_dir = tmp_dir / "crash_checkpoints"
     # NOTE: do not pre-clear via shell rm (sandbox guard). Python rmtree is fine
@@ -427,16 +458,24 @@ def arm_crash_safety(total_rows: int, crash_ratio: float, batch_size: int, tmp_d
     # --- run 1 (child subprocess): should hard-crash mid-way ---
     env = dict(os.environ, PYTHONPATH=str(_REPO_ROOT))
     crash_cmd = [
-        sys.executable, str(_REPO_ROOT / "benchmarks" / "repositioning.py"),
+        sys.executable,
+        str(_REPO_ROOT / "benchmarks" / "repositioning.py"),
         "_crash-run",
-        "--data", str(csv_path),
-        "--checkpoint-dir", str(checkpoint_dir),
-        "--crash-after", str(crash_after),
-        "--batch-size", str(batch_size),
-        "--rows", str(total_rows),
+        "--data",
+        str(csv_path),
+        "--checkpoint-dir",
+        str(checkpoint_dir),
+        "--crash-after",
+        str(crash_after),
+        "--batch-size",
+        str(batch_size),
+        "--rows",
+        str(total_rows),
     ]
     t0 = time.perf_counter()
-    proc = subprocess.run(crash_cmd, capture_output=True, text=True, env=env, timeout=600)
+    proc = subprocess.run(
+        crash_cmd, capture_output=True, text=True, env=env, timeout=600
+    )
     wall_crash = time.perf_counter() - t0
     crashed = proc.returncode == 9 or "SIMULATED CRASH" in (proc.stderr + proc.stdout)
 
@@ -462,16 +501,24 @@ def arm_crash_safety(total_rows: int, crash_ratio: float, batch_size: int, tmp_d
 
     # --- run 2 (this process): resume from the checkpoint, no crash ---
     resume_cmd = [
-        sys.executable, str(_REPO_ROOT / "benchmarks" / "repositioning.py"),
+        sys.executable,
+        str(_REPO_ROOT / "benchmarks" / "repositioning.py"),
         "_crash-resume",
-        "--data", str(csv_path),
-        "--checkpoint-dir", str(checkpoint_dir),
-        "--session-id", str(session_id) if session_id else "",
-        "--batch-size", str(batch_size),
-        "--rows", str(total_rows),
+        "--data",
+        str(csv_path),
+        "--checkpoint-dir",
+        str(checkpoint_dir),
+        "--session-id",
+        str(session_id) if session_id else "",
+        "--batch-size",
+        str(batch_size),
+        "--rows",
+        str(total_rows),
     ]
     t1 = time.perf_counter()
-    proc2 = subprocess.run(resume_cmd, capture_output=True, text=True, env=env, timeout=600)
+    proc2 = subprocess.run(
+        resume_cmd, capture_output=True, text=True, env=env, timeout=600
+    )
     wall_resume = time.perf_counter() - t1
 
     # Parse rows processed from the resume subprocess JSON marker on stdout.
@@ -518,7 +565,7 @@ def _accuracy_pred(df: pd.DataFrame, preds: list[str]) -> float | None:
         return None
     truth = df[GROUND_TRUTH].astype(str).str.lower().str.strip().tolist()
     pred = [str(p).lower().strip() for p in preds]
-    correct = sum(1 for a, b in zip(truth, pred) if a == b)
+    correct = sum(1 for a, b in zip(truth, pred, strict=True) if a == b)
     return correct / len(truth)
 
 
@@ -548,7 +595,9 @@ def _find_session_id(checkpoint_dir: Path):
         try:
             conn = sqlite3.connect(str(db_path))
             try:
-                row = conn.execute("SELECT session_id FROM responses LIMIT 1").fetchone()
+                row = conn.execute(
+                    "SELECT session_id FROM responses LIMIT 1"
+                ).fetchone()
             finally:
                 conn.close()
             if row and row[0]:
@@ -557,8 +606,15 @@ def _find_session_id(checkpoint_dir: Path):
             pass
 
     # Fallback: checkpoint snapshot files.
-    for pattern in ("checkpoint_*.json.gz", "checkpoint_*.pkl", "checkpoint_*.json", "*.json"):
-        files = sorted(checkpoint_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    for pattern in (
+        "checkpoint_*.json.gz",
+        "checkpoint_*.pkl",
+        "checkpoint_*.json",
+        "*.json",
+    ):
+        files = sorted(
+            checkpoint_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True
+        )
         for f in files:
             stem = f.stem
             # checkpoint_<uuid>.json.gz -> strip prefix/suffixes to isolate the uuid
@@ -579,7 +635,6 @@ def _count_durable_rows(checkpoint_dir: Path, session_id) -> int:
     how many rows that batch represented. We sum those to get the true
     row-survival count.
     """
-    from uuid import UUID
 
     db_path = checkpoint_dir / "responses.db"
     if not db_path.exists():
@@ -594,7 +649,9 @@ def _count_durable_rows(checkpoint_dir: Path, session_id) -> int:
             ):
                 try:
                     meta = json.loads(custom_json) if custom_json else {}
-                    bm = meta.get("batch_metadata", {}) if isinstance(meta, dict) else {}
+                    bm = (
+                        meta.get("batch_metadata", {}) if isinstance(meta, dict) else {}
+                    )
                     rows += int(bm.get("original_count", 1))
                 except (ValueError, TypeError):
                     rows += 1
@@ -614,7 +671,9 @@ def _git_info() -> dict[str, str]:
         ("dirty", ["git", "status", "--porcelain"]),
     ):
         try:
-            out = subprocess.run(args, capture_output=True, text=True, cwd=_REPO_ROOT, timeout=10)
+            out = subprocess.run(
+                args, capture_output=True, text=True, cwd=_REPO_ROOT, timeout=10
+            )
             info[key] = out.stdout.strip()
         except Exception:
             info[key] = "unknown"
@@ -641,16 +700,22 @@ def render_results(
     lines.append("# Ondine Repositioning Benchmark — Results\n")
     lines.append(f"> Generated: {datetime.now().isoformat(timespec='seconds')}  ")
     lines.append(f"> Model: `{model}`  ")
-    lines.append(f"> Dataset: `amazon_reviews_100k.csv` ({total_dataset_rows:,} rows total)  ")
+    lines.append(
+        f"> Dataset: `amazon_reviews_100k.csv` ({total_dataset_rows:,} rows total)  "
+    )
     lines.append(f"> Real-API sample size: **{sample_rows:,} rows per arm**  ")
     lines.append(f"> Ondine batch size: {batch_size}  ")
     git = _git_info()
-    lines.append(f"> Commit: `{git.get('commit', 'unknown')[:12]}` on `{git.get('branch', 'unknown')}`  ")
+    lines.append(
+        f"> Commit: `{git.get('commit', 'unknown')[:12]}` on `{git.get('branch', 'unknown')}`  "
+    )
     lines.append("")
 
     lines.append("## How to read these numbers\n")
     lines.append(
-        "- **Measured** rows are the real-API sample (`" + str(sample_rows) + " rows/arm`). "
+        "- **Measured** rows are the real-API sample (`"
+        + str(sample_rows)
+        + " rows/arm`). "
         "Every wall-time, cost, and token figure is from an actual run against DeepSeek.\n"
         "- **Extrapolated** rows multiply the measured per-row rate by 100,000 to project the "
         "full dataset. Labelled explicitly; never presented as measured.\n"
@@ -660,9 +725,13 @@ def render_results(
     )
 
     # --- Measured table ---
-    lines.append("## Measured — real API, sample of {:,} rows/arm\n".format(sample_rows))
-    lines.append("| Arm | Wall-time (s) | API calls | Cost (USD) | Tokens in | Tokens out | Accuracy |")
-    lines.append("|-----|--------------:|----------:|-----------:|----------:|-----------:|---------:|")
+    lines.append(f"## Measured — real API, sample of {sample_rows:,} rows/arm\n")
+    lines.append(
+        "| Arm | Wall-time (s) | API calls | Cost (USD) | Tokens in | Tokens out | Accuracy |"
+    )
+    lines.append(
+        "|-----|--------------:|----------:|-----------:|----------:|-----------:|---------:|"
+    )
     for a in arms:
         acc = f"{a.accuracy:.1%}" if a.accuracy is not None else "—"
         lines.append(
@@ -673,9 +742,15 @@ def render_results(
 
     # --- Extrapolated to 100K ---
     lines.append("## Extrapolated to 100,000 rows (from measured per-row rates)\n")
-    lines.append("> Assumption: per-row latency and token cost are linear in row count. ")
-    lines.append("> Real batched throughput benefits from concurrency at scale, so the Ondine ")
-    lines.append("> projection is conservative (real wall-time at 100K is likely lower).\n")
+    lines.append(
+        "> Assumption: per-row latency and token cost are linear in row count. "
+    )
+    lines.append(
+        "> Real batched throughput benefits from concurrency at scale, so the Ondine "
+    )
+    lines.append(
+        "> projection is conservative (real wall-time at 100K is likely lower).\n"
+    )
     lines.append("| Arm | Wall-time (projected) | API calls | Cost (projected) |")
     lines.append("|-----|----------------------:|----------:|-----------------:|")
     for a in arms:
@@ -692,14 +767,16 @@ def render_results(
 
     # --- Crash safety ---
     if crash is not None:
-        lines.append("## Crash-safety — killed at 60% on full 100K (deterministic LLM)\n")
         lines.append(
-            f"| Arm | Rows completed before crash | Rows recovered after resume | Rows lost | "
-            f"Crash wall-time (s) | Resume wall-time (s) |"
+            "## Crash-safety — killed at 60% on full 100K (deterministic LLM)\n"
         )
         lines.append(
-            f"|-----|----------------------------:|-----------------------------:|"
-            f"-----------:|--------------------:|---------------------:|"
+            "| Arm | Rows completed before crash | Rows recovered after resume | Rows lost | "
+            "Crash wall-time (s) | Resume wall-time (s) |"
+        )
+        lines.append(
+            "|-----|----------------------------:|-----------------------------:|"
+            "-----------:|--------------------:|---------------------:|"
         )
         lines.append(
             f"| {crash.name} | {crash.rows_completed_before_crash:,} | "
@@ -707,7 +784,9 @@ def render_results(
             f"{crash.wall_time_crash_s:.2f} | {crash.wall_time_resume_s:.2f} |"
         )
         lines.append("")
-        lines.append("**Comparison — naive loop / agent-per-row at the same 60% crash point:**")
+        lines.append(
+            "**Comparison — naive loop / agent-per-row at the same 60% crash point:**"
+        )
         lines.append(
             "Both keep their results only in process memory. A crash at 60% loses **100%** of "
             "completed work — 60,000 rows of API spend thrown away, and the run must restart "
@@ -728,7 +807,9 @@ def render_results(
     return text
 
 
-def _headline_json(arms: list[ArmResult], crash: CrashResult | None, sample: int, total: int) -> dict[str, Any]:
+def _headline_json(
+    arms: list[ArmResult], crash: CrashResult | None, sample: int, total: int
+) -> dict[str, Any]:
     by_name = {a.name: a for a in arms}
     ondine = by_name.get("Ondine (batched)")
     naive = by_name.get("Naive loop")
@@ -757,7 +838,7 @@ def _headline_json(arms: list[ArmResult], crash: CrashResult | None, sample: int
         out["BENCH_AGENT"] = proj(agent)
     if ondine and naive and naive.api_calls:
         out["BENCH_API_CALL_REDUCTION_VS_NAIVE"] = (
-            f"{(naive.api_calls / max(ondine.api_calls,1)):.0f}x fewer calls"
+            f"{(naive.api_calls / max(ondine.api_calls, 1)):.0f}x fewer calls"
         )
     if crash:
         out["BENCH_CRASH_ROWS_LOST_NAIVE"] = int(crash.total_rows * 0.60)
@@ -770,10 +851,10 @@ def _humanise_seconds(s: float) -> str:
     if s < 60:
         return f"{s:.1f}s"
     if s < 3600:
-        return f"{s/60:.1f}min"
+        return f"{s / 60:.1f}min"
     if s < 86400:
-        return f"{s/3600:.1f}h"
-    return f"{s/86400:.1f}d"
+        return f"{s / 3600:.1f}h"
+    return f"{s / 86400:.1f}d"
 
 
 # ---------------------------------------------------------------------------
@@ -800,7 +881,9 @@ def _crash_subcommand(cmd: str, argv: list[str]) -> int:
 
     df = pd.read_csv(args.data)
     do_crash = cmd == "_crash-run"
-    crash_after = args.crash_after if do_crash else args.rows * 100  # never crash on resume
+    crash_after = (
+        args.crash_after if do_crash else args.rows * 100
+    )  # never crash on resume
 
     # The crash threshold/enabled flag is read by the registry-instantiated
     # client from the environment. Set it before building the pipeline.
@@ -851,18 +934,37 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] in ("_crash-run", "_crash-resume"):
         return _crash_subcommand(sys.argv[1], sys.argv[2:])
 
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", type=Path, default=Path("benchmarks/data/amazon_reviews_100k.csv"))
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--data", type=Path, default=Path("benchmarks/data/amazon_reviews_100k.csv")
+    )
     ap.add_argument("--model", default="deepseek/deepseek-chat")
-    ap.add_argument("--sample", type=int, default=200, help="rows per arm for the real-API comparison")
+    ap.add_argument(
+        "--sample",
+        type=int,
+        default=200,
+        help="rows per arm for the real-API comparison",
+    )
     ap.add_argument("--batch-size", type=int, default=20)
-    ap.add_argument("--crash-test", action="store_true", help="run the crash-safety arm on full dataset")
-    ap.add_argument("--crash-rows", type=int, default=100_000, help="dataset size for the crash arm")
+    ap.add_argument(
+        "--crash-test",
+        action="store_true",
+        help="run the crash-safety arm on full dataset",
+    )
+    ap.add_argument(
+        "--crash-rows", type=int, default=100_000, help="dataset size for the crash arm"
+    )
     ap.add_argument("--crash-ratio", type=float, default=0.60)
-    ap.add_argument("--skip-api", action="store_true", help="skip real-API arms (crash-test only)")
+    ap.add_argument(
+        "--skip-api", action="store_true", help="skip real-API arms (crash-test only)"
+    )
     ap.add_argument("--out", type=Path, default=Path("benchmarks/RESULTS.md"))
     ap.add_argument("--json-out", type=Path, default=Path("benchmarks/results.json"))
-    ap.add_argument("--arms", default="ondine,naive,agent", help="comma list: ondine,naive,agent")
+    ap.add_argument(
+        "--arms", default="ondine,naive,agent", help="comma list: ondine,naive,agent"
+    )
     args = ap.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
@@ -873,12 +975,17 @@ def main() -> int:
 
     if not args.skip_api:
         if not api_key:
-            print("ERROR: no API key (set DEEPSEEK_API_KEY or OPENAI_API_KEY) and --skip-api not set", file=sys.stderr)
+            print(
+                "ERROR: no API key (set DEEPSEEK_API_KEY or OPENAI_API_KEY) and --skip-api not set",
+                file=sys.stderr,
+            )
             return 2
         df_full = pd.read_csv(args.data)
         n = min(args.sample, len(df_full))
         df_sample = df_full.head(n).copy()
-        print(f"[benchmark] real-API sample: {n} rows/arm, model={args.model}, batch_size={args.batch_size}")
+        print(
+            f"[benchmark] real-API sample: {n} rows/arm, model={args.model}, batch_size={args.batch_size}"
+        )
 
         if "ondine" in arms_wanted:
             print("[benchmark] running Ondine (batched) arm...")
@@ -891,7 +998,9 @@ def main() -> int:
             arms.append(arm_agent_per_row(df_sample, args.model, api_key))
 
     if args.crash_test:
-        print(f"[benchmark] crash-safety arm: {args.crash_rows} rows, crash at {args.crash_ratio:.0%}")
+        print(
+            f"[benchmark] crash-safety arm: {args.crash_rows} rows, crash at {args.crash_ratio:.0%}"
+        )
         tmp_dir = Path("benchmarks/_crash_run")
         tmp_dir.mkdir(parents=True, exist_ok=True)
         crash = arm_crash_safety(
@@ -904,8 +1013,9 @@ def main() -> int:
     total_rows = args.crash_rows if args.crash_test else 100_000
     sample_rows = args.sample if not args.skip_api else 0
 
-    text = render_results(
-        arms, crash,
+    render_results(
+        arms,
+        crash,
         sample_rows=sample_rows,
         total_dataset_rows=total_rows,
         model=args.model,
@@ -916,14 +1026,19 @@ def main() -> int:
 
     # machine-readable json
     headline = _headline_json(arms, crash, sample_rows, total_rows)
-    args.json_out.write_text(json.dumps({
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "model": args.model,
-        "arms": [dataclasses.asdict(a) for a in arms],
-        "crash": dataclasses.asdict(crash) if crash else None,
-        "headline": headline,
-        "git": _git_info(),
-    }, indent=2))
+    args.json_out.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "model": args.model,
+                "arms": [dataclasses.asdict(a) for a in arms],
+                "crash": dataclasses.asdict(crash) if crash else None,
+                "headline": headline,
+                "git": _git_info(),
+            },
+            indent=2,
+        )
+    )
     print(f"[benchmark] wrote {args.json_out}")
 
     # echo headline to stdout for capture

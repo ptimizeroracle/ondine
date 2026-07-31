@@ -23,7 +23,7 @@ def get_provider_configs():
         configs.append(("openai", "gpt-4o-mini", "OPENAI_API_KEY"))
 
     if os.getenv("ANTHROPIC_API_KEY"):
-        configs.append(("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"))
+        configs.append(("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"))
 
     return configs
 
