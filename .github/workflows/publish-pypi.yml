@@ -19,15 +19,25 @@ name: Release to PyPI
 # ──────────────────────────────────────────────────────────────────────────
 
 on:
-  # Tag pushes are the primary trigger. release-please creates its GitHub
-  # Release with GITHUB_TOKEN, and GitHub refuses to let GITHUB_TOKEN-raised
-  # events start further workflows (the recursion guard) — so `release:
-  # published` never fires for an automated release and publishing silently
-  # never happened. Tag pushes are not subject to that guard.
+  # workflow_dispatch is the PRIMARY trigger for automated releases: the
+  # Release Please workflow dispatches this one with the tag it just cut
+  # (see .github/workflows/release.yml).
+  #
+  # It has to be a dispatch. release-please pushes the tag and creates the
+  # GitHub Release with GITHUB_TOKEN, and "events triggered by the
+  # GITHUB_TOKEN will not create a new workflow run" — that guard keys off
+  # the token that raised the event, NOT the event type, so `release:
+  # published` and `push: tags` are BOTH inert for an automated release.
+  # #196 added the tag trigger on the mistaken belief that tag pushes were
+  # exempt; v1.11.1 proved they are not. workflow_dispatch is the documented
+  # exception: it "always creates workflow runs" even from GITHUB_TOKEN.
+  #
+  # The two triggers below remain for humans (a hand-pushed tag or a
+  # hand-published release). They cannot double-publish alongside the
+  # dispatch: concurrency serialises the runs and every upload step sets
+  # skip-existing: true.
   push:
     tags: ['v*']
-  # Retained for releases published by a human, and as a manual fallback.
-  # Both upload steps set skip-existing: true, so a double trigger is a no-op.
   release:
     types: [published]
   workflow_dispatch:
@@ -57,26 +67,82 @@ jobs:
       tag: ${{ steps.r.outputs.tag }}
       version: ${{ steps.r.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
+      # Resolve the tag BEFORE checkout. Each trigger carries it somewhere
+      # different and exactly one source is populated per run, so read the
+      # one that matches the event rather than coalescing them — a fallback
+      # chain would happily resolve a dispatch with a missing input to
+      # "main" and publish whatever HEAD happens to be.
       - id: r
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}"
+          case "$EVENT_NAME" in
+            workflow_dispatch) TAG="$INPUT_TAG" ;;
+            release)           TAG="$RELEASE_TAG" ;;
+            push)
+              if [ "$REF_TYPE" != "tag" ]; then
+                echo "::error::push trigger fired for a $REF_TYPE, not a tag — refusing to publish"
+                exit 1
+              fi
+              TAG="$REF_NAME"
+              ;;
+            *)
+              echo "::error::Unsupported trigger '$EVENT_NAME' — cannot determine a release tag"
+              exit 1
+              ;;
+          esac
+          if [ -z "$TAG" ]; then
+            echo "::error::No release tag available for event '$EVENT_NAME' — refusing to publish an ambiguous version"
+            exit 1
+          fi
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
             echo "::error::Expected SemVer tag starting with v, got: $TAG"
             exit 1
           fi
-          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag $TAG from event '$EVENT_NAME'"
+
+      # The dispatch from release.yml lands moments after release-please
+      # pushes the tag, so give the ref a brief window to become visible
+      # before checkout turns a propagation blip into a failed release.
+      - name: Await tag ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.r.outputs.tag }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+              echo "Tag $TAG exists"
+              exit 0
+            fi
+            echo "Tag $TAG not visible yet (attempt $i) — waiting 10s"
+            sleep 10
+          done
+          echo "::error::Tag $TAG does not exist in ${GITHUB_REPOSITORY} — refusing to publish"
+          exit 1
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.r.outputs.tag }}
+
+      - name: Verify tag matches pyproject.toml version
+        shell: bash
+        env:
+          VERSION: ${{ steps.r.outputs.version }}
+        run: |
           PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
           if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
             echo "::error::Tag version ($VERSION) != pyproject.toml version ($PACKAGE_VERSION)"
             exit 1
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "✅ Tag $TAG / version $VERSION"
+          echo "✅ Tag ${{ steps.r.outputs.tag }} / version $VERSION"
 
   # ────────────────────────────────────────────────────────────────────
   # 2. Source distribution (one tarball)
@@ -248,22 +314,44 @@ jobs:
 
       - name: Install from TestPyPI (wheel-only, no source fallback)
         shell: bash
+        env:
+          VERSION: ${{ needs.resolve-tag.outputs.version }}
         run: |
           python -m pip install --upgrade pip
           # --only-binary ondine: refuses sdist fallback, errors hard if no wheel
           # --extra-index-url prod PyPI: dependencies come from prod, package itself from test
-          # Retry: TestPyPI propagation can lag a few seconds after upload
-          for i in 1 2 3 4 5; do
-            if python -m pip install \
+          #
+          # TestPyPI's index lags its own upload on some CDN edges: in v1.11.1
+          # 5 of 7 runners installed fine while 2 got "No matching distribution"
+          # seconds later (#197). The old 5×15s window was too tight, so retry
+          # 6 times with 15/30/60/60/60s backoff — ~3m45s total.
+          #
+          # ONLY index lag is retried. Any other pip failure (a broken wheel, a
+          # missing dependency, an ABI mismatch) is a real defect that more
+          # waiting cannot fix, so it fails immediately instead of burning the
+          # whole backoff window and masking the cause.
+          BACKOFF=(15 30 60 60 60)
+          for i in 0 1 2 3 4 5; do
+            if OUTPUT=$(python -m pip install \
                 --index-url https://test.pypi.org/simple/ \
                 --extra-index-url https://pypi.org/simple/ \
                 --only-binary ondine \
-                "ondine==${{ needs.resolve-tag.outputs.version }}"; then
-              break
+                "ondine==${VERSION}" 2>&1); then
+              echo "$OUTPUT"
+              echo "✅ Installed ondine==${VERSION} on attempt $((i + 1))"
+              exit 0
             fi
-            echo "Attempt $i failed — waiting 15s for TestPyPI propagation"
-            sleep 15
-            if [ "$i" = "5" ]; then exit 1; fi
+            echo "$OUTPUT"
+            if ! echo "$OUTPUT" | grep -qE "No matching distribution found|Could not find a version that satisfies"; then
+              echo "::error::pip failed for a reason other than TestPyPI index lag — not retrying"
+              exit 1
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "::error::ondine==${VERSION} still not installable from TestPyPI after 6 attempts (~3m45s) — treating as a genuine publish failure"
+              exit 1
+            fi
+            echo "Attempt $((i + 1)) hit TestPyPI index lag — retrying in ${BACKOFF[$i]}s"
+            sleep "${BACKOFF[$i]}"
           done
 
       - name: Verify Rust extension loads (regression gate)
