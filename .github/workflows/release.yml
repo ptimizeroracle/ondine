@@ -16,6 +16,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  actions: write  # dispatch the publish workflow once a release is cut
 
 jobs:
   release-please:
@@ -29,3 +30,37 @@ jobs:
           # Use PAT if GITHUB_TOKEN doesn't have PR creation permission
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: python
+
+      # ──────────────────────────────────────────────────────────────────
+      # Hand off to the publish pipeline.
+      #
+      # This dispatch exists because neither the GitHub Release nor the tag
+      # push that release-please performs can start a workflow on their own:
+      # "events triggered by the GITHUB_TOKEN will not create a new workflow
+      # run". The guard is about the token that raised the event, not the
+      # event type, so `release: published` AND `push: tags` are both dead
+      # ends here (see #190).
+      #
+      # workflow_dispatch is the documented exception — "workflow_dispatch
+      # and repository_dispatch events always create workflow runs" — which
+      # is why the handoff is an explicit dispatch rather than a trigger on
+      # the publish side. It also lets us pass the exact tag release-please
+      # cut, instead of inferring it after the fact.
+      # ──────────────────────────────────────────────────────────────────
+      - name: Dispatch PyPI publish
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job never checks out, so gh has no git remote to infer the
+          # repo from — it has to be passed explicitly.
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          if [ -z "$TAG_NAME" ]; then
+            echo "::error::release-please reported a release but gave no tag_name — refusing to publish an unknown version"
+            exit 1
+          fi
+          echo "Dispatching 'Release to PyPI' for $TAG_NAME"
+          gh workflow run publish-pypi.yml \
+            --ref "${{ github.ref_name }}" \
+            -f release_tag="$TAG_NAME"
