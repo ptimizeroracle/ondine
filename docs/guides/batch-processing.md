@@ -156,16 +156,16 @@ Sometimes the LLM ignores your formatting instructions entirely:
 
 ## Performance Benchmarks
 
-### Scaling to 5M Rows
+### Measured: 100,000 Rows
 
-| Batch Size | API Calls | Time | Speedup | Cost Overhead |
-|------------|-----------|------|---------|---------------|
-| 1 (default) | 5,000,000 | ~69 hours | 1x | 0% |
-| 10 | 500,000 | ~7 hours | 10x | ~2% |
-| 100 | 50,000 | ~42 minutes | 100x | ~5% |
-| 500 | 10,000 | ~8 minutes | 500x | ~10% |
+In a [measured benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md) against a naive per-row loop (100,000 rows, DeepSeek Chat, batch size 15, projected from a 30-row real-API sample):
 
-The cost overhead comes from JSON formatting: roughly 200 extra tokens per batch. At batch_size=100, that 5% token increase buys you a 100x speedup. The math speaks for itself.
+| Arm | Wall-time (projected) | API calls | Cost (projected) |
+|-----|-----------------------:|----------:|------------------:|
+| Ondine (batched) | 3.8h | 6,666 | $0.4815 |
+| Naive loop | 21.0h | 100,000 | $0.7411 |
+
+That is ~15x fewer API calls and ~35% lower cost than the naive loop. Batching does add a small token overhead from JSON formatting; see the linked results for the full token breakdown. Actual numbers depend on your batch size, provider, and workload.
 
 ### Worked Example: 10-Row Sentiment Job
 
@@ -184,14 +184,14 @@ SHARED_CONTEXT = """You are an expert data analyst.
 pipeline = (
     PipelineBuilder.create()
     .with_prompt("TASK: Classify\\nINPUT: {text}")
-    .with_system_prompt(SHARED_CONTEXT)  # Cached (40-50% savings)
-    .with_batch_size(100)  # 100× fewer API calls
+    .with_system_prompt(SHARED_CONTEXT)  # Cached -- reduces token cost on repeated calls
+    .with_batch_size(100)  # Fewer, larger API calls
     .with_llm(provider="openai", model="gpt-4o-mini")
     .build()
 )
 ```
 
-Prefix caching saves 40-50% on token cost. Batching eliminates 99% of API calls. Together, you can hit 90%+ total cost reduction while running 100x faster.
+Prefix caching reduces token cost on repeated prompts. Batching reduces API call count. Stacking them compounds the savings -- see the [measured benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md) above for real numbers against a naive per-row loop.
 
 ## CLI Configuration
 

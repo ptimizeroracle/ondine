@@ -41,7 +41,7 @@ Data flows through composable stages in a fixed order:
 - **ResponseParserStage** parses the LLM output (text, JSON, or regex).
 - **ResultWriterStage** writes results to the output destination.
 
-The two batch stages only appear when `batch_size > 1`. Multi-row batching can yield up to 100x fewer API calls, with automatic context-window validation and partial-failure handling.
+The two batch stages only appear when `batch_size > 1`. Multi-row batching reduces API call counts substantially -- in a [measured benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md) processing 100,000 rows at batch size 15, Ondine made ~15x fewer calls than a naive per-row loop -- with automatic context-window validation and partial-failure handling.
 
 ### Pipeline Builder
 

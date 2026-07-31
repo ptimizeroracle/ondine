@@ -1,6 +1,10 @@
 # Ondine
 
-**Run LLMs on tabular data: 100x fewer API calls, 40-50% lower cost.**
+**Batch-process your DataFrames with LLMs, without the boilerplate.**
+
+Agents reason row-by-row. Ondine computes columns.
+
+In a [measured benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md) processing 100,000 rows (DeepSeek Chat, batch size 15, projected from a 30-row real-API sample), Ondine made ~15x fewer API calls than a naive per-row loop (6,666 vs 100,000) and cost ~35% less ($0.4815 vs $0.7411).
 
 Ondine is an open-source Python SDK for data engineers and ML practitioners who need to process large CSV/DataFrame datasets with LLMs. Multi-row batching, prefix caching, and budget controls are built in from day one, not bolted on later.
 
@@ -23,7 +27,7 @@ Most teams processing tabular data with LLMs hit the same three walls: **API cos
 
 | Problem | Ondine's answer |
 |---|---|
-| API bills too high | Multi-row batching (100 rows/call) + prefix caching → 40-50% savings |
+| API bills too high | Multi-row batching (100 rows/call) + prefix caching -- ~35% lower cost in our [benchmark](https://github.com/ptimizeroracle/ondine/blob/main/benchmarks/RESULTS.md) |
 | Pipeline crashes lose progress | Checkpointing -- resume from last saved row, not row 0 |
 | LLM makes things up | Context Store -- ground each response against your source data |
 | Too many providers to juggle | 100+ providers via LiteLLM, single unified API |
@@ -37,7 +41,7 @@ Most teams processing tabular data with LLMs hit the same three walls: **API cos
 - **Provider Batch API mode** -- OpenAI/Anthropic native Batch jobs for ~50% provider-advertised savings
 - **100+ LLM providers** via LiteLLM (OpenAI, Anthropic, Groq, Azure, local MLX)
 - **Multi-row batching** -- Process 100 rows per API call
-- **Prefix caching** -- 40-50% cost reduction on repeated prompts
+- **Prefix caching** -- reduces token cost on repeated prompts
 - **Cost estimation** -- Know the cost before you run
 - **Budget limits** -- Hard caps on spending
 - **Checkpointing** -- Resume failed pipelines from where they stopped
