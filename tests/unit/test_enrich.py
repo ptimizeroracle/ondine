@@ -347,8 +347,10 @@ class TestEnrichRegressions1111:
         df = pd.DataFrame({"product": ["Widget", "Gadget"]})
         with pytest.raises(RuntimeError, match="stop-after-construction"):
             ondine.enrich(
-                df, prompt="Category of {product}",
-                output_columns=["category"], schema=Schema,
+                df,
+                prompt="Category of {product}",
+                output_columns=["category"],
+                schema=Schema,
             )
         assert seen["dataframe"] is not None, (
             "rebuilt pipeline lost its DataFrame — from_specifications() must "
