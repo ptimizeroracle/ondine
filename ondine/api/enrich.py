@@ -96,7 +96,7 @@ def enrich(
     # Polars at the end to preserve the caller's input type (path in →
     # pandas out, per the enrich() contract).
     is_polars_input = isinstance(data, pl.DataFrame)
-    pipeline_data = data.to_pandas() if isinstance(data, pl.DataFrame) else data
+    pipeline_data = _polars_to_pandas(data) if isinstance(data, pl.DataFrame) else data
 
     # QuickPipeline owns all the smart defaults (provider auto-detect,
     # batch/concurrency sizing, parser selection, retries). We build it
@@ -112,11 +112,40 @@ def enrich(
     )
 
     if schema is not None:
+        # Specifications carry configuration, not data. Re-attach the frame or
+        # the rebuilt pipeline has nothing to load (QuickPipeline attaches an
+        # in-memory frame even when the caller passed a file path).
         pipeline = (
-            PipelineBuilder.from_specifications(pipeline.specifications)
+            PipelineBuilder.from_specifications(
+                pipeline.specifications, dataframe=pipeline.dataframe
+            )
             .with_structured_output(schema)
             .build()
         )
 
     result = pipeline.execute()
-    return result.to_polars() if is_polars_input else result.to_pandas()
+    return _to_polars(result) if is_polars_input else result.to_pandas()
+
+
+def _polars_to_pandas(frame: pl.DataFrame) -> pd.DataFrame:
+    """Convert Polars -> pandas without requiring pyarrow.
+
+    ``DataFrame.to_pandas()`` goes through Arrow, but pyarrow is an optional
+    extra (``ondine[parquet]``) while polars is a core dependency — so the fast
+    path is unavailable on a default install. Fall back to a column-wise copy,
+    which needs no extra dependency.
+    """
+    try:
+        return frame.to_pandas()
+    except (ModuleNotFoundError, ImportError):
+        return pd.DataFrame({name: frame[name].to_list() for name in frame.columns})
+
+
+def _to_polars(result: Any) -> pl.DataFrame:
+    """Convert an execution result back to Polars without requiring pyarrow."""
+    try:
+        converted: pl.DataFrame = result.to_polars()
+        return converted
+    except (ModuleNotFoundError, ImportError):
+        frame = result.to_pandas()
+        return pl.DataFrame({name: frame[name].to_list() for name in frame.columns})

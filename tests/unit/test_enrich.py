@@ -309,3 +309,70 @@ class TestEnrichInputTypePreservation:
         result = enrich(csv, prompt="Classify: {review}", output_columns=["sentiment"])
 
         assert isinstance(result, pd.DataFrame)
+
+
+class TestEnrichRegressions1111:
+    """Regressions for bugs shipped in 1.11.0 and found via a clean-venv install.
+
+    Both were invisible to the existing suite: the schema path was mocked at
+    ``Pipeline.execute`` so the rebuilt pipeline never loaded data, and the dev
+    venv installs pyarrow via ``--all-extras`` so the polars path never
+    exercised the dependency-free fallback.
+    """
+
+    def test_schema_rebuild_preserves_dataframe(self, monkeypatch):
+        """enrich(schema=...) must not lose the data during the builder rebuild.
+
+        Shipped behaviour raised
+        ``ValueError: Either dataframe or source_path must be provided``
+        because ``from_specifications()`` carried the specs but not the frame.
+        """
+        from pydantic import BaseModel
+
+        import ondine
+        from ondine.api.pipeline import Pipeline
+
+        class Schema(BaseModel):
+            category: str
+
+        seen: dict = {}
+
+        def fake_execute(self, *a, **kw):
+            # The bug is upstream of execution: assert the rebuilt pipeline
+            # still owns its data before any stage runs.
+            seen["dataframe"] = self.dataframe
+            raise RuntimeError("stop-after-construction")
+
+        monkeypatch.setattr(Pipeline, "execute", fake_execute)
+        df = pd.DataFrame({"product": ["Widget", "Gadget"]})
+        with pytest.raises(RuntimeError, match="stop-after-construction"):
+            ondine.enrich(
+                df,
+                prompt="Category of {product}",
+                output_columns=["category"],
+                schema=Schema,
+            )
+        assert seen["dataframe"] is not None, (
+            "rebuilt pipeline lost its DataFrame — from_specifications() must "
+            "re-attach it via the dataframe= argument"
+        )
+        assert list(seen["dataframe"]["product"]) == ["Widget", "Gadget"]
+
+    def test_polars_conversion_without_pyarrow(self, monkeypatch):
+        """Polars input must work when pyarrow is absent.
+
+        polars is a core dependency but pyarrow ships only in the parquet/all
+        extras, so ``DataFrame.to_pandas()`` explodes on a default install.
+        """
+        import polars as pl
+
+        from ondine.api.enrich import _polars_to_pandas
+
+        def boom(*a, **kw):
+            raise ModuleNotFoundError("No module named 'pyarrow'")
+
+        monkeypatch.setattr(pl.DataFrame, "to_pandas", boom)
+        out = _polars_to_pandas(pl.DataFrame({"a": [1, 2], "b": ["x", "y"]}))
+        assert isinstance(out, pd.DataFrame)
+        assert list(out["a"]) == [1, 2]
+        assert list(out["b"]) == ["x", "y"]
