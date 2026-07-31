@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1](https://github.com/ptimizeroracle/ondine/compare/v1.11.0...v1.11.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **api:** repair enrich() data path + stop sending OpenAI-only kwarg to Anthropic ([#188](https://github.com/ptimizeroracle/ondine/issues/188)) ([2ea8be4](https://github.com/ptimizeroracle/ondine/commit/2ea8be42d6c66c23d649c3c0feee655f7e8bb29b))
+
+
+### Documentation
+
+* add guides for enrich(), plan(), MCP server, and Provider Batch mode ([#185](https://github.com/ptimizeroracle/ondine/issues/185)) ([c5c011e](https://github.com/ptimizeroracle/ondine/commit/c5c011e854c1e70d59c558b1d8f28efc1b85503e))
+
 ## [1.11.0](https://github.com/ptimizeroracle/ondine/compare/v1.10.1...v1.11.0) (2026-07-30)
 
 
