@@ -163,7 +163,8 @@ class ErrorHandler:
             )
 
         if self.policy == ErrorPolicy.SKIP:
-            logger.info(f"Skipping row {row_index} due to error: {error}")
+            # A skipped row is silent data loss — warn, don't whisper at INFO.
+            logger.warning(f"Skipping row {row_index} due to error: {error}")
             return ErrorDecision(
                 action=ErrorAction.SKIP,
                 context=context,

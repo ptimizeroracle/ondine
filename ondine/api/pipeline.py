@@ -21,6 +21,7 @@ from ondine.adapters import (
 )
 from ondine.adapters.streaming_loader import StreamingDataLoader
 from ondine.adapters.streaming_writer import StreamingResultWriter
+from ondine.core.exceptions import PipelineExecutionError
 from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
@@ -447,6 +448,15 @@ class Pipeline:
                     retry_source = context.intermediate_data.get("loaded_data")
                 # Pass container directly (no Pandas conversion)
                 result = self._auto_retry_failed_rows(result, retry_source)
+
+            # A run that produced no usable output is a failure, not a
+            # success — raise loudly instead of returning a frame full of
+            # [SKIPPED] markers / nulls with a green checkmark. Placed after
+            # auto-retry so recovered rows count, and before cleanup so the
+            # checkpoints of a failed run survive for debugging.
+            self._guard_produced_output(
+                result, self.specifications.dataset.output_columns
+            )
 
             if self.specifications.processing.cleanup_on_success:
                 state_manager.cleanup_checkpoints(context.session_id)
@@ -1611,6 +1621,35 @@ class Pipeline:
             for observer in self.observers:
                 observer.on_stage_error(stage, context, e)
             raise
+
+    def _guard_produced_output(
+        self, result: ExecutionResult, output_columns: list[str]
+    ) -> None:
+        """Raise when a completed run produced nothing usable.
+
+        Two silent-failure modes reach here as an apparent success: every
+        row skipped (all cells are the ``[SKIPPED]`` marker) and every cell
+        parsed to null/empty (e.g. a provider that returned empty bodies).
+        Both are caught by the same signal — zero valid output cells — which
+        ``validate_output_quality`` already computes (it now treats the skip
+        marker as invalid). Basing the check on the actual output data rather
+        than on metrics makes it correct after auto-retry recovery, where the
+        metrics are stale but the data is not.
+
+        A run over an empty dataset (no rows) is not a failure and is left
+        alone.
+        """
+        if not output_columns:
+            return
+        quality = result.validate_output_quality(output_columns)
+        if quality.total_rows > 0 and quality.valid_outputs == 0:
+            raise PipelineExecutionError(
+                f"Run completed but produced 0 valid outputs across "
+                f"{quality.total_rows} row(s). Every row failed — check the "
+                f"model name, credentials, and provider. "
+                f"({quality.null_outputs} null, {quality.empty_outputs} "
+                f"empty/skipped cells across columns {output_columns})."
+            )
 
     def _auto_retry_failed_rows(
         self, result: ExecutionResult, original_container: Any

@@ -14,6 +14,7 @@ from ondine.core.exceptions import (
     QuotaExceededError,
 )
 from ondine.core.models import (
+    SKIPPED_OUTPUT_MARKER,
     CostEstimate,
     LLMResponse,
     PromptBatch,
@@ -409,6 +410,17 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         else:
             context.update_row(metadata.row_index)
 
+        # Count skipped rows so partial failures are visible in the final
+        # metrics (and thus the CLI/progress surfaces) and so the whole-run
+        # guard can raise when nothing succeeded. Both the async and sync
+        # error paths funnel their skip markers through here, so this is the
+        # one place the count has to live. A skipped batch loses every row in
+        # it, not just one.
+        if isinstance(response.metadata, dict) and (
+            response.metadata.get("action") == "skipped"
+        ):
+            context.skipped_rows += batch_size
+
         # Update cost and token tracking
         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
             context.add_cost(response.cost, response.tokens_in + response.tokens_out)
@@ -485,7 +497,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
 
         if decision.action == ErrorAction.SKIP:
             return LLMResponse(
-                text="[SKIPPED]",
+                text=SKIPPED_OUTPUT_MARKER,
                 tokens_in=0,
                 tokens_out=0,
                 model=self.llm_client.model,
