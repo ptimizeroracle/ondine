@@ -43,6 +43,7 @@ import pytest
 import yaml
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 from ondine.core.models import LLMResponse
@@ -132,8 +133,23 @@ def fake_llm(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 @pytest.fixture
-def service(tmp_path: Path) -> MCPService:
-    return MCPService(registry_dir=tmp_path)
+def service(tmp_path: Path, fake_llm: Any) -> Iterator[MCPService]:
+    """An MCPService whose background runs cannot outlive the test.
+
+    ``run()`` returns immediately and does the work on a daemon thread, so
+    without this join a still-running thread survives into later tests. By
+    then ``fake_llm``'s monkeypatch has been undone, so the thread resolves
+    the *real* client factory and issues a real ``litellm`` call — which lands
+    inside whatever mock the next test has installed and corrupts it (#210).
+
+    Depending on ``fake_llm`` here is what orders the teardown correctly:
+    fixtures are torn down in reverse setup order, so taking it as an argument
+    guarantees the threads are joined *before* the patch is lifted.
+    """
+    service = MCPService(registry_dir=tmp_path)
+    yield service
+    for thread in list(service._threads.values()):
+        thread.join(timeout=60)
 
 
 def _config_yaml(input_path: Path) -> str:
