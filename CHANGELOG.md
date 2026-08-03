@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2](https://github.com/ptimizeroracle/ondine/compare/v1.11.1...v1.11.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **docs:** use absolute URLs so PyPI renders the logo, demo GIF, and links ([#202](https://github.com/ptimizeroracle/ondine/issues/202)) ([9ae5754](https://github.com/ptimizeroracle/ondine/commit/9ae57546b14c428c38680add39ecc13112aab4fe))
+* **pipeline:** fail loudly when a run produces no usable output ([#187](https://github.com/ptimizeroracle/ondine/issues/187)) ([#206](https://github.com/ptimizeroracle/ondine/issues/206)) ([38579e1](https://github.com/ptimizeroracle/ondine/commit/38579e18455a6788b71ee524010738bcb0b4d6ac))
+* **structured:** resolve gateway models correctly and fall back on mode rejection ([#187](https://github.com/ptimizeroracle/ondine/issues/187)) ([#209](https://github.com/ptimizeroracle/ondine/issues/209)) ([1eb2847](https://github.com/ptimizeroracle/ondine/commit/1eb2847dbe8996c722dcf435dbd1e9f967860e39))
+
+
+### Documentation
+
+* unpublish internal notes and align claims with measured benchmarks ([#203](https://github.com/ptimizeroracle/ondine/issues/203)) ([94a8363](https://github.com/ptimizeroracle/ondine/commit/94a8363d430c83347e1762fe63bde6b576cec46f))
+
 ## [1.11.1](https://github.com/ptimizeroracle/ondine/compare/v1.11.0...v1.11.1) (2026-07-31)
 
 
