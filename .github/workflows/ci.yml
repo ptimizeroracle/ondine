@@ -65,6 +65,49 @@ jobs:
           python -c "from ondine.observability import disable_tracing, enable_tracing; from ondine.utils.metrics_exporter import PrometheusMetrics; enable_tracing(exporter='console'); disable_tracing(); PrometheusMetrics(port=0)"
         fi
 
+  bare-install-smoke:
+    name: Bare Install Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Build wheel via maturin
+      uses: PyO3/maturin-action@v1
+      with:
+        args: --release --out dist -i python3.11
+        sccache: true
+
+    # Bare first, then one extra. The bug class this job exists for — a core
+    # dependency that is only declared in an extra — is *only* visible in the
+    # bare leg; every extra installed can only hide it. The [mcp] leg is here
+    # to catch extras-only import breakage cheaply. [all] is deliberately not
+    # run: the Install Profile job above already proves it installs, and it
+    # pulls torch via sentence-transformers for no extra detection power.
+    - name: Smoke the public API on a bare install
+      shell: bash
+      run: |
+        set -euo pipefail
+        wheel=$(ls dist/*.whl | head -1)
+        for extras in "" "[mcp]"; do
+          echo "::group::install ondine${extras:-} (no dev environment)"
+          rm -rf "${RUNNER_TEMP}/smokeenv"
+          python -m venv "${RUNNER_TEMP}/smokeenv"
+          "${RUNNER_TEMP}/smokeenv/bin/python" -m pip install --quiet --upgrade pip
+          # Wheels only, and install the wheel by path: a source build would
+          # need a toolchain users do not have, and resolving by name could
+          # quietly pull the last release from PyPI instead of this commit.
+          "${RUNNER_TEMP}/smokeenv/bin/python" -m pip install --quiet \
+            --only-binary=:all: "${wheel}${extras}"
+          "${RUNNER_TEMP}/smokeenv/bin/python" scripts/smoke_bare_install.py
+          echo "::endgroup::"
+        done
+
   # Quick checks for feature branches - runs on every push
   quick-check:
     name: Quick Check (Lint + Unit Tests)
@@ -305,7 +348,7 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [install-profiles, test, test-pandas-compat]
+    needs: [install-profiles, bare-install-smoke, test, test-pandas-compat]
     # Only run on main/develop/PRs
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
 
