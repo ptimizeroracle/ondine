@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.3](https://github.com/ptimizeroracle/ondine/compare/v1.11.2...v1.11.3) (2026-08-03)
+
+
+### Bug Fixes
+
+* **providers:** make OpenAI-compatible endpoints work as documented ([#207](https://github.com/ptimizeroracle/ondine/issues/207), [#208](https://github.com/ptimizeroracle/ondine/issues/208)) ([#212](https://github.com/ptimizeroracle/ondine/issues/212)) ([a897cf7](https://github.com/ptimizeroracle/ondine/commit/a897cf7483b32f0edb66ad892e2743ee5795b934))
+
 ## [1.11.2](https://github.com/ptimizeroracle/ondine/compare/v1.11.1...v1.11.2) (2026-08-03)
 
 
