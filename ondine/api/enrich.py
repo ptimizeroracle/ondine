@@ -31,6 +31,13 @@ _ALLOWED_OPTIONS = frozenset(
         "max_tokens",
         "batch_size",
         "concurrency",
+        # Reaching a custom OpenAI-compatible endpoint (OpenRouter, Together,
+        # vLLM, LM Studio, Ollama's shim) needs both of these. Without them
+        # enrich() — the advertised front door — could only talk to providers
+        # with a built-in LiteLLM route, and everyone else had to drop down to
+        # the full builder.
+        "base_url",
+        "api_key",
     }
 )
 
@@ -64,7 +71,10 @@ def enrich(
         budget: Hard USD cap for the run; the pipeline halts at the limit.
         schema: Optional Pydantic model for structured output.
         **options: Forwarded to QuickPipeline — ``provider``,
-            ``temperature``, ``max_tokens``, ``batch_size``, ``concurrency``.
+            ``temperature``, ``max_tokens``, ``batch_size``, ``concurrency``,
+            ``base_url``, ``api_key``. Point at any OpenAI-compatible endpoint
+            with ``provider="openai_compatible"`` plus ``base_url``; the model
+            name needs no ``openai/`` prefix.
 
     Returns:
         The enriched DataFrame (input columns + output columns), as pandas
