@@ -100,14 +100,20 @@ class TestPipeline:
         assert validation.is_valid is False
         assert len(validation.errors) > 0
 
-    def test_estimate_cost_with_sample(self):
+    def test_estimate_cost_with_sample(self, monkeypatch):
         """Test cost estimation with sample data."""
-        import os
-
         df = pd.DataFrame({"text": [f"Sample {i}" for i in range(100)]})
 
-        # Set a dummy API key for cost estimation (doesn't need to be real)
-        os.environ["OPENAI_API_KEY"] = "sk-test-dummy-key-for-estimation"
+        # Dummy key: cost estimation never calls the API. Set via monkeypatch
+        # so the real environment is restored afterwards. This previously
+        # assigned os.environ directly and then *deleted* OPENAI_API_KEY in a
+        # finally block, which stripped the key from every later test in the
+        # session — the live provider tests were parametrised at collection
+        # time (key present) but then ran with no key at all.
+        monkeypatch.setenv(
+            "OPENAI_API_KEY",
+            "sk-test-dummy-key-for-estimation",  # pragma: allowlist secret
+        )
 
         specs = PipelineSpecifications(
             dataset=DatasetSpec(
@@ -124,16 +130,11 @@ class TestPipeline:
             ),
         )
 
-        try:
-            pipeline = Pipeline(specs, dataframe=df)
-            estimate = pipeline.estimate_cost()
+        pipeline = Pipeline(specs, dataframe=df)
+        estimate = pipeline.estimate_cost()
 
-            assert estimate.total_cost >= 0
-            assert estimate.rows == 100
-        finally:
-            # Clean up
-            if "OPENAI_API_KEY" in os.environ:
-                del os.environ["OPENAI_API_KEY"]
+        assert estimate.total_cost >= 0
+        assert estimate.rows == 100
 
     def test_add_observer(self):
         """Test adding observers to pipeline."""

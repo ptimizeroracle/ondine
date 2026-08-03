@@ -11,6 +11,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
+# Sentinel written into an output cell when a row is skipped under the SKIP
+# error policy. It is a failure marker, NOT valid output — quality checks and
+# the whole-run guard both treat a cell equal to this as a non-result. Defined
+# here (core) so the LLM stage and the quality validator share one spelling.
+SKIPPED_OUTPUT_MARKER = "[SKIPPED]"
+
 
 @dataclass
 class LLMResponse:
@@ -280,7 +286,11 @@ class ExecutionResult:
                 value = row.get(col)
                 if value is None:
                     null_count += 1
-                elif isinstance(value, str) and value.strip() == "":
+                elif isinstance(value, str) and (
+                    value.strip() == "" or value == SKIPPED_OUTPUT_MARKER
+                ):
+                    # A [SKIPPED] cell is a failure marker, not a result;
+                    # bucket it with empties so it never counts as valid.
                     empty_count += 1
                 else:
                     row_has_valid = True

@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from ondine.core.models import SKIPPED_OUTPUT_MARKER
 
 
 def get_provider_configs():
@@ -65,6 +66,16 @@ class TestAllProviders:
         assert "response" in df.columns
         assert result.metrics.processed_rows == 1
         assert result.costs.total_cost >= 0
+
+        # Verify the model actually answered. Without this the test passed on
+        # a run where every row failed (e.g. an invalid key in the
+        # environment): the shape assertions above all hold for a frame full
+        # of skip markers.
+        response = df["response"].iloc[0]
+        assert response is not None
+        assert response != SKIPPED_OUTPUT_MARKER
+        assert str(response).strip(), "provider returned an empty response"
+        assert result.metrics.skipped_rows == 0
 
     def test_provider_cost_estimation(self, provider, model, key_name):
         """Test cost estimation for provider."""

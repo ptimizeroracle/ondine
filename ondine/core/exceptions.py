@@ -147,3 +147,31 @@ class QuotaExceededError(NonRetryableError):
     """
 
     pass
+
+
+class PipelineExecutionError(Exception):
+    """
+    A run finished the pipeline but produced no usable output.
+
+    Raised at the end of ``Pipeline.execute()`` when every row failed —
+    e.g. a misconfigured model name makes every LLM call error out and
+    the SKIP policy turns each into a ``[SKIPPED]`` marker, or a provider
+    returns empty responses that parse to ``None`` for every cell.
+
+    Without this, such a run reported ``success=True`` and returned a
+    DataFrame full of skip markers / nulls: an hour of wall-clock and a
+    green checkmark hiding a total failure. This makes the failure loud
+    instead. It is distinct from :class:`NonRetryableError`, which fires
+    on a single fatal call; this fires on the run as a whole.
+
+    Example:
+        ```python
+        try:
+            result = pipeline.execute()
+        except PipelineExecutionError as e:
+            # Nothing was produced — inspect the model/config and retry.
+            logger.error(f"Run produced no output: {e}")
+        ```
+    """
+
+    pass
