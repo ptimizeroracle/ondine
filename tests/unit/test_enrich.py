@@ -15,10 +15,16 @@ import pytest
 from pydantic import BaseModel
 
 from ondine import enrich
+from ondine.adapters.llm_client import LLMClient
 from ondine.api.enrich import enrich as enrich_direct
 from ondine.api.pipeline import Pipeline
 from ondine.api.quick import QuickPipeline
-from ondine.core.models import CostEstimate, ExecutionResult, ProcessingStats
+from ondine.core.models import (
+    CostEstimate,
+    ExecutionResult,
+    LLMResponse,
+    ProcessingStats,
+)
 from ondine.stages.response_parser_stage import JSONParser
 
 
@@ -376,3 +382,130 @@ class TestEnrichRegressions1111:
         assert isinstance(out, pd.DataFrame)
         assert list(out["a"]) == [1, 2]
         assert list(out["b"]) == ["x", "y"]
+
+
+class _EchoClient(LLMClient):
+    """LLM client that answers every prompt with ANSWER, no network involved.
+
+    Used to run enrich() through its *real* stages. The other tests in this
+    file stub ``Pipeline.execute``, which means the loader, invocation, and
+    parser stages never run — the two bugs fixed in #188 both lived in exactly
+    that gap.
+    """
+
+    ANSWER = "positive"
+
+    def invoke(self, prompt, **kwargs):
+        return self._response()
+
+    async def ainvoke(self, prompt, **kwargs):
+        return self._response()
+
+    def structured_invoke(self, prompt, output_cls, **kwargs):
+        return self._structured(output_cls)
+
+    async def structured_invoke_async(self, prompt, output_cls, **kwargs):
+        return self._structured(output_cls)
+
+    def _structured(self, output_cls):
+        """Answer a structured call the way the real client does.
+
+        Instructor returns the parsed model, but the client hands the stage an
+        LLMResponse whose text is that model serialized — the stage needs the
+        usage/cost fields, not the bare model.
+        """
+        by_type = {int: 1, float: 1.0, bool: True}
+        parsed = output_cls(
+            **{
+                name: by_type.get(field.annotation, self.ANSWER)
+                for name, field in output_cls.model_fields.items()
+            }
+        )
+        return self._response(text=parsed.model_dump_json())
+
+    def _response(self, text=None):
+        return LLMResponse(
+            text=self.ANSWER if text is None else text,
+            tokens_in=5,
+            tokens_out=2,
+            model="echo",
+            cost=Decimal("0.0001"),
+            latency_ms=1.0,
+            metadata={},
+        )
+
+    def estimate_tokens(self, text: str) -> int:
+        return max(1, len(text) // 4)
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+
+class TestEnrichEndToEnd:
+    """enrich() driven through its real stages, with only the network stubbed.
+
+    Everything below patches the *client factory* rather than
+    ``Pipeline.execute``, so the loader, prompt, invocation, parser, and
+    output-quality guard all run for real.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _stub_client(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-stub")  # pragma: allowlist secret
+        monkeypatch.setattr(
+            "ondine.api.pipeline.create_llm_client",
+            lambda spec: _EchoClient(spec),
+        )
+
+    def test_pandas_frame_is_enriched(self):
+        result = enrich(
+            pd.DataFrame({"review": ["great", "awful"]}),
+            prompt="Classify: {review}",
+            output_columns=["sentiment"],
+        )
+
+        assert list(result["sentiment"]) == [_EchoClient.ANSWER] * 2
+
+    def test_polars_frame_is_enriched_and_stays_polars(self):
+        result = enrich(
+            pl.DataFrame({"review": ["great", "awful"]}),
+            prompt="Classify: {review}",
+            output_columns=["sentiment"],
+        )
+
+        assert isinstance(result, pl.DataFrame)
+        assert result["sentiment"].to_list() == [_EchoClient.ANSWER] * 2
+
+    def test_csv_path_is_loaded_and_enriched(self, tmp_path):
+        """A path input must reach the loader stage and come back populated."""
+        csv_path = tmp_path / "reviews.csv"
+        pd.DataFrame({"review": ["great", "awful"]}).to_csv(csv_path, index=False)
+
+        result = enrich(
+            str(csv_path),
+            prompt="Classify: {review}",
+            output_columns=["sentiment"],
+        )
+
+        assert list(result["review"]) == ["great", "awful"]
+        assert list(result["sentiment"]) == [_EchoClient.ANSWER] * 2
+
+    def test_schema_run_survives_the_pipeline_rebuild(self):
+        """schema= rebuilds the pipeline from its specifications mid-flight.
+
+        The frame has to survive that trip: when it did not, the run died with
+        "Either dataframe or source_path must be provided" (#188).
+        """
+
+        class Sentiment(BaseModel):
+            sentiment: str
+
+        result = enrich(
+            pd.DataFrame({"review": ["great", "awful"]}),
+            prompt="Classify: {review}",
+            output_columns=["sentiment"],
+            schema=Sentiment,
+        )
+
+        assert list(result["sentiment"]) == [_EchoClient.ANSWER] * 2
