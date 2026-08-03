@@ -202,3 +202,49 @@ class TestWholeRunGuard:
         )
 
         pipeline._guard_produced_output(result, ["sentiment"])
+
+    def test_deliberately_blanked_output_is_not_a_failure(self):
+        """A grounding/validation filter may legitimately blank every cell.
+
+        No rows errored and tokens were consumed, so the pipeline worked —
+        the data just did not survive the filter. Raising here would turn a
+        working feature into an error.
+        """
+        pipeline = self._pipeline(pd.DataFrame({"review": ["a"]}))
+        result = ExecutionResult(
+            data=ResultContainerImpl([{"sentiment": ""}, {"sentiment": ""}]),
+            metrics=ProcessingStats(2, 2, 0, 0, 1.0, 10.0),
+            costs=CostEstimate(Decimal("0.002"), 120, 100, 20, 2),
+            execution_id=uuid4(),
+            start_time=datetime.now(),
+        )
+
+        pipeline._guard_produced_output(result, ["sentiment"])
+
+    def test_zero_tokens_with_no_output_is_a_failure(self):
+        """Nothing came back from the provider at all — that is a failure."""
+        pipeline = self._pipeline(pd.DataFrame({"review": ["a"]}))
+        result = ExecutionResult(
+            data=ResultContainerImpl([{"sentiment": None}, {"sentiment": None}]),
+            metrics=ProcessingStats(2, 2, 0, 0, 1.0, 10.0),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, 2),
+            execution_id=uuid4(),
+            start_time=datetime.now(),
+        )
+
+        with pytest.raises(PipelineExecutionError):
+            pipeline._guard_produced_output(result, ["sentiment"])
+
+    def test_internal_retry_pass_is_exempt(self):
+        """A retry that recovers nothing must not abort the retry loop."""
+        pipeline = self._pipeline(pd.DataFrame({"review": ["a"]}))
+        pipeline._is_internal_retry = True
+        result = ExecutionResult(
+            data=ResultContainerImpl([{"sentiment": SKIPPED_OUTPUT_MARKER}]),
+            metrics=ProcessingStats(1, 1, 0, 1, 1.0, 10.0),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, 1),
+            execution_id=uuid4(),
+            start_time=datetime.now(),
+        )
+
+        pipeline._guard_produced_output(result, ["sentiment"])

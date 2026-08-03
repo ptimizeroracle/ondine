@@ -141,6 +141,10 @@ class Pipeline:
         self.executor = executor or SyncExecutor()
         self.observers: list[ExecutionObserver] = []
         self.logger = get_logger(f"{__name__}.{self.id}")
+        # Set on the throwaway pipelines _auto_retry_failed_rows builds. A
+        # retry pass that recovers nothing is a normal outcome the retry loop
+        # must survive, so the no-output guard applies to the user's run only.
+        self._is_internal_retry = False
 
     def add_observer(self, observer: ExecutionObserver) -> "Pipeline":
         """
@@ -1625,31 +1629,58 @@ class Pipeline:
     def _guard_produced_output(
         self, result: ExecutionResult, output_columns: list[str]
     ) -> None:
-        """Raise when a completed run produced nothing usable.
+        """Raise when a completed run produced nothing usable *and* something
+        demonstrably went wrong.
 
-        Two silent-failure modes reach here as an apparent success: every
-        row skipped (all cells are the ``[SKIPPED]`` marker) and every cell
+        Two silent-failure modes reach here as an apparent success: every row
+        skipped (all cells are the ``[SKIPPED]`` marker) and every cell
         parsed to null/empty (e.g. a provider that returned empty bodies).
-        Both are caught by the same signal — zero valid output cells — which
-        ``validate_output_quality`` already computes (it now treats the skip
-        marker as invalid). Basing the check on the actual output data rather
-        than on metrics makes it correct after auto-retry recovery, where the
-        metrics are stale but the data is not.
 
-        A run over an empty dataset (no rows) is not a failure and is left
-        alone.
+        Zero valid output is necessary but NOT sufficient to call a run
+        failed. A grounding or validation filter may legitimately blank every
+        cell — the pipeline did its job, the data just did not survive the
+        filter. Raising there would turn a working feature into an error, so
+        the guard also requires positive evidence of failure:
+
+        * rows were skipped or failed outright, or
+        * the run consumed zero tokens, meaning the provider never returned
+          anything at all.
+
+        The trade is deliberate: a provider that returns well-formed but
+        useless output for every row will not trip this. That case is
+        indistinguishable from a deliberate filter from here, and it is still
+        visible in the skipped/failed counts and the quality report.
+
+        A run over an empty dataset is not a failure and is left alone, as is
+        the internal auto-retry pass (see ``_is_internal_retry``).
         """
-        if not output_columns:
+        if not output_columns or self._is_internal_retry:
             return
+
         quality = result.validate_output_quality(output_columns)
-        if quality.total_rows > 0 and quality.valid_outputs == 0:
-            raise PipelineExecutionError(
-                f"Run completed but produced 0 valid outputs across "
-                f"{quality.total_rows} row(s). Every row failed — check the "
-                f"model name, credentials, and provider. "
-                f"({quality.null_outputs} null, {quality.empty_outputs} "
-                f"empty/skipped cells across columns {output_columns})."
-            )
+        if quality.total_rows == 0 or quality.valid_outputs > 0:
+            return
+
+        had_row_errors = (
+            result.metrics.skipped_rows > 0 or result.metrics.failed_rows > 0
+        )
+        produced_nothing = result.costs.total_tokens == 0
+        if not (had_row_errors or produced_nothing):
+            return
+
+        reason = (
+            f"{result.metrics.skipped_rows} skipped / "
+            f"{result.metrics.failed_rows} failed row(s)"
+            if had_row_errors
+            else "the provider returned no tokens at all"
+        )
+        raise PipelineExecutionError(
+            f"Run completed but produced 0 valid outputs across "
+            f"{quality.total_rows} row(s): {reason}. Check the model name, "
+            f"credentials, and provider. ({quality.null_outputs} null, "
+            f"{quality.empty_outputs} empty/skipped cells across columns "
+            f"{output_columns})."
+        )
 
     def _auto_retry_failed_rows(
         self, result: ExecutionResult, original_container: Any
@@ -1748,6 +1779,9 @@ class Pipeline:
 
             # Create new pipeline for retry
             retry_pipeline = Pipeline(retry_specs, dataframe=retry_df)
+            # A retry pass that recovers nothing is expected — the loop must
+            # be free to try again. Only the outer run gets the guard.
+            retry_pipeline._is_internal_retry = True
 
             # Execute retry
             retry_result = retry_pipeline.execute()
