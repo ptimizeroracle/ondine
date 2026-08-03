@@ -509,3 +509,64 @@ class TestEnrichEndToEnd:
         )
 
         assert list(result["sentiment"]) == [_EchoClient.ANSWER] * 2
+
+
+class TestEnrichCustomEndpoint:
+    """enrich() can reach an OpenAI-compatible endpoint (issue #208).
+
+    base_url and api_key were missing from the option allowlist, so the
+    advertised front door could not talk to OpenRouter, Together, vLLM,
+    LM Studio, or Ollama's OpenAI shim at all.
+    """
+
+    def test_base_url_and_api_key_reach_the_llm_spec(self, monkeypatch):
+        capture = {}
+        _patch_execute(monkeypatch, capture=capture)
+
+        enrich(
+            pd.DataFrame({"review": ["a"]}),
+            prompt="Classify: {review}",
+            provider="openai_compatible",
+            model="inclusionai/ling-2.6-flash",
+            base_url="https://openrouter.ai/api/v1",
+            api_key="sk-or-test",  # pragma: allowlist secret
+        )
+
+        llm = capture["pipeline"].specifications.llm
+        assert llm.base_url == "https://openrouter.ai/api/v1"
+        assert llm.api_key == "sk-or-test"  # pragma: allowlist secret
+
+    def test_model_needs_no_openai_prefix(self, monkeypatch):
+        """The endpoint is already declared OpenAI-shaped (#207).
+
+        Asserting on the client's routing rather than the spec: the spec keeps
+        the caller's model name, and the translation happens where LiteLLM is
+        known.
+        """
+        from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
+
+        capture = {}
+        _patch_execute(monkeypatch, capture=capture)
+
+        enrich(
+            pd.DataFrame({"review": ["a"]}),
+            prompt="Classify: {review}",
+            provider="openai_compatible",
+            model="inclusionai/ling-2.6-flash",
+            base_url="https://openrouter.ai/api/v1",
+            api_key="sk-or-test",  # pragma: allowlist secret
+        )
+
+        client = UnifiedLiteLLMClient(capture["pipeline"].specifications.llm)
+        assert client.model == "openai/inclusionai/ling-2.6-flash"
+
+    def test_unknown_options_are_still_rejected(self, monkeypatch):
+        """Widening the allowlist must not turn it into a passthrough."""
+        _patch_execute(monkeypatch)
+
+        with pytest.raises(TypeError, match="unexpected option"):
+            enrich(
+                pd.DataFrame({"review": ["a"]}),
+                prompt="Classify: {review}",
+                bogus_endpoint="https://example.com",
+            )

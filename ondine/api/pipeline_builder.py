@@ -506,7 +506,17 @@ class PipelineBuilder:
             builder.with_llm(provider="openai", model="gpt-4o-mini")
             builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
 
-            # Manual cost override (custom models)
+            # Any OpenAI-compatible endpoint (OpenRouter, Together, vLLM,
+            # LM Studio, ...). The model name is passed through as-is — no
+            # "openai/" prefix needed, the provider already says the endpoint
+            # speaks OpenAI.
+            builder.with_llm(
+                provider="openai_compatible",
+                model="inclusionai/ling-2.6-flash",
+                base_url="https://openrouter.ai/api/v1",
+            )
+
+            # Manual cost override (custom models LiteLLM has no pricing for)
             builder.with_llm(
                 model="my-custom-model",
                 provider="openai_compatible",

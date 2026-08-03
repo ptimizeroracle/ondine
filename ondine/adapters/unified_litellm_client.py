@@ -69,6 +69,14 @@ _json_schema_lock = threading.Lock()
 # timeout says nothing about mode support, and silently degrading to a weaker
 # mode on a 429 would hide a real failure behind a worse result.
 
+# Ondine's provider label for "some endpoint that speaks the OpenAI API".
+_OPENAI_COMPATIBLE_PROVIDER = "openai_compatible"
+
+# Ondine provider names that LiteLLM spells differently. LiteLLM routes by
+# provider prefix and has no "openai_compatible" — a custom OpenAI-shaped
+# endpoint is reached with the "openai" prefix plus an api_base.
+_LITELLM_PROVIDER_ALIASES = {_OPENAI_COMPATIBLE_PROVIDER: "openai"}
+
 # Substrings that identify a structural rejection of the *mode*, not of the
 # request. Matched case-insensitively against str(exception).
 _MODE_REJECTION_SIGNATURES = (
@@ -270,14 +278,29 @@ class UnifiedLiteLLMClient(LLMClient):
             provider_name.replace("litellm_", "").replace("litellm", "").strip()
         )
 
-        if "/" in spec.model:
+        # Ondine's provider name is not always LiteLLM's. "openai_compatible"
+        # is the caller telling us the endpoint speaks OpenAI; LiteLLM has no
+        # such provider and needs "openai". Translating here — the one place
+        # that knows about LiteLLM — keeps that detail out of every caller.
+        is_openai_compatible = provider_name == _OPENAI_COMPATIBLE_PROVIDER
+        provider_name = _LITELLM_PROVIDER_ALIASES.get(provider_name, provider_name)
+
+        if is_openai_compatible:
+            # A slash here belongs to the *model* ("inclusionai/ling-2.6-flash"),
+            # not to a provider, so the usual "has a slash → already namespaced"
+            # rule would leave LiteLLM with no provider at all. Prefix unless the
+            # caller already applied the old workaround.
+            self.model = (
+                spec.model
+                if spec.model.startswith("openai/")
+                else f"openai/{spec.model}"
+            )
+        elif "/" in spec.model:
             self.model = spec.model  # Already has provider prefix
+        elif provider_name:
+            self.model = f"{provider_name}/{spec.model}"
         else:
-            # Only prepend if we have a non-empty provider
-            if provider_name:
-                self.model = f"{provider_name}/{spec.model}"
-            else:
-                self.model = spec.model  # No provider, hope model is complete
+            self.model = spec.model  # No provider, hope model is complete
 
         self.provider_name = (
             (provider_name if provider_name else self.model.split("/")[0])
