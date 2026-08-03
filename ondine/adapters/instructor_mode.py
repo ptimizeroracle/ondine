@@ -89,6 +89,23 @@ PROVIDER_CAPABILITIES: dict[str, dict[str, Any]] = {
         "tools": True,
         "json": True,
     },
+    # Aggregator/gateway providers. Registering them matters for more than
+    # capabilities: _extract_provider consults this registry to decide whether
+    # the first path segment names a provider. Without an entry, a namespaced
+    # model like "openrouter/anthropic/claude-3.5-sonnet" fell through to
+    # substring matching and resolved to "anthropic" — selecting a native
+    # Anthropic Instructor mode for a request that actually travels over
+    # LiteLLM. The model behind the gateway is not the transport.
+    "openrouter": {
+        # OpenRouter exposes an OpenAI-compatible surface; per-model support
+        # varies, so LiteLLM's lookup (layer 3) still wins when it resolves.
+        "tools": True,
+        "json": True,
+    },
+    "deepseek": {
+        "tools": True,
+        "json": True,
+    },
 }
 
 

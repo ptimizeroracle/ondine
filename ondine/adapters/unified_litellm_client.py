@@ -56,6 +56,108 @@ _prepared_model_cache: dict[int, Any] = {}
 _json_schema_patched = False
 _json_schema_lock = threading.Lock()
 
+# ── Structured-output mode fallback (issue #187) ──────────────────────────
+#
+# Mode detection is a best guess: LiteLLM's capability table can be missing or
+# wrong for a given model, and gateways expose models whose real capabilities
+# differ from the gateway's. When the guess is wrong the provider rejects the
+# request *structurally* — it will never succeed, no matter how many times it
+# is retried in the same mode. Those are the only errors worth switching mode
+# for.
+#
+# Everything else must propagate untouched. A rate limit, an auth failure or a
+# timeout says nothing about mode support, and silently degrading to a weaker
+# mode on a 429 would hide a real failure behind a worse result.
+
+# Substrings that identify a structural rejection of the *mode*, not of the
+# request. Matched case-insensitively against str(exception).
+_MODE_REJECTION_SIGNATURES = (
+    "tools is not supported",
+    "tool use is not supported",
+    "does not support tool",
+    "tool calling is not supported",
+    "function calling is not supported",
+    "'functions' is not supported",
+    "functions is not supported",
+    "response_format is not supported",
+    "response_format is unsupported",
+    "json_schema is not supported",
+    "json_schema is unsupported",
+    "response_schema is not supported",
+    "structured output is not supported",
+)
+
+# Checked first: if any of these appear, the error is transient or fatal for
+# reasons unrelated to mode, and we must never fall back. This list wins over
+# the signatures above, so a message mentioning both stays loud.
+_NEVER_FALLBACK_SIGNATURES = (
+    "rate limit",
+    "ratelimit",
+    "429",
+    "quota",
+    "insufficient_quota",
+    "budget",
+    "authentication",
+    "unauthorized",
+    "401",
+    "403",
+    "invalid api key",
+    "api key not found",
+    "permission denied",
+    "timed out",
+    "timeout",
+    "connection",
+    "network",
+    "503",
+    "502",
+)
+
+
+def _is_mode_rejection_error(error: Exception) -> bool:
+    """True when an error means "this provider will never accept this mode".
+
+    Deliberately conservative: an unrecognised error returns False, so the
+    default behaviour is to propagate rather than to silently switch modes.
+    """
+    text = str(error).lower()
+
+    if any(sig in text for sig in _NEVER_FALLBACK_SIGNATURES):
+        return False
+
+    if any(sig in text for sig in _MODE_REJECTION_SIGNATURES):
+        return True
+
+    # Instructor's parse_tools() asserts exactly one tool call per response.
+    # A violation means the model does not honour the tool protocol properly,
+    # which a non-tool mode sidesteps entirely.
+    return isinstance(error, AssertionError) and "tool call" in text
+
+
+def _mode_fallback_chain(
+    current: "instructor.Mode", provider: str | None
+) -> list["instructor.Mode"]:
+    """Ordered modes to try after ``current``, most to least capable.
+
+    JSON is last everywhere because it is the most broadly supported mode —
+    it needs no tool protocol and no server-side schema enforcement. Anthropic
+    keeps its own chain: the native Instructor adapter rejects the LiteLLM
+    modes outright, so mixing the two families would trade one structural
+    failure for another.
+    """
+    if provider == "anthropic":
+        candidates = [
+            getattr(instructor.Mode, name, None)
+            for name in ("ANTHROPIC_TOOLS", "ANTHROPIC_JSON")
+        ]
+    else:
+        candidates = [
+            instructor.Mode.JSON_SCHEMA,
+            instructor.Mode.TOOLS,
+            instructor.Mode.JSON,
+        ]
+
+    return [m for m in candidates if m is not None and m != current]
+
 
 def _install_json_schema_cache() -> None:
     """Cache Pydantic JSON schema generation and Instructor model preparation.
@@ -280,6 +382,30 @@ class UnifiedLiteLLMClient(LLMClient):
             router_model_list=router_model_list,
         )
 
+        self._build_instructor_client(instructor_mode)
+
+        # Modes still worth trying if the provider structurally rejects the
+        # detected one. Consumed left to right, at most once each; an empty
+        # list means the current mode is the last resort. See
+        # _invoke_structured_with_fallback for why this is sticky.
+        self._mode_fallbacks: list[instructor.Mode] = _mode_fallback_chain(
+            instructor_mode,
+            provider="anthropic" if self._uses_direct_anthropic_instructor else None,
+        )
+        # Serialises mode switches: at high concurrency many in-flight rows hit
+        # the same rejection at once and would otherwise each rebuild the
+        # client. Created lazily because __init__ may run outside a loop.
+        self._mode_lock: asyncio.Lock | None = None
+
+        logger.debug(f"Initialized LiteLLM client: {self.model}")
+
+    def _build_instructor_client(self, mode: "instructor.Mode") -> None:
+        """(Re)bind the Instructor client to ``mode``.
+
+        Instructor binds its mode at construction, so switching modes means
+        building a new client. Cheap — it wraps a completion callable — and
+        happens at most once per fallback step, never per row.
+        """
         # Anthropic structured output currently works more reliably through the
         # native Instructor adapter than through LiteLLM's OpenAI-style tool shim.
         if self.provider_name == "anthropic" and not self.router:
@@ -288,9 +414,9 @@ class UnifiedLiteLLMClient(LLMClient):
             self.instructor_client = instructor.from_anthropic(
                 AsyncAnthropic(
                     api_key=self.api_key,
-                    base_url=getattr(spec, "base_url", None) or None,
+                    base_url=getattr(self.spec, "base_url", None) or None,
                 ),
-                mode=instructor_mode,
+                mode=mode,
             )
             self._uses_direct_anthropic_instructor = True
         else:
@@ -303,10 +429,8 @@ class UnifiedLiteLLMClient(LLMClient):
             # inspect.iscoroutinefunction(), but the static overload resolution needs
             # async_client=True to match the AsyncInstructor type used below.
             self.instructor_client = instructor.from_litellm(
-                completion_func, mode=instructor_mode, async_client=True
+                completion_func, mode=mode, async_client=True
             )
-
-        logger.debug(f"Initialized LiteLLM client: {self.model}")
 
         # Observer dispatcher for emitting LLM call events (set via set_observer_dispatcher)
         self._observer_dispatcher: ObserverDispatcher | None = None
@@ -977,6 +1101,22 @@ class UnifiedLiteLLMClient(LLMClient):
         if hasattr(self.spec, "extra_params") and self.spec.extra_params:
             call_kwargs.update(self.spec.extra_params)
 
+        result, raw_response = await self._invoke_structured_with_fallback(call_kwargs)
+
+        return self._finish_structured(
+            result, raw_response, prompt, kwargs.get("system_message"), start
+        )
+
+    def _apply_mode_kwargs(self, call_kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Add call parameters that depend on the *current* Instructor mode.
+
+        Recomputed on every attempt: a fallback changes the mode, and a kwarg
+        that was required for the old mode can be rejected outright by the new
+        one.
+        """
+        kwargs = dict(call_kwargs)
+        kwargs.pop("parallel_tool_calls", None)
+
         # Prevent models from returning multiple tool calls in a single response.
         # Instructor's parse_tools() asserts exactly one tool call per response;
         # parallel tool calls (common with temperature > 0) trigger an assertion.
@@ -993,38 +1133,108 @@ class UnifiedLiteLLMClient(LLMClient):
                 getattr(instructor.Mode, "PARALLEL_TOOLS", None),
             )
         ):
-            call_kwargs.setdefault("parallel_tool_calls", False)
+            kwargs.setdefault("parallel_tool_calls", False)
 
-        # Call with pre-initialized Instructor client
-        raw_response = None
-        try:
-            if self._uses_direct_anthropic_instructor:
-                # Anthropic's native Instructor adapter avoids LiteLLM's tool
-                # translation layer, which is currently incompatible with batch
-                # structured output. Use create() and fall back to local token
-                # estimation since raw completion metadata is not returned here.
-                if call_kwargs["max_tokens"] is None:
-                    call_kwargs["max_tokens"] = 1024
-                result = await self.instructor_client.create(**call_kwargs)  # type: ignore[arg-type]
-            # Try to get raw response for metadata extraction
-            # Instructor >= 1.0.0 supports create_with_completion
-            elif hasattr(
-                self.instructor_client.chat.completions, "create_with_completion"
-            ):
-                (
-                    result,
-                    raw_response,
-                ) = await self.instructor_client.chat.completions.create_with_completion(
-                    **call_kwargs  # type: ignore[arg-type]
-                )
-            else:
-                # Fallback for older versions
-                result = await self.instructor_client.chat.completions.create(
-                    **call_kwargs  # type: ignore[arg-type]
-                )
-        except Exception as e:
-            raise self._map_provider_error(e)
+        return kwargs
 
+    async def _create_structured(self, call_kwargs: dict[str, Any]) -> tuple[Any, Any]:
+        """One structured call in the current mode. Returns (result, raw)."""
+        if self._uses_direct_anthropic_instructor:
+            # Anthropic's native Instructor adapter avoids LiteLLM's tool
+            # translation layer, which is currently incompatible with batch
+            # structured output. Use create() and fall back to local token
+            # estimation since raw completion metadata is not returned here.
+            if call_kwargs.get("max_tokens") is None:
+                call_kwargs["max_tokens"] = 1024
+            return await self.instructor_client.create(**call_kwargs), None  # type: ignore[arg-type]
+
+        # Instructor >= 1.0.0 exposes create_with_completion, which also hands
+        # back the raw response we need for accurate usage/cost.
+        if hasattr(self.instructor_client.chat.completions, "create_with_completion"):
+            return await self.instructor_client.chat.completions.create_with_completion(  # type: ignore[no-any-return]
+                **call_kwargs  # type: ignore[arg-type]
+            )
+
+        return (
+            await self.instructor_client.chat.completions.create(**call_kwargs),  # type: ignore[arg-type]
+            None,
+        )
+
+    async def _invoke_structured_with_fallback(
+        self, call_kwargs: dict[str, Any]
+    ) -> tuple[Any, Any]:
+        """Call the model, walking the mode chain on structural rejections.
+
+        Mode detection is a guess (LiteLLM's capability table is incomplete for
+        gateway-hosted models). When the guess is structurally wrong, retrying
+        the same mode can never succeed, so we advance to the next candidate
+        and retry once per candidate.
+
+        The switch is **sticky**: the client keeps the mode that worked, so a
+        100k-row run pays the discovery cost once rather than per row. It is
+        also **narrow** — only :func:`_is_mode_rejection_error` triggers it, so
+        rate limits, auth failures and timeouts propagate unchanged.
+        """
+        while True:
+            # Capture the mode we are about to use. Reading it back after the
+            # failure would be wrong under concurrency: another row may have
+            # already switched the client, and we would then report a mode we
+            # never attempted — consuming a second candidate for one rejection.
+            attempted_mode = self.instructor_client.mode
+            try:
+                return await self._create_structured(
+                    self._apply_mode_kwargs(call_kwargs)
+                )
+            except Exception as e:
+                if not _is_mode_rejection_error(e):
+                    raise self._map_provider_error(e) from e
+
+                switched = await self._advance_mode(attempted_mode)
+                if not switched:
+                    # Chain exhausted: no mode this provider accepts. Report the
+                    # rejection itself rather than a generic failure.
+                    raise self._map_provider_error(e) from e
+
+    async def _advance_mode(self, failed_mode: "instructor.Mode") -> bool:
+        """Move to the next fallback mode. Returns False if none remain.
+
+        Concurrency: many in-flight rows hit the same rejection at once. The
+        first to take the lock performs the switch; the rest observe that the
+        mode already moved on from the one they failed with and reuse it
+        instead of consuming another candidate.
+        """
+        if self._mode_lock is None:
+            self._mode_lock = asyncio.Lock()
+
+        async with self._mode_lock:
+            if self.instructor_client.mode != failed_mode:
+                # Another coroutine already switched away from this mode.
+                return True
+
+            if not self._mode_fallbacks:
+                return False
+
+            next_mode = self._mode_fallbacks.pop(0)
+            logger.warning(
+                f"Structured output mode {failed_mode} rejected by "
+                f"'{self.model}'; falling back to {next_mode}"
+            )
+            self._build_instructor_client(next_mode)
+            return True
+
+    def _finish_structured(
+        self,
+        result: Any,
+        raw_response: Any,
+        prompt: str,
+        system_message: str | None,
+        start: float,
+    ) -> LLMResponse:
+        """Turn an Instructor result into an LLMResponse (usage, cost, events).
+
+        Split out from structured_invoke_async so the call path above stays
+        about *making the call*; everything here is accounting.
+        """
         # Serialize for backward compatibility (text field)
         text = result.model_dump_json()
 
@@ -1042,11 +1252,7 @@ class UnifiedLiteLLMClient(LLMClient):
             self._check_cache_hit(raw_response, tokens_in)
         else:
             # Fallback estimation
-            full_prompt = (
-                f"{kwargs.get('system_message', '')}\n\n{prompt}"
-                if kwargs.get("system_message")
-                else prompt
-            )
+            full_prompt = f"{system_message}\n\n{prompt}" if system_message else prompt
             tokens_in = self.estimate_tokens(full_prompt)
             tokens_out = self.estimate_tokens(text)
             cost = self._calc_cost(tokens_in, tokens_out)
@@ -1087,7 +1293,7 @@ class UnifiedLiteLLMClient(LLMClient):
             cost=cost,
             latency_ms=latency_ms,
             metadata=metadata,
-            system_message=kwargs.get("system_message"),
+            system_message=system_message,
         )
 
         return LLMResponse(
