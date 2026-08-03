@@ -235,12 +235,12 @@ jobs:
     name: Verify 16 wheels + 1 sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist
@@ -272,7 +272,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: Ondine
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheel-*
           path: dist
@@ -374,12 +374,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: Ondine
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist
@@ -393,7 +393,7 @@ jobs:
           twine check --strict dist/*
 
       - name: Sign wheels + sdist with Sigstore
-        uses: sigstore/gh-action-sigstore-python@v3.3.0
+        uses: sigstore/gh-action-sigstore-python@v3.4.0
         with:
           inputs: ./dist/*.whl ./dist/*.tar.gz
 
