@@ -32,6 +32,63 @@ jobs:
           release-type: python
 
       # ──────────────────────────────────────────────────────────────────
+      # Keep uv.lock in step with the version release-please just bumped.
+      #
+      # release-please edits pyproject.toml and CHANGELOG.md only, so merging
+      # its PR untouched lands a main where pyproject says 1.11.3 and uv.lock
+      # still says 1.11.2. Nothing fails at that moment — the cost is paid by
+      # whoever commits next, because pre-commit runs `uv sync`, the lock is
+      # rewritten underneath them, and the run aborts with "files were
+      # modified by this hook" on a file they never touched. Patched by hand
+      # for 1.11.1, 1.11.2 and 1.11.3 before this (#217).
+      # ──────────────────────────────────────────────────────────────────
+      # The action publishes the PR object; take the branch from it rather than
+      # rebuilding "release-please--branches--<base>" by hand, which would
+      # silently stop matching if the base branch ever changed.
+      - name: Check out the release PR branch
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+
+      - name: Install uv
+        if: steps.release.outputs.prs_created == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync uv.lock on the release PR
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Resolves the whole graph, but the only entry that can move here is
+          # ondine's own version — the dependency pins are already locked.
+          uv lock
+
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock already matches the bumped version — nothing to do."
+            exit 0
+          fi
+
+          git add uv.lock
+          git commit -m "chore: sync uv.lock with the release version bump"
+
+          # release-please recreates this branch whenever main moves, so it can
+          # be rewritten under us mid-run. Losing that race is self-healing —
+          # the push that caused it runs this job again — so it must not fail
+          # the release.
+          if ! git push origin "HEAD:$BRANCH"; then
+            echo "::warning::Could not push the uv.lock sync — release-please most likely rewrote $BRANCH. The next run on main will redo this."
+            exit 0
+          fi
+          echo "✅ uv.lock synced on $BRANCH"
+
+      # ──────────────────────────────────────────────────────────────────
       # Hand off to the publish pipeline.
       #
       # This dispatch exists because neither the GitHub Release nor the tag
@@ -53,6 +110,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # This job never checks out, so gh has no git remote to infer the
           # repo from — it has to be passed explicitly.
+          # A checkout only happens on the release-PR path above, so on this
+          # path there may be no git remote for gh to infer the repo from.
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
