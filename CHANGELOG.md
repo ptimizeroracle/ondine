@@ -65,6 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **readme:** R2 rewrite — pain-first, agentic bridge, use-case wedges ([#175](https://github.com/ptimizeroracle/ondine/issues/175)) ([568e136](https://github.com/ptimizeroracle/ondine/commit/568e136a16eb5af11f80847e0e6768a3f80f9c1a))
 
+## [1.10.1](https://github.com/ptimizeroracle/ondine/compare/v1.10.0...v1.10.1) (2026-04-23)
+
+
+### Bug Fixes
+
+* derive `__version__` from package metadata ([#163](https://github.com/ptimizeroracle/ondine/issues/163)) ([9fbb49c](https://github.com/ptimizeroracle/ondine/commit/9fbb49c05d33dc0aa1fa93a5bdd7d43e45052aeb))
+* **ci:** grant contents:write for Sigstore release attachments ([#162](https://github.com/ptimizeroracle/ondine/issues/162)) ([78275d7](https://github.com/ptimizeroracle/ondine/commit/78275d75029c3924b0f0854cd16885a697fbce79))
+
+## [1.10.0](https://github.com/ptimizeroracle/ondine/compare/v1.9.1...v1.10.0) (2026-04-23)
+
+
+### Bug Fixes
+
+* **ci:** publish wheels for all platforms + TestPyPI smoke gate ([#160](https://github.com/ptimizeroracle/ondine/issues/160)) ([0a7e90c](https://github.com/ptimizeroracle/ondine/commit/0a7e90cc3c615d2bdab28b76e45a79ee41226282))
+
 ## [1.9.1](https://github.com/ptimizeroracle/ondine/compare/v1.9.0...v1.9.1) (2026-04-22)
 
 
