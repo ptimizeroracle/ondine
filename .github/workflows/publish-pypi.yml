@@ -317,21 +317,31 @@ jobs:
         env:
           VERSION: ${{ needs.resolve-tag.outputs.version }}
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip packaging
           # --only-binary ondine: refuses sdist fallback, errors hard if no wheel
           # --extra-index-url prod PyPI: dependencies come from prod, package itself from test
           #
-          # TestPyPI's index lags its own upload on some CDN edges: in v1.11.1
-          # 5 of 7 runners installed fine while 2 got "No matching distribution"
-          # seconds later (#197). The old 5×15s window was too tight, so retry
-          # 6 times with 15/30/60/60/60s backoff — ~3m45s total.
+          # "No matching distribution found" has two causes that need opposite
+          # responses, and pip cannot tell them apart:
           #
-          # ONLY index lag is retried. Any other pip failure (a broken wheel, a
-          # missing dependency, an ABI mismatch) is a real defect that more
-          # waiting cannot fix, so it fails immediately instead of burning the
-          # whole backoff window and masking the cause.
-          BACKOFF=(15 30 60 60 60)
-          for i in 0 1 2 3 4 5; do
+          #   * this runner reached a stale TestPyPI CDN edge while the wheel is
+          #     uploaded and compatible — harmless, must not block the release
+          #   * no uploaded wheel matches this interpreter — the v1.7.0-v1.9.1
+          #     regression this job exists to catch, must block the release
+          #
+          # Waiting longer cannot separate them. In 1.11.3 the lag outlived the
+          # ~3m45s window from #197 and blocked a perfectly good release *after*
+          # its tag was cut, while all 16 wheels sat on TestPyPI (#215). So:
+          # retry longer, then ask the JSON API — authoritative about what was
+          # uploaded, and updated ahead of the simple index — whether a wheel
+          # matching *this* runner exists.
+          #
+          # Any other pip failure (a broken wheel, a missing dependency, an ABI
+          # mismatch) is a real defect that waiting cannot fix, so it still
+          # fails immediately instead of burning the window and masking itself.
+          BACKOFF=(15 30 60 60 60 90 120)
+          LAST=${#BACKOFF[@]}
+          for i in $(seq 0 "$LAST"); do
             if OUTPUT=$(python -m pip install \
                 --index-url https://test.pypi.org/simple/ \
                 --extra-index-url https://pypi.org/simple/ \
@@ -346,13 +356,75 @@ jobs:
               echo "::error::pip failed for a reason other than TestPyPI index lag — not retrying"
               exit 1
             fi
-            if [ "$i" -eq 5 ]; then
-              echo "::error::ondine==${VERSION} still not installable from TestPyPI after 6 attempts (~3m45s) — treating as a genuine publish failure"
-              exit 1
+            if [ "$i" -lt "$LAST" ]; then
+              echo "Attempt $((i + 1)) hit TestPyPI index lag — retrying in ${BACKOFF[$i]}s"
+              sleep "${BACKOFF[$i]}"
             fi
-            echo "Attempt $((i + 1)) hit TestPyPI index lag — retrying in ${BACKOFF[$i]}s"
-            sleep "${BACKOFF[$i]}"
           done
+
+          echo "Retries exhausted (~7m15s). Asking the JSON API what was actually uploaded."
+          STATUS=$(python - <<'PY'
+          import json, os, urllib.error, urllib.request
+
+          from packaging.tags import sys_tags
+          from packaging.utils import parse_wheel_filename
+
+          url = f"https://test.pypi.org/pypi/ondine/{os.environ['VERSION']}/json"
+          try:
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  payload = json.load(response)
+          except urllib.error.HTTPError as exc:
+              print("absent" if exc.code == 404 else "unreachable")
+              raise SystemExit(0)
+          except Exception:
+              print("unreachable")
+              raise SystemExit(0)
+
+          wheels = [
+              f["filename"]
+              for f in payload.get("urls", [])
+              if f.get("filename", "").endswith(".whl")
+          ]
+          if not wheels:
+              print("absent")
+              raise SystemExit(0)
+
+          supported = {str(tag) for tag in sys_tags()}
+          for filename in wheels:
+              try:
+                  _, _, _, tags = parse_wheel_filename(filename)
+              except Exception:
+                  continue  # an unparseable filename tells us nothing
+              if any(str(tag) in supported for tag in tags):
+                  print("compatible")
+                  break
+          else:
+              print("incompatible")
+          PY
+          )
+
+          case "$STATUS" in
+            compatible)
+              # The upload is complete and this platform's wheel is there; only
+              # this CDN edge is behind. Production publish uploads the build
+              # artifacts directly, never TestPyPI, so the released files are
+              # unaffected by a stale test index.
+              echo "::warning::ondine==${VERSION} is uploaded to TestPyPI with a wheel matching this runner, but the index edge served to this job is still stale after ~7m15s. Treating as index lag, not a publish failure (#215)."
+              exit 0
+              ;;
+            incompatible)
+              echo "::error::TestPyPI has ondine==${VERSION} but no wheel matching this runner ($(python -c 'import platform,sys;print(platform.platform(), "py%d.%d" % sys.version_info[:2])')). This is the v1.7.0 wheel regression — refusing to publish."
+              exit 1
+              ;;
+            absent)
+              echo "::error::TestPyPI has no wheels for ondine==${VERSION} — the upload did not land. Refusing to publish."
+              exit 1
+              ;;
+            *)
+              echo "::error::Could not reach the TestPyPI JSON API to tell index lag from a missing wheel. Failing closed."
+              exit 1
+              ;;
+          esac
 
       - name: Verify Rust extension loads (regression gate)
         shell: bash
