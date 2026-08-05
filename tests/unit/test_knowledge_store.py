@@ -38,8 +38,8 @@ class TestInMemoryChunkDB:
 
 class TestKnowledgeStore:
     @pytest.fixture
-    def store(self):
-        return KnowledgeStore(":memory:")
+    def store(self, deterministic_embedder):
+        return KnowledgeStore(":memory:", embedder=deterministic_embedder)
 
     def test_ingest_text_and_search(self, store):
         count = store.ingest_text("Organic cereals contain whole grains and fiber")

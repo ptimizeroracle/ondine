@@ -5,8 +5,11 @@ Provides reusable test fixtures and mocks for the test suite.
 """
 
 import logging
+import math
 import os
+import re
 import warnings
+import zlib
 from decimal import Decimal
 from typing import Any
 
@@ -140,6 +143,52 @@ class MockLLMClient(LLMClient):
     def estimate_tokens(self, text: str) -> int:
         """Mock token estimation."""
         return len(text) // 4
+
+
+class DeterministicEmbedder:
+    """Bag-of-words embedder — no model, no network, sensible geometry.
+
+    The knowledge tests used to embed with the real sentence-transformers
+    model, which downloads ~90MB from huggingface.co on first use. That made a
+    *unit* suite depend on a third-party host being reachable: when it was not,
+    17 tests failed and the job burned ~57 minutes on HF's retry backoff before
+    giving up (#221). A red suite that usually means "the network hiccuped" is
+    worse than useless — it teaches everyone to re-run without reading.
+
+    Each token is hashed into a fixed bucket and the vector L2-normalised, so
+    cosine similarity tracks token overlap. That is enough geometry for the
+    "best keyword match ranks first" assertions these tests actually make,
+    while staying instant and hermetic. crc32 rather than hash() because the
+    latter is salted per process, which would make rankings vary between runs.
+
+    The real embedder is exercised where it is the subject, in the integration
+    suite — not incidentally, in every test that happens to need a store.
+    """
+
+    DIMENSIONS = 64
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.call_count += 1
+        return [self._vector(text) for text in texts]
+
+    def _vector(self, text: str) -> list[float]:
+        vector = [0.0] * self.DIMENSIONS
+        for token in re.findall(r"[a-z0-9]+", text.lower()):
+            vector[zlib.crc32(token.encode()) % self.DIMENSIONS] += 1.0
+        norm = math.sqrt(sum(value * value for value in vector))
+        return [value / norm for value in vector] if norm else vector
+
+    def __repr__(self) -> str:
+        return f"DeterministicEmbedder(dims={self.DIMENSIONS})"
+
+
+@pytest.fixture
+def deterministic_embedder():
+    """An embedder that needs no model download. See DeterministicEmbedder."""
+    return DeterministicEmbedder()
 
 
 @pytest.fixture

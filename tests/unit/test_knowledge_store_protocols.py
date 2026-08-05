@@ -50,18 +50,22 @@ class TestKnowledgeStoreWithProtocols:
         store.ingest_text("hello world test document")
         assert embedder.call_count >= 1
 
-    def test_reranker_applied_during_search(self):
+    def test_reranker_applied_during_search(self, deterministic_embedder):
         reranker = _FakeReranker()
-        store = KnowledgeStore(":memory:", reranker=reranker)
+        store = KnowledgeStore(
+            ":memory:", reranker=reranker, embedder=deterministic_embedder
+        )
         store.ingest_text("apple pie recipe with cinnamon")
         store.ingest_text("banana split dessert with chocolate")
 
         store.search("apple", limit=5)
         assert reranker.called
 
-    def test_query_transform_applied_during_search(self):
+    def test_query_transform_applied_during_search(self, deterministic_embedder):
         transformer = _FakeTransformer()
-        store = KnowledgeStore(":memory:", query_transform=transformer)
+        store = KnowledgeStore(
+            ":memory:", query_transform=transformer, embedder=deterministic_embedder
+        )
         store.ingest_text("deep learning neural networks tutorial")
 
         store.search("ML", limit=5)
