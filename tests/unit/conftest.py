@@ -1,12 +1,10 @@
 """Unit-suite guarantees that hold no matter what a test forgets to inject."""
 
-import os
-
 import pytest
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _no_model_downloads():
+@pytest.fixture(autouse=True)
+def _no_model_downloads(monkeypatch):
     """Forbid the unit suite from reaching Hugging Face.
 
     Injecting a fake embedder covers ``KnowledgeStore``, but not every
@@ -21,20 +19,15 @@ def _no_model_downloads():
     failure that the caller's existing fallback handles, so behaviour stops
     depending on whether the network happens to be up.
 
-    Real models belong in the integration suite, which is allowed to be slow
-    and online. This fixture is scoped to unit tests only.
+    Deliberately per-test rather than per-session. A session fixture that sets
+    ``os.environ`` leaks: the CI step that runs the whole tree in one process
+    (``pytest --cov``) would carry offline mode out of tests/unit and into
+    tests/verification, where ``test_claim_36_knowledge_store_search`` embeds
+    with a real model on purpose. ``monkeypatch`` undoes it after each test, so
+    the guard stops exactly at the edge of this directory.
+
+    Real models belong in the integration and verification suites, which are
+    allowed to be slow and online.
     """
-    previous = {
-        name: os.environ.get(name)
-        for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
-    }
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    try:
-        yield
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
