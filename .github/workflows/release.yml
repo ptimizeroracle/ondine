@@ -50,6 +50,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          # Full history and tags: the changelog-coverage check below walks
+          # commits back to the previous release tag, which a shallow clone
+          # would not contain.
+          fetch-depth: 0
 
       - name: Install uv
         if: steps.release.outputs.prs_created == 'true'
@@ -108,10 +112,8 @@ jobs:
         if: steps.release.outputs.release_created == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This job never checks out, so gh has no git remote to infer the
-          # repo from — it has to be passed explicitly.
           # A checkout only happens on the release-PR path above, so on this
-          # path there may be no git remote for gh to infer the repo from.
+          # path gh may have no git remote to infer the repo from — pass it.
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
@@ -123,3 +125,19 @@ jobs:
           gh workflow run publish-pypi.yml \
             --ref "${{ github.ref_name }}" \
             -f release_tag="$TAG_NAME"
+
+      # ──────────────────────────────────────────────────────────────────
+      # Last step on purpose: a changelog gap must be *visible*, but it must
+      # never stop a release that is otherwise fine. Running after the
+      # dispatch above means this can go red without having held anything up.
+      #
+      # release-please parses every commit as a conventional commit, and when
+      # that parse fails it skips the commit, writes the changelog without it,
+      # and still reports success. In 1.11.0 that swallowed #180 — the largest
+      # feature in the release — because a body line contained nested parens
+      # its grammar could not read. The version bump came from other commits,
+      # so nothing else looked wrong (#191).
+      # ──────────────────────────────────────────────────────────────────
+      - name: Verify the changelog covers everything that shipped
+        if: steps.release.outputs.prs_created == 'true'
+        run: python scripts/check_changelog_coverage.py
