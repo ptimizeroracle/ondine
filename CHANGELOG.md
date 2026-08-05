@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.5](https://github.com/ptimizeroracle/ondine/compare/v1.11.4...v1.11.5) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ci:** stop a skipped step's expression from killing the release job ([#222](https://github.com/ptimizeroracle/ondine/issues/222)) ([baffa76](https://github.com/ptimizeroracle/ondine/commit/baffa76c86c5bbae3ea432733087dad09d9ba2d9))
+* **pipeline:** don't divide by a zero-length stream duration ([#224](https://github.com/ptimizeroracle/ondine/issues/224)) ([aea800b](https://github.com/ptimizeroracle/ondine/commit/aea800b0fdf59befa0a2a17bb78efbf29ecf1147))
+
 ## [1.11.4](https://github.com/ptimizeroracle/ondine/compare/v1.11.3...v1.11.4) (2026-08-05)
 
 
