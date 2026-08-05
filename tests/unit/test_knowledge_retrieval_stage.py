@@ -20,8 +20,8 @@ def _make_container(rows: list[dict], columns: list[str]) -> DictListContainer:
 
 class TestKnowledgeRetrievalStage:
     @pytest.fixture
-    def populated_store(self):
-        store = KnowledgeStore(":memory:")
+    def populated_store(self, deterministic_embedder):
+        store = KnowledgeStore(":memory:", embedder=deterministic_embedder)
         store.ingest_text("Organic cereals contain whole grains and fiber")
         store.ingest_text("Frozen vegetables are flash-frozen at harvest")
         return store
@@ -43,8 +43,8 @@ class TestKnowledgeRetrievalStage:
         assert "_kb_context" in row
         assert len(row["_kb_context"]) > 0
 
-    def test_empty_store_produces_empty_context(self):
-        store = KnowledgeStore(":memory:")
+    def test_empty_store_produces_empty_context(self, deterministic_embedder):
+        store = KnowledgeStore(":memory:", embedder=deterministic_embedder)
         stage = KnowledgeRetrievalStage(store=store, query_columns=["q"], top_k=3)
 
         container = _make_container([{"q": "anything"}], ["q"])

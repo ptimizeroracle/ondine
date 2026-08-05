@@ -488,3 +488,77 @@ class TestPipeline:
         assert len(results) == 2
         written = pd.read_csv(output_path)
         assert written["result"].tolist() == ["A", "B"]
+
+    @pytest.mark.asyncio
+    async def test_execute_stream_async_survives_a_zero_duration_run(self, monkeypatch):
+        """A run that finishes inside one clock tick must still return.
+
+        The final log line divided rows by elapsed seconds. On Windows
+        datetime.now() has ~15ms resolution, so a fast stream could finish with
+        duration exactly 0.0 and raise ZeroDivisionError *after* every chunk had
+        been processed — failing a run whose work had entirely succeeded.
+
+        Time is frozen here so the boundary is hit on every platform, rather
+        than only on the machines whose clocks are coarse enough.
+        """
+        df = pd.DataFrame({"text": ["a"]})
+        specs = PipelineSpecifications(
+            dataset=DatasetSpec(
+                source_type=DataSourceType.DATAFRAME,
+                input_columns=["text"],
+                output_columns=["result"],
+            ),
+            prompt=PromptSpec(template="{text}"),
+            llm=LLMSpec(provider=LLMProvider.OPENAI, model="gpt-4o-mini"),
+        )
+        pipeline = Pipeline(
+            specs, dataframe=df, executor=StreamingExecutor(chunk_size=1)
+        )
+
+        frozen = datetime(2026, 1, 1, 12, 0, 0)
+
+        class _FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen
+
+        monkeypatch.setattr("ondine.api.pipeline.datetime", _FrozenDatetime)
+
+        async def fake_stream_dataframe_chunks(dataframe, chunk_size):
+            yield pl.DataFrame({"text": ["a"]})
+
+        async def fake_process_chunk_async(chunk_df, execution_id, chunk_index):
+            return ExecutionResult(
+                data=pd.DataFrame({"text": ["a"], "result": ["A"]}),
+                metrics=ProcessingStats(
+                    total_rows=1, processed_rows=1, failed_rows=0, skipped_rows=0
+                ),
+                costs=CostEstimate(
+                    total_cost=Decimal("0.01"),
+                    total_tokens=10,
+                    input_tokens=5,
+                    output_tokens=5,
+                    rows=1,
+                    confidence="actual",
+                ),
+                start_time=frozen,
+                end_time=frozen,
+                success=True,
+            )
+
+        with (
+            patch.object(
+                pipeline,
+                "_stream_dataframe_chunks",
+                side_effect=fake_stream_dataframe_chunks,
+            ),
+            patch.object(
+                pipeline,
+                "_process_chunk_async",
+                side_effect=fake_process_chunk_async,
+            ),
+        ):
+            results = [chunk async for chunk in pipeline.execute_stream_async(1)]
+
+        assert len(results) == 1
+        assert results[0].metrics.processed_rows == 1

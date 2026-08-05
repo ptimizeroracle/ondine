@@ -159,12 +159,12 @@ def test_knowledge_store_accepts_ocr_param():
     assert kb._loader._ocr is ocr
 
 
-def test_knowledge_store_ingest_image():
+def test_knowledge_store_ingest_image(deterministic_embedder):
     """Full integration: image → OCR → chunk → store."""
     from ondine.knowledge.store import KnowledgeStore
 
     ocr = _FakeOCR("The quarterly revenue was $2.5 billion, up 15% year-over-year.")
-    kb = KnowledgeStore(":memory:", ocr=ocr)
+    kb = KnowledgeStore(":memory:", ocr=ocr, embedder=deterministic_embedder)
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)

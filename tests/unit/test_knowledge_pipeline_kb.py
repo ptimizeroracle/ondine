@@ -10,13 +10,18 @@ from ondine.api.pipeline_builder import PipelineBuilder
 
 
 class TestWithKnowledgeBaseBuilder:
+    @pytest.fixture(autouse=True)
+    def _use_deterministic_embedder(self, deterministic_embedder):
+        """Keep the helper below off the network — see DeterministicEmbedder."""
+        self.embedder = deterministic_embedder
+
     def _builder_with_kb(self, **kb_kwargs):
         """Helper: create a minimal builder with KB configured."""
         import pandas as pd
 
         from ondine.knowledge.store import KnowledgeStore
 
-        kb = KnowledgeStore(":memory:")
+        kb = KnowledgeStore(":memory:", embedder=self.embedder)
         kb.ingest_text("Test document for pipeline integration")
 
         df = pd.DataFrame({"question": ["What is a test?"]})
