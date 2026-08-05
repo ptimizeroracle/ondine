@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.4](https://github.com/ptimizeroracle/ondine/compare/v1.11.3...v1.11.4) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ci:** fail the release when the changelog omits a shipped PR ([#191](https://github.com/ptimizeroracle/ondine/issues/191)) ([#220](https://github.com/ptimizeroracle/ondine/issues/220)) ([e00ed8f](https://github.com/ptimizeroracle/ondine/commit/e00ed8f5432af0f7fc5d2bcf79faeb7c7881f329))
+* **ci:** sync uv.lock on the release PR ([#217](https://github.com/ptimizeroracle/ondine/issues/217)) ([#219](https://github.com/ptimizeroracle/ondine/issues/219)) ([b92bc3b](https://github.com/ptimizeroracle/ondine/commit/b92bc3b89d6a0a3c943c0ed596f459a4d49a1c6f))
+* **ci:** tell TestPyPI index lag from a genuinely missing wheel ([#215](https://github.com/ptimizeroracle/ondine/issues/215)) ([#216](https://github.com/ptimizeroracle/ondine/issues/216)) ([e093469](https://github.com/ptimizeroracle/ondine/commit/e093469b31756a8c900f69f980b691b4f244963c))
+
 ## [1.11.3](https://github.com/ptimizeroracle/ondine/compare/v1.11.2...v1.11.3) (2026-08-03)
 
 
