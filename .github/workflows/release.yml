@@ -42,14 +42,47 @@ jobs:
       # modified by this hook" on a file they never touched. Patched by hand
       # for 1.11.1, 1.11.2 and 1.11.3 before this (#217).
       # ──────────────────────────────────────────────────────────────────
-      # The action publishes the PR object; take the branch from it rather than
-      # rebuilding "release-please--branches--<base>" by hand, which would
-      # silently stop matching if the base branch ever changed.
+      # Parse the PR object here, in a step body, rather than in a `with:` or
+      # `env:` expression.
+      #
+      # A step's inputs are evaluated even when its `if:` is false, so an
+      # inline `fromJSON(steps.release.outputs.pr)` is evaluated on the
+      # release-merge path too — where there is no PR and the output is the
+      # empty string. fromJSON('') then fails template validation and kills
+      # the whole job:
+      #
+      #   The template is not valid. release.yml (Line: 67, Col: 19):
+      #   Error reading JToken from JsonReader.
+      #
+      # That took down the 1.11.4 release: the tag was cut, then the job died
+      # before the publish dispatch below, so nothing reached PyPI. Reading
+      # the raw string into an env var and parsing it with jq keeps every
+      # expression here a plain string.
+      #
+      # The branch still comes from the action's own output rather than a
+      # hand-built "release-please--branches--<base>", which would silently
+      # stop matching if the base branch ever changed.
+      # ──────────────────────────────────────────────────────────────────
+      - name: Resolve the release PR branch
+        id: release_pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          set -euo pipefail
+          branch=$(printf '%s' "$PR_JSON" | jq -r '.headBranchName // empty')
+          if [ -z "$branch" ]; then
+            echo "::error::release-please reported a PR but no head branch name"
+            exit 1
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "Release PR branch: $branch"
+
       - name: Check out the release PR branch
         if: steps.release.outputs.prs_created == 'true'
         uses: actions/checkout@v6
         with:
-          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          ref: ${{ steps.release_pr.outputs.branch }}
           # Full history and tags: the changelog-coverage check below walks
           # commits back to the previous release tag, which a shallow clone
           # would not contain.
@@ -64,7 +97,7 @@ jobs:
       - name: Sync uv.lock on the release PR
         if: steps.release.outputs.prs_created == 'true'
         env:
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          BRANCH: ${{ steps.release_pr.outputs.branch }}
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
@@ -108,8 +141,13 @@ jobs:
       # the publish side. It also lets us pass the exact tag release-please
       # cut, instead of inferring it after the fact.
       # ──────────────────────────────────────────────────────────────────
+      # always(): the publish is the critical path and must not be hostage to
+      # anything above it. The uv.lock sync failing — or, as in 1.11.4, merely
+      # failing to *evaluate* — previously skipped this step and left a cut tag
+      # with nothing on PyPI. Those steps are conveniences; this one is the
+      # release.
       - name: Dispatch PyPI publish
-        if: steps.release.outputs.release_created == 'true'
+        if: always() && steps.release.outputs.release_created == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # A checkout only happens on the release-PR path above, so on this
