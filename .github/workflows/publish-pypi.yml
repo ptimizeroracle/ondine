@@ -409,7 +409,14 @@ jobs:
               # this CDN edge is behind. Production publish uploads the build
               # artifacts directly, never TestPyPI, so the released files are
               # unaffected by a stale test index.
-              echo "::warning::ondine==${VERSION} is uploaded to TestPyPI with a wheel matching this runner, but the index edge served to this job is still stale after ~7m15s. Treating as index lag, not a publish failure (#215)."
+              #
+              # Nothing got installed, so every later step in this job would
+              # fail on a missing import. Flag the job as unverified and let
+              # them skip: this runner could not test the wheel, which is not
+              # the same as the wheel being broken. The other matrix legs still
+              # gate the release.
+              echo "::warning::ondine==${VERSION} is uploaded to TestPyPI with a wheel matching this runner, but the index edge served to this job is still stale after ~7m15s. Treating as index lag, not a publish failure — this runner verified nothing (#215)."
+              echo "smoke_unverified=true" >> "$GITHUB_ENV"
               exit 0
               ;;
             incompatible)
@@ -427,6 +434,10 @@ jobs:
           esac
 
       - name: Verify Rust extension loads (regression gate)
+        # Skipped when the install above hit a stale index edge and installed
+        # nothing — otherwise this fails on a missing import and reports a
+        # broken wheel when the wheel was never fetched.
+        if: env.smoke_unverified != 'true'
         shell: bash
         env:
           PYTHONIOENCODING: utf-8
