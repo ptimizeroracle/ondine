@@ -1470,9 +1470,16 @@ class Pipeline:
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
+        # A run can finish inside one clock tick — small frames, or Windows,
+        # where datetime.now() has ~15ms resolution — leaving duration at
+        # exactly 0.0. Dividing there raised ZeroDivisionError from the final
+        # log line, killing a run whose work had already completed
+        # successfully. Every other throughput site in the codebase guards
+        # this; this one did not.
+        rate = total_rows / duration if duration > 0 else float(total_rows)
         self.logger.info(
             f"Streaming complete: {total_rows} rows in {duration:.1f}s "
-            f"({total_rows / duration:.1f} rows/sec), "
+            f"({rate:.1f} rows/sec), "
             f"cost: ${total_cost:.4f}"
         )
 
