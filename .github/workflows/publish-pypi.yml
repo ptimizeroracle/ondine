@@ -410,13 +410,13 @@ jobs:
               # artifacts directly, never TestPyPI, so the released files are
               # unaffected by a stale test index.
               #
-              # Nothing got installed, so every later step in this job would
-              # fail on a missing import. Flag the job as unverified and let
-              # them skip: this runner could not test the wheel, which is not
-              # the same as the wheel being broken. The other matrix legs still
-              # gate the release.
-              echo "::warning::ondine==${VERSION} is uploaded to TestPyPI with a wheel matching this runner, but the index edge served to this job is still stale after ~7m15s. Treating as index lag, not a publish failure — this runner verified nothing (#215)."
-              echo "smoke_unverified=true" >> "$GITHUB_ENV"
+              # Nothing got installed, so the steps below fall back to the
+              # built wheel instead of skipping. A stale edge must not turn
+              # into an unverified platform: the artifact answers the question
+              # this gate actually asks — does this wheel install without a
+              # Rust toolchain, and does its extension load (#226).
+              echo "::warning::ondine==${VERSION} is uploaded to TestPyPI with a wheel matching this runner, but the index edge served to this job is still stale after ~7m15s. Falling back to the built wheel for verification (#215, #226)."
+              echo "smoke_from_artifact=true" >> "$GITHUB_ENV"
               exit 0
               ;;
             incompatible)
@@ -433,11 +433,50 @@ jobs:
               ;;
           esac
 
+      # Fallback target when TestPyPI's index was stale. verify-matrix-complete
+      # has already proved these 16 wheels exist and publish-prod uploads these
+      # same files, so installing one here tests exactly what ships.
+      - name: Download built wheels (fallback verification target)
+        if: env.smoke_from_artifact == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Install the built wheel for this runner
+        if: env.smoke_from_artifact == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel=$(python - <<'PY'
+          import glob
+          import os
+
+          from packaging.tags import sys_tags
+          from packaging.utils import parse_wheel_filename
+
+          supported = {str(tag) for tag in sys_tags()}
+          for path in sorted(glob.glob(os.path.join("dist", "*.whl"))):
+              try:
+                  _, _, _, tags = parse_wheel_filename(os.path.basename(path))
+              except Exception:
+                  continue
+              if any(str(tag) in supported for tag in tags):
+                  print(path)
+                  break
+          PY
+          )
+          if [ -z "$wheel" ]; then
+            echo "::error::No built wheel matches this runner — the build matrix is missing this platform, which is the v1.7.0 regression."
+            exit 1
+          fi
+          echo "Installing $wheel"
+          python -m pip install "$wheel"
+
+      # Always runs. Whether the wheel came from TestPyPI or from the build
+      # artifact, this is the assertion the gate exists to make.
       - name: Verify Rust extension loads (regression gate)
-        # Skipped when the install above hit a stale index edge and installed
-        # nothing — otherwise this fails on a missing import and reports a
-        # broken wheel when the wheel was never fetched.
-        if: env.smoke_unverified != 'true'
         shell: bash
         env:
           PYTHONIOENCODING: utf-8
