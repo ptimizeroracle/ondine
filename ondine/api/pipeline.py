@@ -234,7 +234,10 @@ class Pipeline:
         )
 
         # Create LLM client and estimate
-        llm_client = create_llm_client(self.specifications.llm)
+        # Estimation must use the same client the run will use — a custom
+        # client can tokenize or price differently.
+        injected = (self.specifications.metadata or {}).get("custom_llm_client")
+        llm_client = injected or create_llm_client(self.specifications.llm)
         llm_stage = LLMInvocationStage(llm_client)
 
         sample_estimate = llm_stage.estimate_cost(batches)
@@ -779,7 +782,11 @@ class Pipeline:
                 update={"instructor_mode": specs.metadata["instructor_mode"]}
             )
 
-        llm_client = create_llm_client(llm_spec)
+        # A client injected via PipelineBuilder.with_custom_llm_client() wins.
+        # The builder used to store it and every execution path built a real
+        # client anyway, calling the provider the caller was replacing (#230).
+        injected = (specs.metadata or {}).get("custom_llm_client")
+        llm_client = injected or create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration)
         if context.observer_dispatcher and hasattr(
@@ -1495,6 +1502,19 @@ class Pipeline:
             yield pl.from_pandas(chunk_pd)
             await asyncio.sleep(0)  # Yield to event loop
 
+    def _carry_injected_client(self, specs: Any) -> None:
+        """Re-attach an injected LLM client to *specs* by reference.
+
+        Sub-pipelines start from ``model_copy(deep=True)``, which deep-copies
+        anything in metadata — including a client the caller injected. A copy
+        defeats the point of injecting an instance: state it holds (a session,
+        a token, a shared rate limiter, a call counter) stops being shared, and
+        a client wrapping something uncopyable would fail outright.
+        """
+        injected = (self.specifications.metadata or {}).get("custom_llm_client")
+        if injected is not None:
+            specs.metadata["custom_llm_client"] = injected
+
     async def _process_chunk_async(
         self,
         chunk_df: pd.DataFrame,
@@ -1508,6 +1528,7 @@ class Pipeline:
 
         # Create a mini-pipeline for this chunk
         chunk_specs = self.specifications.model_copy(deep=True)
+        self._carry_injected_client(chunk_specs)
         chunk_specs.dataset.source_path = None  # Use dataframe
         chunk_specs.output = None  # Don't write (we handle it)
 
@@ -1778,6 +1799,7 @@ class Pipeline:
 
             # Create modified specs for retry
             retry_specs = self.specifications.model_copy(deep=True)
+            self._carry_injected_client(retry_specs)
             retry_specs.dataset.source_type = DataSourceType.DATAFRAME
             retry_specs.dataset.source_path = None
             retry_specs.processing.enable_preprocessing = False

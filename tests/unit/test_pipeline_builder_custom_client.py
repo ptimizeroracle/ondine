@@ -6,6 +6,7 @@ Tests the ability to provide a custom LLM client instance directly.
 
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -204,3 +205,138 @@ class TestCustomClientWithConfig:
         assert pipeline.specifications.llm.provider == "openai_compatible"
         assert pipeline.specifications.llm.base_url == "https://api.together.xyz/v1"
         assert pipeline.specifications.llm.provider_name == "Together.AI"
+
+
+class TestCustomClientIsActuallyUsed:
+    """The builder stored the client; nothing ever used it (#230).
+
+    Every test above asserts wiring — that the method exists, returns the
+    builder, records the attribute. None ran a pipeline, so a no-op API passed
+    CI for ondine's entire public life: the builder kept the client in
+    metadata and both execution paths built a real client from the spec
+    instead, calling the provider the caller was trying to replace.
+
+    These tests assert the client is *invoked*, which is the only claim that
+    matters and the only one the old tests could not make.
+    """
+
+    class _RecordingClient(LLMClient):
+        """Answers every prompt and remembers it was asked."""
+
+        def __init__(self, spec: LLMSpec):
+            super().__init__(spec)
+            self.prompts: list[str] = []
+            self.token_estimates = 0
+
+        def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+            self.prompts.append(prompt)
+            return LLMResponse(
+                text="from-custom-client",
+                tokens_in=5,
+                tokens_out=2,
+                model="custom",
+                cost=Decimal("0.001"),
+                latency_ms=1.0,
+                metadata={},
+            )
+
+        async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+            return self.invoke(prompt, **kwargs)
+
+        def structured_invoke(self, prompt, output_cls, **kwargs):
+            return self.invoke(prompt, **kwargs)
+
+        async def structured_invoke_async(self, prompt, output_cls, **kwargs):
+            return self.invoke(prompt, **kwargs)
+
+        def estimate_tokens(self, text: str) -> int:
+            self.token_estimates += 1
+            return max(1, len(text) // 4)
+
+        async def start(self) -> None: ...
+
+        async def stop(self) -> None: ...
+
+    def _pipeline(self, client):
+        import pandas as pd
+
+        return (
+            PipelineBuilder.create()
+            .from_dataframe(
+                pd.DataFrame({"t": ["a", "b"]}),
+                input_columns=["t"],
+                output_columns=["out"],
+            )
+            .with_prompt("Echo: {t}")
+            .with_custom_llm_client(client)
+            .with_batch_size(1)
+            .build()
+        )
+
+    def test_execute_invokes_the_custom_client(self):
+        """The whole point: a run must go through the injected client.
+
+        The model name below is deliberately not a real one. Before the fix
+        the pipeline called the provider with it and every row failed on
+        "model does not exist" — the caller's client untouched.
+        """
+        client = self._RecordingClient(LLMSpec(provider="openai", model="not-a-model"))
+
+        result = self._pipeline(client).execute()
+
+        assert len(client.prompts) == 2, "custom client was never invoked"
+        assert list(result.to_pandas()["out"]) == ["from-custom-client"] * 2
+
+    def test_no_real_provider_client_is_built(self):
+        """Nothing may fall back to create_llm_client when one was injected."""
+        client = self._RecordingClient(LLMSpec(provider="openai", model="not-a-model"))
+
+        with patch(
+            "ondine.api.pipeline.create_llm_client",
+            side_effect=AssertionError("built a real client despite an injected one"),
+        ):
+            self._pipeline(client).execute()
+
+    def test_cost_estimation_uses_the_custom_client(self):
+        """Estimation must price with the client the run will actually use."""
+        client = self._RecordingClient(LLMSpec(provider="openai", model="not-a-model"))
+
+        estimate = self._pipeline(client).estimate_cost()
+
+        assert estimate.rows == 2
+        assert client.token_estimates > 0, (
+            "estimation built its own client instead of using the injected one"
+        )
+
+    @pytest.mark.asyncio
+    async def test_streaming_uses_the_same_client_instance(self):
+        """Chunks must share the injected instance, not deep copies of it.
+
+        Sub-pipelines start from model_copy(deep=True), which copies whatever
+        is in metadata. A copied client silently defeats the point of
+        injecting one: any state it holds — a session, a token, a shared rate
+        limiter — stops being shared, and a client wrapping something
+        uncopyable would fail outright.
+        """
+        import pandas as pd
+
+        client = self._RecordingClient(LLMSpec(provider="openai", model="not-a-model"))
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(
+                pd.DataFrame({"t": [f"r{i}" for i in range(4)]}),
+                input_columns=["t"],
+                output_columns=["out"],
+            )
+            .with_prompt("Echo: {t}")
+            .with_custom_llm_client(client)
+            .with_batch_size(1)
+            .build()
+        )
+
+        chunks = [c async for c in pipeline.execute_stream_async(chunk_size=2)]
+
+        assert len(chunks) == 2
+        assert len(client.prompts) == 4, (
+            "chunks used copies of the client, not the injected instance"
+        )

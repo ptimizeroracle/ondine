@@ -223,7 +223,11 @@ class LiveBackend:
                 update={"instructor_mode": specs.metadata["instructor_mode"]}
             )
 
-        llm_client = create_llm_client(llm_spec)
+        # A client injected via PipelineBuilder.with_custom_llm_client() wins.
+        # The builder used to store it and every execution path built a real
+        # client anyway, calling the provider the caller was replacing (#230).
+        injected = (specs.metadata or {}).get("custom_llm_client")
+        llm_client = injected or create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration).
         if context.observer_dispatcher and hasattr(
