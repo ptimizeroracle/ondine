@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.6](https://github.com/ptimizeroracle/ondine/compare/v1.11.5...v1.11.6) (2026-08-06)
+
+
+### Bug Fixes
+
+* **ci:** skip the rest of a smoke job when the index edge was stale ([#225](https://github.com/ptimizeroracle/ondine/issues/225)) ([8da8fdd](https://github.com/ptimizeroracle/ondine/commit/8da8fdd89dfbd1a4c8fb1dc93546b04ff590d5f1))
+
 ## [1.11.5](https://github.com/ptimizeroracle/ondine/compare/v1.11.4...v1.11.5) (2026-08-05)
 
 
