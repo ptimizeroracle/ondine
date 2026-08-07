@@ -81,11 +81,44 @@ class MyCustomLLMClient(LLMClient):
             latency_ms=latency_ms,
         )
 
+    def structured_invoke(
+        self, prompt: str, output_cls: Any, **kwargs: Any
+    ) -> LLMResponse:
+        """Invoke and return output conforming to *output_cls*.
+
+        Required by the LLMClient interface — a client that cannot be
+        instantiated without it. Ondine calls this when a pipeline sets
+        with_structured_output(); if your API has no structured mode, ask it
+        for JSON and validate here, or raise NotImplementedError so callers
+        learn immediately rather than at row 40,000.
+        """
+        # A real implementation would parse the response text into output_cls
+        # and re-raise on validation failure. The demo response is not JSON,
+        # so we simply hand the text back.
+        return self.invoke(prompt, **kwargs)
+
+    async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+        """Async variant — this is the one the pipeline actually calls.
+
+        The default executor is async, so leaving this as a sync-only client
+        means every row goes through the base class. Implement it with your
+        API's async client for real concurrency; delegating to invoke() as
+        below is correct but serialises requests.
+        """
+        return self.invoke(prompt, **kwargs)
+
+    async def structured_invoke_async(
+        self, prompt: str, output_cls: Any, **kwargs: Any
+    ) -> LLMResponse:
+        """Async variant of structured_invoke."""
+        return self.structured_invoke(prompt, output_cls, **kwargs)
+
     def estimate_tokens(self, text: str) -> int:
         """
         Estimate token count.
 
-        Replace with your custom tokenization logic.
+        Used for cost estimation before a run, so it should match your
+        provider's tokenizer as closely as you care about the estimate.
         """
         # Simple word count for demo
         return len(text.split())

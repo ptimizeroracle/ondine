@@ -30,6 +30,7 @@
 * [Cost Estimation & Budgets](guides/cost-control.md)
 * [Caching](guides/caching.md)
 * [Multi-Provider Routing](guides/routing.md)
+* [Custom LLM Clients](guides/custom-clients.md)
 
 ## Providers
 

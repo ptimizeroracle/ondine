@@ -365,3 +365,57 @@ class TestCustomClientIsActuallyUsed:
         dumped = pipeline.specifications.model_dump(mode="json")
 
         assert "custom_llm_client" not in dumped.get("metadata", {})
+
+
+class TestMinimalClientInterface:
+    """A client implementing only the declared interface must run.
+
+    LLMClient declares three abstract methods, but the invocation stage also
+    calls start() and stop() — which lived on UnifiedLiteLLMClient only, and
+    were invoked through a `type: ignore[attr-defined]`. So a client that
+    implemented everything the interface asked for still died at the first row
+    with AttributeError, and neither the ABC nor mypy could say why.
+
+    This pins the contract: implement what is abstract, and it runs.
+    """
+
+    class _BareMinimum(LLMClient):
+        """Exactly the three abstract methods — nothing else."""
+
+        def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+            return LLMResponse(
+                text="minimal",
+                tokens_in=1,
+                tokens_out=1,
+                model="minimal",
+                cost=Decimal("0"),
+                latency_ms=1.0,
+                metadata={},
+            )
+
+        def structured_invoke(self, prompt, output_cls, **kwargs):
+            return self.invoke(prompt, **kwargs)
+
+        def estimate_tokens(self, text: str) -> int:
+            return max(1, len(text) // 4)
+
+    def test_client_with_only_abstract_methods_runs(self):
+        import pandas as pd
+
+        client = self._BareMinimum(LLMSpec(provider="openai", model="not-a-model"))
+
+        result = (
+            PipelineBuilder.create()
+            .from_dataframe(
+                pd.DataFrame({"t": ["a", "b"]}),
+                input_columns=["t"],
+                output_columns=["out"],
+            )
+            .with_prompt("Echo: {t}")
+            .with_custom_llm_client(client)
+            .with_batch_size(1)
+            .build()
+            .execute()
+        )
+
+        assert list(result.to_pandas()["out"]) == ["minimal"] * 2

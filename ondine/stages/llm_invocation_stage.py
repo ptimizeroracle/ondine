@@ -159,7 +159,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
     ) -> list[ResponseBatch]:
         """Internal async implementation — shared by process() and process_async()."""
         # Initialize global connection pool
-        await self.llm_client.start()  # type: ignore[attr-defined]
+        await self.llm_client.start()
 
         try:
             # Setup deployment tracker from Router config
@@ -205,7 +205,7 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             return response_batches
         finally:
             # Cleanup global connection pool
-            await self.llm_client.stop()  # type: ignore[attr-defined]
+            await self.llm_client.stop()
 
     def _get_router_model_list(self) -> list[dict] | None:
         """Get model list from Router if available."""
