@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **builder:** honour with_custom_llm_client() instead of ignoring it ([#230](https://github.com/ptimizeroracle/ondine/issues/230)) ([#231](https://github.com/ptimizeroracle/ondine/issues/231)) ([346b585](https://github.com/ptimizeroracle/ondine/commit/346b585fc48a29fc7a1eb8f5d6d75f1067a79b59))
 * **ci:** verify every smoke leg, falling back to the built wheel ([#226](https://github.com/ptimizeroracle/ondine/issues/226)) ([#228](https://github.com/ptimizeroracle/ondine/issues/228)) ([ccf0cbf](https://github.com/ptimizeroracle/ondine/commit/ccf0cbfccd4d4a5c968e7ee5f4e11e911c8eee29))
 * **streaming:** stop writing a response cache nothing can read ([#150](https://github.com/ptimizeroracle/ondine/issues/150)) ([#234](https://github.com/ptimizeroracle/ondine/issues/234)) ([a7cc6d7](https://github.com/ptimizeroracle/ondine/commit/a7cc6d75195bb1f5af1fd59f90fd71afbff37305))
+* **core:** keep live objects out of specifications, so structured output and MCP snapshots work together ([#232](https://github.com/ptimizeroracle/ondine/issues/232)) ([#233](https://github.com/ptimizeroracle/ondine/issues/233)) ([6ebf2a7](https://github.com/ptimizeroracle/ondine/commit/6ebf2a75b8339ebc4762a7dc8bac7dfd45e54e78))
 
 ## [1.11.6](https://github.com/ptimizeroracle/ondine/compare/v1.11.5...v1.11.6) (2026-08-06)
 
