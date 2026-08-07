@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 import pandas as pd  # noqa: TC002
 
 from ondine.api.pipeline import Pipeline
+from ondine.core.components import PipelineComponents
 from ondine.core.specifications import (
     DatasetSpec,
     DataSourceType,
@@ -63,6 +64,11 @@ class PipelineBuilder:
         self._executor: ExecutionStrategy | None = None
         self._custom_parser: Any | None = None
         self._custom_llm_client: Any | None = None
+        # Live collaborators, kept off specifications.metadata so the specs
+        # stay serializable — see ondine/core/components.py (#232).
+        self._knowledge_store: Any | None = None
+        self._context_store: Any | None = None
+        self._structured_output_model: Any | None = None
         self._custom_stages: list[dict] = []  # For custom stage injection
         self._observers: list[tuple[str, dict]] = []  # For observability
         self._custom_metadata: dict[str, Any] = {}  # For arbitrary metadata
@@ -1449,7 +1455,7 @@ class PipelineBuilder:
         """
         if not hasattr(self, "_custom_metadata"):
             self._custom_metadata = {}
-        self._custom_metadata["structured_output_model"] = schema
+        self._structured_output_model = schema
         self._custom_metadata["instructor_mode"] = mode
 
         # Auto-inject JSONParser if no parser configured
@@ -1526,7 +1532,7 @@ class PipelineBuilder:
                 "Create one with: KnowledgeStore('path.db')"
             )
 
-        self._custom_metadata["knowledge_store"] = store
+        self._knowledge_store = store
         self._custom_metadata["knowledge_config"] = {
             "query_columns": query_columns,
             "top_k": top_k,
@@ -1579,7 +1585,7 @@ class PipelineBuilder:
 
                 store = InMemoryContextStore()
 
-        self._custom_metadata["context_store"] = store
+        self._context_store = store
         return self
 
     def with_evidence_priming(
@@ -1623,7 +1629,7 @@ class PipelineBuilder:
             )
             ```
         """
-        if "context_store" not in self._custom_metadata:
+        if self._context_store is None:
             self.with_context_store()
 
         self._custom_metadata["evidence_priming"] = {
@@ -1672,7 +1678,7 @@ class PipelineBuilder:
             "embed_fn": embed_fn,
         }
 
-        if "context_store" not in self._custom_metadata:
+        if self._context_store is None:
             self.with_context_store()
 
         return self
@@ -1710,7 +1716,7 @@ class PipelineBuilder:
             "tolerance": tolerance,
         }
 
-        if "context_store" not in self._custom_metadata:
+        if self._context_store is None:
             self.with_context_store()
 
         return self
@@ -1744,7 +1750,7 @@ class PipelineBuilder:
             "scoring_mode": scoring_mode,
         }
 
-        if "context_store" not in self._custom_metadata:
+        if self._context_store is None:
             self.with_context_store()
 
         return self
@@ -1795,8 +1801,6 @@ class PipelineBuilder:
         metadata = {}
         if self._custom_metadata:
             metadata.update(self._custom_metadata)
-        if self._custom_parser is not None:
-            metadata["custom_parser"] = self._custom_parser
         if self._custom_stages:
             metadata["custom_stages"] = self._custom_stages
         if self._observers:
@@ -1865,5 +1869,11 @@ class PipelineBuilder:
             specifications,
             dataframe=self._dataframe,
             executor=self._executor,
-            llm_client=self._custom_llm_client,
+            components=PipelineComponents(
+                llm_client=self._custom_llm_client,
+                knowledge_store=self._knowledge_store,
+                context_store=self._context_store,
+                structured_output_model=self._structured_output_model,
+                custom_parser=self._custom_parser,
+            ),
         )

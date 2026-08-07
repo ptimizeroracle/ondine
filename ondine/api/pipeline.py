@@ -21,6 +21,7 @@ from ondine.adapters import (
 )
 from ondine.adapters.streaming_loader import StreamingDataLoader
 from ondine.adapters.streaming_writer import StreamingResultWriter
+from ondine.core.components import PipelineComponents
 from ondine.core.exceptions import PipelineExecutionError
 from ondine.core.models import (
     CostEstimate,
@@ -126,7 +127,7 @@ class Pipeline:
         specifications: PipelineSpecifications,
         dataframe: pd.DataFrame | None = None,
         executor: ExecutionStrategy | None = None,
-        llm_client: Any | None = None,
+        components: PipelineComponents | None = None,
     ):
         """
         Initialize pipeline with specifications.
@@ -135,17 +136,18 @@ class Pipeline:
             specifications: Complete pipeline configuration
             dataframe: Optional pre-loaded DataFrame
             executor: Optional execution strategy (default: SyncExecutor)
-            llm_client: Optional caller-supplied LLM client, used instead of
-                building one from the spec. Passed explicitly — like
-                *dataframe* and *executor* — rather than smuggled through
-                specifications.metadata, so specs stay serializable and
-                sub-pipelines share the instance rather than a deep copy.
+            components: Optional live collaborators (LLM client, knowledge
+                store, context store, parser, structured-output model). Passed
+                explicitly — like *dataframe* and *executor* — rather than
+                smuggled through specifications.metadata, so specs stay
+                serializable and sub-pipelines share instances rather than
+                deep copies.
         """
         self.id = uuid4()
         self.specifications = specifications
         self.dataframe = dataframe
         self.executor = executor or SyncExecutor()
-        self._llm_client = llm_client
+        self._components = components or PipelineComponents()
         self.observers: list[ExecutionObserver] = []
         self.logger = get_logger(f"{__name__}.{self.id}")
         # Set on the throwaway pipelines _auto_retry_failed_rows builds. A
@@ -243,7 +245,9 @@ class Pipeline:
         # Create LLM client and estimate
         # Estimation must use the same client the run will use — a custom
         # client can tokenize or price differently.
-        llm_client = self._llm_client or create_llm_client(self.specifications.llm)
+        llm_client = self._components.llm_client or create_llm_client(
+            self.specifications.llm
+        )
         llm_stage = LLMInvocationStage(llm_client)
 
         sample_estimate = llm_stage.estimate_cost(batches)
@@ -357,7 +361,7 @@ class Pipeline:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
-        context.llm_client = self._llm_client
+        context.components = self._components
 
         # Add default observers if none specified
         if not self.observers:
@@ -692,7 +696,7 @@ class Pipeline:
             )
 
         # Stage 1.5: Knowledge Base retrieval (if configured)
-        kb_store = specs.metadata.get("knowledge_store") if specs.metadata else None
+        kb_store = self._components.knowledge_store
         kb_config = specs.metadata.get("knowledge_config") if specs.metadata else None
         if kb_store is not None and kb_config is not None:
             from ondine.stages.knowledge_retrieval_stage import (
@@ -735,7 +739,7 @@ class Pipeline:
         evidence_priming_cfg = (
             specs.metadata.get("evidence_priming") if specs.metadata else None
         )
-        evidence_store = specs.metadata.get("context_store") if specs.metadata else None
+        evidence_store = self._components.context_store
         if evidence_priming_cfg is not None and evidence_store is not None:
             from ondine.stages.evidence_retrieval_stage import EvidenceRetrievalStage
 
@@ -792,7 +796,7 @@ class Pipeline:
         # A client injected via PipelineBuilder.with_custom_llm_client() wins.
         # Before #230 the builder stored it and every execution path built a
         # real client anyway, calling the provider the caller was replacing.
-        llm_client = context.llm_client or create_llm_client(llm_spec)
+        llm_client = self._components.llm_client or create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration)
         if context.observer_dispatcher and hasattr(
@@ -813,7 +817,7 @@ class Pipeline:
             retry_handler=retry_handler,
             error_policy=specs.processing.error_policy,
             max_retries=specs.processing.max_retries,
-            output_cls=specs.metadata.get("structured_output_model")
+            output_cls=self._components.structured_output_model
             if specs.metadata
             else None,
             budget_controller=budget_controller,
@@ -852,7 +856,7 @@ class Pipeline:
 
         # Stage 4: Parse responses (using configured parser)
         # Check if custom parser provided in metadata
-        custom_parser = specs.metadata.get("custom_parser") if specs.metadata else None
+        custom_parser = self._components.custom_parser
         if custom_parser:
             parser = custom_parser
         else:
@@ -871,7 +875,7 @@ class Pipeline:
         )
 
         # Stage 4.5: Context Store — grounding, storage, contradiction detection
-        context_store = specs.metadata.get("context_store") if specs.metadata else None
+        context_store = self._components.context_store
         grounding_cfg = specs.metadata.get("grounding") if specs.metadata else None
         contradiction_cfg = (
             specs.metadata.get("contradiction_detection") if specs.metadata else None
@@ -1528,10 +1532,10 @@ class Pipeline:
             specifications=chunk_specs,
             dataframe=chunk_df,
             executor=AsyncExecutor(),
-            # Share the caller's instance. Passing it explicitly is what keeps
-            # chunks off deep copies: model_copy(deep=True) above would clone
-            # anything carried inside the specifications instead.
-            llm_client=self._llm_client,
+            # Share the caller's instances. Passing them explicitly is what
+            # keeps chunks off deep copies: model_copy(deep=True) above would
+            # clone anything carried inside the specifications instead.
+            components=self._components,
         )
 
         # Execute the chunk
@@ -1803,7 +1807,7 @@ class Pipeline:
 
             # Create new pipeline for retry
             retry_pipeline = Pipeline(
-                retry_specs, dataframe=retry_df, llm_client=self._llm_client
+                retry_specs, dataframe=retry_df, components=self._components
             )
             # A retry pass that recovers nothing is expected — the loop must
             # be free to try again. Only the outer run gets the guard.
