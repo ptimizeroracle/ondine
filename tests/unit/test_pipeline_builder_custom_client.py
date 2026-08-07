@@ -340,3 +340,28 @@ class TestCustomClientIsActuallyUsed:
         assert len(client.prompts) == 4, (
             "chunks used copies of the client, not the injected instance"
         )
+
+    def test_specifications_stay_serializable(self):
+        """An injected client must not make the specs unserializable.
+
+        The client used to be stored in specifications.metadata, which broke
+        model_dump(mode="json") — the call MCP makes to snapshot a run
+        (ondine/mcp/server.py). Specifications are configuration; a live
+        client is runtime state and belongs on the Pipeline, not in them.
+        """
+        import pandas as pd
+
+        client = self._RecordingClient(LLMSpec(provider="openai", model="not-a-model"))
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(
+                pd.DataFrame({"t": ["a"]}), input_columns=["t"], output_columns=["out"]
+            )
+            .with_prompt("Echo: {t}")
+            .with_custom_llm_client(client)
+            .build()
+        )
+
+        dumped = pipeline.specifications.model_dump(mode="json")
+
+        assert "custom_llm_client" not in dumped.get("metadata", {})

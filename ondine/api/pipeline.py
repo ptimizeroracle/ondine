@@ -126,6 +126,7 @@ class Pipeline:
         specifications: PipelineSpecifications,
         dataframe: pd.DataFrame | None = None,
         executor: ExecutionStrategy | None = None,
+        llm_client: Any | None = None,
     ):
         """
         Initialize pipeline with specifications.
@@ -134,11 +135,17 @@ class Pipeline:
             specifications: Complete pipeline configuration
             dataframe: Optional pre-loaded DataFrame
             executor: Optional execution strategy (default: SyncExecutor)
+            llm_client: Optional caller-supplied LLM client, used instead of
+                building one from the spec. Passed explicitly — like
+                *dataframe* and *executor* — rather than smuggled through
+                specifications.metadata, so specs stay serializable and
+                sub-pipelines share the instance rather than a deep copy.
         """
         self.id = uuid4()
         self.specifications = specifications
         self.dataframe = dataframe
         self.executor = executor or SyncExecutor()
+        self._llm_client = llm_client
         self.observers: list[ExecutionObserver] = []
         self.logger = get_logger(f"{__name__}.{self.id}")
         # Set on the throwaway pipelines _auto_retry_failed_rows builds. A
@@ -236,8 +243,7 @@ class Pipeline:
         # Create LLM client and estimate
         # Estimation must use the same client the run will use — a custom
         # client can tokenize or price differently.
-        injected = (self.specifications.metadata or {}).get("custom_llm_client")
-        llm_client = injected or create_llm_client(self.specifications.llm)
+        llm_client = self._llm_client or create_llm_client(self.specifications.llm)
         llm_stage = LLMInvocationStage(llm_client)
 
         sample_estimate = llm_stage.estimate_cost(batches)
@@ -351,6 +357,7 @@ class Pipeline:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
+        context.llm_client = self._llm_client
 
         # Add default observers if none specified
         if not self.observers:
@@ -783,10 +790,9 @@ class Pipeline:
             )
 
         # A client injected via PipelineBuilder.with_custom_llm_client() wins.
-        # The builder used to store it and every execution path built a real
-        # client anyway, calling the provider the caller was replacing (#230).
-        injected = (specs.metadata or {}).get("custom_llm_client")
-        llm_client = injected or create_llm_client(llm_spec)
+        # Before #230 the builder stored it and every execution path built a
+        # real client anyway, calling the provider the caller was replacing.
+        llm_client = context.llm_client or create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration)
         if context.observer_dispatcher and hasattr(
@@ -1502,19 +1508,6 @@ class Pipeline:
             yield pl.from_pandas(chunk_pd)
             await asyncio.sleep(0)  # Yield to event loop
 
-    def _carry_injected_client(self, specs: Any) -> None:
-        """Re-attach an injected LLM client to *specs* by reference.
-
-        Sub-pipelines start from ``model_copy(deep=True)``, which deep-copies
-        anything in metadata — including a client the caller injected. A copy
-        defeats the point of injecting an instance: state it holds (a session,
-        a token, a shared rate limiter, a call counter) stops being shared, and
-        a client wrapping something uncopyable would fail outright.
-        """
-        injected = (self.specifications.metadata or {}).get("custom_llm_client")
-        if injected is not None:
-            specs.metadata["custom_llm_client"] = injected
-
     async def _process_chunk_async(
         self,
         chunk_df: pd.DataFrame,
@@ -1528,7 +1521,6 @@ class Pipeline:
 
         # Create a mini-pipeline for this chunk
         chunk_specs = self.specifications.model_copy(deep=True)
-        self._carry_injected_client(chunk_specs)
         chunk_specs.dataset.source_path = None  # Use dataframe
         chunk_specs.output = None  # Don't write (we handle it)
 
@@ -1536,6 +1528,10 @@ class Pipeline:
             specifications=chunk_specs,
             dataframe=chunk_df,
             executor=AsyncExecutor(),
+            # Share the caller's instance. Passing it explicitly is what keeps
+            # chunks off deep copies: model_copy(deep=True) above would clone
+            # anything carried inside the specifications instead.
+            llm_client=self._llm_client,
         )
 
         # Execute the chunk
@@ -1799,7 +1795,6 @@ class Pipeline:
 
             # Create modified specs for retry
             retry_specs = self.specifications.model_copy(deep=True)
-            self._carry_injected_client(retry_specs)
             retry_specs.dataset.source_type = DataSourceType.DATAFRAME
             retry_specs.dataset.source_path = None
             retry_specs.processing.enable_preprocessing = False
@@ -1807,7 +1802,9 @@ class Pipeline:
             retry_specs.output = None
 
             # Create new pipeline for retry
-            retry_pipeline = Pipeline(retry_specs, dataframe=retry_df)
+            retry_pipeline = Pipeline(
+                retry_specs, dataframe=retry_df, llm_client=self._llm_client
+            )
             # A retry pass that recovers nothing is expected — the loop must
             # be free to try again. Only the outer run gets the guard.
             retry_pipeline._is_internal_retry = True
