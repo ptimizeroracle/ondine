@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.8](https://github.com/ptimizeroracle/ondine/compare/v1.11.7...v1.11.8) (2026-08-07)
+
+
+### Bug Fixes
+
+* **adapters:** make the declared LLMClient interface sufficient to run ([#235](https://github.com/ptimizeroracle/ondine/issues/235)) ([06461b9](https://github.com/ptimizeroracle/ondine/commit/06461b9060f44dd5e59e0a0d25baa62dccd27a27))
+
 ## [1.11.7](https://github.com/ptimizeroracle/ondine/compare/v1.11.6...v1.11.7) (2026-08-07)
 
 
