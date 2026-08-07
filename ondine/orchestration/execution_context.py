@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+from ondine.core.components import PipelineComponents
 from ondine.core.models import ProcessingStats
 
 if TYPE_CHECKING:
@@ -192,13 +193,17 @@ class ExecutionContext:
         default=None, repr=False, compare=False
     )
 
-    # Caller-supplied LLM client (PipelineBuilder.with_custom_llm_client).
-    # A runtime object like the cache above: set by the pipeline, never
-    # serialized into checkpoint JSON. It lives here rather than in
-    # PipelineSpecifications.metadata because specifications are
-    # configuration — MCP calls model_dump(mode="json") on them, which a live
-    # client cannot survive (#230).
-    llm_client: Any | None = field(default=None, repr=False, compare=False)
+    # Live collaborators the caller injected (client, stores, parser, schema).
+    # Runtime objects like the cache above: set by the pipeline, never
+    # serialized into checkpoint JSON. They live here rather than in
+    # PipelineSpecifications.metadata because specifications are configuration
+    # and must stay dumpable — see ondine/core/components.py (#230, #232).
+    # Defaults to an empty set rather than None: a context built outside the
+    # pipeline (tests, backends constructing their own) must still be safe to
+    # read from, without every caller guarding for None.
+    components: PipelineComponents = field(
+        default_factory=PipelineComponents, repr=False, compare=False
+    )
 
     def update_stage(self, stage_index: int) -> None:
         """Update current stage."""

@@ -23,17 +23,17 @@ class TestBuilderContextMethods:
     def test_with_context_store_explicit(self):
         store = InMemoryContextStore()
         builder = self._base_builder().with_context_store(store)
-        assert builder._custom_metadata["context_store"] is store
+        assert builder._context_store is store
 
     def test_with_context_store_auto_detect(self):
         builder = self._base_builder().with_context_store()
-        assert isinstance(builder._custom_metadata["context_store"], ContextStore)
+        assert isinstance(builder._context_store, ContextStore)
 
     def test_with_grounding_sets_metadata(self):
         builder = self._base_builder().with_grounding(threshold=0.5, action="skip")
         assert builder._custom_metadata["grounding"]["threshold"] == 0.5
         assert builder._custom_metadata["grounding"]["action"] == "skip"
-        assert "context_store" in builder._custom_metadata
+        assert builder._context_store is not None
 
     def test_with_grounding_invalid_action_raises(self):
         with pytest.raises(ValueError, match="action must be one of"):
@@ -47,13 +47,13 @@ class TestBuilderContextMethods:
         cfg = builder._custom_metadata["contradiction_detection"]
         assert cfg["key_columns"] == ["product_id"]
         assert cfg["value_columns"] == ["category"]
-        assert "context_store" in builder._custom_metadata
+        assert builder._context_store is not None
 
     def test_with_confidence_scoring_sets_metadata(self):
         builder = self._base_builder().with_confidence_scoring(include_in_output=False)
         cfg = builder._custom_metadata["confidence_scoring"]
         assert cfg["include_in_output"] is False
-        assert "context_store" in builder._custom_metadata
+        assert builder._context_store is not None
 
     def test_with_confidence_scoring_sigmoid_mode(self):
         builder = self._base_builder().with_confidence_scoring(scoring_mode="sigmoid")
@@ -103,7 +103,7 @@ class TestBuilderContextMethods:
             .with_contradiction_detection(key_columns=["id"])
             .with_confidence_scoring()
         )
-        assert builder._custom_metadata["context_store"] is store
+        assert builder._context_store is store
         assert builder._custom_metadata["grounding"]["threshold"] == 0.4
         assert builder._custom_metadata["contradiction_detection"]["key_columns"] == [
             "id"

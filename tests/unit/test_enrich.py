@@ -253,9 +253,9 @@ class TestEnrichStructuredOutput:
             schema=Sentiment,
         )
 
-        metadata = capture["pipeline"].specifications.metadata
-        assert metadata["structured_output_model"] is Sentiment
-        assert isinstance(metadata["custom_parser"], JSONParser)
+        components = capture["pipeline"]._components
+        assert components.structured_output_model is Sentiment
+        assert isinstance(components.custom_parser, JSONParser)
 
     def test_no_schema_leaves_metadata_without_structured_output(self, monkeypatch):
         """Without schema, no structured-output metadata or parser is injected."""
@@ -264,9 +264,9 @@ class TestEnrichStructuredOutput:
 
         enrich(pd.DataFrame({"review": ["a"]}), prompt="Classify: {review}")
 
-        metadata = capture["pipeline"].specifications.metadata
-        assert "structured_output_model" not in metadata
-        assert "custom_parser" not in metadata
+        components = capture["pipeline"]._components
+        assert components.structured_output_model is None
+        assert components.custom_parser is None
 
 
 class TestEnrichInputTypePreservation:

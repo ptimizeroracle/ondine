@@ -158,7 +158,7 @@ class TestEvidencePrimingBuilder:
         assert cfg["query_columns"] == ["product"]
         assert cfg["top_k"] == 5
         assert cfg["min_score"] == 0.3
-        assert "context_store" in builder._custom_metadata
+        assert builder._context_store is not None
 
     def test_auto_creates_context_store(self):
         from ondine.api.pipeline_builder import PipelineBuilder
@@ -170,7 +170,7 @@ class TestEvidencePrimingBuilder:
             .with_prompt("Classify: {product}")
             .with_evidence_priming()
         )
-        assert isinstance(builder._custom_metadata["context_store"], ContextStore)
+        assert isinstance(builder._context_store, ContextStore)
 
     def test_default_params(self):
         from ondine.api.pipeline_builder import PipelineBuilder
@@ -197,4 +197,4 @@ class TestEvidencePrimingBuilder:
             .with_context_store(store)
             .with_evidence_priming(query_columns=["product"])
         )
-        assert builder._custom_metadata["context_store"] is store
+        assert builder._context_store is store

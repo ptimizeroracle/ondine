@@ -226,7 +226,7 @@ class LiveBackend:
         # A client injected via PipelineBuilder.with_custom_llm_client() wins.
         # Before #230 the builder stored it and every execution path built a
         # real client anyway, calling the provider the caller was replacing.
-        llm_client = context.llm_client or create_llm_client(llm_spec)
+        llm_client = context.components.llm_client or create_llm_client(llm_spec)
 
         # Wire observer dispatcher to LLM client (for direct SDK integration).
         if context.observer_dispatcher and hasattr(
@@ -248,9 +248,7 @@ class LiveBackend:
             error_policy=specs.processing.error_policy,
             max_retries=specs.processing.max_retries,
             output_cls=(
-                specs.metadata.get("structured_output_model")
-                if specs.metadata
-                else None
+                context.components.structured_output_model if specs.metadata else None
             ),
             budget_controller=self._budget_controller,
             adaptive_concurrency=specs.processing.adaptive_concurrency,
