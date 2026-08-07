@@ -101,6 +101,46 @@ class LLMClient(ABC):
         """
         pass
 
+    async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+        """Async variant of :meth:`invoke`. Delegates to it by default.
+
+        The default executor is async, so this — not ``invoke`` — is what a
+        run actually calls. Without a default, a client that implemented every
+        abstract method still had all its rows skipped, because the async path
+        found nothing to call.
+
+        Delegating is correct but serialises requests: the sync call blocks
+        the event loop. Override with your provider's async client to get real
+        concurrency.
+        """
+        return self.invoke(prompt, **kwargs)
+
+    async def structured_invoke_async(
+        self, prompt: str, output_cls: Any, **kwargs: Any
+    ) -> Any:
+        """Async variant of :meth:`structured_invoke`. Delegates by default."""
+        return self.structured_invoke(prompt, output_cls, **kwargs)
+
+    async def start(self) -> None:
+        """Open any resources the client needs for a run.
+
+        Defaults to doing nothing, because most clients have nothing to open.
+        The invocation stage calls this before the first request and
+        :meth:`stop` after the last, so a client holding a session, a pool or
+        a subprocess overrides both.
+
+        Not abstract on purpose. The stage has always called it
+        unconditionally, so every custom client that did not happen to define
+        it crashed at the first row with ``AttributeError: object has no
+        attribute 'start'`` — a requirement the interface never stated and the
+        type checker could not see, since the call carried a
+        ``type: ignore[attr-defined]``. A no-op default removes the trap
+        rather than documenting it.
+        """
+
+    async def stop(self) -> None:
+        """Release whatever :meth:`start` opened. No-op by default."""
+
     def batch_invoke(self, prompts: list[str], **kwargs: Any) -> list[LLMResponse]:
         """
         Invoke LLM with multiple prompts.
