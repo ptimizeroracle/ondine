@@ -1797,8 +1797,6 @@ class PipelineBuilder:
             metadata.update(self._custom_metadata)
         if self._custom_parser is not None:
             metadata["custom_parser"] = self._custom_parser
-        if self._custom_llm_client is not None:
-            metadata["custom_llm_client"] = self._custom_llm_client
         if self._custom_stages:
             metadata["custom_stages"] = self._custom_stages
         if self._observers:
@@ -1867,4 +1865,5 @@ class PipelineBuilder:
             specifications,
             dataframe=self._dataframe,
             executor=self._executor,
+            llm_client=self._custom_llm_client,
         )

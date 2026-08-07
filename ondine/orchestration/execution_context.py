@@ -192,6 +192,14 @@ class ExecutionContext:
         default=None, repr=False, compare=False
     )
 
+    # Caller-supplied LLM client (PipelineBuilder.with_custom_llm_client).
+    # A runtime object like the cache above: set by the pipeline, never
+    # serialized into checkpoint JSON. It lives here rather than in
+    # PipelineSpecifications.metadata because specifications are
+    # configuration — MCP calls model_dump(mode="json") on them, which a live
+    # client cannot survive (#230).
+    llm_client: Any | None = field(default=None, repr=False, compare=False)
+
     def update_stage(self, stage_index: int) -> None:
         """Update current stage."""
         self.current_stage_index = stage_index
