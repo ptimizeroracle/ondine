@@ -49,7 +49,18 @@ repos:
     hooks:
       - id: pytest-unit
         name: Run Unit Tests
-        entry: bash -c 'uv sync --extra dev --extra observability --extra excel --extra parquet --extra knowledge --quiet && uv run pytest tests/unit/ -q --tb=line -o addopts=""'
+        # One command, not `uv sync && uv run`. `uv run` already syncs the
+        # environment, so the explicit sync was a second, redundant mutation
+        # of the venv on every commit — and the one that rewrote uv.lock,
+        # producing "files were modified by this hook" on a file the committer
+        # never touched (#193, #217).
+        #
+        # The extras must be repeated here: `uv run` alone syncs only the
+        # default groups, and the unit suite needs these.
+        entry: >-
+          uv run --extra dev --extra observability --extra excel
+          --extra parquet --extra knowledge
+          pytest tests/unit/ -q --tb=line -o addopts=""
         language: system
         pass_filenames: false
         always_run: true

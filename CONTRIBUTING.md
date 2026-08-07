@@ -25,6 +25,19 @@ Thank you for your interest in contributing to Ondine!
    uv run pre-commit install
    ```
 
+   > **Working in a git worktree?** Hooks are shared, not per-worktree. Git
+   > resolves them from the main repository's `.git/hooks` no matter which
+   > worktree you commit from — unsetting `core.hooksPath` does not change
+   > this, it is how git works. So a hook always runs the interpreter that
+   > `pre-commit install` recorded, while its working directory is the
+   > worktree you are in.
+   >
+   > In practice that is fine, because the hook resolves the environment from
+   > the current directory. It matters when two worktrees have diverging
+   > dependencies: the run picks up whichever `pyproject.toml` you are sitting
+   > in. If a hook fails for reasons that have nothing to do with your change,
+   > check which worktree you are in before debugging it.
+
 3. **Create a Branch**
    ```bash
    git checkout -b feature/your-feature-name
