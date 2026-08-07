@@ -46,6 +46,34 @@ Resume with: pipeline.execute(resume_from=UUID('e650ee2a-0c71-4761-ac3f-bdab8ecd
 
 Paste that line back in and the pipeline skips everything already done. No duplicate LLM spend.
 
+## Streaming does not resume
+
+Checkpoint resume applies to `execute()` and `execute_async()`. It does **not**
+apply to the streaming methods:
+
+```python
+pipeline.execute_stream()            # no resume
+pipeline.execute_stream_async()      # no resume
+pipeline.execute_stream_pipelined()  # no resume
+```
+
+None of them accept `resume_from`, so there is no way to ask for one. A
+streamed run that dies must be restarted from the beginning, and every row is
+paid for again.
+
+The reason is structural rather than an oversight to work around: streaming
+processes each chunk as an independent sub-pipeline, and resume is keyed by
+session. Each chunk has its own session, so there is no single id to resume
+from. Until that changes, streaming writes no `responses.db` at all — a cache
+whose rows nothing can read is worse than none, because up to
+`max_pending_chunks` chunks contend on the same SQLite file to write it
+(#150).
+
+**If you need resume on a large dataset**, prefer `execute()` with
+checkpointing over streaming, or split the data yourself and run one pipeline
+per shard so each shard has a session you can resume.
+
+
 ## Builder Methods
 
 ### `with_checkpoint_dir(directory: str)`

@@ -154,6 +154,10 @@ class Pipeline:
         # retry pass that recovers nothing is a normal outcome the retry loop
         # must survive, so the no-output guard applies to the user's run only.
         self._is_internal_retry = False
+        # A sub-pipeline (a streaming chunk, or the auto-retry pass) runs
+        # inside another pipeline's run. It owns no durable state of its own —
+        # see _attach_response_cache.
+        self._is_subpipeline = False
 
     def add_observer(self, observer: ExecutionObserver) -> "Pipeline":
         """
@@ -351,15 +355,7 @@ class Pipeline:
             # Create new context
             context = ExecutionContext(pipeline_id=self.id)
 
-        # Attach durable response cache. Co-located with the checkpoint
-        # directory so a user who copies/backs-up the checkpoint dir
-        # gets the response history along with it. The cache is the
-        # source of truth for resume — the JSON checkpoint only carries
-        # counters.
-        from ondine.adapters.response_cache import SqliteResponseCache
-
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
+        self._attach_response_cache(context, checkpoint_dir)
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
         context.components = self._components
 
@@ -1537,6 +1533,7 @@ class Pipeline:
             # clone anything carried inside the specifications instead.
             components=self._components,
         )
+        chunk_pipeline._is_subpipeline = True
 
         # Execute the chunk
         result = await chunk_pipeline.execute_async()
@@ -1653,6 +1650,37 @@ class Pipeline:
             for observer in self.observers:
                 observer.on_stage_error(stage, context, e)
             raise
+
+    def _attach_response_cache(self, context: ExecutionContext, checkpoint_dir) -> None:
+        """Give *context* the durable response cache, unless nothing can read it.
+
+        The cache is the source of truth for resume — the JSON checkpoint only
+        carries counters — and lives beside the checkpoint directory so backing
+        one up takes the response history with it.
+
+        Sub-pipelines get no cache. Each is constructed fresh, so its
+        ExecutionContext has a new uuid4 session_id, and the cache is keyed
+        (session_id, row_index): every row it writes is unreadable by the next
+        run, which generates new ids again. Measured on a 6-row stream over 3
+        chunks, run twice: 6 LLM calls each time, and responses.db grew to 12
+        rows across 6 dead sessions (#150).
+
+        Those writes were not merely wasted. Up to max_pending_chunks chunks
+        write the one SQLite file concurrently, which is the contention #147
+        papered over with busy_timeout.
+
+        Streaming therefore has no resume, and this makes that honest rather
+        than half-implemented: execute_stream_async() and
+        execute_stream_pipelined() take no resume_from, so there is no way to
+        ask for one.
+        """
+        if self._is_subpipeline:
+            return
+
+        from ondine.adapters.response_cache import SqliteResponseCache
+
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
 
     def _guard_produced_output(
         self, result: ExecutionResult, output_columns: list[str]
@@ -1812,6 +1840,7 @@ class Pipeline:
             # A retry pass that recovers nothing is expected — the loop must
             # be free to try again. Only the outer run gets the guard.
             retry_pipeline._is_internal_retry = True
+            retry_pipeline._is_subpipeline = True
 
             # Execute retry
             retry_result = retry_pipeline.execute()
