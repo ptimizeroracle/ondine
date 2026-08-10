@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.9](https://github.com/ptimizeroracle/ondine/compare/v1.11.8...v1.11.9) (2026-08-10)
+
+
+### Bug Fixes
+
+* **resume:** stop the watermark running ahead of rows that never finished ([#240](https://github.com/ptimizeroracle/ondine/issues/240)) ([ff19b65](https://github.com/ptimizeroracle/ondine/commit/ff19b6598da87b6503edf0615e786d3f461e4388))
+
 ## [1.11.8](https://github.com/ptimizeroracle/ondine/compare/v1.11.7...v1.11.8) (2026-08-07)
 
 
