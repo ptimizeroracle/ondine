@@ -33,6 +33,7 @@ from ondine.api.dataset_processor import DatasetProcessor
 from ondine.api.enrich import enrich
 from ondine.api.pipeline import Pipeline
 from ondine.api.pipeline_builder import PipelineBuilder
+from ondine.api.pipeline_composer import PipelineComposer
 from ondine.api.quick import QuickPipeline
 
 # Context store (pluggable anti-hallucination backends)
@@ -68,6 +69,7 @@ __all__ = [
     "__version__",
     "Pipeline",
     "PipelineBuilder",
+    "PipelineComposer",
     "QuickPipeline",
     "enrich",
     "DatasetProcessor",

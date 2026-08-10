@@ -56,7 +56,7 @@ async def process_data():
     )
 
     result = await pipeline.execute_async()
-    print(f"Processed {result.metrics.processed_rows} rows in {result.metrics.elapsed_time:.1f}s")
+    print(f"Processed {result.metrics.processed_rows} rows in {result.metrics.total_duration_seconds:.1f}s")
     return result
 
 result = asyncio.run(process_data())

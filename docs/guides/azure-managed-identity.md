@@ -391,9 +391,12 @@ ValueError: Azure OpenAI requires either:
 # Option 2: API Key  # pragma: allowlist secret
 .with_llm(..., api_key="your-key")  # pragma: allowlist secret
 
-# Option 3: Environment variable
-export AZURE_OPENAI_API_KEY="your-key"  # pragma: allowlist secret
+# Option 3: Environment variable (set AZURE_OPENAI_API_KEY in the shell first)
 .with_llm(...)  # Reads from env var
+```
+
+```bash
+export AZURE_OPENAI_API_KEY="your-key"  # pragma: allowlist secret
 ```
 
 ## Testing

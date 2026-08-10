@@ -162,7 +162,7 @@ Role:"""
         print(f"     → Recommended Role: {row['role_fit']}")
 
     print(f"\n💰 Cost: ${result.costs.total_cost:.6f}")
-    print(f"⏱️  Total time: {result.costs.total_latency_ms / 1000:.2f}s")
+    print(f"⏱️  Total time: {result.metrics.total_duration_seconds:.2f}s")
 
 
 def example_2_multiple_custom_providers():

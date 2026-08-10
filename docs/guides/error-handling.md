@@ -280,7 +280,7 @@ pipeline = (
 result = pipeline.execute()
 df = result.to_pandas()
 
-failure_rate = 1 - (result.metrics.success_count / result.metrics.total_rows)
+failure_rate = 1 - (result.metrics.processed_rows / result.metrics.total_rows)
 if failure_rate > 0.05:
     raise RuntimeError(f"Failure rate {failure_rate:.1%} exceeds 5% threshold")
 
