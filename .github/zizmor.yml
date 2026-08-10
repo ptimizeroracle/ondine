@@ -1,60 +1,41 @@
 # zizmor configuration — https://docs.zizmor.sh/configuration/
 #
-# CI fails on anything not listed here, which is the point: the two classes
-# already fixed (unpinned actions, template injection) cannot come back
-# unnoticed. A floating action tag is what broke the v1.8.0 and v1.8.1
-# publishes when upstream stopped publishing the alias (#149).
+# CI fails on anything not listed here, which is the point: a class that has
+# been fixed cannot come back unnoticed. A floating action tag is what broke
+# the v1.8.0 and v1.8.1 publishes when upstream stopped publishing the alias
+# (#149).
 #
-# The rules below are switched off deliberately, not because they are wrong.
-# Each needs per-workflow analysis rather than a sweep, and turning them on
-# without doing that work would only teach everyone to ignore a red check.
+# Enforced, having been fixed rather than ignored:
+#
+#   unpinned-uses         every action pinned to a commit SHA (#149)
+#   template-injection    untrusted values routed through env: (#149)
+#   artipacked            persist-credentials: false on every checkout that
+#                         does not push, so a later step — including a
+#                         third-party action — cannot read the token out of
+#                         .git/config (#239)
+#   excessive-permissions every workflow declares contents: read, and the one
+#                         job that signs asks for id-token: write itself (#239)
+#   cache-poisoning       no compiler or dependency cache on the paths that
+#                         produce published artifacts (#239)
 rules:
-  # 18 findings. actions/checkout leaves the token in .git/config, so any
-  # later step — including third-party actions — can read it. Fixing means
-  # auditing which jobs actually need to push and setting
-  # persist-credentials: false everywhere else. Tracked separately.
-  artipacked:
-    ignore:
-      - "ci.yml"
-      - "docstring-quality.yml"
-      - "publish-pypi.yml"
-      - "release.yml"
-      - "security.yml"
-      - "validate-docs.yml"
-
-  # 18 findings. Several jobs inherit broader GITHUB_TOKEN permissions than
-  # they use. Narrowing them requires knowing what each job genuinely needs;
-  # guessing risks breaking releases, which is the one thing worth not
-  # breaking. Tracked separately.
-  excessive-permissions:
-    ignore:
-      - "ci.yml"
-      - "docstring-quality.yml"
-      - "publish-pypi.yml"
-      - "release.yml"
-      - "security.yml"
-      - "validate-docs.yml"
-
-  # 2 findings. Trusted publishing would remove the long-lived PyPI token
-  # entirely. A real improvement, and a change to how releases authenticate —
-  # not something to fold into a lint PR.
+  # 2 findings. Trusted publishing replaces the stored PyPI token with a
+  # short-lived OIDC credential — the strongest of the four, because it deletes
+  # a secret rather than narrowing one.
+  #
+  # It cannot be turned on from this side alone: PyPI must first be told which
+  # repository, workflow and environment are allowed to publish
+  # (pypi.org → ondine → Publishing → Add a trusted publisher:
+  #  owner ptimizeroracle, repo ondine, workflow publish-pypi.yml,
+  #  environment Ondine). Changing the workflow before that exists would fail
+  # the next release at the upload step, so the order matters:
+  #
+  #   1. add the trusted publisher on PyPI
+  #   2. drop `password: ${{ secrets.PYPI_API_TOKEN }}` from publish-prod and
+  #      add `id-token: write` (already present for Sigstore)
+  #   3. delete the PYPI_API_TOKEN secret
+  #   4. remove this ignore
+  #
+  # Tracked in #239.
   use-trusted-publishing:
     ignore:
-      - "ci.yml"
-      - "docstring-quality.yml"
       - "publish-pypi.yml"
-      - "release.yml"
-      - "security.yml"
-      - "validate-docs.yml"
-
-  # 2 findings. Cache restore before a build step can in principle poison the
-  # artifact. Low risk here (caches are per-branch and the wheels are rebuilt
-  # from a tag), but worth revisiting.
-  cache-poisoning:
-    ignore:
-      - "ci.yml"
-      - "docstring-quality.yml"
-      - "publish-pypi.yml"
-      - "release.yml"
-      - "security.yml"
-      - "validate-docs.yml"
