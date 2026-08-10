@@ -211,6 +211,22 @@ jobs:
       run: |
         uv run pytest tests/unit/ -v --tb=short
 
+    # ──────────────────────────────────────────────────────────────────
+    # Runs on every PR, unlike the integration suite below, because this is
+    # the suite that catches silent data loss — a run that finishes green
+    # with rows dropped, duplicated or misaligned. It needs no API key and
+    # no network: the provider is a local fake that answers from the prompt's
+    # own content, so every row's answer is checkable by value.
+    #
+    # Kept out of tests/unit/ because it drives the real executor,
+    # checkpointer and cost tracker end to end, and out of the main-only
+    # integration job because a regression here must block the PR that
+    # introduces it, not surface after merge.
+    # ──────────────────────────────────────────────────────────────────
+    - name: Run pipeline conformance suite
+      run: |
+        uv run pytest tests/e2e/test_pipeline_conformance.py -v --tb=short
+
     - name: Run integration tests (main branch only)
       if: github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
       env:

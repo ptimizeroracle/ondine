@@ -169,6 +169,17 @@ result = pipeline.execute(resume_from=UUID("e650ee2a-0c71-4761-ac3f-bdab8ecd920b
 print(f"Resumed. Processed {result.metrics.processed_rows} rows total.")
 ```
 
+You do not have to read the UUID out of the log. `pipeline.session_id` holds
+the session of the most recent run and is set as soon as the run starts, so it
+is still there after a failure:
+
+```python
+try:
+    result = pipeline.execute()
+except Exception:
+    result = pipeline.execute(resume_from=pipeline.session_id)
+```
+
 Works with async too:
 
 ```python
@@ -228,21 +239,23 @@ def build_pipeline():
         .build()
     )
 
-def run(resume_from: UUID | None = None):
+def run(attempts: int = 3):
     pipeline = build_pipeline()
-    try:
-        return pipeline.execute(resume_from=resume_from)
-    except Exception as e:
-        # The pipeline logs the session UUID automatically.
-        # Extract it from result.execution_id if you need it programmatically.
-        log.error(f"Pipeline failed: {e}")
-        raise
+    resume_from: UUID | None = None
 
-# First attempt
+    for attempt in range(1, attempts + 1):
+        try:
+            return pipeline.execute(resume_from=resume_from)
+        except Exception as e:
+            # pipeline.session_id is set from the moment the run starts, so it
+            # is available here — no log scraping, and no need for a result
+            # object that a failed run never produced.
+            resume_from = pipeline.session_id
+            log.error(f"Attempt {attempt} failed ({e}); resuming {resume_from}")
+
+    raise RuntimeError(f"Gave up after {attempts} attempts; resume {resume_from}")
+
 result = run()
-
-# On a subsequent attempt after a failure, pass the UUID from the log:
-# result = run(resume_from=UUID("..."))
 ```
 
 ### Listing Checkpoints

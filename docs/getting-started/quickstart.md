@@ -262,16 +262,19 @@ pipeline = (
     .from_csv("data.csv", ...)
     .with_prompt("...")
     .with_llm(provider="openai", model="gpt-4o-mini")
-    .with_retry_policy(max_retries=3, backoff_factor=2.0)
+    .with_max_retries(3)
     .build()
 )
 
 result = pipeline.execute()
 
-# Check for failures
-if result.metrics.failed_rows > 0:
-    print(f"Failed rows: {result.metrics.failed_rows}")
-    print(result.data[result.data['response'].isna()])
+# Check for failures. With the default SKIP policy the run still succeeds,
+# so the counters are what tell you rows were lost.
+lost = result.metrics.skipped_rows + result.metrics.failed_rows
+if lost:
+    print(f"Lost {lost} rows")
+    for err in result.errors:
+        print(f"  row {err.row_index}: {err.message}")
 ```
 
 ## Checkpointing

@@ -36,7 +36,8 @@ ErrorPolicy.USE_DEFAULT # "use_default"
 
 ### SKIP (default)
 
-Logs the error, leaves the output column empty for that row, moves on.
+Logs the error, writes the marker `[SKIPPED]` into the output column for that
+row, and moves on.
 
 ```python
 pipeline = (
@@ -49,12 +50,21 @@ pipeline = (
 )
 
 result = pipeline.execute()
-# Failed rows will have None/NaN in the "result" column
-failed = result.to_pandas()[result.to_pandas()["result"].isna()]
-print(f"{len(failed)} rows failed and were skipped")
+
+# The run succeeds even when rows were lost, so check. `errors` names them;
+# `metrics.skipped_rows` counts them, including any beyond the first 1,000
+# that `errors` records.
+print(f"{result.metrics.skipped_rows} rows skipped")
+for error in result.errors:
+    print(f"  row {error.row_index}: {error.message}")
+
+lost = result.to_pandas().iloc[[error.row_index for error in result.errors]]
 ```
 
-Good when partial results are fine and you want throughput.
+Good when partial results are fine and you want throughput — but *always*
+check `skipped_rows`. With this policy a run that lost every third row still
+returns a full-height frame and `success=True`; the count is the only thing
+that says otherwise.
 
 ### FAIL
 
@@ -232,16 +242,15 @@ df = result.to_pandas()
 
 # Check overall failure rate
 total = result.metrics.total_rows
-skipped = result.metrics.total_rows - result.metrics.success_count
-print(f"Success rate: {result.metrics.success_count}/{total} ({skipped} skipped)")
+lost = result.metrics.skipped_rows + result.metrics.failed_rows
+print(f"Success rate: {total - lost}/{total} ({lost} lost)")
 
-# Inspect errors
+# Inspect errors — each names the row it belongs to
 for err in result.errors:
-    print(f"Row {err}: failed")
+    print(f"Row {err.row_index} ({err.stage}): {err.message}")
 
-# Rows with empty outputs (skipped due to error)
-failed_rows = df[df["result"].isna()]
-print(f"Rows with missing output: {len(failed_rows)}")
+# The rows themselves
+failed_rows = df.iloc[[err.row_index for err in result.errors]]
 ```
 
 ## Production Patterns

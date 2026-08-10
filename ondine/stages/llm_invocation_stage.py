@@ -400,15 +400,18 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         if not context:
             return
 
-        # Update row index
+        # Record which rows are done. A mega-batch carries the index of its
+        # first row and covers batch_size of them.
+        #
+        # Completions arrive out of order — that is the point of concurrency —
+        # so this reports *which* rows finished and lets the context work out
+        # how far the contiguous watermark can move. It used to assign the
+        # watermark directly from whichever response happened to land last,
+        # which pushed it past rows that were still in flight and made resume
+        # skip work that had never been done.
         batch_size = BatchProcessor.get_batch_size(metadata)
-        if metadata.custom and metadata.custom.get("is_batch"):
-            if idx == 0:
-                context.update_row(metadata.row_index + batch_size - 1)
-            else:
-                context.update_row(context.last_processed_row + batch_size)
-        else:
-            context.update_row(metadata.row_index)
+        is_batch = bool(metadata.custom and metadata.custom.get("is_batch"))
+        context.complete_rows(metadata.row_index, batch_size if is_batch else 1)
 
         # Count skipped rows so partial failures are visible in the final
         # metrics (and thus the CLI/progress surfaces) and so the whole-run
@@ -416,10 +419,20 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         # error paths funnel their skip markers through here, so this is the
         # one place the count has to live. A skipped batch loses every row in
         # it, not just one.
+        #
+        # The indices go with the count: a run that skips 3 rows out of 5M is
+        # a success by every headline number, and without them the caller has
+        # no way to find those 3 rows other than scanning the output for the
+        # ``[SKIPPED]`` marker.
         if isinstance(response.metadata, dict) and (
             response.metadata.get("action") == "skipped"
         ):
-            context.skipped_rows += batch_size
+            context.record_skipped_rows(
+                first_row_index=metadata.row_index,
+                count=batch_size,
+                stage=self.name,
+                message=str(response.metadata.get("error", "skipped by error policy")),
+            )
 
         # Update cost and token tracking
         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
