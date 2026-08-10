@@ -1,90 +1,73 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-.coverage
-
-# Virtual environments
-.venv
-
-# Excel files
-*.xlsx
-*.xls
-
-# CSV files
-*.csv
-
-# Temporary directory
-tmp/
-
-# macOS files
-.DS_Store
-
-# Test/example YAML files with data
-*bacon*.yaml
-test_similarity_composition.py
-ground_truth*.xlsx
-examples/similarity_*.yaml
-examples/swap_risk_assessment.yaml
-
-# Processing scripts with data
-process_all_*.py
-
-# Test/example scripts (not part of the framework)
-product_similarity_*.py
-product_similarity_*.xlsx
-multi_stage_classification_groq_with_caching.py
-config_stage1_primary_category.yaml
-config_stage2_subcategory.yaml
-
-# Checkpoints directory
-.checkpoints/
-.env
-test_*.csv
-titles_classified*.csv
-*_stage*.csv
-test_*.yaml
-test_output.*
-
-# MkDocs build output
-site/
-
-# IDE files
-.idea/
-.cursor/
-.claude/
-
-# Generated architecture diagrams (regenerated from model.yaml)
-docs/architecture/diagrams/
-
-# Local documentation files (keep locally, don't commit)
-docs/DESIGN_IMPROVEMENT.md
-docs/ARCHITECTURE.md
-
-# Local working directory
-.local/
-multi_stage_classification_groq.py
-
-# Cache directory
-.cache/
-
-# Rust build artifacts
-target/
-Cargo.lock
-
-# Compiled extension modules (built by maturin)
-ondine/_engine*.so
-ondine/_engine*.pyd
-ondine/_engine*.dylib
-ondine/*.dSYM/
-*.dylib.dSYM/
 
 # Agent working files
-.agent/
-
 # Benchmark scratch artifacts (regenerable: checkpoints, generated datasets)
+# CSV files
+# Cache directory
+# Checkpoints directory
+# Compiled extension modules (built by maturin)
+# Excel files
+# Generated architecture diagrams (regenerated from model.yaml)
+# IDE files
+# Local documentation files (keep locally, don't commit)
+# Local working directory
+# MkDocs build output
+# Processing scripts with data
+# Python-generated files
+# Rust build artifacts
+# Temporary directory
+# Test/example YAML files with data
+# Test/example scripts (not part of the framework)
+# Virtual environments
+# macOS files
+*.csv
+*.dylib.dSYM/
+*.egg-info
+*.py[oc]
+*.xls
+*.xlsx
+*_stage*.csv
+*bacon*.yaml
+.DS_Store
+.agent/
+.cache/
+.checkpoints/
+.claude/
+.coverage
+.cursor/
+.env
+.idea/
+.local/
+.venv
+Cargo.lock
+__pycache__/
 benchmarks/_crash_run/
 benchmarks/data/
+build/
+config_stage1_primary_category.yaml
+config_stage2_subcategory.yaml
+dist/
+docs/ARCHITECTURE.md
+docs/DESIGN_IMPROVEMENT.md
+docs/architecture/diagrams/
+examples/similarity_*.yaml
+examples/swap_risk_assessment.yaml
+ground_truth*.xlsx
+multi_stage_classification_groq.py
+multi_stage_classification_groq_with_caching.py
+ondine/*.dSYM/
+ondine/_engine*.dylib
+ondine/_engine*.pyd
+ondine/_engine*.so
+process_all_*.py
+product_similarity_*.py
+product_similarity_*.xlsx
+scripts/.benchmark-data/
+site/
+target/
+test_*.csv
+test_*.yaml
+test_output.*
+test_similarity_composition.py
+titles_classified*.csv
+tmp/
+wheels/

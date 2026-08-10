@@ -50,6 +50,31 @@ class BatchDisaggregatorStage(PipelineStage):
         self.retry_failed_individually = retry_failed_individually
         self.logger = get_logger(f"{__name__}.{name}")
 
+    @staticmethod
+    def _record_failures(
+        context: Any, row_indices: list[Any], message: str, llm_response: Any = None
+    ) -> None:
+        """Tell the context which rows this batch lost, if there is a context.
+
+        Stages are also driven directly in tests and by backends that pass no
+        context, so this stays optional rather than assumed.
+
+        A batch the error policy already skipped arrives here as an unparseable
+        marker string and would otherwise be counted a second time — once as
+        skipped upstream, once as a parse failure here — turning 4 lost rows
+        into 8 across two counters.
+        """
+        if context is None or not hasattr(context, "record_failed_rows"):
+            return
+        metadata = getattr(llm_response, "metadata", None)
+        if isinstance(metadata, dict) and metadata.get("action") == "skipped":
+            return
+        context.record_failed_rows(
+            [index for index in row_indices if isinstance(index, int)],
+            stage="BatchDisaggregator",
+            message=message,
+        )
+
     def process(
         self, batches: list[ResponseBatch], context: Any
     ) -> list[ResponseBatch]:
@@ -204,6 +229,23 @@ class BatchDisaggregatorStage(PipelineStage):
                 )
                 total_retries += len(e.failed_ids)
 
+                # The rows behind those ids produced no answer. Recording them
+                # is what makes the loss visible: the "null" marker below is an
+                # internal signal for the auto-retry pass, which is off by
+                # default, so without this the run reports zero failures and
+                # ships cells containing the string "null".
+                self._record_failures(
+                    context,
+                    [
+                        row_id
+                        for position, row_id in enumerate(batch_metadata.row_ids, 1)
+                        if position in e.failed_ids
+                    ],
+                    f"batch response was missing {len(e.failed_ids)} of "
+                    f"{batch_metadata.original_count} results",
+                    llm_response,
+                )
+
                 # Create responses with error markers for failed rows
                 individual_results = []
                 for i, row_id in enumerate(batch_metadata.row_ids):
@@ -252,6 +294,14 @@ class BatchDisaggregatorStage(PipelineStage):
                     f"Failed to parse batch response from [{provider_info}]: {e}. "
                     f"Batch ID: {batch.batch_id}. "
                     f"Response: {response_text[:500]}"
+                )
+
+                # Every row in this batch is lost, not just some.
+                self._record_failures(
+                    context,
+                    list(batch_metadata.row_ids),
+                    f"batch response could not be parsed: {e}",
+                    llm_response,
                 )
 
                 # Create error responses for all rows

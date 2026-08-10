@@ -304,3 +304,33 @@ def test_a_dropped_batch_names_every_row_it_took_down():
 
     assert result.metrics.skipped_rows == 4
     assert [error.row_index for error in result.errors] == [0, 1, 2, 3]
+
+
+def test_a_provider_returning_nothing_is_reported_as_failure_not_as_data():
+    """An empty response body must not become a value in the output.
+
+    Found while benchmarking against a real provider: a reasoning model with a
+    token cap too low to reach its answer returns an empty body. The pipeline
+    reported `success=True`, `skipped=0`, `errors=[]`, and wrote the literal
+    string "null" into all ten rows — a value that survives `isna()` and
+    `== ""`, so no caller-side check finds it.
+
+    The marker itself is deliberate (it signals the auto-retry pass), but
+    auto-retry is off by default, so on default settings it leaks into user
+    data. What must never be silent is the *count*: the rows are gone, and the
+    result has to say so.
+    """
+
+    class EmptyProvider(LedgerClient):
+        def invoke(self, prompt, **kwargs):
+            response = super().invoke(prompt, **kwargs)
+            response.text = ""
+            return response
+
+    client = EmptyProvider()
+    result = build(client, conformance_frame(10), batch_size=5).execute()
+
+    assert result.metrics.failed_rows == 10, (
+        "a provider that answered nothing was recorded as having answered"
+    )
+    assert sorted(error.row_index for error in result.errors) == list(range(10))
