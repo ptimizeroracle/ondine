@@ -54,20 +54,32 @@ class TestAsyncRateLimiterBehavior:
         within <1 second should block until tokens refill.
         """
         limiter = RateLimiter(requests_per_minute=120, burst_size=2)
+        refill_period = 0.5  # 2 tokens/sec
 
-        # First 2 should be instant (burst)
+        # The first two spend the burst and must not wait for a refill.
         t0 = time.perf_counter()
         await limiter.acquire_async()
         await limiter.acquire_async()
         t_burst = time.perf_counter() - t0
-        assert t_burst < 0.1, f"Burst acquires took {t_burst:.3f}s (expected <0.1s)"
 
-        # 3rd should wait ~0.5s for token refill (2/sec = 1 token every 0.5s)
+        # The third has no token left, so it must.
         t0 = time.perf_counter()
         await limiter.acquire_async()
-        t_wait = time.perf_counter() - t0
-        assert t_wait >= 0.03, (
-            f"3rd acquire returned in {t_wait:.3f}s — should have waited for refill"
+        t_throttled = time.perf_counter() - t0
+
+        # Compared against each other, and against the refill period, rather
+        # than against an absolute ceiling. A ceiling low enough to be
+        # meaningful (0.1s) is also low enough for a loaded CI runner to
+        # exceed while the limiter behaves perfectly: this failed at 0.150s
+        # on a box that was merely busy. What the test is actually about is
+        # the *difference* between the two — and a slow runner slows both.
+        assert t_throttled >= refill_period / 2, (
+            f"3rd acquire returned in {t_throttled:.3f}s — it should have "
+            f"waited for a token to refill (~{refill_period}s)"
+        )
+        assert t_burst < t_throttled / 2, (
+            f"Burst acquires took {t_burst:.3f}s vs {t_throttled:.3f}s "
+            f"throttled — the burst should not have waited at all"
         )
 
     @pytest.mark.asyncio
