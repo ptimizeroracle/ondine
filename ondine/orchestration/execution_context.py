@@ -10,11 +10,11 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID, uuid4
 
 from ondine.core.components import PipelineComponents
-from ondine.core.models import ProcessingStats
+from ondine.core.models import ErrorInfo, ProcessingStats
 
 if TYPE_CHECKING:
     from ondine.adapters.response_cache import ResponseCache
@@ -154,7 +154,28 @@ class ExecutionContext:
     # Progress tracking
     current_stage_index: int = 0
     current_stage: str = ""
-    last_processed_row: int = 0
+
+    # Highest row index such that *every* row up to and including it is done.
+    #
+    # A contiguous watermark, not "the last row that happened to finish".
+    # Resume treats every index at or below this as complete and drops it from
+    # the work, so a watermark that ran ahead of a gap deleted rows that had
+    # never been processed: with concurrency 4, a run that died on row 1 while
+    # rows 2-7 completed resumed with a watermark of 7 and quietly processed
+    # nothing. See complete_rows().
+    #
+    # -1 means "no row is done yet", which 0 could not express — 0 also means
+    # "row 0 is done". Checkpoints written before this field existed default to
+    # 0 on load, keeping their old (slightly conservative) meaning.
+    last_processed_row: int = -1
+
+    # Rows finished ahead of the watermark, waiting for the gap below them to
+    # close. Bounded by how far out of order completions can run — the
+    # concurrency limit — not by the size of the dataset.
+    pending_completions: set[int] = field(
+        default_factory=set, repr=False, compare=False
+    )
+
     total_rows: int = 0
 
     # Cost tracking
@@ -167,6 +188,23 @@ class ExecutionContext:
     # Statistics
     failed_rows: int = 0
     skipped_rows: int = 0
+
+    # Which rows did not survive, and why.
+    #
+    # The counters above say *how many* rows were lost; without this list the
+    # only way to learn *which* ones is to scan the output frame for the
+    # ``[SKIPPED]`` marker — string-matching a sentinel, from user code. That
+    # left ``ExecutionResult.errors`` documented but permanently empty.
+    #
+    # Bounded on purpose: a 5M-row run where the provider is down would
+    # otherwise hold 5M ErrorInfo objects to say one thing. The count in
+    # ``skipped_rows`` stays exact regardless of how many entries were kept.
+    row_errors: list[ErrorInfo] = field(default_factory=list, repr=False)
+
+    #: Entries kept before ``row_errors`` stops growing. Enough to identify a
+    #: pattern in the failures; small enough to never be the reason a run runs
+    #: out of memory.
+    MAX_RECORDED_ROW_ERRORS: ClassVar[int] = 1000
 
     # Observers for progress notifications (backward compatibility)
     observers: list[ExecutionObserver] = field(default_factory=list)
@@ -210,8 +248,68 @@ class ExecutionContext:
         self.current_stage_index = stage_index
 
     def update_row(self, row_index: int) -> None:
-        """Update last processed row."""
+        """Force the watermark to `row_index`.
+
+        For callers that process rows strictly in order and already know the
+        contiguous position — the streaming executor counting whole chunks.
+        Anything completing rows out of order must use complete_rows(), which
+        will not advance the watermark past a gap.
+        """
         self.last_processed_row = row_index
+
+    def complete_rows(self, first_row_index: int, count: int = 1) -> None:
+        """Mark `count` rows from `first_row_index` finished.
+
+        Advances ``last_processed_row`` only across rows with no gap beneath
+        them, so a crash leaves a watermark that resume can trust: everything
+        at or below it really was processed.
+
+        Out-of-order completions are held in ``pending_completions`` until the
+        rows below them arrive, then absorbed in one pass. Rows completing
+        twice (a retry re-reporting) are idempotent.
+        """
+        for offset in range(count):
+            self.pending_completions.add(first_row_index + offset)
+
+        watermark = self.last_processed_row
+        while watermark + 1 in self.pending_completions:
+            watermark += 1
+            self.pending_completions.discard(watermark)
+        self.last_processed_row = watermark
+
+    def record_skipped_rows(
+        self,
+        first_row_index: int,
+        count: int,
+        stage: str,
+        message: str,
+    ) -> None:
+        """Record that `count` rows starting at `first_row_index` were skipped.
+
+        Keeps ``skipped_rows`` and ``row_errors`` in step so the count and the
+        detail can never disagree. A skipped *batch* loses every row in it, so
+        the range is recorded row by row — a caller re-processing the losers
+        needs indices, not a batch id.
+
+        Args:
+            first_row_index: Index of the first lost row, in the input frame.
+            count: How many consecutive rows were lost (1 for a single row).
+            stage: Stage that gave up on them.
+            message: Provider or policy explanation, kept verbatim.
+        """
+        self.skipped_rows += count
+        for offset in range(count):
+            if len(self.row_errors) >= self.MAX_RECORDED_ROW_ERRORS:
+                return
+            self.row_errors.append(
+                ErrorInfo(
+                    row_index=first_row_index + offset,
+                    stage=stage,
+                    error_type="skipped",
+                    message=message,
+                    retryable=False,
+                )
+            )
 
     def add_cost(self, cost: Decimal, tokens: int) -> None:
         """Add cost and token usage.

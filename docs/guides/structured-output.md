@@ -244,17 +244,18 @@ pipeline = (
     PipelineBuilder.create()
     ...
     .with_parser(PydanticParser(ProductInfo, strict=True))
-    .with_retry_policy(max_retries=3)  # Retry validation failures
+    .with_max_retries(3)  # Retry transient provider failures
     .build()
 )
 
 result = pipeline.execute()
 
 # Check for failed validations
-if result.metrics.failed_rows > 0:
-    print(f"Failed to validate {result.metrics.failed_rows} rows")
-    failed = result.data[result.data['brand'].isna()]
-    print(failed)
+lost = result.metrics.skipped_rows + result.metrics.failed_rows
+if lost:
+    print(f"Failed to validate {lost} rows")
+    for err in result.errors:
+        print(f"  row {err.row_index}: {err.message}")
 ```
 
 ### Custom Error Handling

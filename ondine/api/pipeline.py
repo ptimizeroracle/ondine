@@ -158,6 +158,23 @@ class Pipeline:
         # inside another pipeline's run. It owns no durable state of its own —
         # see _attach_response_cache.
         self._is_subpipeline = False
+        # Session of the most recent run — the key a resume needs. See the
+        # session_id property.
+        self._session_id: UUID | None = None
+
+    @property
+    def session_id(self) -> UUID | None:
+        """Session id of the most recent run, or None before the first one.
+
+        This is the value ``execute(resume_from=...)`` takes. It used to exist
+        only inside the log line printed when a run died, which made the
+        documented recovery path depend on a human reading stderr — no use to
+        a scheduled job that has to resume itself.
+
+        Set as soon as the run has a context, so it is readable after a
+        failure, not just after a success.
+        """
+        return self._session_id
 
     def add_observer(self, observer: ExecutionObserver) -> "Pipeline":
         """
@@ -355,6 +372,7 @@ class Pipeline:
             # Create new context
             context = ExecutionContext(pipeline_id=self.id)
 
+        self._session_id = context.session_id
         self._attach_response_cache(context, checkpoint_dir)
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
         context.components = self._components
@@ -448,6 +466,11 @@ class Pipeline:
                     rows=context.total_rows,
                     confidence="actual",
                 ),
+                # Rows the error policy dropped. Reported even though the run
+                # succeeded: with the SKIP default a partial loss is otherwise
+                # invisible to code — right row count, no exception, and the
+                # only trace a sentinel string in the output frame.
+                errors=context.row_errors,
                 execution_id=context.session_id,
                 start_time=context.start_time,
                 end_time=context.end_time,

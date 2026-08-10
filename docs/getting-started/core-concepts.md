@@ -64,7 +64,7 @@ pipeline = (
     # Processing configuration
     .with_batch_size(100)
     .with_concurrency(5)
-    .with_retry_policy(max_retries=3)
+    .with_max_retries(3)
 
     # Build immutable pipeline
     .build()
@@ -77,7 +77,7 @@ Available builder methods by category:
 - **Prompt**: `with_prompt()`, `with_system_prompt()`
 - **LLM**: `with_llm()`, `with_llm_spec()`
 - **Processing**: `with_batch_size()`, `with_concurrency()`, `with_rate_limit()`
-- **Reliability**: `with_retry_policy()`, `with_checkpoint()`
+- **Reliability**: `with_max_retries()`, `with_checkpoint_dir()`
 - **Cost**: `with_max_budget()`
 - **Execution**: `with_async_execution()`, `with_streaming()`
 
@@ -255,11 +255,7 @@ When you call `pipeline.execute()`, Ondine first validates configuration and inp
 Failed requests retry with exponential backoff:
 
 ```python
-.with_retry_policy(
-    max_retries=3,
-    backoff_factor=2.0,
-    retry_on=[RateLimitError, NetworkError]
-)
+.with_max_retries(3)
 ```
 
 ### Checkpointing
