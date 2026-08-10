@@ -51,9 +51,14 @@ concurrency:
   group: publish-pypi
   cancel-in-progress: false
 
+# Read-only for the workflow; the one job that needs to sign asks for the
+# OIDC token itself. Every other job here builds, downloads artifacts and
+# uploads to an index with its own credential — none of them touch the repo.
+#
+# `contents: write` was granted workflow-wide for signatures that are attached
+# to build artifacts, not to a GitHub release, so nothing ever used it.
 permissions:
-  contents: write  # Sigstore attaches signatures to the GitHub release
-  id-token: write  # Sigstore signing via OIDC
+  contents: read
 
 jobs:
 
@@ -130,6 +135,7 @@ jobs:
 
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
+          persist-credentials: false
           ref: ${{ steps.r.outputs.tag }}
 
       - name: Verify tag matches pyproject.toml version
@@ -158,6 +164,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
+          persist-credentials: false
           ref: ${{ needs.resolve-tag.outputs.tag }}
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b  # v1
         with:
@@ -196,6 +203,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
+          persist-credentials: false
           ref: ${{ needs.resolve-tag.outputs.tag }}
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
@@ -208,7 +216,12 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist -i python${{ matrix.python }}
           manylinux: ${{ matrix.manylinux || '' }}
-          sccache: true
+          # No compiler cache on the wheels that go to PyPI. A cache is
+          # writable by any job on any branch, so a poisoned entry can end up
+          # compiled into a published artifact — and these are the artifacts
+          # users install. 16 wheels built from cold is a few minutes on a
+          # workflow that runs once per release.
+          sccache: false
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -500,6 +513,9 @@ jobs:
     name: Publish to PyPI (production)
     runs-on: ubuntu-latest
     environment: Ondine
+    permissions:
+      contents: read
+      id-token: write  # Sigstore signing via OIDC
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
