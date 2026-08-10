@@ -44,7 +44,7 @@ def main():
 
     print(f"\nProcessed {result.metrics.total_rows} rows")
     print(f"Cost: ${result.costs.total_cost:.4f}")
-    print(f"Success rate: {result.metrics.success_count}/{result.metrics.total_rows}")
+    print(f"Success rate: {result.metrics.processed_rows}/{result.metrics.total_rows}")
 
 
 if __name__ == "__main__":

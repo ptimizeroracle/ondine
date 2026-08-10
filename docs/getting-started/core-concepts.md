@@ -18,7 +18,11 @@ The `Pipeline` is the central execution unit. It drives data through stages in o
 from ondine import Pipeline
 
 # Pipelines are built via PipelineBuilder
-pipeline = PipelineBuilder.create()...build()
+pipeline = (
+    PipelineBuilder.create()
+    ...
+    .build()
+)
 
 # Execute synchronously
 result = pipeline.execute()
@@ -237,11 +241,12 @@ state = storage.load()
 Reads and writes CSV, Parquet, Excel, and JSON:
 
 ```python
-from ondine.adapters import DataIO
+from ondine.adapters import CSVReader, ParquetWriter
 
-# Supports CSV, Parquet, Excel, JSON
-data = DataIO.read("data.csv")
-DataIO.write(data, "output.parquet")
+# One reader/writer per format: CSVReader, ExcelReader, ParquetReader,
+# and the matching writers.
+data = CSVReader("data.csv").read()
+ParquetWriter("output.parquet").write(data)
 ```
 
 ## Execution Flow
@@ -263,7 +268,7 @@ Failed requests retry with exponential backoff:
 Resume long-running jobs after a failure:
 
 ```python
-.with_checkpoint("./checkpoints", interval=100)
+.with_checkpoint_dir("./checkpoints", interval=100)
 ```
 
 ### Error Policies
@@ -331,10 +336,10 @@ configure_logging(level="INFO", json_format=True)
 Push metrics to Prometheus:
 
 ```python
-from ondine.utils import MetricsExporter
+from ondine.utils.metrics_exporter import PrometheusMetrics
 
-exporter = MetricsExporter(port=9090)
-exporter.start()
+metrics = PrometheusMetrics(port=9090)
+metrics.start_server()
 ```
 
 ## Next Steps

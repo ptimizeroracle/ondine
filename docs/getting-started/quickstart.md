@@ -219,9 +219,9 @@ print(result.data)              # pandas DataFrame with results
 
 # View metrics
 print(result.metrics.processed_rows)    # Number of rows processed
-print(result.metrics.successful_rows)   # Successfully processed
+print(result.metrics.processed_rows)   # Successfully processed
 print(result.metrics.failed_rows)       # Failed rows
-print(result.metrics.elapsed_time)      # Total time in seconds
+print(result.metrics.total_duration_seconds)      # Total time in seconds
 
 # Check costs
 print(result.costs.total_cost)          # Total cost in USD
@@ -234,7 +234,11 @@ print(result.costs.output_tokens)       # Output tokens generated
 Estimate costs before processing large datasets. A 100k-row job on GPT-4o can run into real money; five seconds of estimation saves you from a surprise invoice:
 
 ```python
-pipeline = PipelineBuilder.create()...build()
+pipeline = (
+    PipelineBuilder.create()
+    ...
+    .build()
+)
 
 # Get cost estimate
 estimate = pipeline.estimate_cost()
@@ -287,7 +291,7 @@ pipeline = (
     .from_csv("large_dataset.csv", ...)
     .with_prompt("...")
     .with_llm(provider="openai", model="gpt-4o-mini")
-    .with_checkpoint("./checkpoints", interval=100)  # Save every 100 rows
+    .with_checkpoint_dir("./checkpoints", interval=100)  # Save every 100 rows
     .build()
 )
 

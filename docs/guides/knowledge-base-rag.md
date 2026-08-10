@@ -141,6 +141,7 @@ KnowledgeStore(
 
 ### Ingestion methods
 
+<!-- docs-check: skip -->
 ```python
 # Load from a file or directory (recursive)
 kb.ingest(path: str | Path) -> int
@@ -163,6 +164,7 @@ applied automatically whenever a document yields multiple chunks or
 
 ### Search
 
+<!-- docs-check: skip -->
 ```python
 kb.search(query: str, limit: int = 5) -> list[SearchResult]
 ```
@@ -611,6 +613,7 @@ kb = KnowledgeStore("knowledge.db", ocr=MyOCR())
 
 ### `with_knowledge_base()`
 
+<!-- docs-check: skip -->
 ```python
 PipelineBuilder.with_knowledge_base(
     store: KnowledgeStore,
