@@ -112,22 +112,43 @@ class TimingClient(LLMClient):
 
 # Cheap, fast models. The claim being measured is about orchestration, so the
 # right model is whichever answers a one-word classification quickly.
+#: (env var, provider, model, base URL, body that turns reasoning off).
+#:
+#: Every provider spells "do not think" differently, and getting it wrong is
+#: not a no-op: reasoning tokens bill as output, and they push a batched reply
+#: past any token cap tuned for the answer alone — which arrives as a truncated
+#: body the pipeline cannot tell from an outage. DeepSeek v4 flash spends 20
+#: output tokens thinking about "what colour is the sky" and 1 answering it.
 PRESETS = {
-    # $0.08/M input, $0.16/M output at the time of writing — the cheapest of
-    # these by an order of magnitude, and the reason to disable thinking:
-    # reasoning tokens are billed as output.
+    # DeepSeek's own endpoint rather than a reseller: first-party pricing, and
+    # one less hop to blame when a call is slow. $0.14/M in, $0.28/M out.
     "deepseek": (
+        "DEEPSEEK_API_KEY",
+        LLMProvider.OPENAI,
+        "deepseek/deepseek-v4-flash",
+        "https://api.deepseek.com/v1",
+        {"thinking": {"type": "disabled"}},
+    ),
+    "qwen": (
         "OPENROUTER_API_KEY",
         LLMProvider.OPENAI,
-        "openrouter/deepseek/deepseek-v4-flash-latest",
+        "openrouter/qwen/qwen3.6-27b",
+        None,
+        {"reasoning": {"enabled": False}},
     ),
-    "qwen": ("OPENROUTER_API_KEY", LLMProvider.OPENAI, "openrouter/qwen/qwen3.6-27b"),
-    "groq": ("GROQ_API_KEY", LLMProvider.GROQ, "groq/openai/gpt-oss-20b"),
-    "cerebras": ("CEREBRAS_API_KEY", LLMProvider.OPENAI, "cerebras/llama3.1-8b"),
-    "together": (
-        "TOGETHER_API_KEY",
+    "groq": (
+        "GROQ_API_KEY",
+        LLMProvider.GROQ,
+        "groq/openai/gpt-oss-20b",
+        None,
+        {},
+    ),
+    "cerebras": (
+        "CEREBRAS_API_KEY",
         LLMProvider.OPENAI,
-        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "cerebras/llama3.1-8b",
+        None,
+        {},
     ),
 }
 
@@ -161,7 +182,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
-    env_var, provider, model = PRESETS[args.provider]
+    env_var, provider, model, base_url, no_thinking = PRESETS[args.provider]
     if not os.getenv(env_var):
         raise SystemExit(f"{env_var} is not set — this benchmark calls a real API")
 
@@ -172,14 +193,14 @@ def main() -> None:
         # One word per row plus JSON scaffolding. A flat cap here truncates
         # every batched response, and a truncated batch is indistinguishable
         # from a provider outage — which is exactly how #... was found.
-        max_tokens=args.max_tokens or max(64, args.batch_size * 24),
+        max_tokens=args.max_tokens or max(256, args.batch_size * 48),
+        base_url=base_url,
         input_cost_per_1k_tokens=Decimal("0.0001"),
         output_cost_per_1k_tokens=Decimal("0.0005"),
     )
-    # OpenRouter takes reasoning control in the request body; LiteLLM passes
-    # extra_body straight through. Harmless on models that do not reason.
-    if not args.thinking:
-        spec.extra_params = {"extra_body": {"reasoning": {"enabled": False}}}
+    # LiteLLM passes extra_body straight through to the provider.
+    if not args.thinking and no_thinking:
+        spec.extra_params = {"extra_body": no_thinking}
 
     client = TimingClient(spec)
 
@@ -240,6 +261,19 @@ def main() -> None:
         f"cost ${result.costs.total_cost:.4f}   "
         f"skipped {result.metrics.skipped_rows}"
     )
+
+    # A rate is only a rate if rows were answered. One run had every call
+    # rejected with HTTP 400 and this script still reported "543 rows/s" and
+    # "31 min per 1M rows" — wall clock divided by rows, whether or not any
+    # work happened. That is the same silent-success shape the library was
+    # just fixed for, and a benchmark that reports throughput for zero output
+    # is worse than one that reports nothing.
+    if lost:
+        print(
+            f"\n  NO THROUGHPUT NUMBER: {lost:,} of {args.rows:,} rows produced "
+            f"no answer. Fix the run before reading any rate from it."
+        )
+        raise SystemExit(1)
 
     per_million_s = 1_000_000 / (args.rows / wall_s)
     print(
