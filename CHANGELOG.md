@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.10](https://github.com/ptimizeroracle/ondine/compare/v1.11.9...v1.11.10) (2026-08-11)
+
+
+### Bug Fixes
+
+* **batch:** report the rows a failed batch response loses ([#251](https://github.com/ptimizeroracle/ondine/issues/251)) ([3d378d5](https://github.com/ptimizeroracle/ondine/commit/3d378d592d36c610bfa0d37e0bda1e0c30b50853))
+
 ## [1.11.9](https://github.com/ptimizeroracle/ondine/compare/v1.11.8...v1.11.9) (2026-08-10)
 
 
