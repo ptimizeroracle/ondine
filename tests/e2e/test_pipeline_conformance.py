@@ -383,9 +383,13 @@ def test_structured_output_gives_each_row_its_own_object(batch_size):
     strict=True,
     reason=(
         "Structured batches are matched to rows by position with no "
-        "verification, so a model that reorders its items silently gives rows "
-        "each other's answers: 4 of 6 wrong, success=True, zero failed rows. "
-        "The plain JSON batch path recovers from the same reordering by id. "
+        "verification, so a model that reorders its items would silently give "
+        "rows each other's answers: 4 of 6 wrong, success=True, zero failed "
+        "rows. The plain JSON batch path recovers from the same reordering by "
+        "id, which is the asymmetry worth closing. "
+        "Latent, not observed: gpt-4o-mini preserved order across 140 real "
+        "rows at batch 10 and 25, so this guards a failure that has not been "
+        "reproduced against a real provider. "
         "See #255 — remove this marker when the paths agree."
     ),
 )
