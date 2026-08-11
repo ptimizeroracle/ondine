@@ -1,5 +1,6 @@
 """Claim verification: Performance claims (Claims 1-9)."""
 
+import sys
 import time
 
 import pandas as pd
@@ -215,3 +216,226 @@ class TestPerformanceClaims:
         assert avg_ms < 10.0, f"Average search {avg_ms:.3f}ms (>10ms)"
 
         store.close()
+
+
+class TestPublishedThroughputClaims:
+    """The numbers we put in front of users, as tests that fail when they stop being true.
+
+    These exist because a claim nothing executes is exactly the defect this
+    project keeps finding in its own code: a statement that looks verified and
+    is not. A benchmark script proves a number once, on one machine, on one
+    day. A test in this file proves it on every pull request, and turns red the
+    day an innocuous refactor costs 30% of the throughput.
+
+    Thresholds sit well below what a laptop measures, because CI runners are
+    slower and shared and a flaky performance test teaches people to ignore
+    red. They are floors under a published claim, not records.
+    """
+
+    @staticmethod
+    def _instant_client():
+        """A provider with no latency, so what is left on the clock is ondine."""
+        from decimal import Decimal
+        from typing import Any
+
+        from ondine.adapters.llm_client import LLMClient
+        from ondine.core.models import LLMResponse
+        from ondine.core.specifications import LLMProvider, LLMSpec
+
+        class InstantClient(LLMClient):
+            def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+                import json
+                import re
+
+                match = re.search(
+                    r"^\s*(\[.*?\])\s*$", prompt, re.MULTILINE | re.DOTALL
+                )
+                if match:
+                    items = json.loads(match.group(1))
+                    text = json.dumps(
+                        [{"id": item["id"], "result": "ok"} for item in items]
+                    )
+                else:
+                    text = "ok"
+                return LLMResponse(
+                    text=text,
+                    tokens_in=8,
+                    tokens_out=4,
+                    model=self.model,
+                    cost=Decimal("0.00001"),
+                    latency_ms=0.0,
+                )
+
+            def structured_invoke(self, prompt: str, output_cls: Any, **kwargs: Any):
+                return self.invoke(prompt)
+
+            def estimate_tokens(self, text: str) -> int:
+                return max(1, len(text) // 4)
+
+        return InstantClient(
+            LLMSpec(
+                provider=LLMProvider.OPENAI,
+                model="instant",
+                temperature=0.0,
+                input_cost_per_1k_tokens=Decimal("0.0001"),
+                output_cost_per_1k_tokens=Decimal("0.0001"),
+            )
+        )
+
+    def test_claim_orchestration_overhead_stays_small(self):
+        """Published: ondine adds ~3 minutes of orchestration to 5M rows.
+
+        Measured on a laptop at 28,700 rows/s; the floor here is 5,000 rows/s,
+        which still means under 17 minutes for 5M. A regression that drops
+        below this has changed something structural, not shaved a constant.
+        """
+        from ondine import PipelineBuilder
+
+        rows = 20_000
+        frame = pd.DataFrame({"text": [f"row {index}" for index in range(rows)]})
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(frame, input_columns=["text"], output_columns=["out"])
+            .with_prompt("Process: {text}")
+            .with_custom_llm_client(self._instant_client())
+            .with_batch_size(50)
+            .with_concurrency(20)
+            .build()
+        )
+
+        started = time.perf_counter()
+        result = pipeline.execute()
+        elapsed = time.perf_counter() - started
+
+        # A rate over lost rows is not a rate.
+        assert result.metrics.skipped_rows == 0
+        assert result.metrics.failed_rows == 0
+
+        rate = rows / elapsed
+        assert rate >= 5_000, f"{rate:,.0f} rows/s is below the published floor"
+
+    def test_claim_streaming_uses_less_memory_than_loading_everything(self):
+        """Published: streaming bounds memory — 5M rows in 847 MB.
+
+        Absolute megabytes are not portable across machines or Python builds,
+        so this asserts the property the claim rests on: the streamed run's
+        peak is meaningfully below the one that materialises everything. On a
+        laptop at 1M rows it was 784 MB against 2,477 MB.
+        """
+        import resource
+
+        from ondine import PipelineBuilder
+
+        def peak_mb() -> float:
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            return peak / (1024 * 1024) if sys.platform == "darwin" else peak / 1024
+
+        rows = 60_000
+        frame = pd.DataFrame({"text": [f"row {index} " * 12 for index in range(rows)]})
+
+        def run(chunk_size: int | None) -> None:
+            builder = (
+                PipelineBuilder.create()
+                .from_dataframe(frame, input_columns=["text"], output_columns=["out"])
+                .with_prompt("Process: {text}")
+                .with_custom_llm_client(self._instant_client())
+                .with_batch_size(50)
+            )
+            if chunk_size:
+                builder = builder.with_streaming(chunk_size=chunk_size)
+                for _ in builder.build().execute_stream():
+                    pass
+            else:
+                builder.build().execute()
+
+        # Streamed first: ru_maxrss is a high-water mark that never falls, so
+        # the heavier run has to come second or it would poison the lighter
+        # measurement.
+        run(chunk_size=10_000)
+        streamed_peak = peak_mb()
+        run(chunk_size=None)
+        whole_peak = peak_mb()
+
+        assert whole_peak > streamed_peak, (
+            f"loading everything peaked at {whole_peak:.0f} MB against "
+            f"{streamed_peak:.0f} MB streamed — streaming is no longer "
+            f"bounding memory"
+        )
+
+    def test_claim_scheduling_stays_close_to_the_theoretical_floor(self):
+        """Published: 84-95% of the provider-bound floor on real providers.
+
+        Reproduced deterministically here: every call sleeps a fixed 40ms, so
+        the floor is exactly `calls * 0.04 / concurrency` and the measurement
+        needs no network. The floor here is 70%, below the 84% worst case seen
+        against four real providers, to survive a loaded runner.
+        """
+        import asyncio
+        from decimal import Decimal
+        from typing import Any
+
+        from ondine import PipelineBuilder
+        from ondine.adapters.llm_client import LLMClient
+        from ondine.core.models import LLMResponse
+        from ondine.core.specifications import LLMProvider, LLMSpec
+
+        latency_s = 0.04
+
+        class SlowClient(LLMClient):
+            def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+                time.sleep(latency_s)
+                return self._response()
+
+            async def ainvoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+                await asyncio.sleep(latency_s)
+                return self._response()
+
+            def _response(self) -> LLMResponse:
+                return LLMResponse(
+                    text="ok",
+                    tokens_in=8,
+                    tokens_out=4,
+                    model=self.model,
+                    cost=Decimal("0"),
+                    latency_ms=latency_s * 1000,
+                )
+
+            def structured_invoke(self, prompt: str, output_cls: Any, **kwargs: Any):
+                return self.invoke(prompt)
+
+            def estimate_tokens(self, text: str) -> int:
+                return 1
+
+        rows, concurrency = 400, 20
+        frame = pd.DataFrame({"text": [f"row {index}" for index in range(rows)]})
+        pipeline = (
+            PipelineBuilder.create()
+            .from_dataframe(frame, input_columns=["text"], output_columns=["out"])
+            .with_prompt("Process: {text}")
+            .with_custom_llm_client(
+                SlowClient(
+                    LLMSpec(
+                        provider=LLMProvider.OPENAI,
+                        model="slow",
+                        temperature=0.0,
+                        input_cost_per_1k_tokens=Decimal("0"),
+                        output_cost_per_1k_tokens=Decimal("0"),
+                    )
+                )
+            )
+            .with_batch_size(1)
+            .with_concurrency(concurrency)
+            .build()
+        )
+
+        started = time.perf_counter()
+        result = pipeline.execute()
+        elapsed = time.perf_counter() - started
+
+        assert result.metrics.skipped_rows == 0
+        floor = rows * latency_s / concurrency
+        efficiency = floor / elapsed
+        assert efficiency >= 0.70, (
+            f"scheduling ran at {efficiency:.0%} of the theoretical floor "
+            f"({elapsed:.2f}s against {floor:.2f}s)"
+        )
