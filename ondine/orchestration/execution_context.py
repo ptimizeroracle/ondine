@@ -17,6 +17,8 @@ from ondine.core.components import PipelineComponents
 from ondine.core.models import ErrorInfo, ProcessingStats
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from ondine.adapters.response_cache import ResponseCache
     from ondine.observability.dispatcher import ObserverDispatcher
     from ondine.orchestration.observers import ExecutionObserver
@@ -286,11 +288,6 @@ class ExecutionContext:
     ) -> None:
         """Record that `count` rows starting at `first_row_index` were skipped.
 
-        Keeps ``skipped_rows`` and ``row_errors`` in step so the count and the
-        detail can never disagree. A skipped *batch* loses every row in it, so
-        the range is recorded row by row — a caller re-processing the losers
-        needs indices, not a batch id.
-
         Args:
             first_row_index: Index of the first lost row, in the input frame.
             count: How many consecutive rows were lost (1 for a single row).
@@ -298,14 +295,57 @@ class ExecutionContext:
             message: Provider or policy explanation, kept verbatim.
         """
         self.skipped_rows += count
-        for offset in range(count):
+        self._record_row_errors(
+            range(first_row_index, first_row_index + count),
+            stage=stage,
+            message=message,
+            error_type="skipped",
+        )
+
+    def record_failed_rows(
+        self,
+        row_indices: Iterable[int],
+        stage: str,
+        message: str,
+    ) -> None:
+        """Record rows whose output could not be produced.
+
+        Distinct from a skip: a skip is the error policy deciding to move on,
+        while this is work that came back unusable — a batch response the
+        parser could not read, a provider that returned nothing. Both lose
+        rows, and both used to be invisible in the metrics.
+
+        Takes explicit indices rather than a range: a batch's rows are whatever
+        the aggregator put in it, not necessarily consecutive.
+        """
+        indices = list(row_indices)
+        self.failed_rows += len(indices)
+        self._record_row_errors(
+            indices, stage=stage, message=message, error_type="parse_failure"
+        )
+
+    def _record_row_errors(
+        self,
+        row_indices: Iterable[int],
+        *,
+        stage: str,
+        message: str,
+        error_type: str,
+    ) -> None:
+        """Append one ErrorInfo per lost row, up to the recording limit.
+
+        Keeps the counters and ``row_errors`` in step so the count and the
+        detail can never disagree — a caller re-processing the losers needs
+        indices, not a batch id.
+        """
+        for row_index in row_indices:
             if len(self.row_errors) >= self.MAX_RECORDED_ROW_ERRORS:
                 return
             self.row_errors.append(
                 ErrorInfo(
-                    row_index=first_row_index + offset,
+                    row_index=row_index,
                     stage=stage,
-                    error_type="skipped",
+                    error_type=error_type,
                     message=message,
                     retryable=False,
                 )
