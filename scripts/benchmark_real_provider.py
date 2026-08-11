@@ -143,10 +143,20 @@ PRESETS = {
         None,
         {},
     ),
+    # Model ids come from each account's own /models endpoint. Guessing them
+    # from a provider's marketing page produced NotFoundError for every call,
+    # which the batch parser then reported as unreadable responses.
     "cerebras": (
         "CEREBRAS_API_KEY",
         LLMProvider.OPENAI,
-        "cerebras/llama3.1-8b",
+        "cerebras/gemma-4-31b",
+        None,
+        {},
+    ),
+    "together": (
+        "TOGETHER_API_KEY",
+        LLMProvider.OPENAI,
+        "together_ai/Qwen/Qwen2.5-7B-Instruct-Turbo",
         None,
         {},
     ),

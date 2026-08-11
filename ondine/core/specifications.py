@@ -413,7 +413,19 @@ class ProcessingSpec(BaseModel):
     """
 
     batch_size: int = Field(default=100, gt=0, le=1000, description="Rows per batch")
-    concurrency: int = Field(default=5, gt=0, le=20, description="Parallel requests")
+    # Ceiling raised from 20 to 100 to match what the builder has always
+    # documented ("1-100", "Maximum (enterprise): 50", "Groq supports ~100").
+    #
+    # The two front doors disagreed: `with_concurrency(64)` was accepted
+    # because the model does not validate on assignment, while
+    # `ProcessingSpec(concurrency=64)` — the YAML and API path — raised. So the
+    # documented configuration worked only when built one particular way, and
+    # a 5M-row run configured from YAML was silently capped at a value nobody
+    # chose. Measured: DeepSeek v4 flash peaks near concurrency 64 (604
+    # rows/s); at 20 it is roughly a third of that.
+    concurrency: int = Field(
+        default=5, gt=0, le=100, description="Parallel requests (1-100)"
+    )
     checkpoint_interval: int = Field(
         default=500, gt=0, description="Checkpoint frequency"
     )
