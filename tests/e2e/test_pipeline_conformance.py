@@ -17,6 +17,8 @@ import pytest
 from ondine import PipelineBuilder
 from tests.e2e.conformance_harness import (
     LedgerClient,
+    StructuredAnswerBatch,
+    StructuredLedgerClient,
     answer_for,
     conformance_frame,
     expected_answers,
@@ -334,3 +336,70 @@ def test_a_provider_returning_nothing_is_reported_as_failure_not_as_data():
         "a provider that answered nothing was recorded as having answered"
     )
     assert sorted(error.row_index for error in result.errors) == list(range(10))
+
+
+# ── structured output ─────────────────────────────────────────────────────
+
+
+def build_structured(client, frame, **options):
+    """A structured-output pipeline over `frame`, wired to `client`."""
+    builder = (
+        PipelineBuilder.create()
+        .from_dataframe(
+            frame, input_columns=["marker"], output_columns=["token", "category"]
+        )
+        .with_prompt(PROMPT)
+        .with_custom_llm_client(client)
+        .with_structured_output(StructuredAnswerBatch)
+    )
+    if "batch_size" in options:
+        builder = builder.with_batch_size(options["batch_size"])
+    return builder.build()
+
+
+@pytest.mark.parametrize("batch_size", [1, 3, 5])
+def test_structured_output_gives_each_row_its_own_object(batch_size):
+    """Row N's parsed object is row N's, not a neighbour's.
+
+    The structured path bypasses JsonBatchStrategy entirely — the model
+    returns a Pydantic object and the disaggregator maps its items onto rows.
+    Nothing else in the suite covers that mapping, and shape assertions cannot
+    see it: six rows of well-formed objects look identical whether or not
+    they landed on the right rows. The answers carry the marker that asked for
+    them, so the mapping is checkable.
+    """
+    client = StructuredLedgerClient()
+    frame = conformance_frame(6)
+
+    output = (
+        build_structured(client, frame, batch_size=batch_size).execute().to_pandas()
+    )
+
+    assert list(output["token"]) == list(frame["marker"])
+    assert list(output["category"]) == expected_answers(6)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Structured batches are matched to rows by position with no "
+        "verification, so a model that reorders its items silently gives rows "
+        "each other's answers: 4 of 6 wrong, success=True, zero failed rows. "
+        "The plain JSON batch path recovers from the same reordering by id. "
+        "See #255 — remove this marker when the paths agree."
+    ),
+)
+def test_a_reordered_structured_batch_does_not_misassign_answers():
+    """Models reorder batch responses. That must not become wrong data.
+
+    This is the one failure mode that no counter can catch after the fact:
+    every cell is populated, every count is right, and the values belong to
+    the wrong rows.
+    """
+    client = StructuredLedgerClient(reverse=True)
+    frame = conformance_frame(6)
+
+    output = build_structured(client, frame, batch_size=3).execute().to_pandas()
+
+    misassigned = int((output["marker"] != output["token"]).sum())
+    assert misassigned == 0, f"{misassigned} rows hold another row's answer"

@@ -36,6 +36,7 @@ from decimal import Decimal
 from typing import Any
 
 import pandas as pd
+from pydantic import BaseModel
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.models import LLMResponse
@@ -238,3 +239,78 @@ def _token_in(text: str) -> str:
             f"prompt mixes markers from several rows: {sorted(set(found))}"
         )
     return found[0]
+
+
+# ── structured output ─────────────────────────────────────────────────────
+#
+# The structured path does not go through JsonBatchStrategy: the model returns
+# a Pydantic object and the disaggregator matches its items to rows. So it
+# needs its own fake, and its own answers-carry-their-own-identity trick — a
+# result object that names the row it belongs to is the only way a test can
+# tell a correctly-ordered batch from a reordered one.
+
+
+class StructuredAnswer(BaseModel):
+    """One row's answer, carrying the marker of the row that asked for it."""
+
+    token: str
+    category: str
+
+
+class StructuredAnswerBatch(BaseModel):
+    """What a batched structured call returns: one item per row, by position."""
+
+    items: list[StructuredAnswer]
+
+
+class StructuredLedgerClient(LLMClient):
+    """Answers structurally from the prompt's own markers.
+
+    Args:
+        reverse: Return the items in reverse order. Models reorder, renumber
+            and re-sort batch responses in practice; this makes that concrete
+            rather than hypothetical.
+    """
+
+    def __init__(self, spec: LLMSpec | None = None, *, reverse: bool = False) -> None:
+        super().__init__(spec or conformance_spec())
+        self._reverse = reverse
+        self.calls: Counter[str] = Counter()
+
+    def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
+        raise AssertionError(
+            "a structured pipeline must call structured_invoke, not invoke"
+        )
+
+    def structured_invoke(self, prompt: str, output_cls: Any, **kwargs: Any):
+        tokens = TOKEN_PATTERN.findall(prompt)
+        if not tokens:
+            raise AssertionError(f"prompt carries no row marker: {prompt!r}")
+        for token in tokens:
+            self.calls[token] += 1
+
+        answers = [
+            StructuredAnswer(token=token, category=answer_for(token))
+            for token in tokens
+        ]
+        if self._reverse:
+            answers.reverse()
+
+        result = (
+            output_cls(items=answers)
+            if "items" in output_cls.model_fields
+            else output_cls(token=answers[0].token, category=answers[0].category)
+        )
+        response = LLMResponse(
+            text=result.model_dump_json(),
+            tokens_in=TOKENS_IN_PER_CALL,
+            tokens_out=TOKENS_OUT_PER_CALL,
+            model=self.model,
+            cost=COST_PER_CALL,
+            latency_ms=1.0,
+        )
+        response.structured_result = result
+        return response
+
+    def estimate_tokens(self, text: str) -> int:
+        return max(1, len(text) // 4)
