@@ -51,20 +51,20 @@ pipeline = (
 
 result = pipeline.execute()
 
-# The run succeeds even when rows were lost, so check. `errors` names them;
-# `metrics.skipped_rows` counts them, including any beyond the first 1,000
-# that `errors` records.
-print(f"{result.metrics.skipped_rows} rows skipped")
-for error in result.errors:
-    print(f"  row {error.row_index}: {error.message}")
-
-lost = result.to_pandas().iloc[[error.row_index for error in result.errors]]
+# `success` means the run *finished* — under skip it stays True even when rows
+# were lost. `is_complete` is the coverage signal: True only when every row
+# produced output. Check it before trusting the frame as a full result.
+if not result.is_complete:
+    print(f"{result.metrics.skipped_rows} rows skipped")
+    for error in result.errors:  # names each lost row (up to the first 1,000)
+        print(f"  row {error.row_index}: {error.message}")
+    lost = result.to_pandas().iloc[[error.row_index for error in result.errors]]
 ```
 
 Good when partial results are fine and you want throughput — but *always*
-check `skipped_rows`. With this policy a run that lost every third row still
-returns a full-height frame and `success=True`; the count is the only thing
-that says otherwise.
+check `is_complete`. With this policy a run that lost every third row still
+returns a full-height frame and `success=True`; `is_complete` (and the
+`skipped_rows` count behind it) is what says otherwise.
 
 ### FAIL
 

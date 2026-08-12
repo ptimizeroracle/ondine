@@ -151,6 +151,10 @@ def test_a_dropped_row_is_named_in_the_result_not_only_counted():
     assert result.metrics.skipped_rows == 1
     assert [error.row_index for error in result.errors] == [2]
     assert failing in result.errors[0].message
+    # The run finished under the skip policy (success), but one row never
+    # produced output, so the frame is not whole (#254).
+    assert result.success is True
+    assert result.is_complete is False
     # The surviving rows are still correct — the skip took one row, not the
     # alignment of everything after it.
     output = result.to_pandas()
