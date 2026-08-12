@@ -239,8 +239,12 @@ jobs:
     # introduces it, not surface after merge.
     # ──────────────────────────────────────────────────────────────────
     - name: Run pipeline conformance suite
-      run: |
-        uv run pytest tests/e2e/test_pipeline_conformance.py -v --tb=short
+      # One line on purpose: this step runs on the Windows matrix leg too, where
+      # the shell is PowerShell and a trailing "\" is not a line continuation —
+      # it reaches pytest as a path argument (the drive root), so pytest scans
+      # the whole of D:\ instead of these two files. Keep the invocation on a
+      # single line so it means the same thing on bash and PowerShell.
+      run: uv run pytest tests/e2e/test_pipeline_conformance.py tests/e2e/test_router_conformance.py -v --tb=short
 
     - name: Run integration tests (main branch only)
       if: github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'

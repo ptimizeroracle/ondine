@@ -33,6 +33,9 @@ Every feature documented in README, docs, or CHANGELOG is either tested or docum
 | 22 | Streaming execution | test_verify_functionality.py | test_claim_22_streaming_execution |
 | 23 | Observability | test_verify_functionality.py | test_claim_23_observability_registry |
 | 24 | Router strategies | test_verify_functionality.py | test_claim_24_router_strategies |
+| 24a | Automatic failover preserves every row (dead deployment → healthy one, no loss/dup/misalignment) | ../e2e/test_router_conformance.py | test_failover_serves_every_row_from_the_healthy_deployment |
+| 24b | Failover keeps row alignment under batching + concurrency | ../e2e/test_router_conformance.py | test_failover_preserves_alignment_across_batching_and_concurrency |
+| 24c | Whole-fleet outage fails loudly, never empty success | ../e2e/test_router_conformance.py | test_total_outage_fails_loudly_instead_of_reporting_empty_success |
 | 25 | MLX local inference | test_verify_functionality.py | test_claim_25_mlx_client_exists |
 | 26 | Provider presets | test_verify_functionality.py | test_claim_26_provider_presets_exist |
 | 27 | Custom providers | test_verify_functionality.py | test_claim_27_custom_provider_registration |
