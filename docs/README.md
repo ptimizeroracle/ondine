@@ -1,5 +1,12 @@
 # Ondine
 
+[![PyPI version](https://img.shields.io/pypi/v/ondine.svg)](https://pypi.org/project/ondine/)
+[![Downloads](https://static.pepy.tech/badge/ondine/month)](https://pepy.tech/project/ondine)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![GitHub stars](https://img.shields.io/github/stars/ptimizeroracle/ondine.svg?style=social)](https://github.com/ptimizeroracle/ondine)
+[![Tests](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml/badge.svg)](https://github.com/ptimizeroracle/ondine/actions/workflows/ci.yml)
+
 **Batch-process your DataFrames with LLMs, without the boilerplate.**
 
 Agents reason row-by-row. Ondine computes columns.
