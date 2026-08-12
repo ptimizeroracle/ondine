@@ -20,6 +20,7 @@ from ondine.config import ConfigLoader
 from ondine.core.specifications import (
     DataSourceType,
     LLMProvider,
+    PipelineSpecifications,
 )
 from ondine.utils.optional_dependencies import (
     raise_excel_extra_error,
@@ -83,7 +84,7 @@ PROVIDER_METADATA = {
 }
 
 
-def _load_specs_from_config(config: Path):
+def _load_specs_from_config(config: Path) -> PipelineSpecifications:
     """Load pipeline specifications from YAML or JSON."""
     suffix = config.suffix.lower()
     if suffix == ".json":
@@ -137,7 +138,7 @@ ONDINE_ART = r"""
 """
 
 
-def show_banner():
+def show_banner() -> None:
     """Display the Ondine banner (centered, creative, robust)."""
     # Color gradient: cyan to magenta
     lines = ONDINE_ART.strip().split("\n")
@@ -173,7 +174,7 @@ def show_banner():
 @click.group()
 @click.version_option(version=__version__, prog_name="ondine")
 @click.pass_context
-def cli(ctx):
+def cli(ctx) -> None:
     """
     🌊 ONDINE - LLM Dataset Engine
 
@@ -273,7 +274,7 @@ def process(
     checkpoint_dir: Path | None,
     dry_run: bool,
     verbose: bool,
-):
+) -> None:
     """
     Process a dataset using LLM transformations.
 
@@ -445,9 +446,10 @@ def process(
                 f"\n[red]❌ Output quality is below acceptable threshold ({quality.success_rate:.1f}% < 70%)[/red]"
             )
 
-        console.print(
-            f"\n[green]Output written to: {specs.output.destination_path}[/green]"
-        )
+        if specs.output:
+            console.print(
+                f"\n[green]Output written to: {specs.output.destination_path}[/green]"
+            )
 
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
@@ -485,7 +487,7 @@ def estimate(
     input: Path,
     provider: str | None,
     model: str | None,
-):
+) -> None:
     """
     Estimate processing cost without executing.
 
@@ -606,7 +608,7 @@ def resume(
     config: Path | None,
     input: Path | None,
     verbose: bool,
-):
+) -> None:
     """
     Resume pipeline execution from checkpoint.
 
@@ -754,7 +756,7 @@ def resume(
     is_flag=True,
     help="Show detailed validation results",
 )
-def validate(config: Path, verbose: bool):
+def validate(config: Path, verbose: bool) -> None:
     """
     Validate pipeline configuration.
 
@@ -785,7 +787,9 @@ def validate(config: Path, verbose: bool):
             table.add_row("Dataset", f"{specs.dataset.source_type.value}")
             table.add_row("Input Columns", ", ".join(specs.dataset.input_columns))
             table.add_row("Output Columns", ", ".join(specs.dataset.output_columns))
-            table.add_row("LLM Provider", specs.llm.provider.value)
+            # provider is LLMProvider | str; only the enum has .value
+            provider = specs.llm.provider
+            table.add_row("LLM Provider", getattr(provider, "value", provider))
             table.add_row("Model", specs.llm.model)
             table.add_row("Batch Size", str(specs.processing.batch_size))
             table.add_row("Concurrency", str(specs.processing.concurrency))
@@ -833,7 +837,7 @@ def validate(config: Path, verbose: bool):
     default=".checkpoints",
     help="Checkpoint directory to list (default: .checkpoints)",
 )
-def list_checkpoints(checkpoint_dir: Path):
+def list_checkpoints(checkpoint_dir: Path) -> None:
     """
     List available checkpoints.
 
@@ -903,7 +907,7 @@ def list_checkpoints(checkpoint_dir: Path):
     default=5,
     help="Number of rows to show (default: 5)",
 )
-def inspect(input: Path, head: int):
+def inspect(input: Path, head: int) -> None:
     """
     Inspect input data file.
 
@@ -974,7 +978,7 @@ def inspect(input: Path, head: int):
 
 
 @cli.command()
-def list_providers():
+def list_providers() -> None:
     """
     List all available LLM providers with details.
 
@@ -1080,7 +1084,7 @@ def submit(
     input: Path,
     output: Path | None,
     checkpoint_dir: Path,
-):
+) -> None:
     """Submit a provider-batch job and return immediately (non-blocking).
 
     The run is tracked in the registry; poll with ``ondine status`` and
@@ -1122,7 +1126,7 @@ def submit(
     default=Path(".checkpoints"),
     help="Directory holding the run registry (default: .checkpoints)",
 )
-def status(run_id: str, checkpoint_dir: Path):
+def status(run_id: str, checkpoint_dir: Path) -> None:
     """Poll the live status of a batch run."""
     try:
         from ondine.orchestration import RunRegistry
@@ -1171,7 +1175,7 @@ def status(run_id: str, checkpoint_dir: Path):
     type=click.Path(path_type=Path),
     help="Write collected results to this file",
 )
-def collect(run_id: str, checkpoint_dir: Path, output: Path | None):
+def collect(run_id: str, checkpoint_dir: Path, output: Path | None) -> None:
     """Collect the results of a finished batch run.
 
     Polls until the provider job is terminal, downloads and decodes the

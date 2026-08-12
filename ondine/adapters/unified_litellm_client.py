@@ -703,6 +703,27 @@ class UnifiedLiteLLMClient(LLMClient):
             # Never let observer errors crash the pipeline
             logger.debug(f"Failed to emit cooldown event: {e}")
 
+    def _auth_key_hint(self) -> str:
+        """Actionable next step to append to an authentication failure.
+
+        A bare "authentication failed" tells the user *that* something is wrong
+        but not *what to do*. The most common cause is a missing API key, so we
+        name the environment variable it is read from (by convention
+        ``<PROVIDER>_API_KEY``) and point at the CLI and setup guide. Returned
+        as a trailing fragment so it slots onto any of the auth messages below.
+        """
+        provider = (self.provider_name or "").strip()
+        if provider:
+            env_var = f"{provider.upper()}_API_KEY"
+            how = f"set {env_var} (e.g. `export {env_var}=...`)"
+        else:
+            how = "set the provider's API key environment variable"
+        return (
+            f" — {how}, or pass api_key=... to .with_llm(). "
+            "Run `ondine list-providers` to see providers, or the setup guide: "
+            "https://docs.ondine.dev/getting-started/installation."
+        )
+
     def _map_provider_error(self, error: Exception) -> Exception:
         """
         Map provider-specific exceptions to Ondine domain exceptions.
@@ -794,7 +815,9 @@ class UnifiedLiteLLMClient(LLMClient):
             from openai import AuthenticationError as OpenAIAuthError
 
             if isinstance(error, OpenAIAuthError):
-                return InvalidAPIKeyError(f"OpenAI authentication failed: {error}")
+                return InvalidAPIKeyError(
+                    f"OpenAI authentication failed: {error}{self._auth_key_hint()}"
+                )
         except ImportError:
             pass
 
@@ -802,12 +825,16 @@ class UnifiedLiteLLMClient(LLMClient):
             from anthropic import AuthenticationError as AnthropicAuthError
 
             if isinstance(error, AnthropicAuthError):
-                return InvalidAPIKeyError(f"Anthropic authentication failed: {error}")
+                return InvalidAPIKeyError(
+                    f"Anthropic authentication failed: {error}{self._auth_key_hint()}"
+                )
         except ImportError:
             pass
 
         if any(p in error_str for p in auth_patterns):
-            return InvalidAPIKeyError(f"Authentication error: {error}")
+            return InvalidAPIKeyError(
+                f"Authentication error: {error}{self._auth_key_hint()}"
+            )
 
         # 6. Check for Model Not Found (Fatal)
         model_patterns = [
