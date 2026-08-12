@@ -154,7 +154,9 @@ class ExecutionResult:
         execution_id: Unique execution identifier
         start_time: When execution started
         end_time: When execution completed
-        success: Whether execution succeeded
+        success: Whether the run finished without aborting. Under the default
+            ``skip`` policy this stays True even if some rows were skipped —
+            use :attr:`is_complete` to check that every row produced output.
         metadata: Additional execution metadata
 
     Example:
@@ -215,6 +217,26 @@ class ExecutionResult:
         if self.metrics.total_rows == 0:
             return 0.0
         return (self.metrics.failed_rows / self.metrics.total_rows) * 100
+
+    @property
+    def is_complete(self) -> bool:
+        """True when every input row produced output — nothing skipped or failed.
+
+        ``success`` and ``is_complete`` answer two different questions, and
+        under the default ``skip`` error policy they can disagree:
+
+        * ``success`` — did the run finish without aborting? A run that skipped
+          a handful of malformed rows and carried on (exactly what ``skip`` is
+          for) still finished, so ``success`` is ``True``.
+        * ``is_complete`` — did *every* row make it? If any row was skipped or
+          failed, the output has holes, so ``is_complete`` is ``False`` even
+          though ``success`` is ``True``.
+
+        Check this before trusting the output as a full result; the rows that
+        did not make it are listed in :attr:`errors` and counted in
+        ``metrics.skipped_rows`` / ``metrics.failed_rows``.
+        """
+        return self.metrics.skipped_rows == 0 and self.metrics.failed_rows == 0
 
     def to_pandas(self) -> Any:
         """

@@ -239,18 +239,16 @@ def test_a_failing_deployment_loses_only_its_own_rows():
     assert len(result.errors) == len(poisoned)
 
 
-@pytest.mark.xfail(
-    reason="#254: a run that skipped rows still reports success=True. The loss "
-    "is recorded in result.errors, but success does not reflect it.",
-    strict=True,
-)
-def test_partial_loss_should_not_report_success():
-    """A run that dropped rows should not call itself a success (#254).
+def test_partial_loss_is_not_complete_even_though_it_succeeded():
+    """A run that dropped rows finished, but is not complete (#254).
 
-    This is the same run as the test above: two rows are lost and recorded, the
-    rest succeed. The rows land in ``result.errors``, but ``result.success``
-    stays True — so a caller that trusts ``success`` ships a dataset with holes
-    in it. Pinned as xfail until the success contract accounts for skipped rows.
+    Same run as the test above: two rows are lost and recorded, the rest
+    succeed. Under the default skip policy the run *did* finish, so
+    ``success`` stays True — that is the contract, not a lie. What tells a
+    caller the output has holes is ``is_complete``: it is False here because
+    two rows never produced output, and those rows are named in
+    ``result.errors``. A caller that needs a full result checks
+    ``is_complete``, not ``success``.
     """
     poisoned = {token_for(3), token_for(5)}
     deployment = LedgerDeployment("only", fail_tokens=poisoned)
@@ -266,4 +264,6 @@ def test_partial_loss_should_not_report_success():
             error_policy="skip",
         ).execute()
 
-    assert result.success is False
+    assert result.success is True  # the run finished; skip policy tolerated loss
+    assert result.is_complete is False  # but two rows never made it
+    assert len(result.errors) == len(poisoned)  # and they are named, not silent

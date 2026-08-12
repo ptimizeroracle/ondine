@@ -248,3 +248,54 @@ class TestWholeRunGuard:
         )
 
         pipeline._guard_produced_output(result, ["sentiment"])
+
+
+class TestIsCompleteTellsCoverageFromMerelyFinishing:
+    """`is_complete` is the honest coverage signal `success` cannot be (#254).
+
+    The default skip policy tolerates lost rows, so `success` stays True even
+    when the frame has holes — that is the contract, not a bug. `is_complete`
+    exists so a caller can tell "every row made it" apart from "the run merely
+    finished". A regression that let `is_complete` return True while rows were
+    skipped would put silent partial loss right back where #254 found it.
+    """
+
+    @staticmethod
+    def _result(*, skipped: int, failed: int, total: int = 10) -> ExecutionResult:
+        processed = total - skipped - failed
+        return ExecutionResult(
+            data=ResultContainerImpl([{"output": "x"}] * processed),
+            metrics=ProcessingStats(total, processed, failed, skipped, 0.0, 0.0),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, total),
+        )
+
+    @pytest.mark.parametrize(
+        ("skipped", "failed", "expected_complete"),
+        [
+            (0, 0, True),  # every row produced output
+            (1, 0, False),  # one skipped → a hole
+            (0, 1, False),  # one failed outright → a hole
+            (2, 3, False),  # both kinds of loss
+        ],
+    )
+    def test_is_complete_is_true_only_when_no_row_was_lost(
+        self, skipped, failed, expected_complete
+    ):
+        result = self._result(skipped=skipped, failed=failed)
+        assert result.is_complete is expected_complete
+
+    def test_success_and_is_complete_diverge_on_a_tolerated_skip(self):
+        """The core #254 decision: a skipped run succeeds but is not complete.
+
+        This is the one assertion that pins the semantic choice — flipping
+        `success` to False here (the rejected option B) would break the
+        default skip policy; the truth lives in `is_complete` instead.
+        """
+        result = ExecutionResult(
+            data=ResultContainerImpl([{"output": "x"}] * 9),
+            metrics=ProcessingStats(10, 9, 0, 1, 0.0, 0.0),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, 10),
+            success=True,
+        )
+        assert result.success is True
+        assert result.is_complete is False
