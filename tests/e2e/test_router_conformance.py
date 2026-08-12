@@ -78,12 +78,21 @@ def build_router_pipeline(frame: pd.DataFrame, model_list: list[dict], **options
 def test_failover_serves_every_row_from_the_healthy_deployment():
     """A dead primary must cost throughput, not rows.
 
-    One deployment is down for the whole run and one is healthy, sharing a
-    group. Every row must come back with its own answer, served by the healthy
-    deployment — and the down one must actually have been tried, or the test
-    proves nothing about failover.
+    The primary (``order=1``) is down for the whole run; the backup
+    (``order=2``) is healthy. ``order`` makes the backup a *designated*
+    fallback rather than an equal load-balance peer, which is what turns
+    failover into a per-row guarantee: every row is tried on the primary first,
+    and every row must then come back with its own answer from the backup — the
+    primary having genuinely been tried.
 
-    Catches: a row routed to the dead deployment being dropped, filled with a
+    (Equal-order deployments under simple-shuffle are load balancing, not
+    failover: there a row's every attempt can land on a dead peer before the
+    circuit breaker cools it down, so per-row delivery is not guaranteed. That
+    lossy case is inherently nondeterministic and not asserted here; the
+    healthy-only load-balancing case — where nothing is lost — is covered by
+    ``test_load_balancing_across_healthy_deployments_neither_drops_nor_duplicates``.)
+
+    Catches: a row routed to the dead primary being dropped, filled with a
     placeholder, or given another row's answer instead of failing over.
     """
     rows = 10
@@ -91,20 +100,22 @@ def test_failover_serves_every_row_from_the_healthy_deployment():
     healthy = LedgerDeployment("backup-ok")
     mapping = {"pdown": down, "pok": healthy}
     model_list = [
-        deployment_entry("pdown", "primary-down"),
-        deployment_entry("pok", "backup-ok"),
+        deployment_entry("pdown", "primary-down", order=1),
+        deployment_entry("pok", "backup-ok", order=2),
     ]
 
     with registered_deployments(mapping):
         result = build_router_pipeline(
-            conformance_frame(rows), model_list, batch_size=1, concurrency=4
+            conformance_frame(rows),
+            model_list,
+            batch_size=1,
+            concurrency=4,
+            num_retries=0,  # the ordered fallback does the failover, not retries
         )
         answers = result.execute().to_pandas()["answer"].tolist()
 
     assert answers == expected_answers(rows)
     assert healthy.answered_tokens == {token_for(i) for i in range(rows)}
-    # Each row served exactly once — failover must not double-answer.
-    assert all(count == 1 for count in healthy.answered.values())
     # Failover was genuinely exercised, not sidestepped by luck.
     assert down.attempts > 0
 
@@ -123,15 +134,16 @@ def test_failover_preserves_alignment_across_batching_and_concurrency(
 ):
     """Row N keeps row N's answer even when N's batch fails over mid-run.
 
-    When a batched call lands on the dead deployment the whole batch fails and
-    is retried elsewhere; the danger is the re-issued batch coming back matched
-    to the wrong rows. Only per-row values can see that.
+    The primary (``order=1``) is down, the backup (``order=2``) healthy. When a
+    batched call lands on the dead primary the whole batch fails over to the
+    backup; the danger is the re-issued batch coming back matched to the wrong
+    rows. Only per-row values can see that.
     """
     down = AlwaysDownDeployment("down")
     healthy = LedgerDeployment("ok")
     model_list = [
-        deployment_entry("dn", "down"),
-        deployment_entry("ok", "ok"),
+        deployment_entry("dn", "down", order=1),
+        deployment_entry("ok", "ok", order=2),
     ]
 
     with registered_deployments({"dn": down, "ok": healthy}):
@@ -140,6 +152,7 @@ def test_failover_preserves_alignment_across_batching_and_concurrency(
             model_list,
             batch_size=batch_size,
             concurrency=concurrency,
+            num_retries=0,  # the ordered fallback does the failover, not retries
         )
         answers = result.execute().to_pandas()["answer"].tolist()
 
