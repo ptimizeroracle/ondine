@@ -19,6 +19,7 @@ many times the Router happened to probe a dead one.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -38,6 +39,17 @@ from tests.e2e.router_ledger import (
 
 if TYPE_CHECKING:
     import pandas as pd
+
+# LiteLLM's Router async retry path hangs under Windows' default
+# ProactorEventLoop, with no per-test timeout to break it (#258). The failover
+# logic these tests verify is platform-independent and stays fully covered on
+# Linux and macOS; the hang is an async-runtime concern whose fix, if any,
+# belongs in the runtime rather than here. Skip on Windows so a hang can never
+# block CI, and track the root cause in #258.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Router async path hangs on Windows ProactorEventLoop; see #258",
+)
 
 PROMPT = "Answer for {marker}"
 
