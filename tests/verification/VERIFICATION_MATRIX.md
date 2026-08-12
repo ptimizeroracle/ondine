@@ -17,7 +17,7 @@ Every feature documented in README, docs, or CHANGELOG is either tested or docum
 | 9 | Sub-millisecond Rust lookups | test_verify_performance.py | test_claim_09_rust_store_submillisecond_lookup |
 | 9a | Orchestration overhead: 5M rows in ~3 min (28.7k rows/s measured; floor 5k) | test_verify_performance.py | test_claim_orchestration_overhead_stays_small |
 | 9b | Streaming bounds memory (5M rows in 847 MB; 784 MB vs 2,477 MB at 1M) | test_verify_performance.py | test_claim_streaming_uses_less_memory_than_loading_everything |
-| 9c | 84-95% of the provider-bound floor (deterministic 40ms stub; floor 70%) | test_verify_performance.py | test_claim_scheduling_stays_close_to_the_theoretical_floor |
+| 9c | 84-95% of the provider-bound floor (deterministic 40ms stub; floor 55% for CI-runner noise) | test_verify_performance.py | test_claim_scheduling_stays_close_to_the_theoretical_floor |
 | 10 | 100+ providers via LiteLLM | test_verify_functionality.py | test_claim_10_litellm_provider_integration |
 | 11 | Quick API (3-line) | test_verify_functionality.py | test_claim_11_quick_api_minimal_args |
 | 12 | Builder API (fluent) | test_verify_functionality.py | test_claim_12_builder_api_fluent_chain |

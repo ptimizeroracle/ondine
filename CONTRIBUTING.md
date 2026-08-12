@@ -53,12 +53,35 @@ uv run pytest
 
 # Run with coverage
 uv run pytest --cov=ondine --cov-report=html
+```
 
-# Run specific test file
+#### Running Specific Tests
+
+While iterating, run just the tests touching your change — it's far faster than
+the whole suite:
+
+```bash
+# A single test file
 uv run pytest tests/unit/test_pipeline_builder.py
 
-# Run with verbose output
-uv run pytest -v
+# A single test by name (node id)
+uv run pytest tests/unit/test_pipeline_builder.py::test_build_minimal_pipeline
+
+# Every test whose name matches a keyword (across all files)
+uv run pytest -k "batch and not integration"
+
+# Only the fast unit tests — skip integration (which need API keys)
+uv run pytest tests/unit/
+
+# Verbose output, and stop at the first failure
+uv run pytest -v -x
+```
+
+Integration tests are marked, so you can select or skip them explicitly:
+
+```bash
+uv run pytest -m integration          # only integration tests
+uv run pytest -m "not integration"    # everything except integration
 ```
 
 ### Code Quality

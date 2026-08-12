@@ -24,6 +24,7 @@
 * [RAG & Knowledge Bases](guides/knowledge-base-rag.md)
 * [Error Handling & Retries](guides/error-handling.md)
 * [Checkpointing & Recovery](guides/checkpointing.md)
+* [Troubleshooting](guides/troubleshooting.md)
 
 ## Cost & Performance
 
@@ -39,6 +40,7 @@
 * [Groq](guides/providers/groq.md)
 * [Azure OpenAI](guides/providers/azure.md)
 * [Local Models (MLX)](guides/providers/local-mlx.md)
+* [Local Models (Ollama)](guides/providers/ollama.md)
 * [Custom / Any API](guides/providers/custom.md)
 
 ## Reference

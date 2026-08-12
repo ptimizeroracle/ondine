@@ -518,5 +518,45 @@ class TestUnifiedLiteLLMClient:
             assert tokens == 6
 
 
+class TestAuthErrorGuidance:
+    """A missing API key must fail with an actionable message (#86)."""
+
+    def test_auth_error_names_the_env_var_and_the_next_step(self):
+        """The mapped error tells the user which env var to set and where to look.
+
+        Regression: without the hint, a missing key surfaces as a bare
+        "Authentication error: 401 ..." that says nothing about how to fix it.
+        This asserts the message names the provider's `<PROVIDER>_API_KEY` and
+        points at `ondine list-providers`, so removing the guidance fails here.
+        """
+        from ondine.core.exceptions import InvalidAPIKeyError
+
+        spec = LLMSpec(provider="openai", model="gpt-4o-mini", api_key="sk-test")
+        client = UnifiedLiteLLMClient(spec)
+
+        mapped = client._map_provider_error(
+            Exception("401 Unauthorized: invalid api key")
+        )
+
+        assert isinstance(mapped, InvalidAPIKeyError)
+        message = str(mapped)
+        assert "OPENAI_API_KEY" in message
+        assert "list-providers" in message
+
+    def test_auth_hint_uses_the_actual_provider(self):
+        """The env var is derived from the spec's provider, not hard-coded.
+
+        Regression: a hint that always said OPENAI_API_KEY would be wrong (and
+        misleading) for every other provider.
+        """
+        spec = LLMSpec(provider="groq", model="llama-3.3-70b-versatile", api_key="x")
+        client = UnifiedLiteLLMClient(spec)
+
+        message = str(client._map_provider_error(Exception("401 unauthorized")))
+
+        assert "GROQ_API_KEY" in message
+        assert "OPENAI_API_KEY" not in message
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
