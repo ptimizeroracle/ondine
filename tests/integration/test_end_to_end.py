@@ -391,7 +391,10 @@ class TestEndToEndWithMock:
         output = result.to_pandas()
 
         assert result.success
-        assert output["result"].tolist() == ["ok::good-1", "[SKIPPED]", "ok::good-2"]
+        # A skipped row reads as missing (None), not a sentinel string (#262).
+        assert output["result"].tolist() == ["ok::good-1", None, "ok::good-2"]
+        assert result.is_complete is False
+        assert result.lost_row_indices == [1]
 
     @patch("ondine.adapters.provider_registry.ProviderRegistry.get")
     def test_error_policy_fail_raises_immediately(self, mock_get):

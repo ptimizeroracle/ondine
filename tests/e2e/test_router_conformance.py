@@ -228,7 +228,7 @@ def test_a_failing_deployment_loses_only_its_own_rows():
 
     for index in range(rows):
         if token_for(index) in poisoned:
-            assert answers[index] == "[SKIPPED]"
+            assert answers[index] is None  # a lost row reads as missing (#262)
         else:
             assert answers[index] == expected[index]
 

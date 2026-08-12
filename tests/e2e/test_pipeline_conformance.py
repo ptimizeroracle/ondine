@@ -156,11 +156,36 @@ def test_a_dropped_row_is_named_in_the_result_not_only_counted():
     assert result.success is True
     assert result.is_complete is False
     # The surviving rows are still correct — the skip took one row, not the
-    # alignment of everything after it.
+    # alignment of everything after it. The lost row is now None (#262).
     output = result.to_pandas()
     assert list(output["answer"].drop(index=2)) == [
         answer_for(token_for(index)) for index in (0, 1, 3, 4)
     ]
+
+
+def test_a_lost_row_reads_as_missing_not_as_a_sentinel_string():
+    """A lost row's cell is None, so df.isna() finds it (#262).
+
+    Before, the three loss paths left three different strings ([SKIPPED],
+    "null", "") that all survived isna(). Now a recorded loss is blanked to
+    None: isna() finds exactly the lost rows, lost_row_indices lists them, and
+    the survivors are untouched.
+    """
+    failing = token_for(3)
+    client = LedgerClient(fail_tokens={failing}, fail_times=None)
+
+    result = build(client, conformance_frame(6)).execute()
+    frame = result.to_pandas()
+
+    assert frame["answer"].iloc[3] is None
+    assert frame.index[frame["answer"].isna()].tolist() == [3]
+    assert result.lost_row_indices == [3]
+    # No sentinel string leaked into any cell.
+    assert "[SKIPPED]" not in frame["answer"].tolist()
+    assert "null" not in frame["answer"].tolist()
+    # Survivors keep their own answers.
+    survivors = frame["answer"].drop(index=result.lost_row_indices).tolist()
+    assert survivors == [answer_for(token_for(i)) for i in (0, 1, 2, 4, 5)]
 
 
 def test_streaming_produces_the_same_answers_as_a_single_pass():
@@ -317,15 +342,16 @@ def test_a_provider_returning_nothing_is_reported_as_failure_not_as_data():
 
     Found while benchmarking against a real provider: a reasoning model with a
     token cap too low to reach its answer returns an empty body. The pipeline
-    reported `success=True`, `skipped=0`, `errors=[]`, and wrote the literal
-    string "null" into all ten rows — a value that survives `isna()` and
-    `== ""`, so no caller-side check finds it.
+    used to write the literal string "null" into every row — a value that
+    survives `isna()` and counts as *valid* in the quality check, so a run that
+    answered nothing looked like a run that answered everything.
 
-    The marker itself is deliberate (it signals the auto-retry pass), but
-    auto-retry is off by default, so on default settings it leaks into user
-    data. What must never be silent is the *count*: the rows are gone, and the
-    result has to say so.
+    Now every lost row is blanked to None (#262), so a run that produced
+    nothing has zero valid output and fails loudly (the whole-run guard) rather
+    than handing back a frame of sentinels with success=True. Either way the
+    rows are recorded — never silent.
     """
+    from ondine.core.exceptions import PipelineExecutionError
 
     class EmptyProvider(LedgerClient):
         def invoke(self, prompt, **kwargs):
@@ -334,12 +360,9 @@ def test_a_provider_returning_nothing_is_reported_as_failure_not_as_data():
             return response
 
     client = EmptyProvider()
-    result = build(client, conformance_frame(10), batch_size=5).execute()
 
-    assert result.metrics.failed_rows == 10, (
-        "a provider that answered nothing was recorded as having answered"
-    )
-    assert sorted(error.row_index for error in result.errors) == list(range(10))
+    with pytest.raises(PipelineExecutionError, match="0 valid outputs"):
+        build(client, conformance_frame(10), batch_size=5).execute()
 
 
 # ── structured output ─────────────────────────────────────────────────────
