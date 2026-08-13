@@ -719,12 +719,9 @@ class Pipeline:
             context.intermediate_data["preprocessed_data"] = working_df
 
         if resume_mode:
-            working_df = self._filter_container_for_resume(
-                working_df, context.last_processed_row
-            )
+            working_df = self._filter_container_for_resume(working_df, context)
             self.logger.info(
-                f"Resume mode: skipping first {context.last_processed_row + 1} rows, "
-                f"processing {len(working_df)} remaining rows"
+                f"Resume mode: {len(working_df)} rows still need processing"
             )
 
         # Stage 1.5: Knowledge Base retrieval (if configured)
@@ -1143,14 +1140,24 @@ class Pipeline:
         return ResultContainerImpl(data=result_rows, columns=columns + extra_cols)
 
     def _filter_container_for_resume(
-        self, container: Any, last_processed_row: int
+        self, container: Any, context: ExecutionContext
     ) -> Any:
-        """Return only rows that still need processing, preserving original indices."""
+        """Return only rows that still need processing, preserving original indices.
+
+        The response cache, when present, is the authority on what is done: it
+        records every finished row including ones that completed *above* a gap,
+        so a row already answered is never re-called even though the contiguous
+        checkpoint watermark stops below it (#241). Without a cache there is no
+        per-row record to consult, so we fall back to the watermark and re-do
+        the (bounded) window above it.
+        """
         from ondine.adapters.containers import DictListContainer
+
+        already_done = self._resume_completed_indices(context)
 
         filtered_rows = []
         for idx, row in enumerate(container):
-            if idx <= last_processed_row:
+            if idx in already_done:
                 continue
             resumed_row = dict(row)
             resumed_row["_index"] = idx
@@ -1160,6 +1167,16 @@ class Pipeline:
         if "_index" not in columns:
             columns.append("_index")
         return DictListContainer(data=filtered_rows, columns=columns)
+
+    def _resume_completed_indices(self, context: ExecutionContext) -> set[int]:
+        """Row indices resume must not re-process.
+
+        Prefer the response cache's exact set of finished rows; fall back to the
+        contiguous ``0..watermark`` prefix when no cache is attached.
+        """
+        if context.response_cache is not None:
+            return context.response_cache.completed_row_indices(context.session_id)
+        return set(range(context.last_processed_row + 1))
 
     def _restore_completed_response_batches(
         self, context: ExecutionContext
