@@ -128,6 +128,30 @@ def test_last_processed_row_empty_session_returns_minus_one(
     assert cache.last_processed_row(uuid4()) == -1
 
 
+def test_completed_row_indices_includes_rows_above_a_gap(
+    cache: SqliteResponseCache,
+) -> None:
+    """Regression #241: resume must skip *every* finished row, not just the
+    contiguous prefix. Rows 6 and 7 completed above a gap at 5, so the
+    watermark (``last_processed_row``) stops at 4 — but they are done and must
+    not be re-called. ``completed_row_indices`` is the set that tells resume so.
+    """
+    session = uuid4()
+    for idx in [0, 1, 2, 3, 4, 6, 7]:  # row 5 died — a hole above the watermark
+        cache.append(session, idx, _resp(), _meta(idx))
+
+    # The watermark alone would re-do 5, 6 and 7; the full set re-does only 5.
+    assert cache.completed_row_indices(session) == {0, 1, 2, 3, 4, 6, 7}
+    assert cache.last_processed_row(session) == 7  # max index, gap and all
+
+
+def test_completed_row_indices_empty_session_is_empty_set(
+    cache: SqliteResponseCache,
+) -> None:
+    """A fresh session has finished nothing, so nothing is skipped."""
+    assert cache.completed_row_indices(uuid4()) == set()
+
+
 # ── regression #3: sessions must not leak across scopes ───────────────
 
 

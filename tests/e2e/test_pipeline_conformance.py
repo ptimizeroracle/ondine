@@ -285,7 +285,9 @@ def test_resume_answers_the_rows_that_were_lost_and_no_others(tmp_path):
     frame = conformance_frame(rows)
     dead = token_for(5)
 
-    # First attempt dies for good on row 5, after earlier rows have completed.
+    # First attempt dies for good on row 5. Concurrency lets rows 6 and 7 finish
+    # *above* that gap before the run aborts — the exact shape #241 is about: the
+    # contiguous watermark stops at 4, but 6 and 7 are already in the cache.
     first_client = LedgerClient(fail_tokens={dead}, fail_times=None, transient=True)
     first = build(
         first_client,
@@ -294,9 +296,14 @@ def test_resume_answers_the_rows_that_were_lost_and_no_others(tmp_path):
         checkpoint_interval=1,
         error_policy="fail",
         max_retries=1,
+        batch_size=1,
+        concurrency=4,
     )
     with pytest.raises(Exception):
         first.execute()
+
+    # The gap scenario must have actually happened, or this test proves nothing.
+    assert {token_for(6), token_for(7)} <= first_client.tokens_seen
 
     # Second attempt: same checkpoint dir, a provider that no longer fails.
     second_client = LedgerClient()
@@ -306,20 +313,23 @@ def test_resume_answers_the_rows_that_were_lost_and_no_others(tmp_path):
         checkpoint_dir=tmp_path,
         checkpoint_interval=1,
         error_policy="fail",
+        batch_size=1,
+        concurrency=4,
     ).execute(resume_from=first.session_id)
 
     assert list(resumed.to_pandas()["answer"]) == expected_answers(rows)
 
-    # The row that died is redone, and so is anything that finished *above*
-    # it — those completions sat above a gap, so the watermark never covered
-    # them. That re-work is bounded by the concurrency window.
-    #
-    # What must never happen is redoing the settled prefix: on a 5M-row run
-    # that is the difference between resuming and starting over.
-    settled_prefix = {token_for(index) for index in range(5)}
-    redone = settled_prefix & second_client.tokens_seen
-    assert not redone, f"resume re-called settled rows: {sorted(redone)}"
-    assert dead in second_client.tokens_seen, "the row that failed was never redone"
+    # The dead row is the only work the resume owes: every other row — the
+    # settled prefix *and* the rows that finished above the gap — already had a
+    # cached answer, so not one of them may be re-called. The response cache,
+    # not the contiguous watermark, is the authority on what is done (#241);
+    # re-calling a cached row is spend paid for an answer already in hand.
+    already_answered = {token_for(index) for index in range(rows)} - {dead}
+    redone = already_answered & second_client.tokens_seen
+    assert not redone, f"resume re-called cached rows: {sorted(redone)}"
+    assert second_client.tokens_seen == {dead}, (
+        "resume must call exactly the one lost row, nothing else"
+    )
 
 
 def test_a_dropped_batch_names_every_row_it_took_down():

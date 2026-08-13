@@ -121,6 +121,16 @@ class ResponseCache(ABC):
         ``row_index``. Empty iterator if no rows."""
 
     @abstractmethod
+    def completed_row_indices(self, session_id: UUID) -> set[int]:
+        """Every ``row_index`` this session has a durable answer for.
+
+        Unlike :meth:`last_processed_row`, this is the *full* set including
+        rows that finished above a gap, so resume can skip exactly the rows it
+        already holds rather than everything past the contiguous watermark.
+        Reads only the index column — no response bodies are materialised.
+        """
+
+    @abstractmethod
     def last_processed_row(self, session_id: UUID) -> int:
         """Highest ``row_index`` for session, or -1 if empty."""
 
@@ -267,6 +277,14 @@ class SqliteResponseCache(ResponseCache):
                     custom=json.loads(custom),
                 ),
             )
+
+    def completed_row_indices(self, session_id: UUID) -> set[int]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT row_index FROM responses WHERE session_id = ?",
+                (str(session_id),),
+            )
+            return {int(row_index) for (row_index,) in cur.fetchall()}
 
     def last_processed_row(self, session_id: UUID) -> int:
         with self._lock:
