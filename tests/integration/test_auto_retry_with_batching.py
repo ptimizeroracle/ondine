@@ -65,8 +65,14 @@ class TestAutoRetryWithBatching:
 
                 text = json.dumps(results)
             else:
-                # Single row retry
-                text = f"Processed_{rows_in_call[0]}"
+                # Single row retry — the retry sub-pipeline still parses a JSON
+                # batch, so the response must be the same array shape, not raw
+                # text. (With raw text the retry never parses and row 5 stays
+                # lost; it only used to look recovered because the failure
+                # marker was a non-null string.)
+                import json
+
+                text = json.dumps([{"id": 1, "result": f"Processed_{rows_in_call[0]}"}])
 
             return LLMResponse(
                 text=text,

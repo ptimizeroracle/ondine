@@ -36,8 +36,10 @@ ErrorPolicy.USE_DEFAULT # "use_default"
 
 ### SKIP (default)
 
-Logs the error, writes the marker `[SKIPPED]` into the output column for that
-row, and moves on.
+Logs the error, leaves the output column empty (`None`) for that row, and
+moves on. A lost row therefore shows up as missing — `df.isna()` finds it, and
+it is listed in `result.errors` — rather than as a sentinel string you have to
+know to look for.
 
 ```python
 pipeline = (

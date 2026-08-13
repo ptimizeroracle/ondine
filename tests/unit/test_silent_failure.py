@@ -32,6 +32,7 @@ from ondine.core.exceptions import PipelineExecutionError
 from ondine.core.models import (
     SKIPPED_OUTPUT_MARKER,
     CostEstimate,
+    ErrorInfo,
     ExecutionResult,
     LLMResponse,
     ProcessingStats,
@@ -299,3 +300,86 @@ class TestIsCompleteTellsCoverageFromMerelyFinishing:
         )
         assert result.success is True
         assert result.is_complete is False
+
+
+class TestBlankLostCellsIsCollisionSafeAndRecoveryAware:
+    """_blank_lost_cells converges the loss markers on None without collateral (#262).
+
+    The pass keys off `errors`, not off cell strings, precisely so it can be
+    two things a string match cannot: collision-safe (a real answer that looks
+    like a marker survives) and recovery-aware (a row auto-retry refilled keeps
+    its value). Both are the reason this approach was chosen over a blanket
+    string replace.
+    """
+
+    @staticmethod
+    def _pipeline() -> Pipeline:
+        return (
+            PipelineBuilder.create()
+            .from_dataframe(
+                pd.DataFrame({"text": ["a"]}),
+                input_columns=["text"],
+                output_columns=["out"],
+            )
+            .with_prompt("Do: {text}")
+            .with_custom_llm_client(
+                _AlwaysFailClient(LLMSpec(provider="openai", model="m"))
+            )
+            .build()
+        )
+
+    @staticmethod
+    def _result(rows: list[dict], lost_indices: list[int]) -> ExecutionResult:
+        return ExecutionResult(
+            data=ResultContainerImpl(list(rows)),
+            metrics=ProcessingStats(
+                len(rows), len(rows), 0, len(lost_indices), 0.0, 0.0
+            ),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, len(rows)),
+            errors=[
+                ErrorInfo(
+                    row_index=i,
+                    stage="LLMInvocation",
+                    error_type="skipped",
+                    message="lost",
+                )
+                for i in lost_indices
+            ],
+        )
+
+    def test_each_marker_in_a_lost_row_becomes_none(self):
+        result = self._result(
+            [
+                {"out": SKIPPED_OUTPUT_MARKER},
+                {"out": "null"},
+                {"out": ""},
+            ],
+            lost_indices=[0, 1, 2],
+        )
+        self._pipeline()._blank_lost_cells(result, ["out"])
+        assert [row["out"] for row in result.data.to_list()] == [None, None, None]
+
+    def test_a_real_answer_that_looks_like_a_marker_survives_in_a_non_lost_row(self):
+        # Rows 0 and 1 are NOT in errors; a model legitimately answered "null"
+        # and "[SKIPPED]". Keying off errors means these are never touched.
+        result = self._result(
+            [
+                {"out": "null"},
+                {"out": SKIPPED_OUTPUT_MARKER},
+                {"out": SKIPPED_OUTPUT_MARKER},
+            ],
+            lost_indices=[2],
+        )
+        self._pipeline()._blank_lost_cells(result, ["out"])
+        assert [row["out"] for row in result.data.to_list()] == [
+            "null",
+            SKIPPED_OUTPUT_MARKER,
+            None,
+        ]
+
+    def test_a_recovered_lost_row_keeps_its_value(self):
+        # Row 0 is in errors but auto-retry refilled it with a real answer;
+        # only a still-lost cell is blanked, so the recovered value stays.
+        result = self._result([{"out": "recovered"}], lost_indices=[0])
+        self._pipeline()._blank_lost_cells(result, ["out"])
+        assert result.data.to_list()[0]["out"] == "recovered"

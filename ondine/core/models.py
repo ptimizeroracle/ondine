@@ -238,6 +238,18 @@ class ExecutionResult:
         """
         return self.metrics.skipped_rows == 0 and self.metrics.failed_rows == 0
 
+    @property
+    def lost_row_indices(self) -> list[int]:
+        """Input-frame indices of the rows that produced no output, sorted.
+
+        The rows behind these indices have ``None`` in their output cells (so
+        ``df.isna()`` finds them) and a matching entry in :attr:`errors`. Use
+        this to slice the survivors from the losses without hand-joining::
+
+            good = result.to_pandas().drop(index=result.lost_row_indices)
+        """
+        return sorted({error.row_index for error in self.errors})
+
     def to_pandas(self) -> Any:
         """
         Convert result data to Pandas DataFrame.

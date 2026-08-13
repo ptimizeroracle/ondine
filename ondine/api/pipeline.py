@@ -24,6 +24,7 @@ from ondine.adapters.streaming_writer import StreamingResultWriter
 from ondine.core.components import PipelineComponents
 from ondine.core.exceptions import PipelineExecutionError
 from ondine.core.models import (
+    SKIPPED_OUTPUT_MARKER,
     CostEstimate,
     ExecutionResult,
     LLMResponse,
@@ -34,6 +35,11 @@ from ondine.core.models import (
 from ondine.core.specifications import (
     PipelineSpecifications,
 )
+
+# The strings the three loss paths leave in a cell before #262's blanking pass
+# rewrites them to None. Matched only within rows already recorded in `errors`,
+# so a model legitimately answering "null" or "" is never mistaken for a loss.
+_LOST_CELL_MARKERS = {SKIPPED_OUTPUT_MARKER, "null"}
 from ondine.orchestration import (
     CostTrackingObserver,
     ExecutionContext,
@@ -485,6 +491,13 @@ class Pipeline:
                     retry_source = context.intermediate_data.get("loaded_data")
                 # Pass container directly (no Pandas conversion)
                 result = self._auto_retry_failed_rows(result, retry_source)
+
+            # Replace the internal loss markers ([SKIPPED], "null", "") with a
+            # single None, so a lost row reads as missing to df.isna() instead of
+            # as three inconsistent strings. Runs after auto-retry so a recovered
+            # row keeps its real value. See _blank_lost_cells for why this is
+            # keyed off errors rather than by matching cell strings.
+            self._blank_lost_cells(result, self.specifications.dataset.output_columns)
 
             # A run that produced no usable output is a failure, not a
             # success — raise loudly instead of returning a frame full of
@@ -1704,6 +1717,49 @@ class Pipeline:
 
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         context.response_cache = SqliteResponseCache(checkpoint_dir / "responses.db")
+
+    def _blank_lost_cells(
+        self, result: ExecutionResult, output_columns: list[str]
+    ) -> None:
+        """Materialise every lost row's output as ``None`` (issue #262).
+
+        Three code paths used to leave three different strings in a lost row's
+        cell — ``[SKIPPED]`` from the skip policy, ``"null"`` from a failed
+        batch response, ``""`` from an empty one — so ``df.isna()`` reported a
+        frame full of holes as complete, and no single check found the losses.
+
+        This converges them on ``None``, in one place, keyed off ``errors``
+        rather than by matching cell strings. Two reasons for that:
+
+        * **No collision.** A model may legitimately answer ``"null"`` or
+          ``""``; only rows Ondine actually recorded as lost are touched, so a
+          real answer that happens to look like a marker is never blanked.
+        * **Recovery-aware.** After auto-retry a formerly-failed row may hold a
+          real value again; a cell is only blanked if it still carries a loss
+          marker, so recovered rows keep their answer.
+
+        The authority on *which* rows were lost stays ``errors`` /
+        ``is_complete``; the ``None`` in the cell is the visible shadow of that,
+        not a second source of truth.
+        """
+        if not result.errors:
+            return
+        rows = getattr(result.data, "_data", None)
+        if rows is None:
+            return  # non-standard container — nothing to rewrite in place
+
+        row_count = len(rows)
+        for index in {error.row_index for error in result.errors}:
+            if not 0 <= index < row_count:
+                continue
+            row = rows[index]
+            for column in output_columns:
+                value = row.get(column)
+                if value is None or (
+                    isinstance(value, str)
+                    and (value.strip() == "" or value in _LOST_CELL_MARKERS)
+                ):
+                    row[column] = None
 
     def _guard_produced_output(
         self, result: ExecutionResult, output_columns: list[str]

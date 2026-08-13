@@ -101,8 +101,6 @@ class TestPipelinedStreamingOverlap:
         Verifies correctness: every chunk produces an ExecutionResult,
         and the method doesn't silently drop chunks or deadlock.
         """
-        from unittest.mock import patch
-
         from ondine.api.pipeline_builder import PipelineBuilder
 
         n_rows = 200
@@ -115,8 +113,14 @@ class TestPipelinedStreamingOverlap:
             PipelineBuilder.create()
             .from_dataframe(df, input_columns=["text"], output_columns=["result"])
             .with_prompt("Classify: {text}")
-            .with_llm(model="delay-mock", provider="openai")
-            .with_batch_size(100)
+            # Drive the mock directly as the client. It returns a single-item
+            # batch response, so batch_size=1 makes every row a valid answer.
+            # (The old wiring patched litellm.acompletion with an ondine
+            # LLMResponse the real client cannot read, so every row errored and
+            # was skipped — invisible only because "null" cells used to count as
+            # valid. This test is about chunk mechanics, so keep the rows valid.)
+            .with_custom_llm_client(client)
+            .with_batch_size(1)
             .with_concurrency(5)
             .with_progress_mode("none")
             .build()
@@ -126,8 +130,7 @@ class TestPipelinedStreamingOverlap:
             "Pipeline must have execute_stream_pipelined() method"
         )
 
-        with patch("litellm.acompletion", side_effect=client.ainvoke):
-            results = list(pipeline.execute_stream_pipelined(chunk_size=chunk_size))
+        results = list(pipeline.execute_stream_pipelined(chunk_size=chunk_size))
 
         # Must produce one result per chunk
         assert len(results) == 2, (
