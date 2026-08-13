@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/ptimizeroracle/ondine/compare/v1.11.10...v2.0.0) (2026-08-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **result:** a lost row's output cell is now None/NaN instead of the strings "[SKIPPED]", "null", or "". Detect lost rows with result.is_complete, result.errors, result.lost_row_indices, or df.isna() rather than by matching those strings.
+
+### Features
+
+* **result:** add is_complete so partial loss is visible without lying ([#254](https://github.com/ptimizeroracle/ondine/issues/254)) ([#260](https://github.com/ptimizeroracle/ondine/issues/260)) ([b7116db](https://github.com/ptimizeroracle/ondine/commit/b7116dbc91f89df962044fc005f231cdf64cdc62))
+
+
+### Bug Fixes
+
+* **result:** blank lost rows to None instead of three different markers ([#262](https://github.com/ptimizeroracle/ondine/issues/262)) ([#263](https://github.com/ptimizeroracle/ondine/issues/263)) ([1f2ddc9](https://github.com/ptimizeroracle/ondine/commit/1f2ddc991b1c83947b1cbceab0bfbc0527ca6847))
+
 ## [1.11.10](https://github.com/ptimizeroracle/ondine/compare/v1.11.9...v1.11.10) (2026-08-11)
 
 
