@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1](https://github.com/ptimizeroracle/ondine/compare/v2.0.0...v2.0.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **resume:** skip cached rows above a gap instead of re-calling them ([#241](https://github.com/ptimizeroracle/ondine/issues/241)) ([#264](https://github.com/ptimizeroracle/ondine/issues/264)) ([34b0743](https://github.com/ptimizeroracle/ondine/commit/34b07439efdf53e1938d77729f2b9dde9d1be216))
+* **structured:** realign batch items by an injected row id ([#255](https://github.com/ptimizeroracle/ondine/issues/255)) ([#266](https://github.com/ptimizeroracle/ondine/issues/266)) ([b40d979](https://github.com/ptimizeroracle/ondine/commit/b40d979d40703e46fd0e9373fc8391b386b7eef8))
+
 ## [2.0.0](https://github.com/ptimizeroracle/ondine/compare/v1.11.10...v2.0.0) (2026-08-13)
 
 
