@@ -416,26 +416,16 @@ def test_structured_output_gives_each_row_its_own_object(batch_size):
     assert list(output["category"]) == expected_answers(6)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Structured batches are matched to rows by position with no "
-        "verification, so a model that reorders its items would silently give "
-        "rows each other's answers: 4 of 6 wrong, success=True, zero failed "
-        "rows. The plain JSON batch path recovers from the same reordering by "
-        "id, which is the asymmetry worth closing. "
-        "Latent, not observed: gpt-4o-mini preserved order across 140 real "
-        "rows at batch 10 and 25, so this guards a failure that has not been "
-        "reproduced against a real provider. "
-        "See #255 — remove this marker when the paths agree."
-    ),
-)
 def test_a_reordered_structured_batch_does_not_misassign_answers():
     """Models reorder batch responses. That must not become wrong data.
 
     This is the one failure mode that no counter can catch after the fact:
     every cell is populated, every count is right, and the values belong to
-    the wrong rows.
+    the wrong rows. Ondine augments the structured schema with a row id the
+    model echoes (#255), so a reordered batch is realigned by id — the same
+    guarantee the plain-JSON path has always had — instead of being trusted in
+    arrival order. The fake here returns its items reversed; every row must
+    still land its own answer.
     """
     client = StructuredLedgerClient(reverse=True)
     frame = conformance_frame(6)
@@ -444,3 +434,29 @@ def test_a_reordered_structured_batch_does_not_misassign_answers():
 
     misassigned = int((output["marker"] != output["token"]).sum())
     assert misassigned == 0, f"{misassigned} rows hold another row's answer"
+
+
+def test_a_structured_batch_that_drops_an_item_reports_the_loss():
+    """Fewer items than rows is a loss, not a silent short read.
+
+    The row id closes reorder *and* omission: with items keyed by id, a model
+    that returns three answers for four rows leaves one id unaccounted for, so
+    that row is recorded as failed instead of quietly borrowing a neighbour's
+    answer or shifting every row below it. Without the id the batch would just
+    look one shorter and the rows would slide.
+    """
+    dropped = token_for(2)
+    client = StructuredLedgerClient(drop_tokens={dropped})
+    frame = conformance_frame(4)
+
+    result = build_structured(client, frame, batch_size=4).execute()
+    output = result.to_pandas()
+
+    # The surviving rows keep their own answers, in place.
+    for index in range(4):
+        if token_for(index) == dropped:
+            continue
+        assert output["token"].iloc[index] == token_for(index)
+    # The dropped row is named as a loss, not papered over.
+    assert result.is_complete is False
+    assert 2 in result.lost_row_indices

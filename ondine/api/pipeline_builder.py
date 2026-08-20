@@ -1423,11 +1423,13 @@ class PipelineBuilder:
 
         **Batch Processing Note:**
         When using with_batch_size() > 1, your Pydantic model should have an
-        'items' field containing a list. Ondine will automatically match items
-        to rows by position. Example:
+        'items' field containing a list. Ondine adds a row id to each item and
+        realigns the response by it, so a model that reorders or drops items is
+        corrected or reported rather than silently misassigning answers (#255).
+        You do not add the id yourself. Example:
 
             class MyBatch(BaseModel):
-                items: list[MyResult]  # Results matched by position
+                items: list[MyResult]  # one per row; realigned by row id
 
         Args:
             schema: Pydantic model class defining the expected output structure
