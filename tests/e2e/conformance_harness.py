@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import typing
 from collections import Counter
 from decimal import Decimal
 from typing import Any
@@ -250,6 +251,20 @@ def _token_in(text: str) -> str:
 # tell a correctly-ordered batch from a reordered one.
 
 
+def _structured_item_type(batch_model: Any) -> Any:
+    """The element type of a ``items: list[X]`` batch model, or None.
+
+    Lets the fake fill whatever item schema ondine actually asked for —
+    including one ondine augmented with a row id — instead of hard-coding
+    ``StructuredAnswer``.
+    """
+    field = getattr(batch_model, "model_fields", {}).get("items")
+    if field is None:
+        return None
+    args = typing.get_args(field.annotation)
+    return args[0] if args else None
+
+
 class StructuredAnswer(BaseModel):
     """One row's answer, carrying the marker of the row that asked for it."""
 
@@ -270,11 +285,20 @@ class StructuredLedgerClient(LLMClient):
         reverse: Return the items in reverse order. Models reorder, renumber
             and re-sort batch responses in practice; this makes that concrete
             rather than hypothetical.
+        drop_tokens: Omit these rows' items from the batch entirely, modelling a
+            model that silently returns fewer items than it was asked for.
     """
 
-    def __init__(self, spec: LLMSpec | None = None, *, reverse: bool = False) -> None:
+    def __init__(
+        self,
+        spec: LLMSpec | None = None,
+        *,
+        reverse: bool = False,
+        drop_tokens: set[str] | None = None,
+    ) -> None:
         super().__init__(spec or conformance_spec())
         self._reverse = reverse
+        self._drop_tokens = drop_tokens or set()
         self.calls: Counter[str] = Counter()
 
     def invoke(self, prompt: str, **kwargs: Any) -> LLMResponse:
@@ -289,18 +313,27 @@ class StructuredLedgerClient(LLMClient):
         for token in tokens:
             self.calls[token] += 1
 
+        # Model a *compliant* provider: the batch prompt lists inputs with ids
+        # 1..N in order, so each answer carries the id of the input it answers.
+        # If ondine augmented the schema with a row id (#255), fill it; the
+        # reversal below still scrambles the array order, which is exactly the
+        # adversarial behaviour the id must survive.
+        item_cls = _structured_item_type(output_cls)
+        item_has_id = item_cls is not None and "id" in item_cls.model_fields
         answers = [
-            StructuredAnswer(token=token, category=answer_for(token))
-            for token in tokens
+            item_cls(id=position, token=token, category=answer_for(token))
+            if item_has_id
+            else StructuredAnswer(token=token, category=answer_for(token))
+            for position, token in enumerate(tokens, start=1)
+            if token not in self._drop_tokens
         ]
         if self._reverse:
             answers.reverse()
 
-        result = (
-            output_cls(items=answers)
-            if "items" in output_cls.model_fields
-            else output_cls(token=answers[0].token, category=answers[0].category)
-        )
+        if "items" in output_cls.model_fields:
+            result = output_cls(items=answers)
+        else:
+            result = output_cls(token=answers[0].token, category=answers[0].category)
         response = LLMResponse(
             text=result.model_dump_json(),
             tokens_in=TOKENS_IN_PER_CALL,

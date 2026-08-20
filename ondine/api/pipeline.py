@@ -839,6 +839,27 @@ class Pipeline:
             initial_delay=specs.processing.retry_delay,
         )
 
+        output_cls = (
+            self._components.structured_output_model if specs.metadata else None
+        )
+        # Structured batches are matched to rows by position, which silently
+        # misassigns answers when a model reorders its items. Give the schema a
+        # row id the model echoes, so the same id-sorting the JSON path uses
+        # realigns a reordered batch and fails a truncated one (#255).
+        if output_cls is not None and specs.prompt.batch_size > 1:
+            from ondine.strategies.structured_batch import with_row_ids
+
+            indexed = with_row_ids(output_cls)
+            if indexed is not None:
+                output_cls = indexed
+            else:
+                self.logger.warning(
+                    "Structured output with batch_size > 1 on a schema without an "
+                    "'items: list[Model]' field cannot be row-id protected: a "
+                    "reordered response would misassign answers. Give the schema "
+                    "an 'items' list, or add an 'id' field to its items. See #255."
+                )
+
         llm_stage = LLMInvocationStage(
             llm_client,
             concurrency=specs.processing.concurrency,
@@ -846,9 +867,7 @@ class Pipeline:
             retry_handler=retry_handler,
             error_policy=specs.processing.error_policy,
             max_retries=specs.processing.max_retries,
-            output_cls=self._components.structured_output_model
-            if specs.metadata
-            else None,
+            output_cls=output_cls,
             budget_controller=budget_controller,
             adaptive_concurrency=specs.processing.adaptive_concurrency,
         )
