@@ -267,8 +267,8 @@ class UnifiedLiteLLMClient(LLMClient):
         super().__init__(spec)
 
         # Build model identifier for LiteLLM
-        # If model has "/", use as-is (e.g., "moonshot/kimi-k2")
-        # Otherwise, prepend provider (e.g., "groq" + "llama-3.3" → "groq/llama-3.3")
+        # A named provider is prepended (e.g., "groq" + "llama-3.3" → "groq/llama-3.3");
+        # with provider="litellm" the model id is used as-is (e.g., "moonshot/kimi-k2").
         provider_name = (
             spec.provider.value
             if hasattr(spec.provider, "value")
@@ -295,12 +295,21 @@ class UnifiedLiteLLMClient(LLMClient):
                 if spec.model.startswith("openai/")
                 else f"openai/{spec.model}"
             )
-        elif "/" in spec.model:
-            self.model = spec.model  # Already has provider prefix
         elif provider_name:
-            self.model = f"{provider_name}/{spec.model}"
+            # The caller named a provider, so that provider is the route. Hosts
+            # namespace models by the vendor that made them — Groq serves
+            # "openai/gpt-oss-20b" — so a slash does not mean "already
+            # prefixed"; reading it that way sent Groq requests to OpenAI.
+            # Only the provider's own prefix means the long form was used.
+            self.model = (
+                spec.model
+                if spec.model.startswith(f"{provider_name}/")
+                else f"{provider_name}/{spec.model}"
+            )
         else:
-            self.model = spec.model  # No provider, hope model is complete
+            # provider="litellm": the model id names its own route
+            # (e.g. "openrouter/anthropic/claude-3.5").
+            self.model = spec.model
 
         self.provider_name = (
             (provider_name if provider_name else self.model.split("/")[0])
