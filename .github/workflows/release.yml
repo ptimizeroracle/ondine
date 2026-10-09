@@ -86,7 +86,7 @@ jobs:
         # false here would not fail loudly — the push is deliberately tolerant
         # of losing a race with release-please — it would just warn, and every
         # release would ship a lock file one version behind (#217).
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ steps.release_pr.outputs.branch }}
           # Full history and tags: the changelog-coverage check below walks
