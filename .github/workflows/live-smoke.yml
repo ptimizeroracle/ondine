@@ -52,13 +52,13 @@ jobs:
     # tree (which has no compiled engine) instead of the installed wheel.
     - name: Run the smoke test
       env:
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         # Providers that must be exercised. A missing key for one of these
         # fails the run instead of skipping it: a smoke test that skips itself
         # green is exactly the gap this workflow closes. Add "openai" here
         # once an OPENAI_API_KEY secret exists.
-        ONDINE_LIVE_REQUIRED: groq
+        ONDINE_LIVE_REQUIRED: openrouter
       run: |
         mkdir -p "${RUNNER_TEMP}/smoke/tests/integration"
         cp tests/integration/live_models.py tests/integration/test_live_smoke.py \
