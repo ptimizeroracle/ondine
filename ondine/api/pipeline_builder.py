@@ -483,7 +483,7 @@ class PipelineBuilder:
 
         Args:
             model: Model identifier. Can be:
-                  - LiteLLM format: "provider/model" (e.g., "groq/llama-3.3-70b-versatile")
+                  - LiteLLM format: "provider/model" (e.g., "groq/openai/gpt-oss-120b")
                   - Short format: "model" (requires provider parameter)
             provider: Provider name (optional if model includes provider prefix)
                      Examples: "openai", "groq", "anthropic", or custom provider ID
@@ -505,12 +505,12 @@ class PipelineBuilder:
         Example:
             ```python
             # NEW: LiteLLM format (provider auto-detected from model string)
-            builder.with_llm(model="groq/llama-3.3-70b-versatile")
+            builder.with_llm(model="groq/openai/gpt-oss-120b")
             builder.with_llm(model="openai/gpt-4o-mini")
 
             # OLD: Explicit provider (still supported)
             builder.with_llm(provider="openai", model="gpt-4o-mini")
-            builder.with_llm(provider="groq", model="llama-3.3-70b-versatile")
+            builder.with_llm(provider="groq", model="openai/gpt-oss-120b")
 
             # Any OpenAI-compatible endpoint (OpenRouter, Together, vLLM,
             # LM Studio, ...). The model name is passed through as-is — no
@@ -542,7 +542,7 @@ class PipelineBuilder:
             else:
                 raise ValueError(
                     "Provider parameter required when model doesn't include provider prefix.\n"
-                    "Either use LiteLLM format (e.g., 'groq/llama-3.3-70b') or specify provider explicitly."
+                    "Either use LiteLLM format (e.g., 'groq/openai/gpt-oss-120b') or specify provider explicitly."
                 )
         else:
             # Try to convert to enum for built-in providers
@@ -1315,7 +1315,7 @@ class PipelineBuilder:
             # Basic usage (resilience enabled by default)
             .with_router(
                 model_list=[
-                    {"model_name": "fast", "litellm_params": {"model": "groq/llama-3.3-70b", "rpm": 30}},
+                    {"model_name": "fast", "litellm_params": {"model": "groq/openai/gpt-oss-120b", "rpm": 30}},
                     {"model_name": "fast", "litellm_params": {"model": "openai/gpt-4o-mini", "rpm": 500}}
                 ]
             )

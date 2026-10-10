@@ -105,7 +105,7 @@ df = enrich(
     "reviews.csv",
     "Classify: {review}",
     provider="groq",
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     temperature=0.0,
     batch_size=25,
     concurrency=10,

@@ -166,7 +166,7 @@ Not every task needs GPT-4:
 | Provider | Model | Cost (per 1M tokens) | Best for |
 |---|---|---|---|
 | OpenAI | gpt-4o-mini | $0.15 | General-purpose |
-| Groq | llama-3.3-70b | $0.05-0.10 | Speed + cost |
+| Groq | openai/gpt-oss-20b | $0.075 in / $0.30 out | Speed + cost |
 | Together.AI | various | $0.20-0.60 | Open models |
 | Local MLX | any | $0 | Apple Silicon, privacy |
 

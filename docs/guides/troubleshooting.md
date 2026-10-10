@@ -45,7 +45,7 @@ pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
     .with_prompt("Process: {text}")
-    .with_llm(provider="groq", model="llama-3.3-70b-versatile")
+    .with_llm(provider="groq", model="openai/gpt-oss-120b")
     .with_rate_limit(30)   # requests per minute — match your provider's limit
     .build()
 )

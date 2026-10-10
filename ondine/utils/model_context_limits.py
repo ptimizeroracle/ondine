@@ -30,7 +30,11 @@ MODEL_CONTEXT_LIMITS = {
     "claude-3-haiku-20240307": 200000,
     "claude-sonnet-4": 200000,
     "claude-opus-4": 200000,
-    # Groq models
+    # Groq models. Groq namespaces what it serves by vendor; the bare names
+    # below match with or without the "openai/" / "groq/" prefixes.
+    "gpt-oss-120b": 131072,
+    "gpt-oss-20b": 131072,
+    # Retired by Groq, kept so older configs still size their batches.
     "llama-3.1-70b-versatile": 131072,
     "llama-3.1-8b-instant": 131072,
     "llama-3.3-70b-versatile": 131072,

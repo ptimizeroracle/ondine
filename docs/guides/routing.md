@@ -65,7 +65,7 @@ Each entry in `model_list` represents one deployment. The `model_name` field is 
     "model_name": "my-model",          # Logical name (shared across replicas)
     "model_id": "groq-llama",          # Optional: friendly ID for tracking
     "litellm_params": {
-        "model": "groq/llama-3.3-70b-versatile",  # LiteLLM model string
+        "model": "groq/openai/gpt-oss-120b",  # LiteLLM model string
         "api_key": "...",
         "rpm": 30,                     # Optional: per-deployment rate limit
     }
@@ -95,7 +95,7 @@ pipeline = (
             {
                 "model_name": "fast-llm",
                 "litellm_params": {
-                    "model": "groq/llama-3.3-70b-versatile",
+                    "model": "groq/openai/gpt-oss-120b",
                     "api_key": os.getenv("GROQ_API_KEY"),
                     "rpm": 30,
                 },
@@ -187,7 +187,7 @@ Routes based on explicit weights. Set a `"weight"` key in `litellm_params` for e
         {
             "model_name": "llm",
             "litellm_params": {
-                "model": "groq/llama-3.3-70b-versatile",
+                "model": "groq/openai/gpt-oss-120b",
                 "api_key": os.getenv("GROQ_API_KEY"),
                 "weight": 8,   # 80% of traffic
             },
@@ -215,7 +215,7 @@ Picks the cheapest deployment using LiteLLM's cost database. Costs need to be de
         {
             "model_name": "llm",
             "litellm_params": {
-                "model": "groq/llama-3.3-70b-versatile",
+                "model": "groq/openai/gpt-oss-120b",
                 "api_key": os.getenv("GROQ_API_KEY"),
             },
         },
@@ -285,7 +285,7 @@ pipeline = (
                 "model_name": "classifier",
                 "model_id": "groq-primary",
                 "litellm_params": {
-                    "model": "groq/llama-3.3-70b-versatile",
+                    "model": "groq/openai/gpt-oss-120b",
                     "api_key": os.getenv("GROQ_API_KEY"),
                     "rpm": 25,
                 },
@@ -344,7 +344,7 @@ pipeline = (
             {
                 "model_name": "triage-model",
                 "litellm_params": {
-                    "model": "groq/llama-3.3-70b-versatile",
+                    "model": "groq/openai/gpt-oss-120b",
                     "api_key": os.getenv("GROQ_API_KEY"),
                     "rpm": 25,
                 },
@@ -396,7 +396,7 @@ To get readable labels in the progress UI, set `model_id` on each entry:
     "model_name": "fast-llm",
     "model_id": "groq-llama",      # Displayed in progress output
     "litellm_params": {
-        "model": "groq/llama-3.3-70b-versatile",
+        "model": "groq/openai/gpt-oss-120b",
         ...
     },
 }

@@ -59,7 +59,7 @@ class ModelNotFoundError(NonRetryableError):
         # This will raise ModelNotFoundError if model is invalid
         pipeline = (
             PipelineBuilder.create()
-            .with_llm(provider="groq", model="llama-3.1-70b-versatile")  # Decommissioned
+            .with_llm(provider="groq", model="llama-3.1-70b-versatile")  # retired by Groq
             .build()
         )
         ```

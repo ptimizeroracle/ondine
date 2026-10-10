@@ -23,7 +23,7 @@ pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
     .with_prompt("Classify: {text}")
-    .with_llm(provider="groq", model="llama-3.3-70b-versatile")
+    .with_llm(provider="groq", model="openai/gpt-oss-120b")
     .with_execution_mode("provider_batch")
     .build()
 )
