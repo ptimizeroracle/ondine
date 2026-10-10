@@ -12,6 +12,12 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import (
+    FREE_KEY_ENV,
+    FREE_LLM,
+    FREE_MODEL,
+    FREE_PROVIDER,
+)
 
 
 @pytest.mark.integration
@@ -19,7 +25,7 @@ from ondine import PipelineBuilder
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
     ],
 )
 def test_rate_limiting_enforces_rpm(provider, model, api_key_env):
@@ -91,9 +97,9 @@ def test_rate_limiting_with_burst_control():
 
     Validates that the first N requests are also throttled, not sent all at once.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     # Small dataset to measure initial burst
     df = pd.DataFrame({"text": [f"Text {i}" for i in range(5)]})
@@ -102,7 +108,7 @@ def test_rate_limiting_with_burst_control():
         PipelineBuilder.create()
         .from_dataframe(df, input_columns=["text"], output_columns=["result"])
         .with_prompt("Echo: {{text}}")
-        .with_llm(provider="groq", model="llama-3.3-70b-versatile", api_key=api_key)
+        .with_llm(provider=FREE_PROVIDER, model=FREE_MODEL, api_key=api_key)
         .with_batch_size(1)  # No mega-prompts (1 row = 1 API call)
         .with_rate_limit(30)  # 30 RPM = 1 request per 2 seconds
         .with_concurrency(5)  # All 5 could fire at once without rate limiting

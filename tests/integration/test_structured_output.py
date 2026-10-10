@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from ondine import PipelineBuilder
 from ondine.stages.response_parser_stage import JSONParser
+from tests.integration.live_models import FREE_LLM
 
 
 # Define models (same as user script)
@@ -29,7 +30,7 @@ class BaconBatch(BaseModel):
     ("provider", "model", "api_key_env", "base_url"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY", None),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY", None),
+        (*FREE_LLM, None),
         ("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY", None),
     ],
 )
@@ -39,7 +40,7 @@ def test_structured_output_e2e(provider, model, api_key_env, base_url):
 
     Tests UnifiedLiteLLMClient with Instructor auto-detection:
     - OpenAI: Instructor with Mode.TOOLS (function calling)
-    - Groq: Instructor with Mode.JSON (JSON mode, no XML issues!)
+    - Free OpenRouter model: Instructor with Mode.JSON
     - Anthropic: Instructor with Mode.TOOLS (Claude function calling)
 
     Requires respective API keys in environment.

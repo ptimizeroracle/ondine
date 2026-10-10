@@ -13,6 +13,12 @@ import pytest
 from pydantic import BaseModel, Field
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import (
+    FREE_KEY_ENV,
+    FREE_LLM,
+    FREE_MODEL,
+    FREE_PROVIDER,
+)
 
 
 class ProductResult(BaseModel):
@@ -46,7 +52,7 @@ class ProductBatch(BaseModel):
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
     ],
 )
 def test_mega_prompt_batching_complex_data(provider, model, api_key_env):
@@ -192,9 +198,9 @@ def test_mega_prompt_preserves_order():
 
     Critical for ensuring results match input DataFrame indices.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     # Create DataFrame with sequential IDs
     df = pd.DataFrame(
@@ -213,8 +219,8 @@ def test_mega_prompt_preserves_order():
             "Extract the number from the text: {{ text }}. Return only the integer."
         )
         .with_llm(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
+            provider=FREE_PROVIDER,
+            model=FREE_MODEL,
             api_key=api_key,
             temperature=0.0,
             input_cost_per_1k_tokens=Decimal("0.00059"),

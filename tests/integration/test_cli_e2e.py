@@ -18,6 +18,12 @@ from ondine.api import Pipeline
 from ondine.cli.main import cli
 from ondine.config import ConfigLoader
 from ondine.core.models import LLMResponse
+from tests.integration.live_models import (
+    FREE_KEY_ENV,
+    FREE_LLM,
+    FREE_MODEL,
+    FREE_PROVIDER,
+)
 
 
 @pytest.mark.integration
@@ -25,7 +31,7 @@ from ondine.core.models import LLMResponse
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
     ],
 )
 def test_cli_process_end_to_end(provider, model, api_key_env):
@@ -101,9 +107,9 @@ output:
 @pytest.mark.integration
 def test_cli_validate_valid_config():
     """Test CLI validate command with valid config."""
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     runner = CliRunner()
 
@@ -122,8 +128,8 @@ data:
 prompt:
   template: "{{ text }}"
 llm:
-  provider: groq
-  model: llama-3.3-70b-versatile
+  provider: {FREE_PROVIDER}
+  model: {FREE_MODEL}
   api_key: {api_key}
 processing:
   batch_size: 1
@@ -141,9 +147,9 @@ output:
 @pytest.mark.integration
 def test_cli_estimate_cost():
     """Test CLI estimate command (no actual API call)."""
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     runner = CliRunner()
 
@@ -164,8 +170,8 @@ data:
 prompt:
   template: "Summarize: {{{{ text }}}}"
 llm:
-  provider: groq
-  model: llama-3.3-70b-versatile
+  provider: {FREE_PROVIDER}
+  model: {FREE_MODEL}
   api_key: {api_key}
 processing:
   batch_size: 10
@@ -418,9 +424,9 @@ def test_cli_auto_cost_detection_in_estimate():
 
     Regression test for cost tracking integration.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     runner = CliRunner()
 
@@ -441,8 +447,8 @@ data:
 prompt:
   template: "Summarize: {{{{ text }}}}"
 llm:
-  provider: groq
-  model: llama-3.3-70b-versatile
+  provider: {FREE_PROVIDER}
+  model: {FREE_MODEL}
   # NO input_cost_per_1k_tokens specified - should auto-detect!
 processing:
   batch_size: 10

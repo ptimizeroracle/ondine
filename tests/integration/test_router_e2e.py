@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import FREE_KEY_ENV, FREE_MODEL, FREE_PROVIDER
 
 
 @pytest.mark.integration
@@ -17,14 +18,14 @@ def test_router_multi_provider_fallback():
     """
     E2E test for Router with multi-provider failover.
 
-    Tests that Router can load balance between Groq and OpenAI,
+    Tests that Router can load balance between a free OpenRouter model and OpenAI,
     with automatic failover if one provider fails.
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    if not groq_key or not openai_key:
-        pytest.skip("GROQ_API_KEY and OPENAI_API_KEY both required for Router test")
+    if not free_key or not openai_key:
+        pytest.skip(f"{FREE_KEY_ENV} and OPENAI_API_KEY both required for Router test")
 
     # Create test data
     df = pd.DataFrame({"text": ["What is 2+2?", "What is 3+3?"]})
@@ -39,9 +40,9 @@ def test_router_multi_provider_fallback():
                 {
                     "model_name": "fast-llm",
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
-                        "rpm": 30,  # Groq limit
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
+                        "rpm": 20,  # OpenRouter free-tier limit
                     },
                 },
                 {
@@ -79,13 +80,13 @@ def test_router_same_provider_load_balance():
     """
     E2E test for Router load balancing across same provider.
 
-    Tests load balancing across multiple Groq deployments
+    Tests load balancing across multiple deployments of one model
     (simulates multi-region or multi-account scenarios).
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
 
-    if not groq_key:
-        pytest.skip("GROQ_API_KEY required")
+    if not free_key:
+        pytest.skip(f"{FREE_KEY_ENV} required")
 
     df = pd.DataFrame({"q": ["What is AI?", "What is ML?", "What is DL?"]})
 
@@ -98,18 +99,18 @@ def test_router_same_provider_load_balance():
         .with_router(
             model_list=[
                 {
-                    "model_name": "groq-llm",
+                    "model_name": "free-llm",
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
                         "rpm": 9,  # Low limit to test balancing
                     },
                 },
                 {
-                    "model_name": "groq-llm",  # Same model_name = load balance
+                    "model_name": "free-llm",  # Same model_name = load balance
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
                         "rpm": 9,
                     },
                 },
@@ -142,10 +143,10 @@ def test_router_with_redis_caching():
     - First call hits API
     - Second identical call uses cache ($0 cost)
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
 
-    if not groq_key:
-        pytest.skip("GROQ_API_KEY required")
+    if not free_key:
+        pytest.skip(f"{FREE_KEY_ENV} required")
 
     df = pd.DataFrame({"text": ["Cached test"] * 2})  # Duplicate prompts
 
@@ -153,7 +154,7 @@ def test_router_with_redis_caching():
         PipelineBuilder.create()
         .from_dataframe(df, input_columns=["text"], output_columns=["result"])
         .with_prompt("Echo: {text}")
-        .with_llm(provider="groq", model="llama-3.3-70b-versatile", api_key=groq_key)
+        .with_llm(provider=FREE_PROVIDER, model=FREE_MODEL, api_key=free_key)
         .with_redis_cache("redis://localhost:6379", ttl=60)
         .build()
     )

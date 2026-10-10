@@ -11,14 +11,15 @@ import pytest
 
 from ondine import PipelineBuilder
 from ondine.core.models import SKIPPED_OUTPUT_MARKER
+from tests.integration.live_models import FREE_KEY_ENV, FREE_LLM
 
 
 def get_provider_configs():
     """Get available provider configurations."""
     configs = []
 
-    if os.getenv("GROQ_API_KEY"):
-        configs.append(("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"))
+    if os.getenv(FREE_KEY_ENV):
+        configs.append(FREE_LLM)
 
     if os.getenv("OPENAI_API_KEY"):
         configs.append(("openai", "gpt-4o-mini", "OPENAI_API_KEY"))

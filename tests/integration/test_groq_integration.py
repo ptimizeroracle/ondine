@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import GROQ_MODEL
 
 
 @pytest.mark.integration
@@ -34,7 +35,7 @@ class TestGroqIntegration:
             .with_prompt("{text}")
             .with_llm(
                 provider="groq",
-                model="llama-3.3-70b-versatile",  # Updated to current Groq model
+                model=GROQ_MODEL,
                 temperature=0.0,
             )
             .build()
@@ -74,7 +75,7 @@ class TestGroqIntegration:
             .with_prompt("Answer briefly: {question}")
             .with_llm(
                 provider="groq",
-                model="llama-3.3-70b-versatile",  # Updated to current Groq model
+                model=GROQ_MODEL,
                 temperature=0.0,
             )
             .with_batch_size(10)
@@ -102,7 +103,7 @@ class TestGroqIntegration:
             )
             .with_prompt("Echo: {text}")
             .with_llm(
-                provider="groq", model="llama-3.3-70b-versatile"
+                provider="groq", model=GROQ_MODEL
             )  # Updated to current Groq model
             .build()
         )
