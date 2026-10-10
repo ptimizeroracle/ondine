@@ -508,6 +508,17 @@ class Pipeline:
                 result, self.specifications.dataset.output_columns
             )
 
+            # The run survived, but with holes. Say so once, with the reason:
+            # per-row errors are logged at debug level to keep a large run
+            # readable, which otherwise leaves a partial loss with no visible
+            # cause at all.
+            if result.errors:
+                self.logger.warning(
+                    f"{len(result.lost_row_indices)} of {result.metrics.total_rows} "
+                    f"row(s) produced no output. {result.error_summary()}. "
+                    f"Indices: result.lost_row_indices; details: result.errors."
+                )
+
             if self.specifications.processing.cleanup_on_success:
                 state_manager.cleanup_checkpoints(context.session_id)
                 if context.response_cache is not None:
@@ -1845,12 +1856,22 @@ class Pipeline:
             if had_row_errors
             else "the provider returned no tokens at all"
         )
+        # Lead with what the provider actually said. "Check the model name,
+        # credentials, and provider" is all we can offer when it said nothing,
+        # and useless advice when it said exactly which of the three is wrong.
+        provider_said = result.error_summary()
+        cause = (
+            f"Provider/stage errors: {provider_said}."
+            if provider_said
+            else "Check the model name, credentials, and provider."
+        )
         raise PipelineExecutionError(
             f"Run completed but produced 0 valid outputs across "
-            f"{quality.total_rows} row(s): {reason}. Check the model name, "
-            f"credentials, and provider. ({quality.null_outputs} null, "
+            f"{quality.total_rows} row(s): {reason}. {cause} "
+            f"({quality.null_outputs} null, "
             f"{quality.empty_outputs} empty/skipped cells across columns "
-            f"{output_columns})."
+            f"{output_columns}).",
+            errors=result.errors,
         )
 
     def _auto_retry_failed_rows(

@@ -5,6 +5,13 @@ This module defines exception types for error classification and handling.
 Distinguishes between retryable (transient) and non-retryable (fatal) errors.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ondine.core.models import ErrorInfo
+
 
 class NonRetryableError(Exception):
     """
@@ -169,9 +176,18 @@ class PipelineExecutionError(Exception):
         try:
             result = pipeline.execute()
         except PipelineExecutionError as e:
-            # Nothing was produced — inspect the model/config and retry.
+            # Nothing was produced — the message names the provider's own
+            # error; e.errors has one entry per lost row.
             logger.error(f"Run produced no output: {e}")
         ```
+
+    Attributes:
+        errors: One ``ErrorInfo`` per lost row (index, stage, provider
+            message), so a handler can act on the rows without parsing text.
     """
+
+    def __init__(self, message: str, errors: list[ErrorInfo] | None = None) -> None:
+        super().__init__(message)
+        self.errors = errors or []
 
     pass
