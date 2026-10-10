@@ -12,13 +12,20 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from tests.integration.live_models import (
+    FREE_KEY_ENV,
+    FREE_LLM,
+    FREE_MODEL,
+    FREE_PROVIDER,
+)
+
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
     ],
 )
 def test_yaml_config_end_to_end(provider, model, api_key_env):
@@ -110,9 +117,9 @@ def test_yaml_config_with_multi_column():
 
     Validates complex YAML configurations work end-to-end.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         data_file = Path(tmpdir) / "test_data.csv"
@@ -140,8 +147,8 @@ prompt:
   use_jinja2: true
 
 llm:
-  provider: groq
-  model: llama-3.3-70b-versatile
+  provider: {FREE_PROVIDER}
+  model: {FREE_MODEL}
   api_key: {api_key}
   temperature: 0.0
 

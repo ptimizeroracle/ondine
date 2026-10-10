@@ -12,17 +12,20 @@ import pandas as pd
 import pytest
 
 from ondine import QuickPipeline
+from tests.integration.live_models import FREE_KEY_ENV, FREE_MODEL, FREE_PROVIDER
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("model", "api_key_env"),
+    ("model", "api_key_env", "provider"),
     [
-        ("gpt-4o-mini", "OPENAI_API_KEY"),
-        ("llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        # None lets QuickPipeline detect the provider from the model name.
+        ("gpt-4o-mini", "OPENAI_API_KEY", None),
+        # A prefixed LiteLLM model id is not auto-detected; name the provider.
+        (FREE_MODEL, FREE_KEY_ENV, FREE_PROVIDER),
     ],
 )
-def test_quickpipeline_auto_detection(model, api_key_env):
+def test_quickpipeline_auto_detection(model, api_key_env, provider):
     """
     Test QuickPipeline with auto-detection of provider and columns.
 
@@ -31,12 +34,6 @@ def test_quickpipeline_auto_detection(model, api_key_env):
     api_key = os.getenv(api_key_env)
     if not api_key:
         pytest.skip(f"{api_key_env} not set")
-
-    # Infer provider from model name
-    if "gpt" in model:
-        provider = "openai"
-    else:
-        provider = "groq"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         data_file = Path(tmpdir) / "test.csv"
@@ -48,6 +45,7 @@ def test_quickpipeline_auto_detection(model, api_key_env):
             data=str(data_file),
             prompt="Summarize: {description}",  # Auto-detects 'description' column
             model=model,
+            provider=provider,
             api_key=api_key,
         )
 
@@ -73,9 +71,9 @@ def test_quickpipeline_with_dataframe():
 
     Validates that QuickPipeline accepts in-memory data.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     df = pd.DataFrame({"text": ["Hello", "World", "Test"]})
 
@@ -83,7 +81,8 @@ def test_quickpipeline_with_dataframe():
     pipeline = QuickPipeline.create(
         data=df,  # Pass DataFrame directly
         prompt="Uppercase: {text}",
-        model="llama-3.3-70b-versatile",
+        model=FREE_MODEL,
+        provider=FREE_PROVIDER,
         api_key=api_key,
     )
 

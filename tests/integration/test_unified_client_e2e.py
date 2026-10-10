@@ -11,6 +11,12 @@ import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import (
+    FREE_KEY_ENV,
+    FREE_LLM,
+    FREE_MODEL,
+    FREE_PROVIDER,
+)
 
 
 @pytest.mark.integration
@@ -18,7 +24,7 @@ from ondine import PipelineBuilder
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
         ("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"),
     ],
 )
@@ -28,7 +34,7 @@ def test_unified_client_basic_invoke_e2e(provider, model, api_key_env):
 
     Tests that the new native client works across providers:
     - OpenAI: Baseline provider
-    - Groq: Fast inference
+    - A free OpenRouter model, through the litellm provider
     - Anthropic: Claude models
 
     Note: Structured output will be tested in Phase 2 after Instructor integration.
@@ -75,8 +81,10 @@ def test_unified_client_basic_invoke_e2e(provider, model, api_key_env):
         f"{provider} returned empty answers"
     )
 
-    # Verify cost tracking
-    assert result.costs.total_cost > 0, f"{provider} cost tracking failed (got $0)"
+    # Verify cost tracking. A free model is billed at exactly zero, so only
+    # priced providers can prove cost accounting; tokens prove usage for all.
+    if model != FREE_MODEL:
+        assert result.costs.total_cost > 0, f"{provider} cost tracking failed (got $0)"
     assert result.costs.total_tokens > 0, f"{provider} token tracking failed"
 
     print(f"\n{provider.upper()} E2E Results:")
@@ -86,16 +94,16 @@ def test_unified_client_basic_invoke_e2e(provider, model, api_key_env):
 
 
 @pytest.mark.integration
-def test_unified_client_groq_async_e2e():
+def test_unified_client_async_e2e():
     """
-    E2E test for async invocation with Groq.
+    E2E test for async invocation against a real hosted model.
 
     Tests that UnifiedLiteLLMClient correctly uses litellm.acompletion
     for async-first execution.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     # Create test data
     df = pd.DataFrame({"question": ["What is Python?", "What is AI?", "What is ML?"]})
@@ -110,14 +118,14 @@ def test_unified_client_groq_async_e2e():
         )
         .with_prompt("Answer in one sentence: {question}")
         .with_llm(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
+            provider=FREE_PROVIDER,
+            model=FREE_MODEL,
             api_key=api_key,
             temperature=0.0,
             max_tokens=100,
         )
         .with_concurrency(3)  # Test concurrent execution
-        .with_rate_limit(9)  # Groq rate limit
+        .with_rate_limit(9)  # stay under the free tier's per-minute limit
         .build()
     )
 
@@ -130,7 +138,7 @@ def test_unified_client_groq_async_e2e():
     assert len(df) == 3
     assert df["answer"].notnull().all()
 
-    print("\nGroq Async E2E Results:")
+    print("\nAsync E2E Results:")
     print(df)
     print(f"Cost: ${result.costs.total_cost:.4f}")
 
@@ -138,13 +146,14 @@ def test_unified_client_groq_async_e2e():
 @pytest.mark.integration
 def test_unified_client_cost_accuracy_e2e():
     """
-    E2E test for cost tracking accuracy across providers.
+    E2E test for cost tracking accuracy.
 
-    Verifies that litellm.completion_cost() provides accurate costs.
+    Verifies that litellm.completion_cost() provides accurate costs. Runs on a
+    priced model: a free one reports zero and would prove nothing.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip("OPENAI_API_KEY not set")
 
     # Create test data
     df = pd.DataFrame({"text": ["Hello" * 100]})  # Long prompt for measurable cost
@@ -155,8 +164,8 @@ def test_unified_client_cost_accuracy_e2e():
         .from_dataframe(df, input_columns=["text"], output_columns=["response"])
         .with_prompt("Summarize: {text}")
         .with_llm(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
+            provider="openai",
+            model="gpt-4o-mini",
             api_key=api_key,
             temperature=0.0,
         )
@@ -171,7 +180,7 @@ def test_unified_client_cost_accuracy_e2e():
     assert result.costs.input_tokens > 0
     assert result.costs.output_tokens > 0
 
-    # Groq pricing: ~$0.59/1M input, ~$0.79/1M output
+    # gpt-4o-mini pricing: ~$0.15/1M input, ~$0.60/1M output
     # Verify cost is in reasonable range
     assert result.costs.total_cost < Decimal("0.01"), "Cost seems too high"
 
@@ -188,9 +197,9 @@ def test_unified_client_batch_processing_e2e():
 
     Verifies that batching works correctly with the new client.
     """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv(FREE_KEY_ENV)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip(f"{FREE_KEY_ENV} not set")
 
     # Create test data
     df = pd.DataFrame(
@@ -207,8 +216,8 @@ def test_unified_client_batch_processing_e2e():
         )
         .with_prompt("Classify this fruit: {product}")
         .with_llm(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
+            provider=FREE_PROVIDER,
+            model=FREE_MODEL,
             api_key=api_key,
             temperature=0.0,
         )

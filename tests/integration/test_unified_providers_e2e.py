@@ -3,7 +3,7 @@ E2E tests for unified provider API (powered by LiteLLM internally).
 
 Validates that standard provider names work correctly:
 - provider="openai" → Works seamlessly
-- provider="groq" → Works (XML bug handled internally)
+- provider="litellm" → Works with a free OpenRouter model
 - provider="anthropic" → Works (validation bug handled internally)
 
 Users never see "LiteLLM" - it's an internal implementation detail.
@@ -16,6 +16,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import FREE_LLM
 
 
 class SimpleResult(BaseModel):
@@ -50,7 +51,7 @@ class PriceBatch(BaseModel):
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
         ("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"),
     ],
 )
@@ -58,7 +59,7 @@ def test_providers_single_row_per_api(provider, model, api_key_env):
     """
     Test standard providers with 1 row processing per API call.
 
-    Validates that provider="openai", "groq", "anthropic" work correctly
+    Validates that provider="openai", "litellm", "anthropic" work correctly
     with structured output and proper data extraction.
 
     Implementation note: Uses LiteLLM internally, but users don't need to know.
@@ -138,7 +139,7 @@ Review: {{ text }}"""
     ("provider", "model", "api_key_env"),
     [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        FREE_LLM,
     ],
 )
 def test_providers_multi_row_batching(provider, model, api_key_env):

@@ -14,6 +14,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from ondine import PipelineBuilder
+from tests.integration.live_models import FREE_KEY_ENV, FREE_MODEL
 
 
 class ExtractedData(BaseModel):
@@ -37,22 +38,22 @@ class BatchResponse(BaseModel):
 
 
 @pytest.mark.integration
-def test_router_with_structured_output_groq_openai():
+def test_router_with_structured_output_free_then_openai():
     """
     CRITICAL TEST: Router + Structured Output (Groq + OpenAI).
 
     This is the EXACT scenario used by bacon cleaner:
-    - Router with Groq (primary) + OpenAI (fallback)
+    - Router with a free OpenRouter model (primary) + OpenAI (fallback)
     - Structured output with Pydantic model
     - Batch processing
 
     If this test passes, bacon cleaner should work!
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    if not groq_key or not openai_key:
-        pytest.skip("GROQ_API_KEY and OPENAI_API_KEY both required")
+    if not free_key or not openai_key:
+        pytest.skip(f"{FREE_KEY_ENV} and OPENAI_API_KEY both required")
 
     # Create test data (small batch)
     df = pd.DataFrame({"question": ["What is 2+2?", "What is 5+5?"]})
@@ -73,8 +74,8 @@ def test_router_with_structured_output_groq_openai():
                 {
                     "model_name": "test-llm",  # Shared model_name
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
                         "temperature": 0.1,
                         "max_tokens": 1000,
                     },
@@ -125,16 +126,16 @@ def test_router_with_structured_output_groq_openai():
 
 
 @pytest.mark.integration
-def test_router_structured_output_groq_only():
+def test_router_structured_output_single_model():
     """
     Test Router + Structured Output with Groq only.
 
     Simpler test with single provider.
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
 
-    if not groq_key:
-        pytest.skip("GROQ_API_KEY required")
+    if not free_key:
+        pytest.skip(f"{FREE_KEY_ENV} required")
 
     df = pd.DataFrame({"q": ["What is AI?"]})
 
@@ -147,10 +148,10 @@ def test_router_structured_output_groq_only():
         .with_router(
             model_list=[
                 {
-                    "model_name": "groq-test",
+                    "model_name": "free-test",
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
                         "temperature": 0.1,
                         "max_tokens": 1000,
                     },
@@ -178,11 +179,11 @@ def test_router_structured_large_batch():
 
     This simulates the bacon cleaner's batch size of 50 rows.
     """
-    groq_key = os.getenv("GROQ_API_KEY")
+    free_key = os.getenv(FREE_KEY_ENV)
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    if not groq_key or not openai_key:
-        pytest.skip("GROQ_API_KEY and OPENAI_API_KEY required")
+    if not free_key or not openai_key:
+        pytest.skip(f"{FREE_KEY_ENV} and OPENAI_API_KEY required")
 
     # Create 10-row batch (smaller than 50 for speed)
     questions = [f"What is {i}+{i}?" for i in range(1, 11)]
@@ -199,8 +200,8 @@ def test_router_structured_large_batch():
                 {
                     "model_name": "bacon-llm",
                     "litellm_params": {
-                        "model": "groq/llama-3.3-70b-versatile",
-                        "api_key": groq_key,
+                        "model": FREE_MODEL,
+                        "api_key": free_key,
                         "temperature": 0.1,
                         "max_tokens": 2000,
                     },
