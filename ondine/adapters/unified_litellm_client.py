@@ -10,7 +10,7 @@ Philosophy:
 Usage:
     # Any LiteLLM model format works (provider/model):
     spec = LLMSpec(model="openai/gpt-4o-mini", api_key="sk-...")  # pragma: allowlist secret
-    spec = LLMSpec(model="groq/llama-3.3-70b-versatile", api_key="gsk_...")  # pragma: allowlist secret
+    spec = LLMSpec(model="groq/openai/gpt-oss-120b", api_key="gsk_...")  # pragma: allowlist secret
     spec = LLMSpec(model="moonshot/kimi-k2-thinking-turbo", api_key="sk-...")  # pragma: allowlist secret
 
     # Advanced: Use extra_params for ANY LiteLLM feature
@@ -267,7 +267,7 @@ class UnifiedLiteLLMClient(LLMClient):
         super().__init__(spec)
 
         # Build model identifier for LiteLLM
-        # A named provider is prepended (e.g., "groq" + "llama-3.3" → "groq/llama-3.3");
+        # A named provider is prepended (e.g., "groq" + "openai/gpt-oss-20b" → "groq/openai/gpt-oss-20b");
         # with provider="litellm" the model id is used as-is (e.g., "moonshot/kimi-k2").
         provider_name = (
             spec.provider.value
@@ -503,7 +503,7 @@ class UnifiedLiteLLMClient(LLMClient):
         try:
             from ondine.observability.events import LLMCallEvent
 
-            # Extract provider from model string (e.g., "groq/llama-3.3" -> "groq")
+            # Extract provider from model string (e.g., "groq/openai/gpt-oss-20b" -> "groq")
             provider = self.model.split("/")[0] if "/" in self.model else "unknown"
 
             event = LLMCallEvent(

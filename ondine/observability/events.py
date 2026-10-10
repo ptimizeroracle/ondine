@@ -193,7 +193,7 @@ class ProviderCooldownEvent:
     timestamp: datetime
     trace_id: str
     span_id: str
-    provider: str  # e.g., "groq/llama-3.3-70b"
+    provider: str  # e.g., "groq/openai/gpt-oss-120b"
     deployment_id: str  # LiteLLM model_id
     reason: str  # Error message that triggered cooldown
     cooldown_duration: int  # Seconds until recovery
@@ -215,7 +215,7 @@ class ProviderRecoveredEvent:
     timestamp: datetime
     trace_id: str
     span_id: str
-    provider: str  # e.g., "groq/llama-3.3-70b"
+    provider: str  # e.g., "groq/openai/gpt-oss-120b"
     deployment_id: str  # LiteLLM model_id
     cooldown_duration: int  # How long the provider was in cooldown
     metadata: dict[str, Any] = field(default_factory=dict)

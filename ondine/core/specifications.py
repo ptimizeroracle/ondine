@@ -214,7 +214,7 @@ class LLMSpec(BaseModel):
         # OLD: Explicit provider (still supported)
         spec = LLMSpec(
             provider=LLMProvider.GROQ,
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             temperature=0.0
         )
         ```
@@ -670,6 +670,24 @@ class LLMProviderPresets:
     )
 
     # Groq Presets
+    GROQ_GPT_OSS_120B = LLMSpec(
+        provider=LLMProvider.GROQ,
+        model="openai/gpt-oss-120b",
+        temperature=0.0,
+        input_cost_per_1k_tokens=Decimal("0.00015"),
+        output_cost_per_1k_tokens=Decimal("0.0006"),
+    )
+
+    GROQ_GPT_OSS_20B = LLMSpec(
+        provider=LLMProvider.GROQ,
+        model="openai/gpt-oss-20b",
+        temperature=0.0,
+        input_cost_per_1k_tokens=Decimal("0.000075"),
+        output_cost_per_1k_tokens=Decimal("0.0003"),
+    )
+
+    # Groq has retired this model; calls fail with "model does not exist".
+    # Kept only so existing imports keep resolving. Use GROQ_GPT_OSS_120B.
     GROQ_LLAMA_70B = LLMSpec(
         provider=LLMProvider.GROQ,
         model="llama-3.1-70b-versatile",

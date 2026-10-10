@@ -140,7 +140,7 @@ class QuickPipeline:
             pipeline = QuickPipeline.create(
                 data=df,
                 prompt="Summarize: {text}",
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 provider="groq"
             )
             ```
@@ -273,9 +273,17 @@ class QuickPipeline:
         Examples:
             "gpt-4o-mini" -> "openai"
             "claude-3-sonnet" -> "anthropic"
-            "llama-3-70b" -> "groq"
+            "groq/openai/gpt-oss-20b" -> "groq"
         """
         model_lower = model.lower()
+
+        # A leading "<provider>/" names the route outright. Checked before the
+        # name patterns, which only describe bare model names: Groq serves
+        # "openai/gpt-oss-20b", so "groq/openai/gpt-oss-20b" matches none of
+        # them and used to fall through to the OpenAI default.
+        route = model_lower.split("/", 1)[0]
+        if "/" in model_lower and route in QuickPipeline.PROVIDER_PATTERNS:
+            return route
 
         for provider, patterns in QuickPipeline.PROVIDER_PATTERNS.items():
             for pattern in patterns:

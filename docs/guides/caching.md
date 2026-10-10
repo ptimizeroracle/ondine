@@ -251,7 +251,7 @@ pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["label"])
     .with_prompt("Label: {text}")
-    .with_llm(provider="groq", model="llama-3.3-70b-versatile")
+    .with_llm(provider="groq", model="openai/gpt-oss-120b")
     .with_concurrency(10)     # Up to 10 simultaneous requests
     .with_rate_limit(25)      # But no more than 25 per minute total
     .build()
