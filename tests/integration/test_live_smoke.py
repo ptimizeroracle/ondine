@@ -1,9 +1,9 @@
 """A few real calls a day, so the outside world cannot break ondine unnoticed.
 
 Everything else in the suite runs against fakes or skips without an API key,
-and CI has no keys — so for weeks nothing noticed that Groq had retired the
-models the docs recommended, or that ``provider="groq"`` was sending requests
-to OpenAI. Both were visible to the first user who tried, and to no test.
+and CI has no keys — so for weeks nothing noticed that a provider had retired
+the models the docs recommended, or that a named provider was being routed to
+a different one (#271). Both were visible to the first user who tried, and to no test.
 
 This file is the tripwire. It is deliberately small: one provider path per
 test, a handful of rows, answers checked by value. The scheduled
@@ -28,7 +28,7 @@ import pytest
 from pydantic import BaseModel
 
 from ondine import PipelineBuilder
-from tests.integration.live_models import GROQ_MODEL
+from tests.integration.live_models import FREE_KEY_ENV, FREE_MODEL, FREE_PROVIDER
 
 pytestmark = pytest.mark.integration
 
@@ -37,14 +37,17 @@ pytestmark = pytest.mark.integration
 ARITHMETIC = pd.DataFrame({"question": ["2 + 2", "10 - 3", "3 * 3"]})
 EXPECTED = ["4", "7", "9"]
 
+#: ``(provider, model, api_key_env)``; the id is the name ONDINE_LIVE_REQUIRED
+#: uses. OpenRouter's free tier allows 50 requests a day, and this file makes
+#: seven, so it fits with room for a manual re-run.
 PROVIDERS = [
-    pytest.param("groq", GROQ_MODEL, "GROQ_API_KEY", id="groq"),
+    pytest.param(FREE_PROVIDER, FREE_MODEL, FREE_KEY_ENV, id="openrouter"),
     pytest.param("openai", "gpt-4o-mini", "OPENAI_API_KEY", id="openai"),
 ]
 
 
-def _api_key(provider: str, key_env: str) -> str:
-    """The provider's key, or a skip — unless this run requires the provider."""
+def _api_key(name: str, key_env: str) -> str:
+    """The key for the provider called ``name``, or a skip — unless required."""
     api_key = os.getenv(key_env)
     if api_key:
         return api_key
@@ -54,9 +57,9 @@ def _api_key(provider: str, key_env: str) -> str:
         for name in os.getenv("ONDINE_LIVE_REQUIRED", "").split(",")
         if name.strip()
     }
-    if provider in required:
+    if name in required:
         pytest.fail(
-            f"{key_env} is not set, but ONDINE_LIVE_REQUIRED names {provider!r}. "
+            f"{key_env} is not set, but ONDINE_LIVE_REQUIRED names {name!r}. "
             f"Add the {key_env} repository secret, or the live smoke test "
             f"proves nothing."
         )
@@ -73,8 +76,8 @@ def _numbers(column: pd.Series) -> list[str]:
 
 
 @pytest.mark.parametrize(("provider", "model", "key_env"), PROVIDERS)
-def test_one_prompt_per_row_answers_every_row(provider, model, key_env):
-    api_key = _api_key(provider, key_env)
+def test_one_prompt_per_row_answers_every_row(provider, model, key_env, request):
+    api_key = _api_key(request.node.callspec.id, key_env)
 
     result = (
         PipelineBuilder.create()
@@ -93,8 +96,10 @@ def test_one_prompt_per_row_answers_every_row(provider, model, key_env):
 
 
 @pytest.mark.parametrize(("provider", "model", "key_env"), PROVIDERS)
-def test_a_batched_prompt_keeps_each_answer_on_its_own_row(provider, model, key_env):
-    api_key = _api_key(provider, key_env)
+def test_a_batched_prompt_keeps_each_answer_on_its_own_row(
+    provider, model, key_env, request
+):
+    api_key = _api_key(request.node.callspec.id, key_env)
 
     result = (
         PipelineBuilder.create()
@@ -117,8 +122,10 @@ class _Sum(BaseModel):
 
 
 @pytest.mark.parametrize(("provider", "model", "key_env"), PROVIDERS)
-def test_structured_output_parses_into_the_declared_type(provider, model, key_env):
-    api_key = _api_key(provider, key_env)
+def test_structured_output_parses_into_the_declared_type(
+    provider, model, key_env, request
+):
+    api_key = _api_key(request.node.callspec.id, key_env)
 
     result = (
         PipelineBuilder.create()

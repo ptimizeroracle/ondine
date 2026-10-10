@@ -246,17 +246,17 @@ jobs:
       # single line so it means the same thing on bash and PowerShell.
       run: uv run pytest tests/e2e/test_pipeline_conformance.py tests/e2e/test_router_conformance.py -v --tb=short
 
-    - name: Run integration tests (main branch only)
+    # No provider keys here, on purpose: every test that needs a real model
+    # skips, and what runs is the half of tests/integration that uses fakes.
+    # Real provider calls live in the Live Smoke workflow, which fails rather
+    # than skips when its key is missing.
+    - name: Run offline integration tests (main branch only)
       if: github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-      env:
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       run: |
         uv run pytest tests/integration/ -v --tb=short
 
     - name: Run all tests with coverage
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-      env:
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       run: |
         uv run pytest --cov=ondine --cov-report=xml --cov-report=term
 
