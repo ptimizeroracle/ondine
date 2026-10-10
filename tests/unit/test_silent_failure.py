@@ -383,3 +383,110 @@ class TestBlankLostCellsIsCollisionSafeAndRecoveryAware:
         result = self._result([{"out": "recovered"}], lost_indices=[0])
         self._pipeline()._blank_lost_cells(result, ["out"])
         assert result.data.to_list()[0]["out"] == "recovered"
+
+
+class TestFailureReasonsReachTheCaller:
+    """The provider's own words must survive to wherever the caller looks.
+
+    A run that lost rows used to say only *that* it lost them. The provider's
+    explanation — "invalid api key", "model does not exist" — was recorded per
+    row but logged at debug level and left out of the final exception, so a
+    wrong model name and an expired key produced the identical message
+    "check the model name, credentials, and provider".
+    """
+
+    def _pipeline(self, df: pd.DataFrame, client: LLMClient) -> Pipeline:
+        return (
+            PipelineBuilder.create()
+            .from_dataframe(df, input_columns=["review"], output_columns=["sentiment"])
+            .with_prompt("Classify: {review}")
+            .with_custom_llm_client(client)
+            .with_error_policy("skip")
+            .build()
+        )
+
+    def test_a_total_failure_names_the_provider_error(self):
+        spec = LLMSpec(provider="openai", model="test-model")
+        pipeline = self._pipeline(
+            pd.DataFrame({"review": ["a", "b", "c"]}), _AlwaysFailClient(spec)
+        )
+
+        with pytest.raises(PipelineExecutionError) as raised:
+            pipeline.execute()
+
+        assert "simulated provider failure" in str(raised.value)
+
+    def test_a_total_failure_carries_the_per_row_errors(self):
+        """Code handling the exception needs the rows, not a parsed message."""
+        spec = LLMSpec(provider="openai", model="test-model")
+        pipeline = self._pipeline(
+            pd.DataFrame({"review": ["a", "b", "c"]}), _AlwaysFailClient(spec)
+        )
+
+        with pytest.raises(PipelineExecutionError) as raised:
+            pipeline.execute()
+
+        assert sorted(error.row_index for error in raised.value.errors) == [0, 1, 2]
+
+    def test_summary_ranks_reasons_by_how_many_rows_they_cost(self):
+        result = ExecutionResult(
+            data=ResultContainerImpl([]),
+            metrics=ProcessingStats(3, 3, 0, 3),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, 3),
+            errors=[
+                ErrorInfo(0, "LLMInvocation", "skipped", "rate limited"),
+                ErrorInfo(1, "LLMInvocation", "skipped", "invalid api key"),
+                ErrorInfo(2, "LLMInvocation", "skipped", "invalid api key"),
+            ],
+        )
+
+        assert result.error_summary() == (
+            "2 row(s): invalid api key; 1 row(s): rate limited"
+        )
+
+    def test_summary_stays_short_when_every_row_failed_differently(self):
+        """Provider messages often embed a request id, so none repeat."""
+        errors = [
+            ErrorInfo(i, "LLMInvocation", "skipped", f"failure req-{i}")
+            for i in range(10)
+        ]
+        result = ExecutionResult(
+            data=ResultContainerImpl([]),
+            metrics=ProcessingStats(10, 10, 0, 10),
+            costs=CostEstimate(Decimal("0"), 0, 0, 0, 10),
+            errors=errors,
+        )
+
+        summary = result.error_summary(limit=2)
+
+        assert summary == (
+            "1 row(s): failure req-0; 1 row(s): failure req-1; "
+            "and 8 more row(s) with 8 other reason(s)"
+        )
+
+    def test_a_partial_loss_is_announced_with_its_reason(self):
+        """A run that succeeds overall must still say why it has holes."""
+
+        class _FailsOnB(_AlwaysFailClient):
+            def _answer(self, prompt: str) -> LLMResponse:
+                if "Classify: b" in prompt:
+                    raise RuntimeError("content policy refusal")
+                return _ok_response()
+
+            def invoke(self, prompt: str, **kwargs: Any) -> Any:
+                return self._answer(prompt)
+
+            async def ainvoke(self, prompt: str, **kwargs: Any) -> Any:
+                return self._answer(prompt)
+
+        spec = LLMSpec(provider="openai", model="test-model")
+        pipeline = self._pipeline(
+            pd.DataFrame({"review": ["a", "b", "c"]}), _FailsOnB(spec)
+        )
+        warnings: list[str] = []
+        pipeline.logger.warning = lambda message, *a, **k: warnings.append(str(message))
+
+        result = pipeline.execute()
+
+        assert result.lost_row_indices == [1]
+        assert any("content policy refusal" in message for message in warnings)

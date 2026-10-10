@@ -5,6 +5,7 @@ These models represent the outputs and state information from pipeline
 execution with type safety.
 """
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -16,6 +17,18 @@ from uuid import UUID, uuid4
 # the whole-run guard both treat a cell equal to this as a non-result. Defined
 # here (core) so the LLM stage and the quality validator share one spelling.
 SKIPPED_OUTPUT_MARKER = "[SKIPPED]"
+
+# Longest provider message quoted in a one-line error summary. Providers
+# return whole JSON bodies; past this the line stops being readable.
+_MAX_REASON_CHARS = 300
+
+
+def _shorten(reason: str) -> str:
+    """Collapse a provider message to one bounded line."""
+    one_line = " ".join(reason.split())
+    if len(one_line) <= _MAX_REASON_CHARS:
+        return one_line
+    return one_line[: _MAX_REASON_CHARS - 1] + "…"
 
 
 @dataclass
@@ -249,6 +262,31 @@ class ExecutionResult:
             good = result.to_pandas().drop(index=result.lost_row_indices)
         """
         return sorted({error.row_index for error in self.errors})
+
+    def error_summary(self, limit: int = 3) -> str:
+        """Why rows were lost, in the provider's words, most costly reason first.
+
+        Rows that failed with the same message are counted together, so a run
+        that lost 40,000 rows to one expired key reads as one line rather than
+        40,000. At most ``limit`` reasons are spelled out; the rest are counted,
+        because provider messages often embed a request id and never repeat.
+
+        Returns an empty string when no row was lost.
+        """
+        if not self.errors:
+            return ""
+        rows_by_reason = Counter(error.message for error in self.errors)
+        ranked = rows_by_reason.most_common()
+        parts = [
+            f"{rows} row(s): {_shorten(reason)}" for reason, rows in ranked[:limit]
+        ]
+        unlisted = ranked[limit:]
+        if unlisted:
+            parts.append(
+                f"and {sum(rows for _, rows in unlisted)} more row(s) with "
+                f"{len(unlisted)} other reason(s)"
+            )
+        return "; ".join(parts)
 
     def to_pandas(self) -> Any:
         """
