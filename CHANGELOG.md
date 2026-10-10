@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4](https://github.com/ptimizeroracle/ondine/compare/v2.0.3...v2.0.4) (2026-10-10)
+
+
+### Bug Fixes
+
+* **groq:** support the models Groq serves now, not the ones it retired ([#278](https://github.com/ptimizeroracle/ondine/issues/278)) ([#279](https://github.com/ptimizeroracle/ondine/issues/279)) ([d8d48f4](https://github.com/ptimizeroracle/ondine/commit/d8d48f422bd86f653208dd785c6e120c3ecc9892))
+* **result:** say why rows were lost, in the provider's own words ([#275](https://github.com/ptimizeroracle/ondine/issues/275)) ([#276](https://github.com/ptimizeroracle/ondine/issues/276)) ([e55c161](https://github.com/ptimizeroracle/ondine/commit/e55c161e68fdfb5b176a628637ee293e57292d0d))
+
 ## [2.0.3](https://github.com/ptimizeroracle/ondine/compare/v2.0.2...v2.0.3) (2026-10-10)
 
 
