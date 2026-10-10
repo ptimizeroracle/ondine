@@ -133,3 +133,25 @@ jobs:
     - name: Check licenses
       run: |
         uv run pip-licenses --format=markdown
+
+  # A scheduled failure reaches nobody on its own; this job files it as an
+  # issue. See .github/scripts/report-scheduled-failure.sh.
+  report:
+    name: Report failure
+    needs: [workflow-audit, dependency-scan, code-scan, secrets-scan, license-check]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Open or update the failure issue
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        WORKFLOW_NAME: Security Scanning
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: .github/scripts/report-scheduled-failure.sh
