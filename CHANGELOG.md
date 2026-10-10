@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3](https://github.com/ptimizeroracle/ondine/compare/v2.0.2...v2.0.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **llm:** route a vendor-namespaced model to the provider the caller named ([#271](https://github.com/ptimizeroracle/ondine/issues/271)) ([#272](https://github.com/ptimizeroracle/ondine/issues/272)) ([a04337a](https://github.com/ptimizeroracle/ondine/commit/a04337a2f30daaa523438a4479c9c2c1cdb8e6de))
+
 ## [2.0.2](https://github.com/ptimizeroracle/ondine/compare/v2.0.1...v2.0.2) (2026-10-09)
 
 
