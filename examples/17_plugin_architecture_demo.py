@@ -4,7 +4,7 @@ Real-world demo of the Plugin Architecture feature.
 This example demonstrates:
 1. Using a custom LLM provider via the Plugin Registry
 2. Injecting a custom pipeline stage for data enrichment
-3. Real execution with Groq API
+3. Real execution against a hosted model
 """
 
 import os
@@ -24,8 +24,8 @@ from ondine.stages import PipelineStage, stage
 # ============================================================================
 
 
-@provider("custom_groq")
-class CustomGroqProvider(LLMClient):
+@provider("custom_wrapper")
+class CustomWrapperProvider(LLMClient):
     """
     Example of a custom provider wrapper.
 
@@ -49,7 +49,7 @@ class CustomGroqProvider(LLMClient):
         from ondine.adapters.unified_litellm_client import UnifiedLiteLLMClient
 
         # Simply delegate to UnifiedLiteLLMClient
-        # (which handles Groq via LiteLLM natively)
+        # (which reaches every provider through LiteLLM)
         client = UnifiedLiteLLMClient(self.spec)
         return client.invoke(prompt, **kwargs)
 
@@ -124,8 +124,8 @@ def demo_custom_provider():
     print("DEMO 1: Custom LLM Provider (Registered)")
     print("=" * 80)
 
-    print("\n✅ Custom provider 'custom_groq' is now registered!")
-    print("   You can use it with: .with_llm(provider='custom_groq', ...")
+    print("\n✅ Custom provider 'custom_wrapper' is now registered!")
+    print("   You can use it with: .with_llm(provider='custom_wrapper', ...")
     print(
         "\n📝 Note: The custom provider is defined in this file using @provider decorator"
     )
@@ -139,8 +139,8 @@ def demo_custom_stage():
     print("DEMO 2: Custom Pipeline Stage (Sentiment Enrichment)")
     print("=" * 80)
 
-    if not os.getenv("GROQ_API_KEY"):
-        print("⚠️  GROQ_API_KEY not set. Skipping custom stage demo.")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        print("⚠️  OPENROUTER_API_KEY not set. Skipping custom stage demo.")
         return
 
     # Create sample data with reviews
@@ -169,12 +169,11 @@ def demo_custom_stage():
             template="Based on this review: {review}\n\nGenerate a customer service response in 20 words."
         )
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.7,
-            api_key=os.getenv("GROQ_API_KEY"),
-            input_cost_per_1k_tokens="0.00059",
-            output_cost_per_1k_tokens="0.00079",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            input_cost_per_1k_tokens="0.0",
+            output_cost_per_1k_tokens="0.0",
         )
         .with_parser(RawTextParser())
         .with_batch_size(3)

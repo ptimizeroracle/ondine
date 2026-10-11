@@ -42,8 +42,7 @@ def streaming_example():
         )
         .with_prompt("Summarize in 3 words: {text}")
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
         )
         .with_streaming(chunk_size=100)  # Process 100 rows at a time
@@ -106,5 +105,5 @@ if __name__ == "__main__":
     comparison_example()
 
     print("\n📝 To run streaming:")
-    print("   export GROQ_API_KEY='your-key'")
+    print("   export OPENROUTER_API_KEY='your-key'")
     print("   python examples/08_streaming_large_files.py")

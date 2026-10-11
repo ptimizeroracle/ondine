@@ -38,8 +38,7 @@ async def main():
         )
         .with_prompt("Answer concisely: {question}")
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
         )
         .with_async_execution(max_concurrency=3)  # Async executor

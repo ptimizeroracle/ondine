@@ -104,8 +104,7 @@ enrich(df, "Classify: {review}", bogus=True)
 df = enrich(
     "reviews.csv",
     "Classify: {review}",
-    provider="groq",
-    model="openai/gpt-oss-120b",
+    model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0,
     batch_size=25,
     concurrency=10,

@@ -30,12 +30,12 @@ else:
 
 # Note: To actually execute, you would need:
 # 1. Create products.csv file
-# 2. Set GROQ_API_KEY environment variable
+# 2. Set OPENROUTER_API_KEY environment variable
 # 3. Run: result = pipeline.execute()
 
 print("\nTo execute this pipeline:")
 print("  1. Create 'products.csv' with a 'description' column")
-print("  2. export GROQ_API_KEY='your-key-here'")
+print("  2. export OPENROUTER_API_KEY='your-key-here'")
 print("  3. Uncomment and run: result = pipeline.execute()")
 
 # Example: Save specifications to JSON

@@ -39,7 +39,7 @@ pipeline = (
     .with_prompt("Answer this question concisely: {question}\n\nAnswer:")
     .with_llm(
         provider="groq",
-        model="gpt-oss-20b",  # Current Groq model
+        model="openai/gpt-oss-20b",  # Groq names models by vendor
         api_key=GROQ_API_KEY,
         temperature=0.0,
     )
