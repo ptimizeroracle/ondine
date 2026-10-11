@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6](https://github.com/ptimizeroracle/ondine/compare/v2.0.5...v2.0.6) (2026-10-11)
+
+
+### Bug Fixes
+
+* **result:** accept the DataFrame idioms the quickstart uses on result.data ([#290](https://github.com/ptimizeroracle/ondine/issues/290)) ([#291](https://github.com/ptimizeroracle/ondine/issues/291)) ([baf1d3b](https://github.com/ptimizeroracle/ondine/commit/baf1d3b7b5d1ec90ed96abb43c306c494d77131d))
+
 ## [2.0.5](https://github.com/ptimizeroracle/ondine/compare/v2.0.4...v2.0.5) (2026-10-11)
 
 
