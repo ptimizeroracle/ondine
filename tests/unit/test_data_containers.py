@@ -428,3 +428,62 @@ class TestDataContainerProtocol:
         df = pd.DataFrame(sample_rows)
         container = PandasContainer(df)
         assert isinstance(container, DataContainer)
+
+
+class TestResultContainerDataFrameIdioms:
+    """``result.data`` must accept the DataFrame idioms the docs show.
+
+    ``result.data`` was a pandas DataFrame until the container replaced it.
+    The quickstart, the README notebook and a dozen examples still write
+    ``print(result.data[["product", "category"]])`` — the first thing a new
+    user runs after their first pipeline — and it raised
+    ``TypeError: list indices must be integers or slices, not list``.
+    """
+
+    @staticmethod
+    def _container():
+        from ondine.adapters.containers.result_container import ResultContainerImpl
+
+        return ResultContainerImpl(
+            data=[
+                {"product": "laptop", "category": "Electronics", "price": 999},
+                {"product": "apple", "category": "Food", "price": 1},
+            ],
+            columns=["product", "category", "price"],
+        )
+
+    def test_a_list_of_columns_selects_those_columns_in_that_order(self):
+        selected = self._container()[["category", "product"]]
+
+        assert selected.columns == ["category", "product"]
+        assert selected.to_list() == [
+            {"category": "Electronics", "product": "laptop"},
+            {"category": "Food", "product": "apple"},
+        ]
+
+    def test_selecting_an_unknown_column_names_it(self):
+        with pytest.raises(KeyError, match="colour"):
+            self._container()[["product", "colour"]]
+
+    def test_printing_shows_the_rows_as_a_table(self):
+        printed = str(self._container()[["product", "category"]])
+
+        lines = printed.splitlines()
+        assert lines[0].split() == ["product", "category"]
+        assert lines[1].split() == ["0", "laptop", "Electronics"]
+        assert lines[2].split() == ["1", "apple", "Food"]
+
+    def test_to_string_passes_pandas_options_through(self):
+        printed = self._container()[["product"]].to_string(index=False)
+
+        assert [line.strip() for line in printed.splitlines()] == [
+            "product",
+            "laptop",
+            "apple",
+        ]
+
+    def test_to_dict_matches_the_dataframe_shape(self):
+        assert self._container()[["product", "price"]].to_dict(orient="records") == [
+            {"product": "laptop", "price": 999},
+            {"product": "apple", "price": 1},
+        ]

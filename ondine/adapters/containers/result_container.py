@@ -42,6 +42,9 @@ class ResultContainerImpl(BaseDataContainer):
         # Write to file
         result.data.to_csv("output.csv")
         result.data.to_parquet("output.parquet")
+
+        # The everyday DataFrame idioms work directly
+        print(result.data[["product", "category"]])
     """
 
     def __init__(
@@ -79,16 +82,23 @@ class ResultContainerImpl(BaseDataContainer):
         """Get column names."""
         return self._columns or []
 
-    def __getitem__(self, key: int | str) -> Any:
+    def __getitem__(self, key: int | str | list[str]) -> Any:
         """
-        Get row by index or column by name.
+        Get a row by index, a column by name, or several columns by name.
 
-        Supports both:
-        - container[0] -> Row at index 0
-        - container["column_name"] -> ColumnAccessor with pandas-like methods
+        - ``container[0]`` -> the row at index 0
+        - ``container["name"]`` -> that column, with pandas-like methods
+        - ``container[["a", "b"]]`` -> a container holding only those columns,
+          in that order, as ``DataFrame[[...]]`` does
 
-        This provides pandas-like compatibility for tests.
+        Raises:
+            KeyError: A list names a column the container does not have.
         """
+        if isinstance(key, list):
+            unknown = [column for column in key if column not in self.columns]
+            if unknown:
+                raise KeyError(f"{unknown} not in columns; available: {self.columns}")
+            return self.select(key)
         if isinstance(key, str):
             # Column access: return accessor with pandas-like methods
             values = [row.get(key) for row in self._data]
@@ -247,6 +257,24 @@ class ResultContainerImpl(BaseDataContainer):
             raise_excel_extra_error("Writing Excel files", exc)
         logger.info(f"Wrote {len(self)} rows to {path}")
 
+    def to_string(self, **kwargs: Any) -> str:
+        """Render the rows as a text table.
+
+        Args:
+            **kwargs: Passed to ``pandas.DataFrame.to_string`` (for example
+                ``index=False``).
+        """
+        return str(self.to_pandas().to_string(**kwargs))
+
+    def to_dict(self, **kwargs: Any) -> Any:
+        """Convert to a dictionary, shaped as ``pandas.DataFrame.to_dict`` shapes it.
+
+        Args:
+            **kwargs: Passed to ``pandas.DataFrame.to_dict`` (for example
+                ``orient="records"``).
+        """
+        return self.to_pandas().to_dict(**kwargs)
+
     def head(self, n: int = 5) -> list[Row]:
         """Get first n rows."""
         return self._data[:n]
@@ -368,6 +396,10 @@ class ResultContainerImpl(BaseDataContainer):
 
     def __repr__(self) -> str:
         return f"ResultContainer(rows={len(self)}, columns={self.columns})"
+
+    def __str__(self) -> str:
+        """The rows as a table, so ``print(result.data)`` shows the results."""
+        return self.to_string()
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, ResultContainerImpl):
