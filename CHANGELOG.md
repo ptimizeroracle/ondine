@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5](https://github.com/ptimizeroracle/ondine/compare/v2.0.4...v2.0.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **quick:** let a LiteLLM model id name its own route in QuickPipeline ([#286](https://github.com/ptimizeroracle/ondine/issues/286)) ([#287](https://github.com/ptimizeroracle/ondine/issues/287)) ([6b02957](https://github.com/ptimizeroracle/ondine/commit/6b02957215f480bb605dea2314877ba7e38f772b))
+
 ## [2.0.4](https://github.com/ptimizeroracle/ondine/compare/v2.0.3...v2.0.4) (2026-10-10)
 
 
