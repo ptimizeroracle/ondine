@@ -27,7 +27,7 @@ import pandas as pd
 import pytest
 from pydantic import BaseModel
 
-from ondine import PipelineBuilder
+from ondine import PipelineBuilder, QuickPipeline
 from tests.integration.live_models import FREE_KEY_ENV, FREE_MODEL, FREE_PROVIDER
 
 pytestmark = pytest.mark.integration
@@ -39,7 +39,7 @@ EXPECTED = ["4", "7", "9"]
 
 #: ``(provider, model, api_key_env)``; the id is the name ONDINE_LIVE_REQUIRED
 #: uses. OpenRouter's free tier allows 50 requests a day, and this file makes
-#: seven, so it fits with room for a manual re-run.
+#: ten, so it fits with room for a manual re-run.
 PROVIDERS = [
     pytest.param(FREE_PROVIDER, FREE_MODEL, FREE_KEY_ENV, id="openrouter"),
     pytest.param("openai", "gpt-4o-mini", "OPENAI_API_KEY", id="openai"),
@@ -114,6 +114,31 @@ def test_a_batched_prompt_keeps_each_answer_on_its_own_row(
     )
 
     assert result.is_complete, result.error_summary()
+    assert _numbers(result.to_pandas()["answer"]) == EXPECTED
+
+
+@pytest.mark.parametrize(("provider", "model", "key_env"), PROVIDERS)
+def test_the_quickstart_runs_as_written(provider, model, key_env, request):
+    """The README's first example, end to end, down to printing the result.
+
+    It is the first thing a new user runs, and it was broken twice without a
+    test noticing: the model id was routed to the wrong provider, and
+    ``result.data[[...]]`` raised once ``result.data`` stopped being a
+    DataFrame.
+    """
+    api_key = _api_key(request.node.callspec.id, key_env)
+
+    result = QuickPipeline.create(
+        data=ARITHMETIC,
+        prompt="Compute {question}. Reply with the number only.",
+        output_columns=["answer"],
+        model=model,
+        provider=None if provider == "litellm" else provider,
+        api_key=api_key,
+    ).execute()
+
+    shown = str(result.data[["question", "answer"]])
+    assert shown.splitlines()[0].split() == ["question", "answer"]
     assert _numbers(result.to_pandas()["answer"]) == EXPECTED
 
 

@@ -41,6 +41,7 @@ pipeline_quick = QuickPipeline.create(
     Description: {description}
 
     Category:""",
+    output_columns=["category"],  # without this the answer lands in "output"
     model="gpt-4o-mini",
 )
 
