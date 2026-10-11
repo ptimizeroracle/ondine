@@ -26,12 +26,12 @@ prompt:
       output: "Shipping"
 
 llm:
-  provider: "groq"
-  model: "openai/gpt-oss-120b"
+  provider: "litellm"
+  model: "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
   temperature: 0.0
   max_tokens: 50
-  input_cost_per_1k_tokens: "0.00005"
-  output_cost_per_1k_tokens: "0.00008"
+  input_cost_per_1k_tokens: "0.0"
+  output_cost_per_1k_tokens: "0.0"
 
 processing:
   batch_size: 100

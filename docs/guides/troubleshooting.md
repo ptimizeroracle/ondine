@@ -9,7 +9,7 @@ Common issues and how to fix them. If your problem isn't here, please
 soon as it makes its first call.
 
 **Cause:** the provider's API key isn't set. Ondine reads keys from environment
-variables by convention — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`,
+variables by convention — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`,
 and so on.
 
 **Fix:** set the key for your provider, then re-run:
@@ -45,7 +45,7 @@ pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
     .with_prompt("Process: {text}")
-    .with_llm(provider="groq", model="openai/gpt-oss-120b")
+    .with_llm(model="openrouter/nvidia/nemotron-3-super-120b-a12b:free")
     .with_rate_limit(30)   # requests per minute — match your provider's limit
     .build()
 )

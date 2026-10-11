@@ -47,8 +47,7 @@ def example_1_python_api():
             template="Rate product match similarity (0-100%): '{current_product}' vs '{candidate_product}'",
         )
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
             max_tokens=10,
         )
@@ -68,8 +67,7 @@ def example_1_python_api():
             template="Explain why '{current_product}' and '{candidate_product}' have a {match_score}% match score. Consider: brand, model, features, specs.",
         )
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.3,
             max_tokens=200,
         )
@@ -140,8 +138,7 @@ Return JSON:
 """,
         )
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
             max_tokens=300,
         )

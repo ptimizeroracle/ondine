@@ -51,8 +51,7 @@ def example_1_basic_system_prompt():
             "3) Choose the most specific category",
         )
         .with_llm(
-            provider="groq",
-            model="openai/gpt-oss-120b",
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
         )
         .build()
@@ -99,7 +98,9 @@ def example_2_different_personas():
             "Be empathetic, apologetic, and offer solutions. "
             "Keep responses concise and actionable.",
         )
-        .with_llm(provider="groq", model="openai/gpt-oss-120b", temperature=0.3)
+        .with_llm(
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.3
+        )
         .build()
     )
 
@@ -117,7 +118,9 @@ def example_2_different_personas():
             "Be warm, understanding, and conversational. "
             "Use a casual tone but remain helpful.",
         )
-        .with_llm(provider="groq", model="openai/gpt-oss-120b", temperature=0.3)
+        .with_llm(
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.3
+        )
         .build()
     )
 
@@ -161,7 +164,9 @@ def example_3_json_extraction_with_system():
             "Always respond with valid JSON only, no explanations. "
             'Format: {"product": "name", "quantity": "amount", "price": "$X.XX"}',
         )
-        .with_llm(provider="groq", model="openai/gpt-oss-120b", temperature=0.0)
+        .with_llm(
+            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.0
+        )
         .with_parser(JSONParser(strict=False))
         .build()
     )
@@ -196,8 +201,8 @@ prompt:
     - Consider business expense type
 
 llm:
-  provider: groq
-  model: openai/gpt-oss-120b
+  provider: litellm
+  model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
   temperature: 0.0
 
 processing:
@@ -260,8 +265,8 @@ prompt:
   system_message: "You are a helpful assistant."
 
 llm:
-  provider: groq
-  model: openai/gpt-oss-120b
+  provider: litellm
+  model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
 """)
 
     print("\nThen run:")
@@ -273,9 +278,9 @@ llm:
 if __name__ == "__main__":
     import os
 
-    if not os.getenv("GROQ_API_KEY"):
-        print("⚠️  Set GROQ_API_KEY environment variable to run examples")
-        print("Example: export GROQ_API_KEY='your-key-here'")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        print("⚠️  Set OPENROUTER_API_KEY environment variable to run examples")
+        print("Example: export OPENROUTER_API_KEY='your-key-here'")
         exit(1)
 
     print("🚀 System Prompts Examples - LLM Dataset Engine\n")

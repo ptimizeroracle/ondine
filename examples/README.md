@@ -24,7 +24,7 @@ All examples updated to work with new architecture!
    ```bash
    # LiteLLM uses standard environment variables
    export OPENAI_API_KEY="your-key-here"
-   export GROQ_API_KEY="your-key-here"
+   export OPENROUTER_API_KEY="your-key-here"
    export ANTHROPIC_API_KEY="your-key-here"
    export AZURE_API_KEY="your-key-here"  # For Azure
    # ... +100 more providers supported!
@@ -69,7 +69,7 @@ Demonstrates:
 - Pydantic model validation with auto-retry
 - Multi-column output extraction
 - Automatic mode selection (JSON vs function calling)
-- Works with all providers (Groq, OpenAI, Anthropic)
+- Works with all providers (OpenAI, Anthropic, OpenRouter, Groq)
 
 Run:
 ```bash
@@ -114,8 +114,8 @@ pipeline = (
             {
                 "model_name": "fast-llm",
                 "litellm_params": {
-                    "model": "groq/openai/gpt-oss-120b",
-                    "api_key": os.getenv("GROQ_API_KEY")
+                    "model": "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+                    "api_key": os.getenv("OPENROUTER_API_KEY")
                 }
             },
             {
@@ -206,7 +206,7 @@ if estimate.total_cost > MAX_BUDGET:
 # Use Router for automatic failover
 pipeline = (
     builder
-    .with_router(model_list=[...])  # Groq + OpenAI fallback
+    .with_router(model_list=[...])  # OpenRouter + OpenAI fallback
     .with_redis_cache(...)  # Avoid duplicate calls
     .build()
 )

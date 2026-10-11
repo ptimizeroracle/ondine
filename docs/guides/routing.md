@@ -8,7 +8,7 @@ LLM routing lets one pipeline spread requests across multiple model deployments 
 
 A single provider has real limits. Rate limits throttle throughput. Outages halt processing. Pricing rarely fits every workload. A router absorbs all of that:
 
-- **Failover** -- Groq starts erroring? Requests automatically shift to OpenAI.
+- **Failover** -- OpenRouter starts erroring? Requests automatically shift to OpenAI.
 - **Load balancing** -- spread 1,000 concurrent requests across three deployments instead of hammering one.
 - **Cost optimization** -- route to the cheapest provider that meets your latency needs.
 - **Resilience** -- a circuit breaker pulls failing providers into cooldown instead of retrying forever.
@@ -63,9 +63,9 @@ Each entry in `model_list` represents one deployment. The `model_name` field is 
 ```python
 {
     "model_name": "my-model",          # Logical name (shared across replicas)
-    "model_id": "groq-llama",          # Optional: friendly ID for tracking
+    "model_id": "openrouter-mini",          # Optional: friendly ID for tracking
     "litellm_params": {
-        "model": "groq/openai/gpt-oss-120b",  # LiteLLM model string
+        "model": "openrouter/openai/gpt-4o-mini",  # LiteLLM model string
         "api_key": "...",
         "rpm": 30,                     # Optional: per-deployment rate limit
     }
@@ -95,8 +95,8 @@ pipeline = (
             {
                 "model_name": "fast-llm",
                 "litellm_params": {
-                    "model": "groq/openai/gpt-oss-120b",
-                    "api_key": os.getenv("GROQ_API_KEY"),
+                    "model": "openrouter/openai/gpt-4o-mini",
+                    "api_key": os.getenv("OPENROUTER_API_KEY"),
                     "rpm": 30,
                 },
             },
@@ -116,7 +116,7 @@ pipeline = (
 result = pipeline.execute()
 ```
 
-With `simple-shuffle` and two deployments, traffic splits roughly 50/50. If Groq starts returning errors, the circuit breaker kicks in after 3 failures and puts Groq into a 60-second cooldown. All remaining requests go to OpenAI until Groq recovers.
+With `simple-shuffle` and two deployments, traffic splits roughly 50/50. If OpenRouter starts returning errors, the circuit breaker kicks in after 3 failures and puts Groq into a 60-second cooldown. All remaining requests go to OpenAI until Groq recovers.
 
 ---
 
@@ -187,8 +187,8 @@ Routes based on explicit weights. Set a `"weight"` key in `litellm_params` for e
         {
             "model_name": "llm",
             "litellm_params": {
-                "model": "groq/openai/gpt-oss-120b",
-                "api_key": os.getenv("GROQ_API_KEY"),
+                "model": "openrouter/openai/gpt-4o-mini",
+                "api_key": os.getenv("OPENROUTER_API_KEY"),
                 "weight": 8,   # 80% of traffic
             },
         },
@@ -215,8 +215,8 @@ Picks the cheapest deployment using LiteLLM's cost database. Costs need to be de
         {
             "model_name": "llm",
             "litellm_params": {
-                "model": "groq/openai/gpt-oss-120b",
-                "api_key": os.getenv("GROQ_API_KEY"),
+                "model": "openrouter/openai/gpt-4o-mini",
+                "api_key": os.getenv("OPENROUTER_API_KEY"),
             },
         },
         {
@@ -283,10 +283,10 @@ pipeline = (
         model_list=[
             {
                 "model_name": "classifier",
-                "model_id": "groq-primary",
+                "model_id": "openrouter-primary",
                 "litellm_params": {
-                    "model": "groq/openai/gpt-oss-120b",
-                    "api_key": os.getenv("GROQ_API_KEY"),
+                    "model": "openrouter/openai/gpt-4o-mini",
+                    "api_key": os.getenv("OPENROUTER_API_KEY"),
                     "rpm": 25,
                 },
             },
@@ -344,8 +344,8 @@ pipeline = (
             {
                 "model_name": "triage-model",
                 "litellm_params": {
-                    "model": "groq/openai/gpt-oss-120b",
-                    "api_key": os.getenv("GROQ_API_KEY"),
+                    "model": "openrouter/openai/gpt-4o-mini",
+                    "api_key": os.getenv("OPENROUTER_API_KEY"),
                     "rpm": 25,
                 },
             },
@@ -394,9 +394,9 @@ To get readable labels in the progress UI, set `model_id` on each entry:
 ```python
 {
     "model_name": "fast-llm",
-    "model_id": "groq-llama",      # Displayed in progress output
+    "model_id": "openrouter-mini",      # Displayed in progress output
     "litellm_params": {
-        "model": "groq/openai/gpt-oss-120b",
+        "model": "openrouter/openai/gpt-4o-mini",
         ...
     },
 }

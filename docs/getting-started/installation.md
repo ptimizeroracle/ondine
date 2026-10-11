@@ -216,6 +216,19 @@ See [Azure Managed Identity Guide](../guides/azure-managed-identity.md) for deta
 export ANTHROPIC_API_KEY="sk-ant-..."  # pragma: allowlist secret
 ```
 
+### OpenRouter
+
+One key for hundreds of models, including free ones. Put the route in the model
+id and leave the provider out:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."  # pragma: allowlist secret
+```
+
+```python
+.with_llm(model="openrouter/openai/gpt-4o-mini")
+```
+
 ### Groq
 
 ```bash
@@ -230,6 +243,7 @@ Or put everything in a `.env` file at your project root:
 # .env
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
 GROQ_API_KEY=gsk_...
 ```
 
