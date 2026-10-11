@@ -58,3 +58,34 @@ def test_groq_presets_name_models_groq_serves(
 
 def test_quickpipeline_reads_a_groq_prefixed_model_as_groq():
     assert QuickPipeline._detect_provider("groq/openai/gpt-oss-20b") == "groq"
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openrouter/openai/gpt-4o-mini",
+        "together_ai/meta-llama/Llama-3-70b-chat-hf",
+        "moonshot/kimi-k2",
+    ],
+)
+def test_quickpipeline_lets_a_litellm_model_id_name_its_own_route(model):
+    """A ``route/model`` id for a provider ondine has no name for is LiteLLM's.
+
+    These fell through to the OpenAI default, so an OpenRouter model was sent
+    to OpenAI and rejected as an invalid model id.
+    """
+    assert QuickPipeline._detect_provider(model) == "litellm"
+
+
+@pytest.mark.parametrize(
+    ("model", "provider"),
+    [
+        ("gpt-4o-mini", "openai"),
+        ("claude-3-5-sonnet-20241022", "anthropic"),
+        ("azure/my-deployment", "azure_openai"),
+        ("mlx/qwen3", "mlx"),
+        ("some-unknown-model", "openai"),
+    ],
+)
+def test_quickpipeline_still_detects_bare_and_named_models(model, provider):
+    assert QuickPipeline._detect_provider(model) == provider

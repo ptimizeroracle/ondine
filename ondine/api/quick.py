@@ -274,6 +274,7 @@ class QuickPipeline:
             "gpt-4o-mini" -> "openai"
             "claude-3-sonnet" -> "anthropic"
             "groq/openai/gpt-oss-20b" -> "groq"
+            "openrouter/openai/gpt-4o-mini" -> "litellm"
         """
         model_lower = model.lower()
 
@@ -290,7 +291,14 @@ class QuickPipeline:
                 if re.search(pattern, model_lower):
                     return provider
 
-        # Default to openai if can't detect
+        # A "route/model" id for a provider ondine has no name of its own for
+        # (openrouter/..., together_ai/..., moonshot/...) is a LiteLLM id: the
+        # model names its route, and LiteLLM resolves it. Defaulting these to
+        # openai sent an OpenRouter model to OpenAI.
+        if "/" in model_lower:
+            return "litellm"
+
+        # A bare name nothing recognised: OpenAI is the most likely intent.
         return "openai"
 
     @staticmethod
