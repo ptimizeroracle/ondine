@@ -487,3 +487,39 @@ class TestResultContainerDataFrameIdioms:
             {"product": "laptop", "price": 999},
             {"product": "apple", "price": 1},
         ]
+
+
+class TestResultContainerMoreDataFrameIdioms:
+    """Idioms the shipped examples use that the container still rejected."""
+
+    @staticmethod
+    def _container():
+        from ondine.adapters.containers.result_container import ResultContainerImpl
+
+        return ResultContainerImpl(
+            data=[
+                {"product": "laptop", "category": "Electronics"},
+                {"product": "phone", "category": "Electronics"},
+                {"product": "apple", "category": "Food"},
+            ],
+            columns=["product", "category"],
+        )
+
+    def test_to_csv_accepts_index_false_like_a_dataframe(self, tmp_path):
+        """``result.data.to_csv(path, index=False)`` is in examples and docs."""
+        path = tmp_path / "out.csv"
+
+        self._container().to_csv(path, index=False)
+
+        assert path.read_text().splitlines() == [
+            "product,category",
+            "laptop,Electronics",
+            "phone,Electronics",
+            "apple,Food",
+        ]
+
+    def test_a_column_counts_its_values_most_common_first(self):
+        counts = self._container()["category"].value_counts()
+
+        assert counts.to_dict() == {"Electronics": 2, "Food": 1}
+        assert list(counts.index) == ["Electronics", "Food"]

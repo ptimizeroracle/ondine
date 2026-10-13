@@ -49,7 +49,8 @@ def example_1_python_api():
         .with_llm(
             model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
-            max_tokens=10,
+            # No max_tokens: a reasoning model spends tokens thinking before
+            # it answers, and a tight limit leaves it with nothing to say.
         )
         .with_batch_size(100)
         .build()
@@ -69,7 +70,6 @@ def example_1_python_api():
         .with_llm(
             model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.3,
-            max_tokens=200,
         )
         .with_batch_size(50)
         .build()
@@ -140,7 +140,6 @@ Return JSON:
         .with_llm(
             model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             temperature=0.0,
-            max_tokens=300,
         )
         .build()
     )

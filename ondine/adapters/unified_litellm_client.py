@@ -229,6 +229,7 @@ from typing import TYPE_CHECKING
 
 from ondine.adapters.llm_client import LLMClient
 from ondine.core.exceptions import (
+    EmptyResponseError,
     InvalidAPIKeyError,
     ModelNotFoundError,
     QuotaExceededError,
@@ -908,7 +909,15 @@ class UnifiedLiteLLMClient(LLMClient):
             raise self._map_provider_error(e)
 
         # Extract response
-        text = response.choices[0].message.content
+        choice = response.choices[0]
+        text = choice.message.content
+        if text is None:
+            # Answered, but with nothing in it. Passing None on would make a
+            # failed call look like a row whose answer happens to be empty.
+            raise EmptyResponseError(
+                f"{self.model} returned no content "
+                f"(finish_reason={getattr(choice, 'finish_reason', None)!r})."
+            )
         tokens_in = response.usage.prompt_tokens if response.usage else 0
         tokens_out = response.usage.completion_tokens if response.usage else 0
         latency_ms = (time.time() - start) * 1000

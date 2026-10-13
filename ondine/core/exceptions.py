@@ -156,6 +156,25 @@ class QuotaExceededError(NonRetryableError):
     pass
 
 
+class EmptyResponseError(Exception):
+    """
+    The provider answered, but with no text.
+
+    Raised when a completion comes back with ``content=None`` — a reasoning
+    model that spent its whole token budget thinking (``finish_reason`` of
+    ``length``), or a reply withheld by a content filter. The call succeeded
+    at the HTTP level, so nothing else reports it, and passing the ``None``
+    on would turn a failed call into an empty cell.
+
+    It goes through the row's error policy like any other failed call. It is
+    not a :class:`NonRetryableError`: an empty reply is often transient.
+
+    Resolution:
+        For ``finish_reason='length'``, raise ``max_tokens``. For
+        ``content_filter``, the prompt or the reply was blocked.
+    """
+
+
 class PipelineExecutionError(Exception):
     """
     A run finished the pipeline but produced no usable output.
