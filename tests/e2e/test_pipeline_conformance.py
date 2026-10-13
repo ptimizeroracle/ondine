@@ -11,6 +11,8 @@ why that is the failure mode worth this much machinery.
 
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -460,3 +462,158 @@ def test_a_structured_batch_that_drops_an_item_reports_the_loss():
     # The dropped row is named as a loss, not papered over.
     assert result.is_complete is False
     assert 2 in result.lost_row_indices
+
+
+# ── prompt formatting ─────────────────────────────────────────────────────
+#
+# A row whose prompt cannot be built never reaches the provider. It used to
+# leave no trace either: the formatter logged a line and moved on, so the row
+# came back empty in a run reporting ``is_complete=True`` and no errors.
+
+
+def test_a_row_whose_prompt_cannot_be_built_is_reported_lost():
+    frame = conformance_frame(4)
+    frame["divisor"] = [1, 0, 2, 0]
+    client = LedgerClient()
+
+    result = (
+        PipelineBuilder.create()
+        .from_dataframe(
+            frame, input_columns=["marker", "divisor"], output_columns=["answer"]
+        )
+        # Jinja renders per row, so this fails only where divisor is zero.
+        .with_prompt("Answer for {{ marker }} {{ 10 // divisor }}")
+        .with_custom_llm_client(client)
+        .build()
+        .execute()
+    )
+
+    answers = list(result.to_pandas()["answer"])
+    assert [answers[0], answers[2]] == [
+        answer_for(token_for(0)),
+        answer_for(token_for(2)),
+    ]
+    assert result.is_complete is False
+    assert result.lost_row_indices == [1, 3]
+    assert "division" in result.error_summary()
+    # The provider was never asked about the rows that had no prompt.
+    assert client.tokens_seen == {token_for(0), token_for(2)}
+
+
+def _prompt_sent(template: str) -> str:
+    """The prompt the provider receives for row 0 under ``template``."""
+    client = LedgerClient()
+    (
+        PipelineBuilder.create()
+        .from_dataframe(
+            conformance_frame(1), input_columns=["marker"], output_columns=["answer"]
+        )
+        .with_prompt(template)
+        .with_custom_llm_client(client)
+        .build()
+        .execute()
+    )
+    return client.prompts[0]
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # What everyone writes first.
+        'Answer for {marker}. Return JSON: {"answer": "..."}',
+        # The standard Python escape, which used to flip the template into
+        # Jinja mode and die on a syntax error.
+        'Answer for {marker}. Return JSON: {{"answer": "..."}}',
+    ],
+)
+def test_a_json_example_in_a_prompt_reaches_the_provider_verbatim(template):
+    """Braces that are not a ``{column}`` placeholder are text.
+
+    A JSON example is the commonest thing to put in a prompt, and there was
+    no working way to write one: unescaped it read as a template variable
+    named ``"answer"`` and every row failed; escaped it was taken for Jinja.
+    """
+    assert _prompt_sent(template) == (
+        f'Answer for {token_for(0)}. Return JSON: {{"answer": "..."}}'
+    )
+
+
+def test_nested_json_in_a_prompt_survives_intact():
+    template = 'Answer for {marker}. Shape: {"a": {"b": [1, 2]}, "c": {}}'
+
+    assert _prompt_sent(template).endswith('Shape: {"a": {"b": [1, 2]}, "c": {}}')
+
+
+def test_a_jinja_template_is_still_rendered_by_jinja():
+    assert _prompt_sent("Answer for {{ marker | replace('row', 'row') }}!") == (
+        f"Answer for {token_for(0)}!"
+    )
+
+
+# ── several output columns ────────────────────────────────────────────────
+#
+# Asking for two columns without naming a parser used to select the raw-text
+# parser, which fills a column called "output" — neither of the two asked for.
+# Every cell came back empty in a run reporting complete, with no errors: a
+# whole paid run producing nothing, marked successful.
+
+
+class _JsonLedgerClient(LedgerClient):
+    """Answers each row with a JSON object carrying that row's own answer."""
+
+    def _answer_token(self, token: str) -> str:
+        answer = super()._answer_token(token)
+        return json.dumps({"brand": answer, "category": f"category-of-{token}"})
+
+
+def _two_column_run(client: LedgerClient, rows: int = 3):
+    return (
+        PipelineBuilder.create()
+        .from_dataframe(
+            conformance_frame(rows),
+            input_columns=["marker"],
+            output_columns=["brand", "category"],
+        )
+        .with_prompt(PROMPT)
+        .with_custom_llm_client(client)
+        .build()
+        .execute()
+    )
+
+
+def test_two_output_columns_are_filled_from_a_json_answer_by_default():
+    frame = _two_column_run(_JsonLedgerClient()).to_pandas()
+
+    assert list(frame["brand"]) == expected_answers(3)
+    assert list(frame["category"]) == [
+        f"category-of-{token_for(index)}" for index in range(3)
+    ]
+
+
+def test_an_answer_in_the_wrong_shape_is_reported_not_returned_as_empty_rows():
+    """A plain-text reply cannot fill two columns; the run must say so."""
+    from ondine.core.exceptions import PipelineExecutionError
+
+    with pytest.raises(PipelineExecutionError) as raised:
+        _two_column_run(LedgerClient())
+
+    assert "not a JSON object" in str(raised.value)
+    assert sorted(error.row_index for error in raised.value.errors) == [0, 1, 2]
+
+
+def test_one_row_answering_in_the_wrong_shape_is_the_only_row_lost():
+    class _OneRowForgetsJson(_JsonLedgerClient):
+        def _answer_token(self, token: str) -> str:
+            if token == token_for(1):
+                return LedgerClient._answer_token(self, token)
+            return super()._answer_token(token)
+
+    result = _two_column_run(_OneRowForgetsJson())
+
+    assert result.lost_row_indices == [1]
+    assert result.is_complete is False
+    brands = list(result.to_pandas()["brand"])
+    assert [brands[0], brands[2]] == [
+        answer_for(token_for(0)),
+        answer_for(token_for(2)),
+    ]

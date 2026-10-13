@@ -1,5 +1,6 @@
 """Prompt formatting stage for template-based prompt generation."""
 
+import re
 import time
 from decimal import Decimal
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from jinja2 import Template as Jinja2Template
 
 from ondine.core.data_container import DataContainer
+from ondine.core.exceptions import ConfigurationError
 from ondine.core.models import (
     CostEstimate,
     PromptBatch,
@@ -15,6 +17,65 @@ from ondine.core.models import (
 )
 from ondine.core.specifications import PromptSpec
 from ondine.stages.pipeline_stage import PipelineStage
+
+# A str.format placeholder: {name}, optionally with attribute/index access, a
+# conversion or a format spec ({price:.2f}, {row[key]}, {name!r}).
+_PLACEHOLDER = re.compile(r"\{[A-Za-z_]\w*(?:[.\[!:][^{}]*)?\}")
+
+# Jinja syntax: a statement or comment tag, or {{ followed by a name, as in
+# {{ name }} or {{ name | upper }}. "{{" followed by anything else — a quote,
+# a newline before a JSON key — is an escaped literal brace, not Jinja.
+# A maximal run of one kind of brace: "{", "}}", "{{{".
+_BRACE_RUN = re.compile(r"\{+|\}+")
+
+_JINJA_SYNTAX = re.compile(r"\{%|\{#|\{\{\s*[A-Za-z_]")
+
+
+def _looks_like_jinja(template: str) -> bool:
+    """Whether ``template`` is written in Jinja rather than ``str.format``."""
+    return _JINJA_SYNTAX.search(template) is not None
+
+
+def _escape_literal_braces(template: str) -> str:
+    """Make every brace in ``template`` that is not a placeholder literal.
+
+    Lets a prompt carry a JSON example as written. The result formats with
+    ``str.format`` to what the author meant.
+
+    ``}}`` is ambiguous: one escaped brace, or two that close nested JSON. The
+    template is read one way throughout. If every run of braces outside the
+    placeholders has even length, the author doubled them deliberately and the
+    template is left alone. A single odd run means the braces were written
+    plainly — nested JSON always has one — and each is doubled.
+    """
+    pieces = _split_on_placeholders(template)
+    literal_text = "".join(
+        text for text, is_placeholder in pieces if not is_placeholder
+    )
+    already_escaped = all(
+        len(run.group()) % 2 == 0 for run in _BRACE_RUN.finditer(literal_text)
+    )
+    if already_escaped:
+        return template
+    return "".join(
+        text if is_placeholder else text.replace("{", "{{").replace("}", "}}")
+        for text, is_placeholder in pieces
+    )
+
+
+def _split_on_placeholders(template: str) -> list[tuple[str, bool]]:
+    """``template`` as ``(text, is_placeholder)`` pieces, in order."""
+    pieces: list[tuple[str, bool]] = []
+    position = 0
+    for match in _PLACEHOLDER.finditer(template):
+        # "{{name}}" is an escaped literal, not a placeholder in braces.
+        if template[max(match.start() - 1, 0) : match.start()] == "{":
+            continue
+        pieces.append((template[position : match.start()], False))
+        pieces.append((match.group(), True))
+        position = match.end()
+    pieces.append((template[position:], False))
+    return pieces
 
 
 class PromptFormatterStage(
@@ -77,8 +138,7 @@ class PromptFormatterStage(
 
         # Determine template rendering mode
         if self.use_jinja2 is None:
-            # Auto-detect: Use Jinja2 if template contains {{ }}
-            use_jinja2 = "{{" in template_str
+            use_jinja2 = _looks_like_jinja(template_str)
             if use_jinja2:
                 self.logger.info(
                     "Auto-detected Jinja2 syntax ({{variable}}), enabling Jinja2 renderer"
@@ -94,6 +154,13 @@ class PromptFormatterStage(
             # We're generating text prompts, not web content, so HTML escaping
             # would corrupt the prompt data sent to the LLM
             jinja_template = Jinja2Template(template_str, autoescape=False)  # noqa: S701
+
+        # str.format reads every brace as a placeholder, so a JSON example in
+        # the prompt would be a template error. Escape the braces that are not
+        # placeholders once, up front.
+        format_template = (
+            template_str if use_jinja2 else _escape_literal_braces(template_str)
+        )
 
         # Format prompt for each row
         total_rows = len(container)
@@ -141,7 +208,7 @@ class PromptFormatterStage(
                 if use_jinja2 and jinja_template:
                     prompt = jinja_template.render(**row_data)
                 else:
-                    prompt = template_str.format(**row_data)
+                    prompt = format_template.format(**row_data)
 
                 # Auto-prepend KB context when the retrieval stage produced it
                 # but the user's template doesn't explicitly reference it.
@@ -183,10 +250,25 @@ class PromptFormatterStage(
                 metadata_list.append(metadata)
 
             except KeyError as e:
-                self.logger.warning(f"Missing template variable at row {idx}: {e}")
-                continue
+                # A {name} with no matching column fails the same way on every
+                # row: the template is wrong, not the data. Stop before any
+                # provider call rather than format nothing and let a later
+                # stage fail about something else.
+                raise ConfigurationError(
+                    f"The prompt template refers to {{{e.args[0]}}}, which is "
+                    f"not an input column (columns: {sorted(row)}). Check the "
+                    f"spelling, or add the column to input_columns."
+                ) from e
             except Exception as e:
-                self.logger.error(f"Error formatting prompt at row {idx}: {e}")
+                # This row's data broke the template; the others may be fine.
+                # Record it as lost: with no prompt it reaches no later stage,
+                # so nothing else would ever notice it is missing.
+                self.logger.debug(f"Error formatting prompt at row {idx}: {e}")
+                context.record_failed_rows(
+                    [idx],
+                    stage=self.name,
+                    message=f"prompt could not be built: {e}",
+                )
                 continue
 
         # Create batches

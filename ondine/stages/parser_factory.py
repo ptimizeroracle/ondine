@@ -93,15 +93,20 @@ def create_response_parser(
         return RegexParser(patterns=prompt_spec.regex_patterns)
 
     if response_format == "raw":
-        logger.info("Creating RawTextParser (default, backward compatible)")
-
         if len(output_columns) > 1:
-            logger.warning(
-                f"Using RawTextParser with {len(output_columns)} output columns. "
-                f"Only the first column will be populated. "
-                f"Consider using response_format='json' or 'regex' for multi-column output."
+            # Raw text fills one column named "output" — none of the several
+            # asked for — so every cell came back empty from a run that
+            # reported success. Several columns can only come from a structured
+            # answer; read it as JSON. A reply that is not JSON still lands in
+            # the first column rather than being discarded.
+            logger.info(
+                f"{len(output_columns)} output columns: reading each response as "
+                f"a JSON object with keys {output_columns}. Ask for that shape in "
+                f"the prompt, or set response_format='regex' / structured output."
             )
+            return JSONParser(strict=False)
 
+        logger.info("Creating RawTextParser (default, backward compatible)")
         return RawTextParser()
 
     # Should never reach here due to Pydantic validation

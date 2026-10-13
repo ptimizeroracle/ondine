@@ -262,14 +262,34 @@ class ResponseParserStage(
                             elif not isinstance(source, dict):
                                 source = {}
 
+                        if not any(col in source for col in output_cols):
+                            # The reply answered, but not in the shape asked
+                            # for, so there is nothing to put in any column.
+                            # Say so: the cells stay empty either way, and an
+                            # empty row with no error reads as a finished one.
+                            context.record_failed_rows(
+                                [metadata.row_index],
+                                stage=self.name,
+                                message=(
+                                    f"response is not a JSON object with any of "
+                                    f"the output columns {list(output_cols)}: "
+                                    f"{response_text.strip()[:120]!r}"
+                                ),
+                            )
+
                         for col in output_cols:
                             row_data[col] = source.get(col)
 
                     results[metadata.row_index] = row_data
 
                 except Exception as e:
-                    self.logger.error(
+                    self.logger.debug(
                         f"Failed to parse response at row {metadata.row_index}: {e}"
+                    )
+                    context.record_failed_rows(
+                        [metadata.row_index],
+                        stage=self.name,
+                        message=f"response could not be parsed: {e}",
                     )
                     # Store None for failed parses
                     results[metadata.row_index] = {
