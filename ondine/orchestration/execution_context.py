@@ -203,6 +203,12 @@ class ExecutionContext:
     # ``skipped_rows`` stays exact regardless of how many entries were kept.
     row_errors: list[ErrorInfo] = field(default_factory=list, repr=False)
 
+    # Rows already recorded as lost. A row is lost once: when a later stage
+    # trips over the hole an earlier one left (a parser handed the skip marker
+    # the invocation stage wrote), the first cause is the real one, and
+    # counting the row again would make skipped + failed exceed the rows lost.
+    _lost_rows: set[int] = field(default_factory=set, repr=False)
+
     #: Entries kept before ``row_errors`` stops growing. Enough to identify a
     #: pattern in the failures; small enough to never be the reason a run runs
     #: out of memory.
@@ -294,9 +300,12 @@ class ExecutionContext:
             stage: Stage that gave up on them.
             message: Provider or policy explanation, kept verbatim.
         """
-        self.skipped_rows += count
+        newly_lost = self._claim_lost_rows(
+            range(first_row_index, first_row_index + count)
+        )
+        self.skipped_rows += len(newly_lost)
         self._record_row_errors(
-            range(first_row_index, first_row_index + count),
+            newly_lost,
             stage=stage,
             message=message,
             error_type="skipped",
@@ -318,11 +327,20 @@ class ExecutionContext:
         Takes explicit indices rather than a range: a batch's rows are whatever
         the aggregator put in it, not necessarily consecutive.
         """
-        indices = list(row_indices)
-        self.failed_rows += len(indices)
+        newly_lost = self._claim_lost_rows(row_indices)
+        self.failed_rows += len(newly_lost)
         self._record_row_errors(
-            indices, stage=stage, message=message, error_type="parse_failure"
+            newly_lost, stage=stage, message=message, error_type="parse_failure"
         )
+
+    def _claim_lost_rows(self, row_indices: Iterable[int]) -> list[int]:
+        """The rows among ``row_indices`` not already recorded as lost.
+
+        Marks them lost, so a second report about the same row is ignored.
+        """
+        newly_lost = [index for index in row_indices if index not in self._lost_rows]
+        self._lost_rows.update(newly_lost)
+        return newly_lost
 
     def _record_row_errors(
         self,

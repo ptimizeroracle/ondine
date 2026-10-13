@@ -198,15 +198,17 @@ class TestBackwardCompatibility:
         result = parser.parse("Some output")
         assert result["output"] == "Some output"
 
-    def test_multiple_outputs_with_raw_parser_warns(self):
-        """Test raw parser with multiple outputs logs warning."""
+    def test_multiple_outputs_are_read_as_json_not_raw_text(self):
+        """Raw text fills one column named "output" — none of several asked for.
+
+        Selecting it here left every cell empty in a run that reported success,
+        so several output columns get the JSON parser instead.
+        """
         spec = PromptSpec(
             template="Process: {text}",
             response_format="raw",
         )
 
-        # Multiple output columns with raw parser
-        # Should create parser but log warning
         parser = create_response_parser(spec, ["output1", "output2", "output3"])
 
-        assert isinstance(parser, RawTextParser)
+        assert isinstance(parser, JSONParser)

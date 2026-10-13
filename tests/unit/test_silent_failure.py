@@ -138,6 +138,28 @@ class TestSkipCounting:
         assert ctx.skipped_rows == 3
 
 
+class TestARowIsLostOnce:
+    """A second stage tripping over the same row must not count it again."""
+
+    def test_a_row_skipped_then_reported_unparseable_is_one_loss(self):
+        ctx = _fresh_context()
+
+        ctx.record_skipped_rows(1, 1, stage="LLMInvocation", message="provider down")
+        ctx.record_failed_rows([1], stage="ResponseParser", message="not JSON")
+
+        assert (ctx.skipped_rows, ctx.failed_rows) == (1, 0)
+        assert [error.message for error in ctx.row_errors] == ["provider down"]
+
+    def test_a_batch_report_counts_only_the_rows_not_already_lost(self):
+        ctx = _fresh_context()
+
+        ctx.record_failed_rows([2], stage="ResponseParser", message="not JSON")
+        ctx.record_skipped_rows(0, 4, stage="LLMInvocation", message="batch failed")
+
+        assert (ctx.skipped_rows, ctx.failed_rows) == (3, 1)
+        assert sorted(error.row_index for error in ctx.row_errors) == [0, 1, 2, 3]
+
+
 class TestSkippedMarkerIsInvalidOutput:
     def test_all_skipped_cells_count_as_zero_valid_outputs(self):
         """The [SKIPPED] sentinel is a failure marker, not valid output."""
