@@ -318,3 +318,48 @@ def test_reopen_sees_previously_appended_rows(tmp_path: Path) -> None:
         assert rows[0][1].text == "persisted"
     finally:
         b.close()
+
+
+def _open_cache_when_told(path: str, start, results) -> None:
+    """Child process: open the cache the instant ``start`` fires."""
+    from ondine.adapters.response_cache import SqliteResponseCache
+
+    start.wait()
+    try:
+        SqliteResponseCache(path)
+        results.put("ok")
+    except Exception as error:  # reported to the parent, which asserts on it
+        results.put(f"{type(error).__name__}: {error}")
+
+
+def test_processes_creating_the_cache_at_the_same_instant_all_succeed(tmp_path):
+    """Two pipelines started together in one directory must both start.
+
+    Switching a new database to WAL takes a lock SQLite's busy timeout does
+    not wait for, so whichever process lost the race died at startup with
+    "database is locked".
+    """
+    import multiprocessing
+
+    spawn = multiprocessing.get_context("spawn")
+    failures: list[str] = []
+    for attempt in range(6):
+        path = str(tmp_path / f"round-{attempt}" / "responses.db")
+        (tmp_path / f"round-{attempt}").mkdir()
+        start, results = spawn.Event(), spawn.Queue()
+        workers = [
+            spawn.Process(target=_open_cache_when_told, args=(path, start, results))
+            for _ in range(8)
+        ]
+        for worker in workers:
+            worker.start()
+        import time
+
+        time.sleep(1.0)  # let every child reach start.wait()
+        start.set()
+        outcomes = [results.get(timeout=60) for _ in workers]
+        for worker in workers:
+            worker.join()
+        failures += [outcome for outcome in outcomes if outcome != "ok"]
+
+    assert failures == []

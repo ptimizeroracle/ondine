@@ -53,6 +53,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
@@ -166,6 +167,11 @@ CREATE TABLE IF NOT EXISTS responses (
 """
 
 
+# How long opening the cache waits for another process that is creating the
+# same database at the same moment. Setup takes milliseconds; this is slack.
+_SETUP_LOCK_WAIT_SECONDS = 10.0
+
+
 class SqliteResponseCache(ResponseCache):
     """SQLite implementation using WAL for crash atomicity.
 
@@ -193,15 +199,34 @@ class SqliteResponseCache(ResponseCache):
             isolation_level=None,  # autocommit — each INSERT is its own txn
             check_same_thread=False,
         )
-        # WAL survives a hard kill with every committed txn intact.
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
         # Multiple processes/connections may share the same responses.db
         # (e.g. pipelined streaming spins one sub-pipeline per chunk, each
         # opening its own connection). Wait up to 5s for the writer lock
         # instead of erroring with "database is locked".
         self._conn.execute("PRAGMA busy_timeout=5000")
-        self._conn.execute(_SCHEMA)
+        self._run_setup_statement("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._run_setup_statement(_SCHEMA)
+
+    def _run_setup_statement(self, statement: str) -> None:
+        """Run a statement that must win an exclusive lock, waiting for it.
+
+        Switching a database to WAL, and creating its first table, need a
+        lock that ``busy_timeout`` does not wait for: SQLite reports "locked"
+        at once. Two pipelines started together in one directory both do this
+        to the same new file, and the loser died at startup. WAL also survives
+        a hard kill with every committed transaction intact, so it is worth
+        waiting for rather than skipping.
+        """
+        deadline = time.monotonic() + _SETUP_LOCK_WAIT_SECONDS
+        while True:
+            try:
+                self._conn.execute(statement)
+                return
+            except sqlite3.OperationalError as error:
+                if "locked" not in str(error) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
 
     def append(
         self,

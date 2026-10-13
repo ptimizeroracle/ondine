@@ -1861,7 +1861,7 @@ class Pipeline:
         # and useless advice when it said exactly which of the three is wrong.
         provider_said = result.error_summary()
         cause = (
-            f"Provider/stage errors: {provider_said}."
+            f"Provider/stage errors: {provider_said.rstrip('.')}."
             if provider_said
             else "Check the model name, credentials, and provider."
         )

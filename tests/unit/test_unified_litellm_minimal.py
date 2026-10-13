@@ -560,3 +560,41 @@ class TestAuthErrorGuidance:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestEmptyProviderResponse:
+    """A reply with no text is a failed call, not an answer of ``None``.
+
+    Reasoning models that spend their whole budget thinking, and filtered
+    replies, come back with ``content=None``. That ``None`` was passed on as
+    the row's answer: with a response cache attached it failed the cache's
+    NOT NULL column and the row was skipped with a SQL error for a reason;
+    without one it became an empty cell in a run reporting no errors.
+    """
+
+    @staticmethod
+    async def _invoke(response: FakeResponse) -> LLMResponse:
+        spec = LLMSpec(provider="litellm", model="openai/gpt-4o-mini")
+        with patch(
+            "ondine.adapters.unified_litellm_client.litellm.acompletion",
+            new_callable=AsyncMock,
+        ) as mock_completion:
+            mock_completion.return_value = response
+            return await UnifiedLiteLLMClient(spec).ainvoke("test prompt")
+
+    @pytest.mark.asyncio
+    async def test_a_reply_with_no_content_raises_naming_why_it_stopped(self):
+        from ondine.core.exceptions import EmptyResponseError
+
+        response = FakeResponse(content=None)
+        response.choices[0].finish_reason = "length"
+
+        with pytest.raises(EmptyResponseError, match="length"):
+            await self._invoke(response)
+
+    @pytest.mark.asyncio
+    async def test_a_whitespace_only_reply_is_still_an_answer(self):
+        """Blank is the model's choice; only *absent* content is a failure."""
+        result = await self._invoke(FakeResponse(content="  "))
+
+        assert result.text == "  "

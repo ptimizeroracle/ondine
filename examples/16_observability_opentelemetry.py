@@ -11,15 +11,16 @@ Setup:
          -p 4318:4318 \
          jaegertracing/all-in-one:latest
 
-    2. Install OpenTelemetry exporters:
-       pip install opentelemetry-exporter-jaeger
+    2. Install the OTLP exporter (Jaeger accepts OTLP natively; the old
+       opentelemetry-exporter-jaeger package has been retired upstream):
+       pip install 'ondine[observability]' opentelemetry-exporter-otlp
 
     3. Run this example and view traces at http://localhost:16686
 """
 
 import pandas as pd
 from opentelemetry import trace
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -30,17 +31,14 @@ from ondine import PipelineBuilder
 resource = Resource(attributes={SERVICE_NAME: "ondine-example"})
 tracer_provider = TracerProvider(resource=resource)
 
-# Add Jaeger exporter
-jaeger_exporter = JaegerExporter(
-    agent_host_name="localhost",
-    agent_port=6831,
-)
-tracer_provider.add_span_processor(BatchSpanProcessor(jaeger_exporter))
+# Send spans over OTLP/HTTP, the port published in the docker command above
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
 # Set as global tracer provider
 trace.set_tracer_provider(tracer_provider)
 
-print("OpenTelemetry configured to export to Jaeger at localhost:6831")
+print("OpenTelemetry configured to export to Jaeger at localhost:4318 (OTLP)")
 
 # Sample data
 data = pd.DataFrame(

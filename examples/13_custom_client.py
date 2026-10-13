@@ -162,7 +162,8 @@ if __name__ == "__main__":
         )
         .with_prompt("Process this: {text}")
         .with_custom_llm_client(custom_client)  # Inject custom client
-        .with_batch_size(10)
+        # No with_batch_size(): batching sends several rows in one prompt and
+        # expects a JSON array back, which this mock client does not produce.
         .build()
     )
 

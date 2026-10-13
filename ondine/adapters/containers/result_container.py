@@ -181,22 +181,48 @@ class ResultContainerImpl(BaseDataContainer):
 
         return pl.DataFrame(self._data)
 
-    def to_csv(self, path: str | Path, **kwargs: Any) -> None:
+    def to_csv(
+        self,
+        path: str | Path,
+        *,
+        index: bool = False,
+        header: bool = True,
+        mode: str = "w",
+        sep: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Write results to CSV file.
 
+        Takes the ``DataFrame.to_csv`` arguments callers reach for, so
+        ``result.data.to_csv(path, index=False)`` and the chunk-appending
+        ``to_csv(path, mode="a", header=False)`` work as they do on a frame.
+
         Args:
             path: Output file path
+            index: Accepted for DataFrame compatibility. Rows carry no index,
+                so none is written; ``True`` is rejected rather than ignored.
+            header: Write the column names as the first line.
+            mode: File mode: ``"w"`` to replace, ``"a"`` to append.
+            sep: Field delimiter (the ``csv`` module's ``delimiter``).
             **kwargs: Additional arguments for csv.DictWriter
         """
+        if index:
+            raise ValueError(
+                "to_csv(index=True) is not supported: result rows have no index. "
+                "Use result.to_pandas().to_csv(...) to write one."
+            )
+        if sep is not None:
+            kwargs.setdefault("delimiter", sep)
         path = Path(path)
 
-        with open(path, "w", newline="", encoding="utf-8") as f:
+        with open(path, mode, newline="", encoding="utf-8") as f:
             if not self._data:
                 return
 
             writer = csv.DictWriter(f, fieldnames=self.columns, **kwargs)
-            writer.writeheader()
+            if header:
+                writer.writeheader()
             writer.writerows(self._data)
 
         logger.info(f"Wrote {len(self)} rows to {path}")
@@ -442,6 +468,16 @@ class _ColumnAccessor(list):
     def tolist(self) -> list:
         """Pandas-compatible tolist()."""
         return list(self)
+
+    def value_counts(self, **kwargs: Any) -> Any:
+        """How often each value occurs, most common first, as a pandas Series.
+
+        Args:
+            **kwargs: Passed to ``pandas.Series.value_counts``.
+        """
+        import pandas as pd
+
+        return pd.Series(list(self)).value_counts(**kwargs)
 
     def isna(self) -> list[bool]:
         """Check for null/None values."""
