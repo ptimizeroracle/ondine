@@ -1,0 +1,106 @@
+name: Examples
+
+# Runs the example scripts for real, once a week, against the published
+# package. Examples are what new users copy, and nothing else executes them:
+# when they were finally run by hand, 9 of 25 failed — two of them in the
+# quickstart — and running them is also what exposed four ways the pipeline
+# lost rows without saying so (#293, #296).
+#
+# Only the examples that need nothing beyond an OpenRouter key (or no key at
+# all) run here; together they make about 25 free-tier requests, inside the
+# 50 a day the tier allows, which is why this is weekly and not daily.
+
+on:
+  schedule:
+    - cron: '43 7 * * 1'  # Mondays, after the daily Live Smoke run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: examples
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Run examples against the published package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      with:
+        python-version: '3.12'
+
+    # From PyPI, not from this checkout: the point is to test what users get.
+    - name: Install the published package
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install ondine
+        python -m pip list | grep -iE "^(ondine|litellm) "
+
+    # Run from a copy of examples/ outside the checkout, so "import ondine"
+    # resolves to the installed wheel rather than the source tree. Every
+    # example runs even if an earlier one fails, so one run reports them all.
+    - name: Run the examples
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        if [ -z "${OPENROUTER_API_KEY}" ]; then
+          echo "::error::OPENROUTER_API_KEY is not set; the examples cannot run."
+          exit 1
+        fi
+        mkdir -p "${RUNNER_TEMP}/run"
+        cp -R examples "${RUNNER_TEMP}/run/examples"
+        cd "${RUNNER_TEMP}/run"
+        failed=""
+        for example in \
+          06_from_config_file.py \
+          07_async_execution.py \
+          09_system_prompts.py \
+          13_custom_client.py \
+          15_custom_llm_provider.py \
+          17_plugin_architecture_demo.py \
+          multi_column_composition_example.py
+        do
+          echo "::group::${example}"
+          if python "examples/${example}"; then
+            echo "PASSED ${example}"
+          else
+            echo "::error::${example} failed"
+            failed="${failed} ${example}"
+          fi
+          echo "::endgroup::"
+        done
+        if [ -n "${failed}" ]; then
+          echo "Failed examples:${failed}"
+          exit 1
+        fi
+
+  # A scheduled failure reaches nobody on its own; this job files it as an
+  # issue. See .github/scripts/report-scheduled-failure.sh.
+  report:
+    name: Report failure
+    needs: run
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Open or update the failure issue
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        WORKFLOW_NAME: Examples
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: .github/scripts/report-scheduled-failure.sh
