@@ -1,6 +1,6 @@
 [project]
 name = "ondine"
-version = "2.0.6"
+version = "2.0.7"
 description = "Batch-process your DataFrames with LLMs, without the boilerplate."
 requires-python = ">=3.10"
 authors = [

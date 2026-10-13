@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7](https://github.com/ptimizeroracle/ondine/compare/v2.0.6...v2.0.7) (2026-10-13)
+
+
+### Bug Fixes
+
+* **pipeline:** stop losing rows silently in prompt formatting and parsing ([#293](https://github.com/ptimizeroracle/ondine/issues/293)) ([#294](https://github.com/ptimizeroracle/ondine/issues/294)) ([d9bccc1](https://github.com/ptimizeroracle/ondine/commit/d9bccc11331ffae713570bc5a77d35ee0035978b))
+* report empty provider replies, survive concurrent starts, widen result.data ([#296](https://github.com/ptimizeroracle/ondine/issues/296)) ([#297](https://github.com/ptimizeroracle/ondine/issues/297)) ([22a7da3](https://github.com/ptimizeroracle/ondine/commit/22a7da33d0d74eed51a2a4ffd605319ddff51ebb))
+
 ## [2.0.6](https://github.com/ptimizeroracle/ondine/compare/v2.0.5...v2.0.6) (2026-10-11)
 
 
