@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.8](https://github.com/ptimizeroracle/ondine/compare/v2.0.7...v2.0.8) (2026-10-14)
+
+
+### Bug Fixes
+
+* **readme:** replace the logo so GitHub, PyPI and dark mode all show it ([#300](https://github.com/ptimizeroracle/ondine/issues/300)) ([783d9d5](https://github.com/ptimizeroracle/ondine/commit/783d9d53a19b081607d95836655755bb01dd69ed))
+
 ## [2.0.7](https://github.com/ptimizeroracle/ondine/compare/v2.0.6...v2.0.7) (2026-10-13)
 
 
