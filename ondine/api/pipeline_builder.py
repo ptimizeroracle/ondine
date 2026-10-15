@@ -1659,9 +1659,10 @@ class PipelineBuilder:
         Args:
             threshold: Minimum similarity score to accept (0.0-1.0).
             action: What to do with ungrounded responses:
-                    "flag" (add grounding_score column),
-                    "retry" (re-prompt the LLM),
-                    "skip" (drop the row).
+                    "flag" (keep the answer, add a ``_grounding_score``
+                    column; filter on it yourself),
+                    "skip" (set the row's output cells to None; the row
+                    stays in the result).
             embed_fn: Optional callable ``(list[str]) -> list[list[float]]``
                       that returns embedding vectors for the given texts.
                       When provided, embedding cosine similarity augments
@@ -1670,7 +1671,16 @@ class PipelineBuilder:
         Returns:
             Self for chaining
         """
-        valid_actions = ("flag", "retry", "skip")
+        if action == "retry":
+            # Documented in early releases but never implemented (#307): the
+            # run kept every ungrounded answer and added no score column.
+            raise ValueError(
+                'with_grounding(action="retry") is not supported: Ondine does '
+                'not re-prompt ungrounded rows. Use action="flag" and filter '
+                'on the _grounding_score column, or action="skip" to blank '
+                "ungrounded rows."
+            )
+        valid_actions = ("flag", "skip")
         if action not in valid_actions:
             raise ValueError(f"action must be one of {valid_actions}, got '{action}'")
 
