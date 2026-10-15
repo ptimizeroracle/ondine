@@ -6,12 +6,12 @@ The context store gives your pipeline memory. Every LLM output becomes an eviden
 
 Attach a context store and each row flows through up to six stages:
 
-1. **Evidence priming** (optional, pre-LLM) -- searches the store for prior validated answers relevant to the current row. Top-k results land in `_evidence_context`.
+1. **Evidence priming** (optional, pre-LLM) -- searches the store for earlier answers relevant to the current row. Only answers that passed grounding, and evidence you stored yourself, are in the store. Top-k results land in `_evidence_context`.
 2. **LLM inference** -- the model generates a response, optionally informed by primed evidence.
 3. **Grounding verification** (optional, post-LLM) -- compares the response against source text using TF-IDF cosine similarity (or dense embeddings if you supply an `embed_fn`). Scores below the threshold get flagged.
 4. **Contradiction detection** (optional) -- rows sharing the same key columns but producing different outputs get flagged.
 5. **Confidence scoring** (optional) -- a composite score from grounding similarity and evidence support count, written to `confidence_score`.
-6. **Storage** -- validated responses go into the store as evidence records for next time.
+6. **Storage** -- answers that passed grounding go into the store as "input → answer" evidence records for next time. Answers no check passed are never stored.
 
 <!-- IMAGE_PLACEHOLDER
 title: Anti-Hallucination Pipeline Lifecycle
@@ -182,7 +182,7 @@ Here's the thing: if you want evidence to persist across runs, pass an explicit 
 
 ### with_evidence_priming()
 
-Before LLM inference, this searches the store for prior validated answers that match the current row. Top-k results land in `_evidence_context` and `_evidence_count`. Reference `_evidence_context` in your prompt template and the formatter picks it up automatically.
+Before LLM inference, this searches the store for earlier answers that match the current row. They reach the prompt labelled as reference only, not as verified answers. Top-k results land in `_evidence_context` and `_evidence_count`. Reference `_evidence_context` in your prompt template and the formatter picks it up automatically.
 
 ```python
 def with_evidence_priming(
@@ -197,7 +197,7 @@ def with_evidence_priming(
 - `top_k` -- Max evidence records retrieved per row.
 - `min_score` -- Minimum relevance score (0.0--1.0). Anything below this gets thrown out. Low-scoring evidence is just noise in your prompt.
 
-First run? The store is empty, so priming is a no-op. Evidence accumulates as grounding and verification store validated claims. Second run onward is where you see the benefit.
+First run? The store is empty, so priming is a no-op. Evidence accumulates only from answers that pass `with_grounding`. Grounding means "similar to its source text", not "correct". Without grounding, runs add nothing to the store. Second run onward is where you see the benefit.
 
 ```python
 pipeline = (
@@ -339,6 +339,8 @@ pipeline = (
 ### with_confidence_scoring()
 
 Rolls grounding similarity and evidence support count into a single number. Adds a `confidence_score` column (float, 0--1).
+
+The score is a heuristic built from TF-IDF similarity, not a calibrated probability that the answer is correct. It needs `with_grounding`: without a grounding score the column is empty.
 
 ```python
 def with_confidence_scoring(
