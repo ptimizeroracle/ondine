@@ -6,7 +6,9 @@ relevant evidence records from the context store (with attribution), and
 a ``_evidence_count`` column showing how many records matched.
 
 The PromptFormatterStage auto-injects ``_evidence_context`` into prompts so
-the LLM can leverage prior validated answers for consistency.
+the LLM can stay consistent with earlier answers. The store holds only
+evidence you stored yourself and LLM answers that passed grounding; an
+unchecked answer never reaches it (#308).
 """
 
 from __future__ import annotations

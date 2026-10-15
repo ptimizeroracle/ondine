@@ -9,7 +9,8 @@ Core stages (in typical execution order)
 - ``DataLoaderStage`` -- Load input data from CSV, DataFrame, or other
   sources into a ``DataContainer``.
 - ``EvidenceRetrievalStage`` -- Pre-LLM evidence priming: search the
-  context store for previously validated answers and inject them into
+  context store for earlier answers that passed grounding (or evidence
+  you stored yourself) and inject them into
   each row as ``_evidence_context`` so the LLM can leverage prior
   evidence for consistency.
 - ``KnowledgeRetrievalStage`` -- RAG retrieval: search the knowledge
