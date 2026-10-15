@@ -158,7 +158,7 @@ def test_a_dropped_row_is_named_in_the_result_not_only_counted():
     assert result.success is True
     assert result.is_complete is False
     # The surviving rows are still correct — the skip took one row, not the
-    # alignment of everything after it. The lost row is now None (#262).
+    # alignment of everything after it. The lost row is now missing (#262).
     output = result.to_pandas()
     assert list(output["answer"].drop(index=2)) == [
         answer_for(token_for(index)) for index in (0, 1, 3, 4)
@@ -166,12 +166,13 @@ def test_a_dropped_row_is_named_in_the_result_not_only_counted():
 
 
 def test_a_lost_row_reads_as_missing_not_as_a_sentinel_string():
-    """A lost row's cell is None, so df.isna() finds it (#262).
+    """A lost row's cell is missing, so df.isna() finds it (#262).
 
     Before, the three loss paths left three different strings ([SKIPPED],
     "null", "") that all survived isna(). Now a recorded loss is blanked to
-    None: isna() finds exactly the lost rows, lost_row_indices lists them, and
-    the survivors are untouched.
+    missing (None, or NaN once pandas 3 stores the column as str): isna() finds
+    exactly the lost rows, lost_row_indices lists them, and the survivors are
+    untouched.
     """
     failing = token_for(3)
     client = LedgerClient(fail_tokens={failing}, fail_times=None)
@@ -179,7 +180,6 @@ def test_a_lost_row_reads_as_missing_not_as_a_sentinel_string():
     result = build(client, conformance_frame(6)).execute()
     frame = result.to_pandas()
 
-    assert frame["answer"].iloc[3] is None
     assert frame.index[frame["answer"].isna()].tolist() == [3]
     assert result.lost_row_indices == [3]
     # No sentinel string leaked into any cell.

@@ -19,8 +19,7 @@ many times the Router happened to probe a dead one.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
@@ -35,9 +34,6 @@ from tests.e2e.router_ledger import (
     deployment_entry,
     registered_deployments,
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 PROMPT = "Answer for {marker}"
 
@@ -228,7 +224,7 @@ def test_a_failing_deployment_loses_only_its_own_rows():
 
     for index in range(rows):
         if token_for(index) in poisoned:
-            assert answers[index] is None  # a lost row reads as missing (#262)
+            assert pd.isna(answers[index])  # a lost row reads as missing (#262)
         else:
             assert answers[index] == expected[index]
 
