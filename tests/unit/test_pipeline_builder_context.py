@@ -90,9 +90,13 @@ class TestBuilderContextMethods:
         builder = self._base_builder().with_grounding(embed_fn=mock_fn)
         assert builder._custom_metadata["grounding"]["embed_fn"] is mock_fn
 
-    def test_with_grounding_retry_action_accepted(self):
-        builder = self._base_builder().with_grounding(action="retry")
-        assert builder._custom_metadata["grounding"]["action"] == "retry"
+    def test_with_grounding_rejects_retry_action(self):
+        # "retry" was accepted and documented but never re-prompted (#307):
+        # the run kept every ungrounded answer and added no score column.
+        # Failing at build time is the only honest answer until it exists.
+        with pytest.raises(ValueError, match="retry") as excinfo:
+            self._base_builder().with_grounding(action="retry")
+        assert '"flag"' in str(excinfo.value)
 
     def test_chaining_all_context_methods(self):
         store = RustContextStore(":memory:")
