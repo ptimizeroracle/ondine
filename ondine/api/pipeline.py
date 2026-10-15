@@ -1080,32 +1080,28 @@ class Pipeline:
                 )
                 if grounding_results:
                     grounding_score = grounding_results[0].confidence
-                    stored_claim_ids[idx] = grounding_results[0].claim_id
+                    # Only an answer that passed grounding becomes evidence a
+                    # later run can be primed with (#308). It is stored as
+                    # "input → answer", so a search on a similar input finds
+                    # it and the reader sees what was asked.
+                    row_index = row.get("_row_index", idx)
+                    stored_claim_ids[idx] = context_store.store(
+                        EvidenceRecord(
+                            text=f"{' '.join(source_text_parts)} → {output_text}",
+                            source_ref=f"grounded:row_{row_index}",
+                            claim_type="factual",
+                            source_type="llm_response",
+                            asserted_by="grounding_engine",
+                            confidence=grounding_score,
+                            metadata={"grounding_threshold": grounding_threshold},
+                        )
+                    )
                 else:
                     grounding_score = 0.0
                     if grounding_action == "skip":
                         for col in output_cols:
                             row[col] = None
                         grounding_score = None
-
-            # Always store the claim in the evidence graph so evidence
-            # priming can retrieve it on subsequent runs.  Store the full
-            # context (input + output) so TF-IDF search can match on the
-            # input text, not just the raw LLM answer.
-            if idx not in stored_claim_ids:
-                source_label = " ".join(source_text_parts) if source_text_parts else ""
-                evidence_text = (
-                    f"{source_label} → {output_text}" if source_label else output_text
-                )
-                record = EvidenceRecord(
-                    text=evidence_text,
-                    source_ref=f"row_{idx}",
-                    claim_type="factual",
-                    source_type="llm_response",
-                    asserted_by="pipeline",
-                )
-                cid = context_store.store(record)
-                stored_claim_ids[idx] = cid
 
             if include_confidence:
                 row["_grounding_score"] = grounding_score
@@ -1136,22 +1132,20 @@ class Pipeline:
             for key, entries in key_to_claims.items():
                 if len(entries) < 2:
                     continue
+                # The flag is decided here, from the answers alone. Only rows
+                # that passed grounding have a stored claim, so the edge in
+                # the store is recorded when both sides have one.
                 seen_values: dict[str, str] = {}
                 for idx, claim_id, val in entries:
-                    if not claim_id or not val:
-                        continue
-                    if val in seen_values:
+                    if not val or val in seen_values:
                         continue
                     for prev_val, prev_cid in seen_values.items():
-                        if (
-                            _values_contradict(prev_val, val, tolerance)
-                            and prev_cid
-                            and claim_id
-                        ):
+                        if not _values_contradict(prev_val, val, tolerance):
+                            continue
+                        result_rows[idx]["_contradiction"] = True
+                        if prev_cid and claim_id:
                             try:
                                 context_store.add_contradiction(prev_cid, claim_id)
-                                row = result_rows[idx]
-                                row["_contradiction"] = True
                             except Exception as exc:  # noqa: BLE001
                                 logger.debug("Contradiction store failed: %s", exc)
                     seen_values[val] = claim_id

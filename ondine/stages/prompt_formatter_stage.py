@@ -222,8 +222,9 @@ class PromptFormatterStage(
                 if ev_ctx and "_evidence_context" not in template_str:
                     prompt = (
                         f"{prompt}\n\n"
-                        f"Previously validated answers for similar inputs "
-                        f"(use as reference, not as ground truth):\n{ev_ctx}"
+                        f"Earlier answers for similar inputs, from the evidence "
+                        f"store. Each line names its source. Use them as reference "
+                        f"only; they are not verified as correct:\n{ev_ctx}"
                     )
 
                 # Add few-shot examples if specified (but NOT system message)

@@ -1554,8 +1554,10 @@ class PipelineBuilder:
     ) -> PipelineBuilder:
         """Configure the context store backend for evidence-based verification.
 
-        When enabled, the pipeline stores validated LLM responses and retrieves
-        prior evidence to enrich prompts and detect contradictions.
+        When enabled, the pipeline stores each LLM answer that passes
+        ``with_grounding`` as an "input → answer" evidence record. Answers no
+        check passed are never stored, so evidence priming cannot copy an
+        unchecked answer into a later prompt.
 
         Args:
             store: ContextStore instance, or None to auto-detect:
@@ -1600,12 +1602,15 @@ class PipelineBuilder:
         """Inject prior evidence into prompts before LLM inference.
 
         Enables pre-LLM evidence retrieval: for each row, searches the context
-        store for previously validated answers and prepends them to the prompt.
-        Results below ``min_score`` are discarded to avoid injecting noise.
+        store for earlier answers to similar inputs and appends them to the
+        prompt, labelled as reference only. Results below ``min_score`` are
+        discarded to avoid injecting noise.
 
-        On the first run the evidence store is empty — the feature is a no-op.
-        Evidence accumulates across runs as grounding/verification stores validated
-        claims, so subsequent runs benefit from prior answers.
+        The store holds evidence you stored yourself, plus LLM answers that
+        passed ``with_grounding`` in earlier runs. Grounding means the answer
+        is similar to its source text, not that it is correct. Without
+        grounding, pipeline runs add nothing, and priming finds only your own
+        evidence.
 
         Requires a context store (calls ``with_context_store()`` automatically
         if not already set).
@@ -1740,11 +1745,14 @@ class PipelineBuilder:
     ) -> PipelineBuilder:
         """Enable confidence scoring on LLM responses.
 
-        Adds a confidence score to each row, computed from the TF-IDF
-        grounding similarity and the evidence support count.
+        Adds a ``_confidence_score`` column computed from the grounding
+        similarity (and, in ``"default"`` mode, the evidence support count).
+        It is a heuristic, not a calibrated probability that the answer is
+        correct. It needs ``with_grounding``: without a grounding score the
+        column is empty.
 
         Args:
-            include_in_output: Whether to add a 'confidence_score' column
+            include_in_output: Whether to add the ``_confidence_score`` column
                                to the output DataFrame.
             scoring_mode: Scoring formula to use. One of ``"default"``,
                           ``"sigmoid"``, or ``"grounding_only"``.
