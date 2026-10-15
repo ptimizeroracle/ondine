@@ -236,7 +236,7 @@ class TestDataReaders:
             # Parquet preserves types perfectly
             assert result["int_col"].dtype == "int64"
             assert result["float_col"].dtype == "float64"
-            assert result["str_col"].dtype == "object"
+            assert pd.api.types.is_string_dtype(result["str_col"])
             assert result["bool_col"].dtype == "bool"
         finally:
             Path(parquet_path).unlink(missing_ok=True)
@@ -495,7 +495,7 @@ class TestDataWriters:
             result = pd.read_parquet(parquet_path)
             assert result["int_col"].dtype == "int64"
             assert result["float_col"].dtype == "float64"
-            assert result["str_col"].dtype == "object"
+            assert pd.api.types.is_string_dtype(result["str_col"])
             assert result["bool_col"].dtype == "bool"  # Parquet preserves bool!
         finally:
             parquet_path.unlink(missing_ok=True)
