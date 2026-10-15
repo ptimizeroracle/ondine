@@ -10,13 +10,13 @@ Attach a context store and each row flows through up to six stages:
 2. **LLM inference** -- the model generates a response, optionally informed by primed evidence.
 3. **Grounding verification** (optional, post-LLM) -- compares the response against source text using TF-IDF cosine similarity (or dense embeddings if you supply an `embed_fn`). Scores below the threshold get flagged.
 4. **Contradiction detection** (optional) -- rows sharing the same key columns but producing different outputs get flagged.
-5. **Confidence scoring** (optional) -- a composite score from grounding similarity and evidence support count, written to `confidence_score`.
+5. **Confidence scoring** (optional) -- a composite score from grounding similarity and evidence support count, written to `_confidence_score`.
 6. **Storage** -- validated responses go into the store as evidence records for next time.
 
 <!-- IMAGE_PLACEHOLDER
 title: Anti-Hallucination Pipeline Lifecycle
 type: data-flow
-description: A left-to-right pipeline diagram showing six stages as rounded boxes connected by arrows, with a feedback loop. Stage 1 "Evidence Priming" (dashed border, labeled "optional, pre-LLM") -- inside label "search store for prior validated answers, write to _evidence_context". Arrow labeled "primed row" points right to Stage 2 "LLM Inference" (solid blue box) -- label "model generates response, informed by evidence". Arrow labeled "raw response" points right to Stage 3 "Grounding Verification" (dashed border, labeled "optional, post-LLM") -- inside show a comparison icon with labels "response vs source text", "TF-IDF cosine similarity (or dense embeddings)", and three outcome branches below: "flag" (yellow), "retry" (orange, loops back to Stage 2 with a curved arrow), "skip" (red, arrow to a trash icon). Arrow labeled "grounded response" points right to Stage 4 "Contradiction Detection" (dashed border, labeled "optional") -- inside label "compare with prior rows sharing same key columns", output "contradiction_flag". Arrow points right to Stage 5 "Confidence Scoring" (dashed border, labeled "optional") -- inside label "composite of grounding score + evidence support count", output "confidence_score". Arrow points right to Stage 6 "Storage" (green cylinder) -- label "validated response stored as evidence record". A large curved feedback arrow goes from Stage 6 back to Stage 1, labeled "evidence available for next run". Use blue for the LLM box, green for storage, dashed gray borders for optional stages.
+description: A left-to-right pipeline diagram showing six stages as rounded boxes connected by arrows, with a feedback loop. Stage 1 "Evidence Priming" (dashed border, labeled "optional, pre-LLM") -- inside label "search store for prior validated answers, write to _evidence_context". Arrow labeled "primed row" points right to Stage 2 "LLM Inference" (solid blue box) -- label "model generates response, informed by evidence". Arrow labeled "raw response" points right to Stage 3 "Grounding Verification" (dashed border, labeled "optional, post-LLM") -- inside show a comparison icon with labels "response vs source text", "TF-IDF cosine similarity (or dense embeddings)", and two outcome branches below: "flag" (yellow), "skip" (red, output cells blanked). Arrow labeled "grounded response" points right to Stage 4 "Contradiction Detection" (dashed border, labeled "optional") -- inside label "compare with prior rows sharing same key columns", output "_contradiction". Arrow points right to Stage 5 "Confidence Scoring" (dashed border, labeled "optional") -- inside label "composite of grounding score + evidence support count", output "_confidence_score". Arrow points right to Stage 6 "Storage" (green cylinder) -- label "validated response stored as evidence record". A large curved feedback arrow goes from Stage 6 back to Stage 1, labeled "evidence available for next run". Use blue for the LLM box, green for storage, dashed gray borders for optional stages.
 placement: full-width
 alt_text: Data flow diagram of the six-stage anti-hallucination pipeline: evidence priming, LLM inference, grounding verification, contradiction detection, confidence scoring, and storage, with a feedback loop from storage back to evidence priming for subsequent runs.
 -->
@@ -226,7 +226,7 @@ The `_evidence_context` column looks like this:
 
 ### with_grounding()
 
-Post-inference reality check. Compares each LLM response against its source text and scores the similarity. Adds `grounding_score` (float, 0--1) and `grounding_flag` (bool, `True` when below threshold).
+Post-inference reality check. Compares each LLM response against its source text and scores the similarity. With `action="flag"` it adds a `_grounding_score` column (float, 0--1). There is no separate flag column: a row is ungrounded when `_grounding_score < threshold`.
 
 ```python
 def with_grounding(
@@ -238,17 +238,18 @@ def with_grounding(
 
 - `threshold` -- Minimum similarity for a response to count as grounded (0.0--1.0).
 - `action` -- What happens to ungrounded responses:
-  - `"flag"` (default) -- adds the score and flag columns, keeps going.
-  - `"retry"` -- re-prompts the LLM for that row.
-  - `"skip"` -- drops the ungrounded row entirely.
+  - `"flag"` (default) -- keeps the answer and adds `_grounding_score`. Filter on it yourself.
+  - `"skip"` -- sets the row's output cells to `None`. The row stays in the result, and `result.is_complete` does not count it as lost.
+
+  Ondine does not re-prompt ungrounded rows. `action="retry"` raises `ValueError`; earlier releases accepted it but did nothing ([#307](https://github.com/ptimizeroracle/ondine/issues/307)).
 - `embed_fn` -- Optional callable: `(list[str]) -> list[list[float]]`. When provided, dense embedding cosine similarity runs alongside TF-IDF. Final score is `max(tfidf_score, embedding_score)`. This matters because embeddings catch semantic matches that TF-IDF misses when the vocabulary differs.
 
 <!-- IMAGE_PLACEHOLDER
 title: Grounding Verification Flow
 type: flowchart
-description: A top-to-bottom flowchart showing how grounding verification decides the fate of an LLM response. Start with "LLM Response" rounded box at top. Arrow labeled "response text + source sentences" goes down to a box "Similarity Scoring" split into two parallel paths: left path "TF-IDF Cosine Similarity" and right path "Dense Embedding Cosine (if embed_fn provided)" shown with dashed border. Both paths feed into a merge node labeled "score = max(tfidf, embedding)". Arrow goes down to a diamond decision node "score >= threshold?". Yes branch goes right to a green box "Grounded" with outputs "grounding_score = value, grounding_flag = False". No branch goes down to a second diamond "action?". Three branches from this diamond: left branch labeled "flag" goes to yellow box "Flag & Continue" with output "grounding_flag = True, row kept"; middle branch labeled "retry" goes to orange box "Re-prompt LLM" with a curved arrow looping back to "LLM Response" at the top; right branch labeled "skip" goes to red box "Drop Row" with output "row removed from results". All terminal boxes feed into a bottom box "Store as Evidence Record (if grounded)".
+description: A top-to-bottom flowchart showing how grounding verification decides the fate of an LLM response. Start with "LLM Response" rounded box at top. Arrow labeled "response text + source sentences" goes down to a box "Similarity Scoring" split into two parallel paths: left path "TF-IDF Cosine Similarity" and right path "Dense Embedding Cosine (if embed_fn provided)" shown with dashed border. Both paths feed into a merge node labeled "score = max(tfidf, embedding)". Arrow goes down to a diamond decision node "score >= threshold?". Yes branch goes right to a green box "Grounded" with output "_grounding_score = value". No branch goes down to a second diamond "action?". Two branches from this diamond: left branch labeled "flag" goes to yellow box "Flag & Continue" with output "_grounding_score below threshold, row kept"; right branch labeled "skip" goes to red box "Blank Row" with output "output cells set to None". All terminal boxes feed into a bottom box "Store as Evidence Record (if grounded)".
 placement: full-width
-alt_text: Flowchart showing grounding verification: LLM response is scored against source text via TF-IDF and optional dense embeddings, then compared to the threshold. Grounded responses pass through; ungrounded ones are flagged, retried, or skipped depending on the configured action.
+alt_text: Flowchart showing grounding verification: LLM response is scored against source text via TF-IDF and optional dense embeddings, then compared to the threshold. Grounded responses pass through; ungrounded ones are flagged or blanked depending on the configured action.
 -->
 ![Grounding Verification Flow](images/grounding-verification-flow.png)
 
@@ -302,7 +303,7 @@ pipeline = (
 
 ### with_contradiction_detection()
 
-Catches inconsistency. If two rows share the same key column values but the model produced different outputs, something is wrong. Adds a `contradiction_flag` (bool) column.
+Catches inconsistency. If two rows share the same key column values but the model produced different outputs, something is wrong. Adds a `_contradiction` column: `True` on a conflicting row, empty otherwise.
 
 ```python
 def with_contradiction_detection(
@@ -332,13 +333,13 @@ pipeline = (
 )
 ```
 
-`contradiction_flag = True` means this row's output differs from a previous row with the same `product_id`. Maybe the model is being flaky. Maybe two genuinely different items share an ID. Either way, look at it.
+`_contradiction == True` means this row's output differs from a previous row with the same `product_id`. Maybe the model is being flaky. Maybe two genuinely different items share an ID. Either way, look at it.
 
 ---
 
 ### with_confidence_scoring()
 
-Rolls grounding similarity and evidence support count into a single number. Adds a `confidence_score` column (float, 0--1).
+Rolls grounding similarity and evidence support count into a single number. Adds a `_confidence_score` column (float, 0--1).
 
 ```python
 def with_confidence_scoring(
@@ -347,7 +348,7 @@ def with_confidence_scoring(
 ) -> PipelineBuilder
 ```
 
-- `include_in_output` -- Whether to write `confidence_score` to the output DataFrame.
+- `include_in_output` -- Whether to write `_confidence_score` to the output DataFrame.
 - `scoring_mode`:
   - `"default"` -- blends grounding score and evidence support count.
   - `"sigmoid"` -- sigmoid transform on the grounding score only.
@@ -412,8 +413,7 @@ pipeline = (
 result = pipeline.execute()
 print(result.data[
     ["product_id", "product_name", "category",
-     "grounding_score", "grounding_flag",
-     "contradiction_flag", "confidence_score"]
+     "_grounding_score", "_contradiction", "_confidence_score"]
 ])
 ```
 
@@ -421,10 +421,9 @@ Here's what the anti-hallucination stack adds to your output DataFrame:
 
 | Column | Type | When present | Description |
 |---|---|---|---|
-| `grounding_score` | float | `with_grounding` enabled | TF-IDF (or max TF-IDF/embedding) similarity of the response to source text |
-| `grounding_flag` | bool | `with_grounding` enabled | `True` when `grounding_score < threshold` |
-| `contradiction_flag` | bool | `with_contradiction_detection` enabled | `True` when this row's output conflicts with a prior row sharing the same keys |
-| `confidence_score` | float | `with_confidence_scoring` enabled | Composite score (0--1) per the selected `scoring_mode` |
+| `_grounding_score` | float | `with_grounding(action="flag")` | TF-IDF (or max TF-IDF/embedding) similarity of the response to source text. Ungrounded when below `threshold` |
+| `_contradiction` | bool | `with_contradiction_detection` enabled | `True` when this row's output conflicts with a row sharing the same keys; empty otherwise |
+| `_confidence_score` | float | `with_confidence_scoring` enabled | Composite score (0--1) per the selected `scoring_mode` |
 | `_evidence_context` | str | `with_evidence_priming` enabled | Formatted prior evidence injected into the prompt |
 | `_evidence_count` | int | `with_evidence_priming` enabled | Number of evidence records that exceeded `min_score` |
 
