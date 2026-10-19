@@ -46,6 +46,9 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: '3.11'
         enable-cache: true
 
     - name: Install maturin
@@ -145,6 +148,9 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: '3.11'
         enable-cache: true
 
     - name: Install dependencies + build Rust extension
@@ -200,6 +206,9 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: ${{ matrix.python-version }}
         enable-cache: true
 
     - name: Install dependencies + build Rust extension
@@ -293,6 +302,9 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: '3.11'
         enable-cache: true
 
     - name: Install with pandas 1.5 + build Rust extension
@@ -328,6 +340,10 @@ jobs:
 
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+      with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: '3.11'
 
     - name: Install dependencies
       run: uv sync --extra dev
@@ -370,6 +386,9 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       with:
+        # uv reads the tracked .python-version and ignores setup-python, so pin
+        # the interpreter here or this job silently runs the repo default.
+        python-version: '3.11'
         enable-cache: true
 
     - name: Install dependencies + build Rust extension
