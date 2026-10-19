@@ -5,7 +5,7 @@ This is the primary entry point that users interact with.
 """
 
 import math
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -989,6 +989,34 @@ class Pipeline:
 
         return ResultContainerImpl(data=merged_rows, columns=merged_columns)
 
+    @staticmethod
+    def _input_row_lookup(
+        result_rows: list[dict], working_df: Any, context: ExecutionContext
+    ) -> Callable[[int], dict]:
+        """Return ``input_row_for(i)``: the input row that result row *i* answers.
+
+        Result rows carry ``_row_index``, the row's position in the full input.
+        Matching on list position instead is wrong on resume: the results hold
+        every row restored from the cache, while ``working_df`` holds only the
+        rows re-sent, so position *i* in one is a different row in the other.
+        Falls back to position when a result has no usable ``_row_index``.
+        """
+        full_input = context.intermediate_data.get("preprocessed_data")
+        if full_input is None:
+            full_input = context.intermediate_data.get("loaded_data", working_df)
+        input_rows: list[dict] = list(full_input)
+        working_rows: list[dict] = list(working_df)
+
+        def input_row_for(position: int) -> dict:
+            row_index = result_rows[position].get("_row_index")
+            if isinstance(row_index, int) and 0 <= row_index < len(input_rows):
+                return input_rows[row_index]
+            if position < len(working_rows):
+                return working_rows[position]
+            return {}
+
+        return input_row_for
+
     def _apply_context_verification(
         self,
         results_df: Any,
@@ -1017,7 +1045,7 @@ class Pipeline:
         )
 
         result_rows = list(results_df)
-        working_rows = list(working_df)
+        input_row_for = self._input_row_lookup(result_rows, working_df, context)
         stored_claim_ids: dict[int, str] = {}
 
         for idx, row in enumerate(result_rows):
@@ -1035,11 +1063,11 @@ class Pipeline:
                 continue
 
             source_text_parts = []
-            if idx < len(working_rows):
-                for col in input_cols:
-                    val = working_rows[idx].get(col)
-                    if val is not None:
-                        source_text_parts.append(str(val))
+            input_row = input_row_for(idx)
+            for col in input_cols:
+                val = input_row.get(col)
+                if val is not None:
+                    source_text_parts.append(str(val))
 
             grounding_score = None
             embed_fn = grounding_cfg.get("embed_fn") if grounding_cfg else None
@@ -1091,7 +1119,14 @@ class Pipeline:
 
             key_to_claims: dict[str, list[tuple[int, str, str]]] = {}
             for idx, row in enumerate(result_rows):
-                key_parts = [str(row.get(c, "")) for c in key_cols]
+                # Key columns are usually input columns, which the parsed
+                # result row does not carry; read them from the input row, or
+                # every row shares an empty key and any two answers conflict
+                # (#311). A key that is an output column comes from the result.
+                input_row = input_row_for(idx)
+                key_parts = [
+                    str(row[c] if c in row else input_row.get(c, "")) for c in key_cols
+                ]
                 key = "|".join(key_parts)
                 val_parts = [str(row.get(c, "")) for c in value_cols]
                 val = "|".join(val_parts)
