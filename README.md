@@ -4,8 +4,6 @@
     <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo.png" alt="Ondine" width="220"/>
   </picture>
 
-  # Ondine
-
   **Batch-process your DataFrames with LLMs, without the boilerplate.**
 
   Agents reason row-by-row. Ondine computes columns — 100,000 rows for $0.48 (projected), crash-safe, on any of 100+ providers.
