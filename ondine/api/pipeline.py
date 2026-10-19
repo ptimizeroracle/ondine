@@ -1787,7 +1787,9 @@ class Pipeline:
 
         The authority on *which* rows were lost stays ``errors`` /
         ``is_complete``; the ``None`` in the cell is the visible shadow of that,
-        not a second source of truth.
+        not a second source of truth. Under pandas 3 a text column uses the
+        ``str`` dtype, which reads the ``None`` back as ``NaN``; check for a
+        lost cell with ``isna()``, never with ``is None``.
         """
         if not result.errors:
             return
