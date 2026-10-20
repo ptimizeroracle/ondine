@@ -26,8 +26,9 @@ Core data classes
 
 Key capabilities
 ----------------
-- **Evidence storage & retrieval** -- Store validated LLM outputs as
-  evidence records and retrieve them by claim ID or semantic search.
+- **Evidence storage & retrieval** -- Store evidence records (your own,
+  or LLM answers that passed grounding) and retrieve them by claim ID or
+  semantic search.
 - **Grounding verification** -- Verify new LLM responses against source
   sentences using TF-IDF cosine similarity or dense embeddings.  Claims
   below the confidence threshold are flagged as ungrounded.
@@ -35,9 +36,9 @@ Key capabilities
   and query the contradiction graph for a given claim.
 - **Confidence scoring** -- Each evidence record carries an optional
   confidence float that downstream stages can use for filtering.
-- **Evidence priming** -- Prior validated evidence is injected into
-  prompts before LLM inference so the model can leverage earlier answers
-  for consistency (see ``EvidenceRetrievalStage``).
+- **Evidence priming** -- Stored evidence is injected into prompts before
+  LLM inference, labelled as reference only, so the model can stay
+  consistent with earlier answers (see ``EvidenceRetrievalStage``).
 
 Examples
 --------
