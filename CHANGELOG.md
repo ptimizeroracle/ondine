@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/ptimizeroracle/ondine/compare/v2.0.8...v2.1.0) (2026-10-20)
+
+
+### Features
+
+* **benchmarks:** golden sets v1 for the harness benchmark ([#321](https://github.com/ptimizeroracle/ondine/issues/321)) ([a582fb6](https://github.com/ptimizeroracle/ondine/commit/a582fb63ade23e2787c0dafad62c8cab607bf7aa))
+
+
+### Bug Fixes
+
+* **context:** match verification checks to the row they check ([#313](https://github.com/ptimizeroracle/ondine/issues/313)) ([f3bf979](https://github.com/ptimizeroracle/ondine/commit/f3bf979377d3377b3d62c3226916912214cce06b)), closes [#311](https://github.com/ptimizeroracle/ondine/issues/311)
+* **context:** only answers that passed grounding become evidence ([#314](https://github.com/ptimizeroracle/ondine/issues/314)) ([b61a864](https://github.com/ptimizeroracle/ondine/commit/b61a864e039cfccbcf503af4ac6e679c8783e4df)), closes [#308](https://github.com/ptimizeroracle/ondine/issues/308)
+* **grounding:** reject action="retry" instead of silently ignoring it ([#310](https://github.com/ptimizeroracle/ondine/issues/310)) ([1a83e24](https://github.com/ptimizeroracle/ondine/commit/1a83e24c840e1f80156928a1ded3572ce3b69f0c)), closes [#307](https://github.com/ptimizeroracle/ondine/issues/307)
+
+
+### Documentation
+
+* fresh CI badge on GitBook, and PyPI's own download count ([#319](https://github.com/ptimizeroracle/ondine/issues/319)) ([5b70044](https://github.com/ptimizeroracle/ondine/commit/5b70044a7940ecbe71b93fa69d6b1af8e7d8765a))
+* **readme:** drop the "# Ondine" heading; the logo already says it ([#316](https://github.com/ptimizeroracle/ondine/issues/316)) ([69b2f54](https://github.com/ptimizeroracle/ondine/commit/69b2f54c3d43ffe634b8c1f8fe9b8969f2335447))
+
 ## [2.0.8](https://github.com/ptimizeroracle/ondine/compare/v2.0.7...v2.0.8) (2026-10-14)
 
 
