@@ -20,6 +20,11 @@ _spec = importlib.util.spec_from_file_location("golden_build", _BUILD)
 build = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(build)
 
+_ADJ = Path(__file__).resolve().parents[2] / "benchmarks" / "golden" / "adjudicate.py"
+_adj_spec = importlib.util.spec_from_file_location("golden_adjudicate", _ADJ)
+adjudicate = importlib.util.module_from_spec(_adj_spec)
+_adj_spec.loader.exec_module(adjudicate)
+
 
 class TestAcceptedValues:
     def test_keeps_every_positively_scored_spelling(self):
@@ -93,7 +98,45 @@ class TestStratifiedTake:
 
 
 @pytest.mark.parametrize(
-    "name", ["banking77_test", "wdcpave_normalized", "summedits_news"]
+    "name", ["banking77_test", "wdcpave_extraction", "summedits_news"]
 )
 def test_every_source_is_pinned_to_a_hash(name):
     assert len(build.SOURCES[name]["sha256"]) == 16
+
+
+class TestFinalAnswer:
+    def test_takes_the_last_line_of_a_reply_that_reasons_first(self):
+        reply = "The message is about a PIN, so...\n\ncard_arrival"
+
+        assert adjudicate.final_answer(reply) == "card_arrival"
+
+    def test_strips_markdown_decoration_from_the_label(self):
+        assert adjudicate.final_answer("**inconsistent**") == "inconsistent"
+
+    def test_empty_reply_is_no_answer(self):
+        assert adjudicate.final_answer(None) is None
+
+
+class TestSameValue:
+    @pytest.mark.parametrize(
+        ("got", "accepted"),
+        [
+            ("3 in", "3"),  # units ignored
+            ("8.5 in", "8 1/2"),  # fraction read as a number
+            ("15000 RPM", "15K"),  # K suffix
+            ("Rack Server", "Rack"),  # containment
+        ],
+    )
+    def test_equivalent_spellings_match(self, got, accepted):
+        assert adjudicate.same_value(got, accepted)
+
+    @pytest.mark.parametrize(
+        ("got", "accepted"),
+        [
+            ("4 in", "3"),
+            ("Hard Disk Drive", "Tape Drive"),
+            ("10 in", "n/a"),  # a stated value is not an absent one
+        ],
+    )
+    def test_different_values_do_not_match(self, got, accepted):
+        assert not adjudicate.same_value(got, accepted)

@@ -3,8 +3,11 @@
 Three row-wise tasks, one per family the harness must lift:
 
 * ``intent`` — BANKING77: a customer-service query → one of 77 intents.
-* ``attributes`` — WDC-PAVE (normalized): a product title + description →
-  a JSON of typed attributes, with unit and name normalization.
+* ``attributes`` — WDC-PAVE (extraction variant): a product title + description →
+  a JSON of typed attributes, each stated in the offer text. The normalized
+  variant is left for v2: its gold uses unit conversions and a fixed taxonomy
+  the prompt would have to spell out (only 41% of its values appear in the
+  text, against 99.8% for this variant).
 * ``faithfulness`` — SummEdits: a document + a candidate summary → is the
   summary consistent with the document (yes/no).
 
@@ -66,9 +69,9 @@ SOURCES: dict[str, dict] = {
         "licence": "CC-BY-4.0 (PolyAI/banking77 card); mirror card says MIT",
         "cite": "Casanueva et al. 2020, Efficient Intent Detection with Dual Sentence Encoders",
     },
-    "wdcpave_normalized": {
-        "url": "https://raw.githubusercontent.com/wbsg-uni-mannheim/wdc-pave/main/data/raw/wdc_normalized/normalized_target_scores.jsonl",
-        "sha256": "7bd5f22046d32614",  # pragma: allowlist secret
+    "wdcpave_extraction": {
+        "url": "https://raw.githubusercontent.com/wbsg-uni-mannheim/wdc-pave/main/data/raw/wdc/final_target_scores.jsonl",
+        "sha256": "1b2717a2ef360f7b",  # pragma: allowlist secret  # pragma: allowlist secret
         "licence": "not stated; site says 'publicly available for download'. Do not redistribute rows.",
         "cite": "Baumann, Brinkmann, Bizer 2024, Using LLMs for the Extraction and Normalization of Product Attribute Values (ADBIS)",
     },
@@ -169,7 +172,7 @@ def build_intent(rng: random.Random) -> dict:
     }
 
 
-# ── task: attributes (WDC-PAVE normalized) ───────────────────────────────
+# ── task: attributes (WDC-PAVE extraction) ───────────────────────────────
 
 
 def accepted_values(target_scores: dict) -> dict[str, list[str]]:
@@ -195,7 +198,7 @@ def accepted_values(target_scores: dict) -> dict[str, list[str]]:
 
 
 def build_attributes(rng: random.Random) -> dict:
-    path = fetch("wdcpave_normalized")
+    path = fetch("wdcpave_extraction")
     rows = [json.loads(line) for line in path.open(encoding="utf-8")]
     by_category: dict[str, list[dict]] = defaultdict(list)
     schemas: dict[str, set[str]] = defaultdict(set)

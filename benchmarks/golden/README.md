@@ -15,7 +15,7 @@ uv run python benchmarks/golden/build.py
 | Task | Source | Row shape | Gold | Dev | Holdout |
 |---|---|---|---|---|---|
 | `intent` | [BANKING77](https://huggingface.co/datasets/PolyAI/banking77) test split | one customer-service query | one of 77 intents | 231 (3 per intent) | 308 (4 per intent) |
-| `attributes` | [WDC-PAVE](https://webdatacommons.org/structureddata/wdc-pave/), normalized variant | product title + description, 5 categories | 8–20 typed attributes per category; values normalized (units, names); `n/a` when absent | 199 | 300 |
+| `attributes` | [WDC-PAVE](https://webdatacommons.org/structureddata/wdc-pave/), extraction variant | product title + description, 5 categories | 8–20 attributes per category, each stated in the offer text; `n/a` when absent | 199 | 300 |
 | `faithfulness` | [SummEdits](https://github.com/salesforce/factualNLG), 8 business domains | a document + a candidate summary | `consistent` / `inconsistent` | 200 (25 per domain, labels balanced) | 304 (38 per domain) |
 
 Why these three:
@@ -24,8 +24,12 @@ Why these three:
   models visibly confuse near neighbours (`card_arrival` vs
   `card_delivery_estimate`). 2023 figures: GPT-3.5 75% vs GPT-4 80% micro-F1.
 - **attributes** is structured extraction where the easy fields come free
-  and the hard ones (unit conversion, enum normalization) need checking.
-  The benchmark paper reports GPT-3.5 F1 88.0 vs GPT-4 90.5.
+  and the hard ones (dimensions, product type, pack quantity) need checking.
+  The benchmark paper reports GPT-3.5 F1 88.0 vs GPT-4 90.5 on the
+  normalized variant. We use the *extraction* variant: 99.8% of its gold
+  values appear in the offer text, against 41% for the normalized variant,
+  whose gold relies on unit conversions and a fixed taxonomy the prompt
+  would have to spell out. Normalization is left for v2.
 - **faithfulness** is a judgment where the cheap-vs-big gap is large and
   documented (balanced accuracy: 7B open models ≈ 50–58, GPT-3.5 71, GPT-4
   82, humans 91) and the yes/no answer suits agreement-based checks.
@@ -50,6 +54,34 @@ record the verdicts in `adjudications.jsonl` (row id, original label,
 corrected label, reason). Report results on the original gold and on the
 adjudicated gold. The holdout gets the same treatment only at release
 time, by someone who has not seen it.
+
+## Adjudication, first pass (2026-10-20)
+
+Dev split labelled by Sol (`openai/gpt-6.1-sol`) and Sonnet 5.5
+(`anthropic/claude-sonnet-5-5`), prompts in `label.py`, candidates found by
+`adjudicate.py`. Total spend about $3.4, tracked by Ondine.
+
+| Task | Sol wrong | Sonnet wrong | Both wrong (candidates) |
+|---|---|---|---|
+| `intent` (231 rows) | 16.9% | 18.2% | 35 rows (15.2%) |
+| `faithfulness` (200 rows) | 14.0% | 16.0% | 25 rows (12.5%) |
+| `attributes` (3,074 attribute values, lenient match) | 9.3% | 7.8% | 163 values (5.3%) |
+
+What the candidates show, so far read by a model, not yet by a human:
+
+- `intent`: real gold noise ("I need my PIN" is labelled `get_physical_card`;
+  "friends would like to top-up my account" is labelled `topping_up_by_card`)
+  next to genuine near-neighbour confusions (`compromised_card` vs
+  `card_payment_not_recognised`).
+- `attributes`: gold `n/a` where both models found a stated value (an
+  under-annotated gold), and vocabulary differences (`Ladies` vs `Women`).
+- Sonnet ignored "reply with only the label" on 9% of `intent` rows and 19%
+  of `faithfulness` rows (reasoning first, label last); Sol never did. The
+  scorer takes the last line. A harness that parses strictly would lose
+  those rows.
+
+Verdicts go in `adjudications.jsonl`. Until a human has ruled on a
+candidate, report both the original and the adjudicated gold.
 
 ## Splits and contamination
 
