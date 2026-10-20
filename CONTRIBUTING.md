@@ -157,6 +157,16 @@ just check
   - `refactor:` - Code refactoring
   - `chore:` - Maintenance tasks
 
+The commit type picks the version number: `fix:` raises the patch number
+(2.1.0 to 2.1.1), `feat:` raises the minor number (2.1.0 to 2.2.0), and a
+`!` or a `BREAKING CHANGE:` footer raises the major number. Only code that
+ships in the package changes what users get, so use `chore:`, `test:` or
+`docs:` for benchmark scripts, CI and other work the package does not ship,
+and keep `feat:` for behaviour a user can call.
+
+To override the version for one release, put `Release-As: 2.1.1` on its own
+line at the end of the PR description of a commit that is merged to `main`.
+
 Example:
 ```
 feat: add support for custom retry strategies
