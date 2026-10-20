@@ -102,11 +102,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", required=True, choices=sorted(MODELS))
     parser.add_argument("--limit", type=int, help="first N rows only (smoke test)")
     parser.add_argument(
+        "--candidates",
+        action="store_true",
+        help="only the rows adjudicate.py listed (the tiebreak run)",
+    )
+    parser.add_argument(
         "--budget", type=float, default=2.0, help="USD ceiling for this run"
     )
     args = parser.parse_args(argv)
 
     frame = load(args.task)
+    if args.candidates:
+        listed = DATA / "adjudication" / f"{args.task}.jsonl"
+        ids = {json.loads(line)["id"] for line in listed.open(encoding="utf-8")}
+        frame = frame[frame["id"].isin(ids)].reset_index(drop=True)
     if args.limit:
         frame = frame.head(args.limit)
     frame, inputs, prompt = prepare(args.task, frame)
@@ -124,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
     result = pipeline.execute()
     out = result.to_pandas()
 
-    dest = DATA / "labels" / args.task / f"{args.model}.jsonl"
+    suffix = "-candidates" if args.candidates else ""
+    dest = DATA / "labels" / args.task / f"{args.model}{suffix}.jsonl"
     dest.parent.mkdir(parents=True, exist_ok=True)
     cost = float(result.costs.total_cost)
     with dest.open("w", encoding="utf-8") as f:
