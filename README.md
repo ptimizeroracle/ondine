@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo-tile.png" alt="Ondine" width="180"/>
+  <img src="https://raw.githubusercontent.com/ptimizeroracle/ondine/main/assets/images/ondine-logo-card.png" alt="Ondine" width="220"/>
 
   **Batch-process your DataFrames with LLMs, without the boilerplate.**
 
