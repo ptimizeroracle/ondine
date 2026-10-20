@@ -71,3 +71,6 @@ test_similarity_composition.py
 titles_classified*.csv
 tmp/
 wheels/
+
+# Golden-set sources and splits are built locally (see benchmarks/golden/build.py)
+benchmarks/golden/data/

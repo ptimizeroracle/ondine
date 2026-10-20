@@ -27,6 +27,10 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+        # The golden-set manifest pins SHA-256 digests of public dataset
+        # files. They are checksums, not credentials, and JSON cannot carry
+        # an inline allowlist comment.
+        exclude: ^benchmarks/golden/manifest\.json$
 
 
   # Standard pre-commit hooks
