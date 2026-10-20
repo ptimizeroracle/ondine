@@ -41,7 +41,7 @@ import random
 import sys
 import urllib.request
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for name, spec in SOURCES.items():
         manifest["sources"][name] = {k: v for k, v in spec.items()}
-    manifest["built_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+    manifest["built_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     print(f"manifest → {manifest_path.relative_to(HERE.parent.parent)}")
     return 0
