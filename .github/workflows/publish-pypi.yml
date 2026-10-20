@@ -166,6 +166,13 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ needs.resolve-tag.outputs.tag }}
+
+      # The README shows one logo per GitHub theme via #gh-light-mode-only /
+      # #gh-dark-mode-only. PyPI ignores those markers and would show both,
+      # and its page is always light, so drop the dark-theme logo here.
+      - name: Drop the dark-theme logo from the PyPI readme
+        shell: bash
+        run: perl -ni -e 'print unless /#gh-dark-mode-only/' README.md
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b  # v1
         with:
           command: sdist
@@ -209,6 +216,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+
+      # The README shows one logo per GitHub theme via #gh-light-mode-only /
+      # #gh-dark-mode-only. PyPI ignores those markers and would show both,
+      # and its page is always light, so drop the dark-theme logo here.
+      - name: Drop the dark-theme logo from the PyPI readme
+        shell: bash
+        run: perl -ni -e 'print unless /#gh-dark-mode-only/' README.md
 
       - name: Build wheel via maturin
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b  # v1
