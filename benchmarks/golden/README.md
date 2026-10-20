@@ -80,6 +80,12 @@ What the candidates show, so far read by a model, not yet by a human:
   scorer takes the last line. A harness that parses strictly would lose
   those rows.
 
+Tiebreak (same day): Opus 5.5 relabelled the candidates (`label.py
+--candidates`, $1.24; the attributes run hit its $0.80 cap and was
+dropped). Opus sided with the gold on 13 of 35 intent rows and 2 of 25
+faithfulness rows, leaving 22 + 23 rows where all three models disagree
+with the gold. Those go to a human.
+
 Verdicts go in `adjudications.jsonl`. Until a human has ruled on a
 candidate, report both the original and the adjudicated gold.
 
