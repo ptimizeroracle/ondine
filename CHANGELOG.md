@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/ptimizeroracle/ondine/compare/v2.1.0...v2.1.1) (2026-10-22)
+
+
+### Features
+
+* **benchmarks:** tiebreak run over adjudication candidates ([#322](https://github.com/ptimizeroracle/ondine/issues/322)) ([7f49755](https://github.com/ptimizeroracle/ondine/commit/7f497555170ce600c0739b6842a598bd298e3f99))
+* raises the minor number, fix: the patch number. A benchmark script the package does not ship was titled feat: and forced a minor release. Spell the rule out and document Release-As. ([ac5a905](https://github.com/ptimizeroracle/ondine/commit/ac5a905c4123a71b58a9e4dda165a282aa235d37))
+
+
+### Bug Fixes
+
+* **readme:** one logo that reads in light and dark themes ([#324](https://github.com/ptimizeroracle/ondine/issues/324)) ([bfd8c11](https://github.com/ptimizeroracle/ondine/commit/bfd8c11212d1d62b3077eaa4f25ad7b3e5eed9ea))
+* **readme:** use the new logos, one per GitHub theme ([#326](https://github.com/ptimizeroracle/ondine/issues/326)) ([8aed446](https://github.com/ptimizeroracle/ondine/commit/8aed446e2b3b9e9d4327939441a7e708d41d0ca2))
+* **readme:** use the original logo art at native resolution ([#325](https://github.com/ptimizeroracle/ondine/issues/325)) ([3ba7a11](https://github.com/ptimizeroracle/ondine/commit/3ba7a114f4eaec95286d0581abf8a16f7ba51617))
+
+
+### Documentation
+
+* **contributing:** say which commit types bump which version number ([#328](https://github.com/ptimizeroracle/ondine/issues/328)) ([ac5a905](https://github.com/ptimizeroracle/ondine/commit/ac5a905c4123a71b58a9e4dda165a282aa235d37))
+
 ## [2.1.0](https://github.com/ptimizeroracle/ondine/compare/v2.0.8...v2.1.0) (2026-10-20)
 
 
