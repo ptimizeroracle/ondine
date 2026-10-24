@@ -143,7 +143,10 @@ def main(argv: list[str] | None = None) -> int:
     result = pipeline.execute()
     out = result.to_pandas()
 
+    # A smoke run (--limit) must never overwrite a full run's labels.
     suffix = "-candidates" if args.candidates else ""
+    if args.limit:
+        suffix += f"-smoke{args.limit}"
     dest = DATA / "labels" / args.task / f"{args.model}{suffix}.jsonl"
     dest.parent.mkdir(parents=True, exist_ok=True)
     cost = float(result.costs.total_cost)

@@ -130,25 +130,26 @@ that can settle a claim.
 Until a human has ruled on a candidate, report both the original and the
 adjudicated gold.
 
-## Baseline, dev split (2026-10-24, partial)
+## Baseline, dev split (2026-10-24)
 
 Five models over the dev splits through `label.py`, scored by `score.py`.
 Figures below were re-checked after fixing two verdicts (see git log).
 Accuracy on the dataset's original gold and on the adjudicated gold; cost
 is Ondine's own tracking for the run, and "per 1k" is cost per successful
-row on the adjudicated gold, times 1,000. Opus on faithfulness and
-attributes is missing: the account ran out of API credit mid-run.
+row on the adjudicated gold, times 1,000. Opus intent was run twice
+(0.892, then 0.883 on the original gold, both at temperature 0): run-to-run
+noise is about a point even before sampling noise.
 
 | Task, metric | Haiku 5.5 | GPT-6 Luna | Sonnet 5.5 | GPT-6.1 Sol | Opus 5.5 |
 |---|---|---|---|---|---|
-| intent, accuracy (original → adjudicated) | 0.810 → 0.894 | 0.788 → 0.876 | 0.818 → 0.908 | 0.831 → 0.917 | 0.892 → 0.982 |
-| intent, $ per 1k successful rows | 0.15 | 0.09 | 2.33 | 1.31 | 5.11 |
-| faithfulness, balanced acc. (original → adjudicated) | 0.820 → 0.934 | 0.781 → 0.869 | 0.840 → 0.944 | 0.860 → 0.975 | not run |
-| faithfulness, $ per 1k successful rows | 0.19 | 0.17 | 3.12 | 1.85 | — |
-| attributes, lenient attribute acc. | 0.916 | 0.906 | 0.922 | 0.907 | not run |
-| attributes, strict attribute acc. | 0.824 | 0.804 | 0.828 | 0.799 | not run |
-| attributes, rows with every attribute right (of 199) | 61 | 57 | 69 | 58 | not run |
-| attributes, $ per 1k successful rows (all attributes right) | 1.19 | 0.72 | 7.86 | 9.06 | — |
+| intent, accuracy (original → adjudicated) | 0.810 → 0.894 | 0.788 → 0.876 | 0.818 → 0.908 | 0.831 → 0.917 | 0.883 → 0.972 |
+| intent, $ per 1k successful rows | 0.15 | 0.09 | 2.33 | 1.31 | 5.42 |
+| faithfulness, balanced acc. (original → adjudicated) | 0.820 → 0.934 | 0.781 → 0.869 | 0.840 → 0.944 | 0.860 → 0.975 | 0.824 → 0.939 |
+| faithfulness, $ per 1k successful rows | 0.19 | 0.17 | 3.12 | 1.85 | 6.83 |
+| attributes, lenient attribute acc. | 0.916 | 0.906 | 0.922 | 0.907 | 0.917 |
+| attributes, strict attribute acc. | 0.824 | 0.804 | 0.828 | 0.799 | 0.810 |
+| attributes, rows with every attribute right (of 199) | 61 | 57 | 69 | 58 | 63 |
+| attributes, $ per 1k successful rows (all attributes right) | 1.19 | 0.72 | 7.86 | 9.06 | 36.34 |
 
 What it says so far, on about 200 rows per task. A 95% interval on a
 single rate is about ±4 points at 90% accuracy and ±5 to 6 points at 80%,
@@ -156,14 +157,16 @@ and balanced accuracy on about 100 rows per class is wider still, so
 differences under 5 points are ties:
 
 - **intent**: the gap the harness has to close is real, and it holds on
-  both golds: Haiku 0.810 / Luna 0.788 against Opus 0.892 on the original
-  gold, 0.894 / 0.876 against 0.982 on the adjudicated one, at 34x to 57x
+  both golds: Haiku 0.810 / Luna 0.788 against Opus 0.883 on the original
+  gold, 0.894 / 0.876 against 0.972 on the adjudicated one, at 36x to 60x
   less cost per successful row. Opus helped pick the candidates, so its
   adjudicated score is the most inflated; the original-gold gap is the
   safer number. Sonnet and Sol sit between, closer to the cheap models.
-- **faithfulness**: Haiku (0.934) is within noise of Sonnet (0.944) and a
-  few points under Sol (0.975); Luna lags (0.869). No ceiling measured yet.
-- **attributes**: a tie across all four, lenient (0.906 to 0.922) and
+- **faithfulness**: no gap to close. Haiku (0.934), Sonnet (0.944) and
+  Opus (0.939) tie; Sol leads (0.975), so Opus is not the ceiling here.
+  Luna lags (0.869). Haiku gets Opus-level results at 36x less cost per
+  successful row with no harness at all.
+- **attributes**: a tie across all five, Opus included, lenient (0.906 to 0.922) and
   strict (0.799 to 0.828). Only about a third of rows get every attribute
   right for any model. The task as scored does not separate cheap from
   big models; the gold's missing values (`n/a` where the offer states a
@@ -171,7 +174,14 @@ differences under 5 points are ties:
 - Costs are from one run each at temperature 0 (Haiku at 1, as required).
   Haiku used 1.5x to 1.8x Luna's tokens for the same rows.
 
-Twelve intent rows and two faithfulness rows are dropped from the
+**What this means for the harness plan.** Only `intent` has a cheap-vs-big
+gap worth closing. On `faithfulness` and `attributes` the cheap models
+already match the most expensive one, so the honest result there is "use
+the cheap model", and a harness can only add cost. The next experiment
+runs on `intent`; the other two need a harder slice before they can show
+any lift.
+
+Thirteen intent rows and two faithfulness rows are dropped from the
 adjudicated gold as ambiguous; the original-gold columns use every row.
 
 ## Splits and contamination
