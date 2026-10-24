@@ -35,6 +35,13 @@ MODELS = {
     "luna": "openai/gpt-6-luna",
 }
 
+#: Per-model call settings. Haiku 5.5 rejects any temperature but 1 and
+#: thinks by default (billed as output), so it runs at the lowest effort.
+#: Everything else runs deterministic.
+MODEL_PARAMS = {
+    "haiku": {"temperature": 1.0, "reasoning_effort": "low"},
+}
+
 INTENT_PROMPT = """You are classifying customer-service messages from a bank's \
 customers into exactly one intent.
 
@@ -124,7 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         PipelineBuilder.create()
         .from_dataframe(frame, input_columns=inputs, output_columns=["answer"])
         .with_prompt(prompt)
-        .with_llm(model=MODELS[args.model])
+        .with_llm(
+            model=MODELS[args.model],
+            **MODEL_PARAMS.get(args.model, {"temperature": 0.0}),
+        )
         .with_concurrency(6)
         .with_max_budget(args.budget)
         .with_error_policy("skip")
@@ -141,6 +151,12 @@ def main(argv: list[str] | None = None) -> int:
         for rid, answer in zip(frame["id"], out["answer"], strict=True):
             record = {"id": rid, "answer": None if pd.isna(answer) else answer}
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    dest.with_suffix(".cost.json").write_text(
+        json.dumps(
+            {"cost": cost, "tokens": result.costs.total_tokens, "rows": len(frame)}
+        )
+    )
 
     lost = result.lost_row_indices
     print(

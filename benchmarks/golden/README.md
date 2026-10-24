@@ -86,8 +86,82 @@ dropped). Opus sided with the gold on 13 of 35 intent rows and 2 of 25
 faithfulness rows, leaving 22 + 23 rows where all three models disagree
 with the gold. Those go to a human.
 
-Verdicts go in `adjudications.jsonl`. Until a human has ruled on a
-candidate, report both the original and the adjudicated gold.
+## Adjudication, verdicts (2026-10-24)
+
+The 45 rows were ruled on by Claude (Fable 5.1) in the maintainer's
+session, reading each input, the dataset's label and the three model
+answers, and for SummEdits the exact edit the dataset made to the seed
+summary. **These are model verdicts, not human ones**, and the maintainer
+delegated the call. They are in `adjudications.jsonl` with a reason and a
+confidence per row.
+
+| Task | Dataset right | Models right | Dropped (ambiguous) | Adjudicated dev size |
+|---|---|---|---|---|
+| intent | 0 | 10 | 12 | 219 of 231 |
+| faithfulness | 1 | 20 (+1 non-candidate, below) | 2 | 198 of 200 |
+
+What the rulings found:
+
+- **intent**: the dataset labels purchases declined on a card as
+  `declined_transfer`, a card fee as `transfer_fee_charged`, a missing
+  card as `activate_my_card`. Twelve messages have no single defensible
+  intent ("Is a SWIFT transfer okay?", "What is the transfer policy?")
+  and were dropped rather than guessed.
+- **faithfulness**: 20 of 23 candidates had a wrong gold. Six "consistent"
+  rows hide a real change (a 20% discount became 15%; "Binance" became
+  "Binance's customers"; "by region" became "by country"). Fourteen
+  "inconsistent" rows are synonym swaps only. Two seed summaries are
+  themselves unfaithful: AutoNation's "over 100 stores by the end of 2025"
+  (the transcript says over 50 by then) and Dolby's "Q3 revenue lower than
+  Q2" (no Q2 revenue in the transcript). Every dev row carrying those
+  claims is scored `inconsistent`, including one that was not a candidate.
+- **attributes**: not adjudicated. The disputes are mostly the gold saying
+  `n/a` where the offer states a value, which needs a rule, not 163 rulings.
+
+**Circularity, stated plainly.** Candidates were chosen because Sol, Sonnet
+and Opus disagreed with the gold, and most verdicts went the models' way.
+Scoring on the adjudicated gold therefore favours those three models, and
+any model that errs like them, more than it favours the dataset. Report
+both golds. The holdout is untouched by any of this; it is the only split
+that can settle a claim.
+
+Until a human has ruled on a candidate, report both the original and the
+adjudicated gold.
+
+## Baseline, dev split (2026-10-24, partial)
+
+Five models over the dev splits through `label.py`, scored by `score.py`.
+Accuracy on the dataset's original gold and on the adjudicated gold; cost
+is Ondine's own tracking for the run, and "per 1k" is cost per successful
+row on the adjudicated gold, times 1,000. Opus on faithfulness and
+attributes is missing: the account ran out of API credit mid-run.
+
+| Task, metric | Haiku 5.5 | GPT-6 Luna | Sonnet 5.5 | GPT-6.1 Sol | Opus 5.5 |
+|---|---|---|---|---|---|
+| intent, accuracy (original → adjudicated) | 0.810 → 0.895 | 0.788 → 0.877 | 0.818 → 0.909 | 0.831 → 0.918 | 0.892 → 0.977 |
+| intent, $ per 1k successful rows | 0.15 | 0.09 | 2.32 | 1.30 | 5.11 |
+| faithfulness, balanced acc. (original → adjudicated) | 0.820 → 0.930 | 0.781 → 0.865 | 0.840 → 0.950 | 0.860 → 0.970 | not run |
+| faithfulness, $ per 1k successful rows | 0.19 | 0.17 | 3.10 | 1.86 | — |
+| attributes, lenient attribute acc. | 0.916 | 0.906 | 0.922 | 0.907 | not run |
+| attributes, $ per 1k successful rows (all attributes right) | 1.19 | 0.72 | 7.86 | 9.06 | — |
+
+What it says so far, on about 200 rows per task (a 95% interval on a
+single rate is about ±4 points here, so differences under that are ties):
+
+- **intent**: the gap the harness has to close is real. Haiku 0.895 and
+  Luna 0.877 against Opus 0.977 on the adjudicated gold, at 34x to 57x
+  less cost per successful row. Sonnet and Sol sit between, closer to the
+  cheap models than to Opus.
+- **faithfulness**: Haiku (0.930) is within a few points of Sonnet and Sol;
+  Luna lags (0.865). No ceiling measured yet.
+- **attributes**: a tie across all four at 0.906 to 0.922. Either the task
+  is easy for every model, or the lenient matcher hides the differences.
+  The strict numbers are in `baseline-report.json`.
+- Costs are from one run each at temperature 0 (Haiku at 1, as required).
+  Haiku's tokens run about 1.8x Luna's for the same rows.
+
+Twelve intent rows and two faithfulness rows are dropped from the
+adjudicated gold as ambiguous; the original-gold columns use every row.
 
 ## Splits and contamination
 
