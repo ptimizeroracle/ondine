@@ -303,6 +303,9 @@ jobs:
     name: Upload to TestPyPI
     runs-on: ubuntu-latest
     environment: Ondine
+    permissions:
+      contents: read
+      id-token: write  # TestPyPI trusted publishing via OIDC
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
@@ -313,9 +316,10 @@ jobs:
       # so only wheels matter. Prod publish uploads both.
       - name: Upload wheels to TestPyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # release/v1
+        # No password: TestPyPI trusts this workflow + environment directly
+        # (trusted publishing), so no long-lived token is stored anywhere.
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
 
@@ -529,7 +533,7 @@ jobs:
     environment: Ondine
     permissions:
       contents: read
-      id-token: write  # Sigstore signing via OIDC
+      id-token: write  # Sigstore signing and PyPI trusted publishing via OIDC
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
@@ -562,8 +566,10 @@ jobs:
 
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # release/v1
+        # No password: PyPI trusts this workflow + environment directly
+        # (trusted publishing). The credential is minted per run and expires
+        # in minutes; there is no token to leak or rotate.
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
 
