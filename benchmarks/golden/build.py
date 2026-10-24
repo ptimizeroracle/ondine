@@ -318,6 +318,11 @@ def main(argv: list[str] | None = None) -> int:
             "dev": write_jsonl(out / "dev.jsonl", dev_rows),
             "holdout": write_jsonl(out / "holdout.jsonl", built["holdout"]),
         }
+        adjudicated = apply_adjudications(task, dev_rows)
+        if adjudicated is not None:
+            hashes["dev-adjudicated"] = write_jsonl(
+                out / "dev-adjudicated.jsonl", adjudicated
+            )
         for name, value in built["extra"].items():
             (out / f"{name}.json").write_text(
                 json.dumps(value, indent=2, ensure_ascii=False)
@@ -340,6 +345,34 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     print(f"manifest → {manifest_path.relative_to(HERE.parent.parent)}")
     return 0
+
+
+def apply_adjudications(task: str, rows: list[dict]) -> list[dict] | None:
+    """The dev rows with the verdicts in adjudications.jsonl applied.
+
+    A ``models`` verdict replaces the label, ``dataset`` keeps it, and
+    ``drop`` removes the row. Returns None when the file has no verdicts
+    for this task, so the caller writes no adjudicated split.
+    """
+    path = HERE / "adjudications.jsonl"
+    if not path.exists():
+        return None
+    verdicts = {
+        r["id"]: r
+        for r in (json.loads(line) for line in path.open(encoding="utf-8"))
+        if r["task"] == task
+    }
+    if not verdicts:
+        return None
+    out = []
+    for row in rows:
+        v = verdicts.get(row["id"])
+        if v is None or v["verdict"] == "dataset":
+            out.append(row)
+        elif v["verdict"] == "models":
+            out.append({**row, "label": v["label"], "adjudicated_from": v["original"]})
+        # "drop": left out
+    return out
 
 
 def _count(rows: list[dict], key: str) -> dict[str, int]:
