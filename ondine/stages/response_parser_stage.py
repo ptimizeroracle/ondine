@@ -1,5 +1,7 @@
 """Response parsing stage for structured output extraction."""
 
+from __future__ import annotations
+
 import json
 import re
 from abc import ABC, abstractmethod
@@ -14,10 +16,24 @@ from ondine.core.models import (
     ResponseBatch,
     ValidationResult,
 )
+from ondine.harness.contract import OutputContract, build_contract
+from ondine.harness.judge import ParsedAnswer, judge
+from ondine.stages.llm_invocation_stage import model_answered
 from ondine.stages.pipeline_stage import PipelineStage
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from ondine.core.data_container import Row  # noqa: TC001
+    from ondine.core.models import RowMetadata
+    from ondine.harness.judge import Verdict
+
+#: The attempt every verdict here belongs to. The model stage reports each
+#: answer it gets as attempt 1 of its pass, and the auto-retry pass runs as a
+#: sub-pipeline whose ledger is renumbered when it merges into the run's.
+_ATTEMPT = 1
+
+_NO_INPUTS: Mapping[str, Any] = {}
 
 
 class ResponseParser(ABC):
@@ -153,40 +169,65 @@ class ResponseParserStage(
     PipelineStage[tuple[list[ResponseBatch], list[str]], ResultContainerImpl]
 ):
     """
-    Parse LLM responses into structured ResultContainer.
+    Turn each LLM response into its row's output values, through the judge.
 
-    Now returns ResultContainerImpl instead of pd.DataFrame for
-    framework-agnostic output.
+    For every response the stage asks the judge
+    (:func:`ondine.harness.judge.judge`) for a verdict, writes the verdict's
+    values, and reports the verdict to the run's row ledger. The judge is the
+    only place that reads an answer and maps it onto the output columns; this
+    stage only gathers what the judge needs:
 
-    Responsibilities:
-    - Parse responses using configured parser
-    - Map parsed data to output columns
-    - Handle parse errors gracefully
-    - Return ResultContainer with results
+    - **the answer**: the response text, which the judge reads the way the
+      contract says; or, when a client parser is configured (``with_parser``,
+      structured output's parser), that parser's output, which the stage
+      still produces by calling ``parser.parse(text)`` as it always has;
+    - **the row's inputs**, read only when the contract compares a field with
+      an input column.
+
+    Under the unchecked contract (nothing declared) the values, the error
+    list and the loss counters are what this stage produced before the judge
+    existed: an answer it cannot read is a lost row under this stage's name.
+
+    A response the model never gave is written but not judged as an answer:
+    a call the error policy skipped or filled with its default, or the
+    placeholder the batch splitter leaves for a row its batch answer lacked.
+    Those rows were already reported lost upstream, and a verdict on a
+    placeholder would mark them delivered. If such a response cannot even be
+    read, that is reported as a failure of this stage, as before.
     """
 
     def __init__(
         self,
         parser: ResponseParser | None = None,
         output_columns: list[str] | None = None,
+        contract: OutputContract | None = None,
     ):
         """
         Initialize response parser stage.
 
         Args:
-            parser: Response parser (default: RawTextParser)
-            output_columns: Output column names
+            parser: The client's own parser, whose output the judge maps. With
+                a contract and no parser, the judge reads the text as the
+                contract says. With neither, today's default:
+                :class:`RawTextParser`.
+            output_columns: Output column names.
+            contract: The run's output contract, which the pipeline resolves.
+                Without one the stage judges under the unchecked contract over
+                its output columns.
         """
         super().__init__("ResponseParser")
-        self.parser = parser or RawTextParser()
+        if parser is None and contract is None:
+            parser = RawTextParser()
+        self.parser = parser
         self.output_columns = output_columns or ["output"]
+        self.contract = contract
 
     def process(
         self,
         input_data: tuple[list[ResponseBatch], list[str]] | list[ResponseBatch],
         context: Any,
     ) -> ResultContainerImpl:
-        """Parse responses into ResultContainer."""
+        """Judge every response and write its values into a ResultContainer."""
         # Handle both tuple (batches, output_cols) and list [batches] for backward compatibility
         if isinstance(input_data, tuple):
             batches, output_cols = input_data
@@ -198,104 +239,31 @@ class ResponseParserStage(
             batches = input_data
             output_cols = self.output_columns
 
+        contract = self._contract_for(list(output_cols))
+        inputs_of = _inputs_reader(contract, context)
+        ledger = getattr(context, "ledger", None)
+        if ledger is not None:
+            # A context driven outside a pipeline learns its size from reports.
+            ledger.widen(
+                max(
+                    (m.row_index for b in batches for m in b.metadata),
+                    default=-1,
+                )
+                + 1
+            )
+
         # Initialize result storage - use dict to maintain row_index ordering
         results: dict[int, Row] = {}
 
-        # Parse all responses
         for batch in batches:
             for response, metadata in zip(
                 batch.responses, batch.metadata, strict=False
             ):
-                try:
-                    # Parse response text
-                    response_text = (
-                        response.text if hasattr(response, "text") else str(response)
-                    )
-                    parsed = self.parser.parse(response_text)
-
-                    # Handle None result (e.g. from "null" input for retry)
-                    if parsed is None:
-                        results[metadata.row_index] = {
-                            "_row_index": metadata.row_index,
-                            **{col: None for col in output_cols},
-                        }
-                        continue
-
-                    # Map to output columns
-                    row_data: Row = {"_row_index": metadata.row_index}
-
-                    if len(output_cols) == 1:
-                        # Single output column
-                        if isinstance(parsed, dict) and output_cols[0] in parsed:
-                            # 1. Exact match for column name
-                            row_data[output_cols[0]] = parsed[output_cols[0]]
-                        elif isinstance(parsed, dict) and "output" in parsed:
-                            # 2. "output" field (standard fallback)
-                            row_data[output_cols[0]] = parsed["output"]
-                        elif isinstance(parsed, dict):
-                            # 3. Use first value (risky but sometimes needed)
-                            row_data[output_cols[0]] = next(iter(parsed.values()))
-                        else:
-                            row_data[output_cols[0]] = parsed
-                    else:
-                        # Multiple output columns
-                        source = parsed if isinstance(parsed, dict) else {}
-
-                        # Unwrap nested structures when output columns
-                        # aren't found at the top level. Two patterns:
-                        # 1. Batch wrapper: {"items": [{"id":1, "result":{…}}]}
-                        #    (batch_size=1 skips the disaggregator)
-                        # 2. Single-item wrapper: {"id":1, "result":{…}}
-                        #    (disaggregated item still carrying id/result)
-                        if not any(col in source for col in output_cols):
-                            if "items" in source and isinstance(source["items"], list):
-                                item = source["items"][0] if source["items"] else {}
-                                if isinstance(item, dict):
-                                    source = item.get("result", item)
-                            elif "result" in source and isinstance(
-                                source["result"], dict
-                            ):
-                                source = source["result"]
-
-                            if hasattr(source, "model_dump"):
-                                source = source.model_dump()
-                            elif not isinstance(source, dict):
-                                source = {}
-
-                        if not any(col in source for col in output_cols):
-                            # The reply answered, but not in the shape asked
-                            # for, so there is nothing to put in any column.
-                            # Say so: the cells stay empty either way, and an
-                            # empty row with no error reads as a finished one.
-                            context.record_failed_rows(
-                                [metadata.row_index],
-                                stage=self.name,
-                                message=(
-                                    f"response is not a JSON object with any of "
-                                    f"the output columns {list(output_cols)}: "
-                                    f"{response_text.strip()[:120]!r}"
-                                ),
-                            )
-
-                        for col in output_cols:
-                            row_data[col] = source.get(col)
-
-                    results[metadata.row_index] = row_data
-
-                except Exception as e:
-                    self.logger.debug(
-                        f"Failed to parse response at row {metadata.row_index}: {e}"
-                    )
-                    context.record_failed_rows(
-                        [metadata.row_index],
-                        stage=self.name,
-                        message=f"response could not be parsed: {e}",
-                    )
-                    # Store None for failed parses
-                    results[metadata.row_index] = {
-                        "_row_index": metadata.row_index,
-                        **{col: None for col in output_cols},
-                    }
+                row = metadata.row_index
+                text = response.text if hasattr(response, "text") else str(response)
+                verdict = judge(contract, self._answer(text), inputs_of(row))
+                results[row] = {"_row_index": row, **verdict.values}
+                self._report(context, ledger, row, verdict, response, metadata)
 
         # Convert to list sorted by row_index
         sorted_results = [results[idx] for idx in sorted(results.keys())]
@@ -309,6 +277,47 @@ class ResponseParserStage(
         self.logger.info(f"Parsed {len(results)} responses")
 
         return container
+
+    def _contract_for(self, output_cols: list[str]) -> OutputContract:
+        """The contract to judge under: the run's, or unchecked over ``output_cols``."""
+        if self.contract is None:
+            return build_contract(output_cols)
+        if list(self.contract.output_columns) != output_cols:
+            raise ValueError(
+                f"the output contract covers {list(self.contract.output_columns)}, "
+                f"but this stage writes {output_cols}"
+            )
+        return self.contract
+
+    def _answer(self, text: str) -> Any:
+        """What the judge reads: the text, or the client parser's reading of it."""
+        if self.parser is None:
+            return text
+        try:
+            return ParsedAnswer(self.parser.parse(text), text)
+        # A client parser's failure is the row's, not the run's.
+        except Exception as error:
+            self.logger.debug(f"Failed to parse response: {error}")
+            return ParsedAnswer(None, text, error=str(error))
+
+    def _report(
+        self,
+        context: Any,
+        ledger: Any,
+        row: int,
+        verdict: Verdict,
+        response: Any,
+        metadata: RowMetadata,
+    ) -> None:
+        """Report ``verdict`` to the ledger, or a lost row the way it always was."""
+        if ledger is not None and _model_answered(response, metadata):
+            ledger.record_verdict(row, _ATTEMPT, verdict, stage=self.name)
+        elif not verdict.passed and hasattr(context, "record_failed_rows"):
+            context.record_failed_rows(
+                [row],
+                stage=self.name,
+                message="; ".join(reason.text for reason in verdict.reasons),
+            )
 
     def validate_input(
         self, input_data: tuple[list[ResponseBatch], list[str]]
@@ -337,3 +346,39 @@ class ResponseParserStage(
             output_tokens=0,
             rows=sum(len(b.responses) for b in input_data[0]),
         )
+
+
+def _model_answered(response: Any, metadata: RowMetadata) -> bool:
+    """Whether ``response`` is the model's answer for its row, so worth a verdict.
+
+    Not when the error policy skipped the call or filled in its default (the
+    model stage marks both, and reports them to the ledger as provider
+    failures), nor for the placeholder the batch splitter leaves for a row its
+    batch answer lacked (reported there as that stage's failure). The model
+    stage's own reading (:func:`model_answered`) decides the first two, so
+    both stages agree on what counts as an answer.
+    """
+    if (metadata.custom or {}).get("parse_error"):
+        return False
+    return model_answered(response)
+
+
+def _inputs_reader(
+    contract: OutputContract, context: Any
+) -> Callable[[int], Mapping[str, Any]]:
+    """``inputs_of(row)``: the input values the judge compares ``row`` against.
+
+    Only a relation naming an input column reads them, so a contract without
+    one (the unchecked contract among them) costs nothing here. Rows are
+    numbered by position in the full input, which is what the context keeps
+    as the loaded (or preprocessed) data, on resume too.
+    """
+    if not any(relation.input_column for relation in contract.relations):
+        return lambda row: _NO_INPUTS
+    full_input = context.full_input() if hasattr(context, "full_input") else None
+    rows: list[Mapping[str, Any]] = list(full_input) if full_input is not None else []
+
+    def inputs_of(row: int) -> Mapping[str, Any]:
+        return rows[row] if 0 <= row < len(rows) else _NO_INPUTS
+
+    return inputs_of

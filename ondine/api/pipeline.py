@@ -70,9 +70,9 @@ from ondine.stages import (
     PromptFormatterStage,
     ResponseParserStage,
     ResultWriterStage,
-    create_response_parser,
 )
 from ondine.stages.llm_invocation_stage import report_response
+from ondine.stages.parser_factory import validate_response_format
 from ondine.utils import RateLimiter, RetryHandler, get_logger
 from ondine.utils.budget_controller import BudgetExceededError
 from ondine.utils.optional_dependencies import raise_parquet_extra_error
@@ -83,6 +83,15 @@ logger = get_logger(__name__)
 #: The stage name the ledger gives context verification (grounding,
 #: contradiction, confidence), which runs inside the pipeline, not as a stage.
 _VERIFICATION_STAGE = "ContextVerification"
+
+#: Why a run under a declared output contract refuses to start (see
+#: Pipeline._refuse_unenforced_contract).
+UNENFORCED_CONTRACT_MESSAGE = (
+    "Output contracts are declared but not enforced yet; they take effect "
+    "when delivery is wired (harness step 3). Remove the with_output_field / "
+    "with_output_relation / with_contract_policy / as_contract=True "
+    "declarations to run."
+)
 
 
 def _report_unlisted_stage_failure(
@@ -397,6 +406,8 @@ class Pipeline:
             Progress is automatically saved via checkpoints. If execution fails,
             use resume_from to continue from the last checkpoint.
         """
+        self._refuse_unenforced_contract()
+
         # Enable uvloop for high performance (UNIX only)
         try:
             import uvloop
@@ -548,13 +559,9 @@ class Pipeline:
 
             # Optional: Auto-retry failed rows
             if self.specifications.processing.auto_retry_failed:
-                # Get preprocessed data from context (or loaded data if no preprocessing)
-                retry_source = context.intermediate_data.get("preprocessed_data")
-                if retry_source is None:
-                    retry_source = context.intermediate_data.get("loaded_data")
                 # Pass container directly (no Pandas conversion)
                 result = self._auto_retry_failed_rows(
-                    result, retry_source, ledger=ledger
+                    result, context.full_input(), ledger=ledger
                 )
             self._hold_ledger(ledger, finished=True)
 
@@ -792,7 +799,8 @@ class Pipeline:
 
         # The input's size is known: every row now exists in the run's
         # ledger, pending, before any stage reports on it.
-        ledger = context.open_ledger(self._unchecked_contract())
+        contract = self._resolve_contract()
+        ledger = context.open_ledger(contract)
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
@@ -1005,19 +1013,22 @@ class Pipeline:
             context.intermediate_data["disaggregated_responses"] = response_batches
             self.logger.info("Batch disaggregation complete")
 
-        # Stage 4: Parse responses (using configured parser)
-        # Check if custom parser provided in metadata
+        # Stage 4: Parse responses: the judge reads each answer under the
+        # run's contract, or maps the output of the client's own parser.
         custom_parser = self._components.custom_parser
-        if custom_parser:
-            parser = custom_parser
-        else:
-            parser = create_response_parser(
-                prompt_spec=specs.prompt,
-                output_columns=specs.dataset.output_columns,
+        if not custom_parser:
+            # The judge reads the text under the run's contract; a response
+            # format it cannot honour fails here, as it always has.
+            validate_response_format(
+                specs.prompt.response_format,
+                specs.dataset.output_columns,
+                specs.prompt.regex_patterns,
+                json_fields=specs.prompt.json_fields,
             )
         parser_stage = ResponseParserStage(
-            parser=parser,
+            parser=custom_parser or None,
             output_columns=specs.dataset.output_columns,
+            contract=contract,
         )
         results_df = self._execute_stage(
             parser_stage,
@@ -1096,10 +1107,7 @@ class Pipeline:
         rows re-sent, so position *i* in one is a different row in the other.
         Falls back to position when a result has no usable ``_row_index``.
         """
-        full_input = context.intermediate_data.get("preprocessed_data")
-        if full_input is None:
-            full_input = context.intermediate_data.get("loaded_data", working_df)
-        input_rows: list[dict] = list(full_input)
+        input_rows: list[dict] = list(context.full_input(default=working_df))
         working_rows: list[dict] = list(working_df)
 
         def input_row_for(position: int) -> dict:
@@ -1438,6 +1446,7 @@ class Pipeline:
         Raises:
             ValueError: If executor doesn't support async
         """
+        self._refuse_unenforced_contract()
         if not self.executor.supports_async():
             raise ValueError(
                 "Current executor doesn't support async. "
@@ -1469,6 +1478,7 @@ class Pipeline:
         Raises:
             ValueError: If executor doesn't support streaming
         """
+        self._refuse_unenforced_contract()
         if not self.executor.supports_streaming():
             raise ValueError(
                 "Current executor doesn't support streaming. "
@@ -1579,6 +1589,7 @@ class Pipeline:
         """
         import asyncio
 
+        self._refuse_unenforced_contract()
         start_time = datetime.now()
         execution_id = uuid4()
 
@@ -1809,6 +1820,8 @@ class Pipeline:
         """
         import asyncio
 
+        self._refuse_unenforced_contract()
+
         async def _run_pipelined() -> list[ExecutionResult]:
             return [r async for r in self._execute_stream_pipelined_async(chunk_size)]
 
@@ -1916,23 +1929,33 @@ class Pipeline:
 
     # ── the row ledger ────────────────────────────────────────────────────
     #
-    # Migration step 1 of the data-quality harness: the ledger is the only
-    # record of row fate, fed by the same events the context used to count,
-    # but no contract is applied yet. Every run is "unchecked", and today's
-    # outputs (errors, counters, blanked cells) are read from the ledger with
-    # today's rules (RowLedger.reported_losses).
+    # The data-quality harness. Migration step 1 made the ledger the only
+    # record of row fate; step 2 has the parse stage ask the judge for every
+    # answer and report its verdict there. A run's contract is the one the
+    # builder compiled, or the unchecked one: under it, today's outputs
+    # (errors, counters, blanked cells) are read from the ledger with today's
+    # rules (RowLedger.reported_losses).
 
-    def _unchecked_contract(self) -> OutputContract:
-        """The contract every run uses until contracts are wired: none declared.
+    def _resolve_contract(self) -> OutputContract:
+        """The run's output contract: the one place a run's contract is chosen.
 
-        Built from the pipeline's output columns and response format, so the
-        ledger's policy has the same source it will have once a contract is
-        declared. Nothing is checked under it. A response format the contract
-        cannot read (a regex format missing a column's pattern) is today's
-        parser's problem to report, not a reason to refuse a run that works
-        today, so it falls back to a plain-text contract over the same
-        columns; the ledger's policy is the same either way.
+        The ledger's policy, the parse stage's judge, a resumed attempt's
+        restored answers and every streamed chunk all read it from here, so
+        they cannot judge one run under two contracts.
+
+        The builder's compiled contract when the client declared one
+        (``PipelineComponents.output_contract``). Otherwise the unchecked
+        contract, built from the pipeline's output columns and response
+        format: nothing is checked under it, and the judge reads every answer
+        exactly as the parser factory's parser does. A response format the
+        contract cannot read (a regex format missing a column's pattern) is
+        the parser factory's problem to report, not a reason to refuse a run
+        that works today, so it falls back to a plain-text contract over the
+        same columns; the ledger's policy is the same either way.
         """
+        declared = self._components.output_contract
+        if declared is not None:
+            return declared
         dataset = self.specifications.dataset
         prompt = self.specifications.prompt
         columns = list(dataset.output_columns) or ["output"]
@@ -1945,6 +1968,23 @@ class Pipeline:
         except ContractError as error:
             self.logger.debug(f"Unchecked contract falls back to plain text: {error}")
             return build_contract(columns)
+
+    def _refuse_unenforced_contract(self) -> None:
+        """Refuse to run under a checked contract until delivery is wired.
+
+        The judge and the ledger already act on a declared contract, but
+        nothing delivers its outcome yet: a rejected row would come back
+        blank, with no error, no quarantine and a run reported complete.
+        Every entry path calls this first, before any model call, until
+        harness step 3 wires delivery. :meth:`_resolve_contract` still
+        returns the declared contract: it is the seam step 3 builds on.
+
+        Raises:
+            NotImplementedError: the client declared a contract.
+        """
+        declared = self._components.output_contract
+        if declared is not None and declared.checked:
+            raise NotImplementedError(UNENFORCED_CONTRACT_MESSAGE)
 
     def _hold_ledger(self, ledger: RowLedger | None, *, finished: bool) -> None:
         """Make ``ledger`` the one :attr:`row_ledger` reads.
@@ -1990,7 +2030,7 @@ class Pipeline:
         named a restored row, stay as they were (``RowLedger.reported_losses``).
         """
         previous = ExecutionContext(total_rows=ledger.row_count)
-        previous.open_ledger(self._unchecked_contract())
+        previous.open_ledger(self._resolve_contract())
         for batch in restored:
             for response, metadata in zip(
                 batch.responses, batch.metadata, strict=False
@@ -2010,7 +2050,7 @@ class Pipeline:
         unknown: the ledger then widens chunk by chunk, so rows past the last
         chunk read are not in it at all.
         """
-        policy = LedgerPolicy.from_contract(self._unchecked_contract())
+        policy = LedgerPolicy.from_contract(self._resolve_contract())
         ledger = RowLedger(row_count, policy)
         self._hold_ledger(ledger, finished=False)
         return ledger
@@ -2360,6 +2400,7 @@ class Pipeline:
             RunHandle with ``status == SUBMITTED_REMOTE`` and the
             ``provider_job_id`` populated.
         """
+        self._refuse_unenforced_contract()
         if self.specifications.processing.execution_mode != "provider_batch":
             raise ValueError(
                 "submit() requires execution_mode='provider_batch'. "

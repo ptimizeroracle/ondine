@@ -385,6 +385,9 @@ class RowLedger:
         self._reported_errors: list[tuple[int, _Cause]] = []
         self._reported_skipped = 0
         self._reported_failed = 0
+        # The ledger's copy of a clean unchecked pass, one per reporting stage
+        # and column list: nearly every verdict of a run without a contract.
+        self._clean_passes: dict[tuple[str, tuple[Any, ...]], _Judgement] = {}
         self._lock = threading.Lock()
         self._widen(row_count)
 
@@ -479,6 +482,14 @@ class RowLedger:
         stage). Without a contract an unparseable answer is a lost row, and
         today's error list names that stage, so the ledger must know it.
         """
+        judgement = self._clean_pass(verdict, stage)
+        if judgement is not None:
+            # Fast path: the run's common case, with nothing to check.
+            with self._lock:
+                index = self._checked_row(row)
+                if index is not None and self._checked_attempt(attempt):
+                    self._add_verdict(index, attempt, judgement)
+            return
         judgement, contradiction = _Judgement.of(verdict, stage)
         with self._lock:
             index = self._checked_row(row)
@@ -499,8 +510,39 @@ class RowLedger:
             self._add_verdict(index, attempt, judgement)
             if not self._policy.checked and not judgement.passed:
                 # Without a contract an unparseable answer is a lost row, as
-                # the parse step has always recorded it.
-                self._report_loss(index, judgement.unparseable_cause())
+                # the parse step has always recorded it, stamped when it was
+                # reported, as the parse step's own failure report was.
+                cause = replace(judgement.unparseable_cause(), timestamp=datetime.now())
+                self._report_loss(index, cause)
+
+    def _clean_pass(self, verdict: Verdict, stage: str) -> _Judgement | None:
+        """The ledger's copy of ``verdict`` if it is a clean unchecked pass.
+
+        Without a contract nearly every verdict is one: every field a value,
+        no reason, no format fix. All such verdicts on the same columns from
+        the same stage copy to equal judgements, so the copy is made once and
+        shared. None for any other verdict, or under a checked policy; those
+        take the full path, with its consistency checks.
+        """
+        if self._policy.checked or verdict.checked:
+            return None
+        names = []
+        for item in verdict.fields:
+            if (
+                item.outcome != "value"
+                or not item.required
+                or item.reasons
+                or item.format_fixed
+                or item.fixed_reasons
+            ):
+                return None
+            names.append(item.name)
+        key = (stage, tuple(names))
+        judgement = self._clean_passes.get(key)
+        if judgement is None:
+            judgement = _Judgement.of(verdict, stage)[0]
+            self._clean_passes[key] = judgement
+        return judgement
 
     def record_provider_failure(
         self,
@@ -1443,9 +1485,13 @@ def _decide(
     if judgements:
         latest_attempt = max(judgements)
         latest = judgements[latest_attempt]
-        if latest.passed:
+        # A failure reported on the attempt a passing verdict judged means a
+        # later stage withdrew that value (grounding blanked it): the row is
+        # lost, exactly as an answer with no verdict and a failure is.
+        withdrawn = any(f.attempt == latest_attempt for f in events.failures)
+        if latest.passed and not withdrawn:
             return _delivered(base, events, policy, latest_attempt), None
-        if policy.checked:
+        if policy.checked and not latest.passed:
             return _failed_check(base, events, policy, latest_attempt), None
 
     return _lost(base, events, policy)

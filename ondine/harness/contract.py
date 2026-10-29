@@ -285,7 +285,7 @@ def build_contract(
     schema: type | None = None,
     input_columns: Sequence[str] | None = None,
     response_format: str = "raw",
-    regex_patterns: Mapping[str, str] | None = None,
+    regex_patterns: Mapping[str, str | re.Pattern[str]] | None = None,
 ) -> OutputContract:
     """Validate the declarations and return a frozen contract.
 
@@ -300,7 +300,11 @@ def build_contract(
             validators run in the judge.
         input_columns: The row's input columns, which relations may name.
         response_format: "raw", "json" or "regex", as on the prompt spec.
-        regex_patterns: Extraction patterns for ``response_format='regex'``.
+        regex_patterns: Extraction patterns for ``response_format='regex'``,
+            as text or compiled (``with_parser(RegexParser(...))`` stores
+            compiled ones). A compiled pattern is read as its text, with its
+            flags written in front as inline flags, so the contract holds text
+            only and one pattern has one fingerprint however it was given.
             They run on the whole answer, so under a checked contract they
             must pass the same safety check as field patterns. Under the
             unchecked contract they are compiled but not checked, exactly as
@@ -331,7 +335,10 @@ def build_contract(
     checked = bool(declared or relations or schema is not None)
     policy = policy or RunPolicy()
     parse_mode = _parse_mode(response_format, len(columns), problems)
-    patterns = dict(regex_patterns or {})
+    patterns = {
+        column: _pattern_text(pattern)
+        for column, pattern in (regex_patterns or {}).items()
+    }
     if parse_mode == "regex":
         missing = [column for column in columns if column not in patterns]
         if missing:
@@ -341,10 +348,14 @@ def build_contract(
 
     by_name: dict[str, OutputField] = {}
     for item in declared:
-        if item.name in by_name:
-            problems.append(f"{item.name}: declared twice")
-        elif item.name not in columns:
-            problems.append(f"{item.name}: not an output column {list(columns)}")
+        if item.name in by_name or item.name not in columns:
+            if item.name in by_name:
+                problems.append(f"{item.name}: declared twice")
+            else:
+                problems.append(f"{item.name}: not an output column {list(columns)}")
+            # A declaration the contract will not keep is still compiled, so
+            # its own problems are listed with this one, not after a rebuild.
+            problems.extend(_compile_field(item, None, checked=checked)[1])
         else:
             by_name[item.name] = item
     resolved = tuple(
@@ -365,7 +376,8 @@ def build_contract(
     if checked:
         problems.extend(policy_problems(policy))
     if problems:
-        raise ContractError(problems)
+        # A field declared twice the same way would list each problem twice.
+        raise ContractError(list(dict.fromkeys(problems)))
 
     pattern_pairs = tuple(sorted(patterns.items()))
     return OutputContract(
@@ -411,6 +423,41 @@ def _output_columns(
     if not columns:
         problems.append("the contract names no output column")
     return tuple(columns)
+
+
+# The inline letter of each flag a text pattern can carry. ``re.UNICODE`` is
+# implied for text and ``re.DEBUG`` only prints, so neither is written.
+_INLINE_FLAGS = (
+    (re.ASCII, "a"),
+    (re.IGNORECASE, "i"),
+    (re.MULTILINE, "m"),
+    (re.DOTALL, "s"),
+    (re.VERBOSE, "x"),
+)
+
+
+def _pattern_text(pattern: str | re.Pattern[str]) -> str:
+    """The text of an extraction pattern, given as text or compiled.
+
+    A compiled pattern's flags change what it matches, so they are written in
+    front of its source as inline flags (``re.compile("a", re.I)`` reads as
+    ``"(?i)a"``). Flags the source already writes inline are not repeated, so
+    a compiled pattern without flags reads as exactly its source.
+    """
+    if not isinstance(pattern, re.Pattern):
+        return pattern
+    source = pattern.pattern
+    try:
+        written = re.compile(source).flags
+    except re.error:
+        # Only valid under the pattern's own flags (a verbose comment, say).
+        written = 0
+    letters = "".join(
+        letter
+        for flag, letter in _INLINE_FLAGS
+        if pattern.flags & flag and not written & flag
+    )
+    return f"(?{letters}){source}" if letters else source
 
 
 def _parse_mode(response_format: str, column_count: int, problems: list[str]) -> str:

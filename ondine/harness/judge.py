@@ -35,12 +35,15 @@ Why the judge is built the way it is:
   The format fix runs on a failed field before relations, so relations see
   the fixed value; this is the same result as "check, fix, re-check all".
 
-* **Under the unchecked contract it is today's parse step, exactly.** Values
-  and failure messages equal what ``ResponseParserStage`` with today's parsers
-  produces, including its fallbacks. One of them is a known silent-error
-  source: a dict answer without the expected key delivers *whichever value
-  comes first*. It is kept only under "unchecked", for byte-identical output;
-  any real contract replaces it with a reasoned "missing" failure.
+* **Under the unchecked contract it is today's parse step, exactly.** The
+  parse stage now asks the judge for every answer, so this is the only copy
+  of that step. Values and failure messages equal what ``ResponseParserStage``
+  produced before the move (a frozen copy in
+  ``tests/unit/test_parser_stage_judge.py`` pins it), including its
+  fallbacks. One of them is a known silent-error source: a dict answer
+  without the expected key delivers *whichever value comes first*. It is
+  kept only under "unchecked", for byte-identical output; any real contract
+  replaces it with a reasoned "missing" failure.
 """
 
 from __future__ import annotations
@@ -93,6 +96,31 @@ _MIRROR = {"<": ">", "<=": ">=", "==": "==", "!=": "!=", ">=": "<=", ">": "<"}
 _NO_ANSWER = "no answer was returned"
 _NOT_OBJECT = "missing, the answer is not a JSON object"
 _NOT_IN_ANSWER = "missing from the answer"
+_PARSER_FAILED = "missing, the parser could not read the answer"
+
+
+@dataclass(frozen=True)
+class ParsedAnswer:
+    """An answer the client's own parser already read, with the text it read.
+
+    A client may bring its own parser (``with_parser``, or structured output's
+    parser). Its output is what the judge checks, but the judge cannot tell a
+    parser that returned the string ``"42"`` from a raw answer ``"42"`` it
+    must read itself, and a reason should quote what the model wrote, not the
+    parser's output. Wrapping the two keeps both apart.
+
+    Attributes:
+        value: What the parser returned, of any type. Never read again: a
+            ``str`` here is a value, not text to parse.
+        text: The raw answer the parser read; failure reasons quote it.
+        error: What the parser raised, as text, if it raised. ``value`` is
+            then unused. Kept as text, not as the exception, so two equal
+            failures give equal verdicts.
+    """
+
+    value: Any
+    text: str
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -208,9 +236,10 @@ def judge(
         contract: From :func:`~ondine.harness.contract.build_contract`.
         answer: The model's answer, one of: text (plain, JSON, or JSON in a
             code fence); an object already parsed (a dict, a structured-output
-            Pydantic instance, or a custom parser's output); or ``None`` when
-            the provider returned no answer. A ``str`` is always read as raw
-            text to parse.
+            Pydantic instance, or a custom parser's output); a
+            :class:`ParsedAnswer` (a client parser's output with the text it
+            read); or ``None`` when the provider returned no answer. A bare
+            ``str`` is always read as raw text to parse.
         inputs: The row's input values, read by relations that name an input
             column.
 
@@ -229,14 +258,25 @@ def judge(
 
 def _judge_unchecked(contract: OutputContract, answer: Any) -> Verdict:
     columns = list(contract.output_columns)
-    text = answer if isinstance(answer, str) else str(answer)
+    if isinstance(answer, ParsedAnswer):
+        text, failure = answer.text, answer.error
+    else:
+        text, failure = (answer if isinstance(answer, str) else str(answer)), None
+    row: dict[str, Any]
+    message: str | None
     try:
-        parsed = (
-            _parse_like_today(contract, answer) if isinstance(answer, str) else answer
-        )
-        row, message = _map_like_today(parsed, columns, text)
+        if failure is not None:
+            row, message = dict.fromkeys(columns), _unparsed(failure)
+        else:
+            if isinstance(answer, ParsedAnswer):
+                parsed = answer.value
+            elif isinstance(answer, str):
+                parsed = _parse_like_today(contract, answer)
+            else:
+                parsed = answer
+            row, message = _map_like_today(parsed, columns, text)
     except Exception as error:  # today's stage catches everything here too
-        row, message = dict.fromkeys(columns), f"response could not be parsed: {error}"
+        row, message = dict.fromkeys(columns), _unparsed(str(error))
     if message is None:
         fields = tuple(FieldVerdict(name, "value", row[name]) for name in columns)
     else:
@@ -247,8 +287,18 @@ def _judge_unchecked(contract: OutputContract, answer: Any) -> Verdict:
     return Verdict(checked=False, fields=fields)
 
 
+def _unparsed(error: str) -> str:
+    return f"response could not be parsed: {error}"
+
+
 def _parse_like_today(contract: OutputContract, text: str) -> Any:
-    """What the parser chosen by ``create_response_parser`` returns today."""
+    """What the parser chosen by ``create_response_parser`` returns.
+
+    The parse stage hands the judge the text whenever no client parser is
+    configured, so this is where a pipeline's default parsing happens. The
+    parser classes produce the same result for a client that uses them
+    directly; ``tests/unit/test_parser_stage_judge.py`` pins the two together.
+    """
     if contract.parse_mode == "text":
         return {"output": _clean_text(text)}
     if contract.parse_mode == "regex":
@@ -278,9 +328,9 @@ def _map_like_today(
 ) -> tuple[dict[str, Any], str | None]:
     """Today's per-row column mapping, and the failure it records, if any.
 
-    Mirrors ``ResponseParserStage.process`` branch for branch. The third
-    single-column branch is the known silent-error source: a dict without the
-    expected key delivers its first value.
+    The only copy: ``ResponseParserStage`` used to hold this mapping and now
+    asks the judge. The third single-column branch is the known silent-error
+    source: a dict without the expected key delivers its first value.
     """
     if parsed is None:
         return dict.fromkeys(columns), None
@@ -352,6 +402,11 @@ def _extract(contract: OutputContract, answer: Any) -> tuple[dict[str, Any], str
     or ``{"result": …}``), which carries the same fields one level down.
     """
     columns = list(contract.output_columns)
+    already_read = isinstance(answer, ParsedAnswer)
+    if already_read:
+        if answer.error is not None:
+            return {}, f"{_PARSER_FAILED}: {answer.error}"
+        answer = answer.value
     if answer is None:
         return {}, _NO_ANSWER
     if hasattr(answer, "model_dump") and not isinstance(answer, type):
@@ -359,7 +414,7 @@ def _extract(contract: OutputContract, answer: Any) -> tuple[dict[str, Any], str
             answer = answer.model_dump()
         except Exception:
             return {}, _NOT_OBJECT
-    if isinstance(answer, str):
+    if isinstance(answer, str) and not already_read:
         if contract.parse_mode == "text":
             return {columns[0]: _clean_text(answer)}, _NOT_IN_ANSWER
         if contract.parse_mode == "regex":

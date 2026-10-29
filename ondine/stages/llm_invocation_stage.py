@@ -58,6 +58,17 @@ def skipped_by_error_policy(response: Any) -> bool:
     return _policy_action(response) == _SKIPPED
 
 
+def model_answered(response: Any) -> bool:
+    """True when ``response`` is the model's answer, not the error policy's.
+
+    False when the error policy skipped the call or substituted its default:
+    :func:`report_response` reports both as provider failures, so a later
+    stage must not treat their text as an answer. Reads the same mark
+    :func:`report_response` does, so the stages agree on what was answered.
+    """
+    return _policy_action(response) is None
+
+
 def report_response(
     context: "ExecutionContext",
     response: LLMResponse,

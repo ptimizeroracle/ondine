@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import enum
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -34,6 +35,8 @@ from ondine.harness.contract import (
     RunPolicy,
     build_contract,
 )
+from ondine.harness.judge import judge
+from ondine.stages.response_parser_stage import RegexParser
 
 
 def _problems(**kwargs) -> list[str]:
@@ -367,6 +370,46 @@ def test_each_impossible_declaration_is_named(kwargs, expected):
     assert any(expected in problem for problem in problems), problems
 
 
+def test_a_field_declared_twice_lists_each_declarations_problems():
+    """A "declared twice" problem does not hide either declaration's own."""
+    problems = _problems(
+        output_columns=["a"],
+        fields=[
+            OutputField("a", type="integer", minimum=5, maximum=2),
+            OutputField("a", pattern=r"(a+)+b", min_length=3, max_length=1),
+        ],
+    )
+
+    assert "a: declared twice" in problems
+    assert "a: minimum 5 is above the maximum 2" in problems
+    assert "a: min_length 3 is above max_length 1" in problems
+    assert any(
+        problem.startswith("a: pattern '(a+)+b' is not safe on long answers")
+        for problem in problems
+    ), problems
+
+
+def test_a_field_declared_twice_the_same_way_lists_its_problem_once():
+    broken = OutputField("a", min_length=3, max_length=1)
+
+    problems = _problems(output_columns=["a"], fields=[broken, broken])
+
+    assert problems == [
+        "a: declared twice",
+        "a: min_length 3 is above max_length 1",
+    ]
+
+
+def test_a_field_that_is_not_an_output_column_lists_its_own_problems():
+    problems = _problems(
+        output_columns=["a"],
+        fields=[OutputField("b", min_length=3, max_length=1)],
+    )
+
+    assert "b: not an output column ['a']" in problems
+    assert "b: min_length 3 is above max_length 1" in problems
+
+
 @pytest.mark.parametrize(
     ("relation", "fields", "expected"),
     [
@@ -631,6 +674,131 @@ def test_extraction_patterns_are_not_checked_under_the_unchecked_contract():
 
     assert contract.checked is False
     assert contract.rules_for("a").extractor.pattern == r"(a+)+b"
+
+
+# ``with_parser(RegexParser(...))`` stores the parser's compiled patterns on the
+# prompt spec, so the contract receives ``re.Pattern`` objects there.
+
+
+def test_a_compiled_extraction_pattern_builds_like_its_source():
+    """A compiled pattern without flags is the same declaration as its text."""
+    from_text = build_contract(
+        ["a"], response_format="regex", regex_patterns={"a": r"A: (\w+)"}
+    )
+
+    from_compiled = build_contract(
+        ["a"], response_format="regex", regex_patterns={"a": re.compile(r"A: (\w+)")}
+    )
+
+    assert from_compiled.regex_patterns == (("a", r"A: (\w+)"),)
+    assert from_compiled.fingerprint == from_text.fingerprint
+
+
+def test_a_regex_parsers_patterns_build_a_contract():
+    """The patterns ``with_parser(RegexParser)`` stores build without a crash."""
+    parser = RegexParser({"score": r"SCORE: (\d+)", "why": r"WHY: (.+)"})
+
+    contract = build_contract(
+        ["score", "why"], response_format="regex", regex_patterns=parser.patterns
+    )
+
+    assert contract.regex_patterns == (
+        ("score", r"SCORE: (\d+)"),
+        ("why", r"WHY: (.+)"),
+    )
+    assert judge(contract, "SCORE: 7\nWHY: good").values == {
+        "score": "7",
+        "why": "good",
+    }
+
+
+@pytest.mark.parametrize(
+    ("source", "flags", "answer"),
+    [
+        (r"^SCORE:\s*(\d+)", re.IGNORECASE, "score: 7"),
+        (r"^SCORE:\s*(\d+)", re.MULTILINE, "noise\nSCORE: 7"),
+        (r"^SCORE:.(\d+)", re.DOTALL, "SCORE:\n7"),
+        (r"^SCORE: \s* (\d+)  # the score", re.VERBOSE, "SCORE: 7"),
+        (r"^SCORE:\s*(\d+)", re.IGNORECASE | re.MULTILINE, "noise\nscore: 7"),
+    ],
+    ids=["ignorecase", "multiline", "dotall", "verbose", "combined"],
+)
+def test_a_compiled_extraction_patterns_flags_are_kept(source, flags, answer):
+    """The flags change what the pattern matches, so the contract keeps them."""
+    compiled = re.compile(source, flags)
+    assert compiled.search(answer), "the flagged pattern must match"
+    assert not re.search(source, answer), "the case must need its flag"
+
+    contract = build_contract(
+        ["score"], response_format="regex", regex_patterns={"score": compiled}
+    )
+
+    assert contract.rules_for("score").extractor.flags == compiled.flags
+    assert judge(contract, answer).values == {"score": "7"}
+    without_flags = build_contract(
+        ["score"], response_format="regex", regex_patterns={"score": source}
+    )
+    assert contract.fingerprint != without_flags.fingerprint
+
+
+def test_flags_written_inside_a_compiled_pattern_are_not_repeated():
+    compiled = re.compile(r"(?i)score: (\d+)")
+
+    contract = build_contract(
+        ["score"], response_format="regex", regex_patterns={"score": compiled}
+    )
+
+    assert contract.regex_patterns == (("score", r"(?i)score: (\d+)"),)
+
+
+def test_a_compiled_pattern_with_a_flag_reads_as_the_same_text_pattern():
+    """The flag is written into the text, so both spellings are one contract."""
+    compiled = build_contract(
+        ["a"],
+        response_format="regex",
+        regex_patterns={"a": re.compile(r"a: (\w+)", re.IGNORECASE)},
+    )
+    written = build_contract(
+        ["a"], response_format="regex", regex_patterns={"a": r"(?i)a: (\w+)"}
+    )
+
+    assert compiled.regex_patterns == written.regex_patterns
+    assert compiled.fingerprint == written.fingerprint
+
+
+def test_a_compiled_extraction_pattern_is_safety_checked_when_checked():
+    problems = _problems(
+        fields=[OutputField("a")],
+        response_format="regex",
+        regex_patterns={"a": re.compile(r"(a+)+b", re.IGNORECASE)},
+    )
+
+    assert len(problems) == 1
+    assert problems[0].startswith("a: extraction pattern '(?i)(a+)+b'")
+    assert "is not safe on long answers" in problems[0]
+
+
+def test_a_pipeline_with_a_regex_parser_runs():
+    """Regression: the run's unchecked contract read the compiled patterns."""
+    from ondine import PipelineBuilder
+    from tests.e2e.conformance_harness import LedgerClient, conformance_frame
+
+    pipeline = (
+        PipelineBuilder.create()
+        .from_dataframe(
+            conformance_frame(2), input_columns=["marker"], output_columns=["score"]
+        )
+        .with_prompt("Answer for {marker}")
+        .with_parser(RegexParser({"score": re.compile(r"ans-(row-\d+)", re.I)}))
+        .with_custom_llm_client(LedgerClient())
+        .with_batch_size(1)
+        .with_concurrency(1)
+        .build()
+    )
+
+    result = pipeline.execute()
+
+    assert list(result.to_pandas()["score"]) == ["row-0000", "row-0001"]
 
 
 # ---------------------------------------------------------------------------

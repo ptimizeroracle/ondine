@@ -303,6 +303,20 @@ class ExecutionContext:
             self.pending_completions.discard(watermark)
         self.last_processed_row = watermark
 
+    def full_input(self, default: Any = None) -> Any:
+        """The run's full input: the preprocessed data, else the loaded data.
+
+        Rows are numbered by position in it (``RowMetadata.row_index``), on
+        resume too. ``default`` when the pipeline stored neither (a context
+        driven outside a pipeline). An empty preprocessed input still counts:
+        only a missing one falls back.
+        """
+        data = self.intermediate_data
+        full = data.get("preprocessed_data")
+        if full is None:
+            full = data.get("loaded_data")
+        return default if full is None else full
+
     # -- row fate: events go to the ledger, the old surface reads it ---------
 
     def open_ledger(self, contract: OutputContract) -> RowLedger:

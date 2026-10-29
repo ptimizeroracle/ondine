@@ -4,9 +4,11 @@ Two families of tests, for the two promises the judge makes.
 
 **Parity.** Under the unchecked contract the judge must produce, for every
 row, exactly what today's parse step produces: same values, same failure
-messages. These tests run each answer through *both* the real
-``ResponseParserStage`` (with the parser the factory picks today) and the
-judge, and compare. They are the regression gate for moving the parse step
+messages. These tests run each answer through *both* the parse stage as it
+was before the move (the frozen copy ``_todays_process`` in
+``tests/unit/test_parser_stage_judge.py``, with the parser the factory picks
+today) and the judge, and compare. The live stage now asks the judge, so it
+cannot serve as the oracle. They are the regression gate for moving the parse step
 into the judge: if they pass, "no contract" stays byte-identical.
 
 **Verdicts.** Under a checked contract, a bad answer is data, never an
@@ -46,11 +48,11 @@ from ondine.stages.response_parser_stage import (
     JSONParser,
     PydanticParser,
     ResponseParser,
-    ResponseParserStage,
 )
+from tests.unit.test_parser_stage_judge import _todays_process
 
 # ---------------------------------------------------------------------------
-# Today's parse path, run for real
+# Today's parse path: the stage before the move, frozen
 # ---------------------------------------------------------------------------
 
 
@@ -65,7 +67,7 @@ class _RecordingContext:
 
 
 def _today(answer, columns, response_format="raw", regex_patterns=None, parser=None):
-    """One answer through today's factory-chosen parser and parse stage."""
+    """One answer through today's factory-chosen parser and the frozen stage."""
     if parser is None:
         spec = PromptSpec(
             template="Classify {text}",
@@ -73,7 +75,6 @@ def _today(answer, columns, response_format="raw", regex_patterns=None, parser=N
             regex_patterns=regex_patterns,
         )
         parser = create_response_parser(spec, list(columns))
-    stage = ResponseParserStage(parser=parser, output_columns=list(columns))
     context = _RecordingContext()
     response = LLMResponse(
         text=answer,
@@ -84,10 +85,25 @@ def _today(answer, columns, response_format="raw", regex_patterns=None, parser=N
         latency_ms=0.0,
     )
     batch = ResponseBatch(responses=[response], metadata=[RowMetadata(row_index=0)])
-    container = stage.process(([batch], list(columns)), context)
+    container = _todays_process(parser, [batch], list(columns), context)
     row = dict(container.to_list()[0])
     row.pop("_row_index")
     return row, context.messages
+
+
+def test_the_parity_oracle_never_asks_the_judge(monkeypatch):
+    """The oracle is the stage before the move; the judge cannot grade itself."""
+    import ondine.stages.response_parser_stage as stage_module
+
+    def no_judge(*args, **kwargs):
+        raise AssertionError("the oracle asked the judge")
+
+    monkeypatch.setattr(stage_module, "judge", no_judge)
+
+    assert _today('{"intent": "a", "amount": 1}', TWO, "json") == (
+        {"intent": "a", "amount": 1},
+        [],
+    )
 
 
 def _judged(answer, columns, response_format="raw", regex_patterns=None):
