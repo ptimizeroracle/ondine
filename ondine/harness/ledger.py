@@ -26,7 +26,11 @@ How it works, and why it is built this way:
 * **Today's views are readings of the ledger.** The error list,
   ``lost_row_indices`` and ``is_complete`` are computed from the snapshot, and
   with no contract they say what ``ExecutionContext`` and ``ExecutionResult``
-  say today (the #262/#312 guard). Rejected rows get their own list.
+  say today (the #262/#312 guard). Rejected rows get their own list. Where the
+  snapshot's view is deliberately truer than today's (row order, recoveries,
+  rows a stopped run never reached), :meth:`RowLedger.reported_losses` reads
+  the same events exactly as ``ExecutionContext`` used to keep them, so the
+  migration can change today's outputs one deliberate step at a time.
 
 The ledger reads the judge's own :class:`~ondine.harness.judge.Verdict`, with
 no adapter and no second vocabulary: ``Verdict.passed`` for the row, and per
@@ -55,6 +59,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from itertools import islice
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -273,6 +278,37 @@ class LedgerSnapshot:
         return all(r.status in _COMPLETE_STATUSES for r in self.rows)
 
 
+@dataclass(frozen=True)
+class ReportedLosses:
+    """The losses reported to one ledger, read the way ``ExecutionContext`` kept them.
+
+    Migration step 1 makes the ledger the only record of row fate, but the
+    result's error list and loss counters must not change until a later step
+    changes them on purpose (the parity net freezes them). The snapshot's own
+    view decides differently by design, so this second view reads the same
+    events with today's rules:
+
+    * a row is lost the first time a failure is reported for it, and that
+      first report is its cause, whatever arrives later;
+    * ``errors`` is in report order and bounded; the counts stay exact;
+    * only failures reported to this ledger count. A sub-pipeline's failures
+      arrive by :meth:`RowLedger.merge` and never reached today's context, and
+      a recovery merged later does not take a reported row back;
+    * a row nothing reported on (never reached) is not here.
+
+    Attributes:
+        errors: One entry per lost row, in report order, at most the limit
+            asked for.
+        skipped_rows: Rows whose first report was a provider failure.
+        failed_rows: Rows whose first report was a stage failure or an
+            unparseable answer.
+    """
+
+    errors: tuple[ErrorInfo, ...]
+    skipped_rows: int
+    failed_rows: int
+
+
 # ---------------------------------------------------------------------------
 # The ledger
 # ---------------------------------------------------------------------------
@@ -323,12 +359,34 @@ class RowLedger:
         self._live: dict[int, RowStatus] = {}
         self._dirty: set[int] = set()
         self._tally: dict[RowStatus, int] = dict.fromkeys(RowStatus, 0)
+        # First direct loss report per row, for reported_losses(). A dict keeps
+        # insertion order, which is report order, so the bounded error list is
+        # a slice and never a sort; the skip count keeps the counts O(1).
+        self._reported: dict[int, _Cause] = {}
+        self._reported_skipped = 0
         self._lock = threading.Lock()
 
     @property
     def row_count(self) -> int:
         """How many input rows this ledger covers."""
         return self._row_count
+
+    @property
+    def policy(self) -> LedgerPolicy:
+        """The policy this ledger decides statuses under."""
+        return self._policy
+
+    def widen(self, row_count: int) -> None:
+        """Cover ``row_count`` rows; the rows added start pending.
+
+        For a caller that learns the input's size late: a context driven
+        outside a pipeline (stage tests, backends with no loader), or a
+        streamed file whose length is known only chunk by chunk. A pipeline
+        that knows its input opens the ledger at the exact size instead.
+        Never shrinks: an event already reported cannot fall outside.
+        """
+        with self._lock:
+            self._row_count = max(self._row_count, row_count)
 
     # -- events -------------------------------------------------------------
 
@@ -382,6 +440,10 @@ class RowLedger:
                     f"but a required field failed; treated as not deliverable"
                 )
             self._add_verdict(index, attempt, judgement)
+            if not self._policy.checked and not judgement.passed:
+                # Without a contract an unparseable answer is a lost row, as
+                # the parse step has always recorded it.
+                self._report_loss(index, judgement.unparseable_cause())
 
     def record_provider_failure(
         self,
@@ -404,9 +466,9 @@ class RowLedger:
             for row in rows:
                 checked = self._checked_row(row)
                 if checked is not None:
-                    self._add_failure(
-                        checked, _Failure(attempt, True, stage, message, retryable)
-                    )
+                    failure = _Failure(attempt, True, stage, message, retryable)
+                    self._add_failure(checked, failure)
+                    self._report_loss(checked, failure.cause)
 
     def record_stage_failure(
         self, rows: Iterable[int], *, stage: str, message: str
@@ -423,9 +485,9 @@ class RowLedger:
             for row in rows:
                 checked = self._checked_row(row)
                 if checked is not None:
-                    self._add_failure(
-                        checked, _Failure(1, False, stage, message, False)
-                    )
+                    failure = _Failure(1, False, stage, message, False)
+                    self._add_failure(checked, failure)
+                    self._report_loss(checked, failure.cause)
 
     def record_run_stopped(self, reason: StopReason) -> None:
         """The run stopped. Rows still undecided at snapshot become failed.
@@ -605,7 +667,37 @@ class RowLedger:
                 failed_rows=failed,
             )
 
+    def reported_losses(self, limit: int | None = None) -> ReportedLosses:
+        """The losses reported to this ledger, by today's rules (see the class).
+
+        Args:
+            limit: Error entries to build, the first ones by report order;
+                ``None`` for :attr:`MAX_RECORDED_ROW_ERRORS`. ``0`` reads the
+                counts alone.
+
+        Cost: the entries built, never the input's size, so a context may
+        read its counters at every checkpoint.
+        """
+        if limit is None:
+            limit = self.MAX_RECORDED_ROW_ERRORS
+        with self._lock:
+            errors = tuple(
+                cause.error_info(row)
+                for row, cause in islice(self._reported.items(), max(limit, 0))
+            )
+            skipped = self._reported_skipped
+            failed = len(self._reported) - skipped
+        return ReportedLosses(errors=errors, skipped_rows=skipped, failed_rows=failed)
+
     # -- internals ----------------------------------------------------------
+
+    def _report_loss(self, row: int, cause: _Cause) -> None:
+        """Keep ``cause`` if it is the first loss reported for ``row``."""
+        if row in self._reported:
+            return
+        self._reported[row] = cause
+        if cause.error_type == "skipped":
+            self._reported_skipped += 1
 
     def _events(self, row: int) -> _RowEvents:
         """``row``'s events, for a caller about to add one: its status is stale."""
@@ -819,6 +911,16 @@ class _Judgement:
     def failed_check_count(self) -> int:
         return len(self.failure_reasons)
 
+    def unparseable_cause(self) -> _Cause:
+        """Why this verdict lost its row, without a contract: it could not be read.
+
+        Reported under the stage that judged the answer, with each distinct
+        reason once: today's parse step records one message per row, under
+        its own name.
+        """
+        text = "; ".join(self.failure_reasons) or "the answer could not be parsed"
+        return _Cause("parse_failure", self.stage or "judge", text)
+
     def safety_rank(self) -> tuple[bool, int, str]:
         """Lower is safer: not passed first, then more failed checks.
 
@@ -858,6 +960,17 @@ class _Failure:
     @property
     def text(self) -> str:
         return f"{self.stage}: {self.message}"
+
+    @property
+    def cause(self) -> _Cause:
+        """This failure as a lost row's cause, in the terms of today's error list."""
+        return _Cause(
+            "skipped" if self.provider else "parse_failure",
+            self.stage,
+            self.message,
+            self.retryable,
+            self.timestamp,
+        )
 
     @property
     def tie_key(self) -> tuple:
@@ -1064,25 +1177,19 @@ def _lost(
     # differ between precedences.
     candidates: list[tuple[tuple, _Cause, str]] = []
     for failure in events.failures:
-        cause = _Cause(
-            "skipped" if failure.provider else "parse_failure",
-            failure.stage,
-            failure.message,
-            failure.retryable,
-            failure.timestamp,
-        )
         precedence = 2 if failure.provider else 0
         candidates.append(
-            ((-failure.attempt, -precedence, failure.tie_key), cause, failure.text)
+            (
+                (-failure.attempt, -precedence, failure.tie_key),
+                failure.cause,
+                failure.text,
+            )
         )
     if not policy.checked:
         for attempt, judgement in events.verdicts.items():
             if not judgement.passed:
-                text = (
-                    "; ".join(judgement.failure_reasons)
-                    or "the answer could not be parsed"
-                )
-                cause = _Cause("parse_failure", judgement.stage or "judge", text)
+                cause = judgement.unparseable_cause()
+                text = cause.message
                 candidates.append(((-attempt, -1, (text,)), cause, text))
     if not candidates:
         text = "an answer was received but never judged"

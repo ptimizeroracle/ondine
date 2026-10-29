@@ -433,6 +433,19 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 stage=self.name,
                 message=str(response.metadata.get("error", "skipped by error policy")),
             )
+        else:
+            # The rows' answer, for the row ledger: without it a row that
+            # answered reads, to the ledger, like a row the run never reached.
+            # Reported before the budget check below, so the answer that
+            # crosses the budget still counts as received.
+            record_answers = getattr(context, "record_answers", None)
+            if callable(record_answers):
+                record_answers(
+                    BatchProcessor.row_indices(metadata),
+                    model=str(response.model),
+                    tokens=response.tokens_in + response.tokens_out,
+                    cost=response.cost,
+                )
 
         # Update cost and token tracking
         if hasattr(response, "cost") and hasattr(response, "tokens_in"):

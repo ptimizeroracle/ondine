@@ -9,8 +9,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from ondine.harness.ledger import RowLedger
 
 # Sentinel written into an output cell when a row is skipped under the SKIP
 # error policy. It is a failure marker, NOT valid output — quality checks and
@@ -171,6 +174,12 @@ class ExecutionResult:
             ``skip`` policy this stays True even if some rows were skipped —
             use :attr:`is_complete` to check that every row produced output.
         metadata: Additional execution metadata
+        row_ledger: The run's row ledger (``ondine.harness.ledger``): one
+            status per input row, sub-pipelines merged in. ``errors``,
+            ``metrics`` and the blanked cells are read from it with today's
+            rules; ``row_ledger.snapshot()`` gives the ledger's own view,
+            which the harness migration will make the default. ``None`` for a
+            result built by hand.
 
     Example:
         ```python
@@ -206,6 +215,7 @@ class ExecutionResult:
         end_time: datetime | None = None,
         success: bool = True,
         metadata: dict[str, Any] | None = None,
+        row_ledger: "RowLedger | None" = None,
     ):
         self.data = data  # Store as-is (container)
         self.metrics = metrics
@@ -216,6 +226,7 @@ class ExecutionResult:
         self.end_time = end_time
         self.success = success
         self.metadata = metadata or {}
+        self.row_ledger = row_ledger
 
     @property
     def duration(self) -> float:
