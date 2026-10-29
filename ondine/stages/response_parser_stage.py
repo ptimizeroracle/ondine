@@ -188,6 +188,15 @@ class ResponseParserStage(
     list and the loss counters are what this stage produced before the judge
     existed: an answer it cannot read is a lost row under this stage's name.
 
+    Under a checked contract the values written are not yet the client's:
+    the pipeline's delivery reads them, by row, and keeps or blanks each by
+    the row's status. A failed field is written as None, so no later stage
+    (context verification, the context store) can read a rejected answer;
+    only under ``on_failure="deliver_flagged"``, the one policy that ships a
+    failing value, is it written with the judge's candidate. A verdict that
+    did not pass is reported with the response text, which the ledger keeps
+    for the quarantine.
+
     A response the model never gave is written but not judged as an answer:
     a call the error policy skipped or filled with its default, or the
     placeholder the batch splitter leaves for a row its batch answer lacked.
@@ -262,8 +271,11 @@ class ResponseParserStage(
                 row = metadata.row_index
                 text = response.text if hasattr(response, "text") else str(response)
                 verdict = judge(contract, self._answer(text), inputs_of(row))
-                results[row] = {"_row_index": row, **verdict.values}
-                self._report(context, ledger, row, verdict, response, metadata)
+                results[row] = {
+                    "_row_index": row,
+                    **_written_values(verdict, contract),
+                }
+                self._report(context, ledger, row, verdict, response, metadata, text)
 
         # Convert to list sorted by row_index
         sorted_results = [results[idx] for idx in sorted(results.keys())]
@@ -308,10 +320,21 @@ class ResponseParserStage(
         verdict: Verdict,
         response: Any,
         metadata: RowMetadata,
+        text: str,
     ) -> None:
-        """Report ``verdict`` to the ledger, or a lost row the way it always was."""
+        """Report ``verdict`` to the ledger, or a lost row the way it always was.
+
+        A verdict that did not pass goes with ``text``, the raw answer, which
+        the ledger keeps only for a row that ends quarantined. A passing
+        verdict goes without it: a delivered row's text is in the frame.
+        """
         if ledger is not None and _model_answered(response, metadata):
-            ledger.record_verdict(row, _ATTEMPT, verdict, stage=self.name)
+            if verdict.passed:
+                ledger.record_verdict(row, _ATTEMPT, verdict, stage=self.name)
+            else:
+                ledger.record_verdict(
+                    row, _ATTEMPT, verdict, stage=self.name, raw_answer=text
+                )
         elif not verdict.passed and hasattr(context, "record_failed_rows"):
             context.record_failed_rows(
                 [row],
@@ -346,6 +369,25 @@ class ResponseParserStage(
             output_tokens=0,
             rows=sum(len(b.responses) for b in input_data[0]),
         )
+
+
+def _written_values(verdict: Verdict, contract: OutputContract) -> dict[str, Any]:
+    """The values this stage writes for one row: what delivery will read.
+
+    The verdict's values: without a contract, today's parse output; under a
+    checked contract, each passing field's value and None for a failed one,
+    so a rejected answer never reaches context verification or the context
+    store. Under ``on_failure="deliver_flagged"`` a failed field's candidate
+    (``FieldVerdict.value``) is written instead, because that policy ships
+    it, flagged, on an unverified row; delivery blanks it on any other row
+    (decision D-C).
+    """
+    if not verdict.checked or contract.policy.on_failure != "deliver_flagged":
+        return verdict.values
+    return {
+        item.name: None if item.outcome == "absent" else item.value
+        for item in verdict.fields
+    }
 
 
 def _model_answered(response: Any, metadata: RowMetadata) -> bool:

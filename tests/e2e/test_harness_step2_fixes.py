@@ -1,8 +1,8 @@
 """Fixes from the harness step-2 review, each pinned by a test.
 
-* **A declared contract does not run yet** (finding 1). Until delivery is
-  wired (harness step 3), a run under a checked contract would blank rejected
-  rows and report nothing. Every entry path refuses it before any model call.
+* **A declared contract runs on every entry path** (finding 1). Step 2
+  refused it until delivery was wired; since step 3 every entry path judges
+  each row and delivers it with its status.
 * **``with_parser(RegexParser(...))`` runs** (finding 2) and returns the
   values it returns on main.
 * **One response-format check** (finding 5): the pipeline validates the format
@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 from decimal import Decimal
 
+import pandas as pd
 import pytest
 
 from ondine import PipelineBuilder
@@ -40,12 +41,6 @@ from tests.e2e.conformance_harness import (
 )
 
 ROWS = 4
-UNENFORCED = (
-    "Output contracts are declared but not enforced yet; they take effect "
-    "when delivery is wired (harness step 3). Remove the with_output_field / "
-    "with_output_relation / with_contract_policy / as_contract=True "
-    "declarations to run."
-)
 
 
 def _builder(client: LedgerClient, *, columns: list[str] | None = None):
@@ -64,11 +59,13 @@ def _builder(client: LedgerClient, *, columns: list[str] | None = None):
 
 
 def _declared(client: LedgerClient):
-    return _builder(client).with_output_field("answer", pattern=r"^ANS-row-\d{4}$")
+    """Rows 0-2 pass the pattern; row 3's answer is rejected."""
+    return _builder(client).with_output_field("answer", pattern=r"^ANS-row-000[0-2]$")
 
 
 # ---------------------------------------------------------------------------
-# Finding 1: a declared contract refuses to run, on every entry path
+# Finding 1, superseded by step 3: a declared contract runs on every entry
+# path and delivers each row with its status
 # ---------------------------------------------------------------------------
 
 
@@ -106,20 +103,23 @@ def _execute_stream_pipelined(pipeline):
     ],
     ids=["execute", "execute_async", "stream", "stream_async", "stream_pipelined"],
 )
-def test_a_declared_contract_refuses_to_run_before_any_model_call(entry, configure):
+def test_a_declared_contract_runs_and_delivers_statuses(entry, configure):
     client = LedgerClient()
     pipeline = configure(_declared(client)).build()
 
-    with pytest.raises(NotImplementedError) as raised:
-        entry(pipeline)
+    outcome = entry(pipeline)
 
-    assert str(raised.value) == UNENFORCED
-    assert client.calls == {}
-    assert client.prompts == []
+    results = outcome if isinstance(outcome, list) else [outcome]
+    frame = pd.concat([result.to_pandas() for result in results], ignore_index=True)
+    assert list(frame["status"]) == ["accepted"] * 3 + ["rejected"]
+    assert list(frame["answer"].iloc[:3]) == [
+        answer_for(token_for(row)) for row in range(3)
+    ]
+    assert pd.isna(frame["answer"].iloc[3])  # a rejected value is blanked
+    assert sum(client.calls.values()) == ROWS  # one call per row, no stop
 
 
 def test_the_declared_contract_stays_the_runs_contract():
-    """The seam step 3 builds on: the refusal does not hide the contract."""
     pipeline = _declared(LedgerClient()).build()
 
     contract = pipeline._resolve_contract()

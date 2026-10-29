@@ -153,14 +153,17 @@ def _report_substitution(
     views count only losses reported to the ledger directly
     (``RowLedger.reported_losses``), so the failure arrives the way a
     sub-pipeline's do: in a ledger of its own, merged.
+
+    Without a contract the reason says the default was delivered, as it is.
+    Under a checked contract delivery blanks a failed row whatever the error
+    policy wrote, so the reason does not claim it.
     """
     ledger = context.ledger
+    if not ledger.policy.checked:
+        message = f"{message} (the error policy delivered its default value)"
     substitution = RowLedger(len(rows), ledger.policy)
     substitution.record_provider_failure(
-        range(len(rows)),
-        1,
-        stage=stage,
-        message=f"{message} (the error policy delivered its default value)",
+        range(len(rows)), 1, stage=stage, message=message
     )
     ledger.widen(max(rows) + 1)
     ledger.merge(substitution, rows)

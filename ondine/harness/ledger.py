@@ -39,8 +39,12 @@ The ledger reads the judge's own :class:`~ondine.harness.judge.Verdict`, with
 no adapter and no second vocabulary: ``Verdict.passed`` for the row, and per
 ``FieldVerdict`` its ``name``, ``outcome``, ``required``, ``format_fixed``,
 ``reasons`` and ``fixed_reasons``. A field passes unless its outcome is ``"failed"``; an ``"absent"``
-optional field is a valid answer. The ledger copies only those attributes, so
-the judge may add fields to its verdict without touching this module.
+optional field is a valid answer. The ledger copies only those attributes (and
+each reason's ``rule``, so delivery can group failures by rule), so the judge
+may add fields to its verdict without touching this module. The snapshot
+hands that copy to delivery in :attr:`RowOutcome.verdicts`: the checks
+column, the quarantine and the per-rule report read it, and the pipeline
+keeps no judged answer of its own (step 3, D-C).
 
 The policy has one source too: :meth:`LedgerPolicy.from_contract` reads
 whether the run is checked and its run policy from the contract, and adds only
@@ -56,6 +60,7 @@ loudly instead of the run crashing on a bookkeeping slip.
 
 from __future__ import annotations
 
+import heapq
 import operator
 import threading
 from array import array
@@ -186,10 +191,10 @@ class LedgerPolicy:
 class AttemptRecord:
     """One billed model answer for a row.
 
-    ``raw_answer`` is whatever reference the caller reported — ideally a cache
-    key, not the text, since the ledger holds it until the snapshot. In a
-    snapshot it is kept only for quarantined rows within the D3 cap, and is
-    None everywhere else.
+    ``raw_answer`` is what the caller reported with the answer
+    (:meth:`RowLedger.record_answer`) or with a verdict that did not pass
+    (:meth:`RowLedger.record_verdict`). In a snapshot it is kept only for
+    quarantined rows within the D3 cap, and is None everywhere else.
     """
 
     attempt: int
@@ -219,6 +224,14 @@ class RowOutcome:
             checks column. Empty without a contract.
         failed_checks: Every failed check's reason, across every attempt.
         attempts: Every answer received, by attempt number.
+        verdicts: The ledger's copy of each judged attempt's verdict, as
+            ``(attempt, Judgement)`` pairs by attempt number, for delivery's
+            checks column, quarantine and per-rule report. A passing verdict
+            without a contract is left out: it carries no check to show.
+        failed_attempts: Each attempt that failed and was never judged, as
+            ``(attempt, what failed)`` pairs by attempt number: "provider",
+            or the name of the stage that failed. For the path in delivery's
+            reason column.
     """
 
     row: int
@@ -230,6 +243,8 @@ class RowOutcome:
     field_statuses: tuple[tuple[str, RowStatus], ...] = ()
     failed_checks: tuple[str, ...] = ()
     attempts: tuple[AttemptRecord, ...] = ()
+    verdicts: tuple[tuple[int, Judgement], ...] = ()
+    failed_attempts: tuple[tuple[int, str], ...] = ()
 
     @property
     def cost(self) -> Decimal:
@@ -286,10 +301,10 @@ class LedgerSnapshot:
 class ReportedLosses:
     """The losses reported to one ledger, read the way ``ExecutionContext`` kept them.
 
-    Temporary: a second reading of the events, with today's rules, next to
-    the snapshot's own. Migration step 3 deletes it, together with
-    :meth:`RowLedger.reported_losses`, when ``result.errors`` and the loss
-    counters are read from the snapshot instead.
+    A second reading of the events, with today's rules, next to the
+    snapshot's own. It stays for the run without a contract (decision D-A):
+    there, ``result.errors`` and the loss counters must keep today's values,
+    and only this reading gives them. A checked run reads the snapshot.
 
     Migration step 1 makes the ledger the only record of row fate, but the
     result's error list and loss counters must not change until a later step
@@ -388,6 +403,13 @@ class RowLedger:
         # The ledger's copy of a clean unchecked pass, one per reporting stage
         # and column list: nearly every verdict of a run without a contract.
         self._clean_passes: dict[tuple[str, tuple[Any, ...]], _Judgement] = {}
+        # Raw answers reported with a verdict, by row then attempt (see
+        # _hold_raw). Held only while the row is not delivered, and for at
+        # most raw_answer_cap rows, the lowest in input order. _raw_rows is
+        # a max-heap of the held rows (as -row); it may name rows released
+        # since, which eviction skips.
+        self._raw: dict[int, dict[int, Any]] = {}
+        self._raw_rows: list[int] = []
         self._lock = threading.Lock()
         self._widen(row_count)
 
@@ -474,13 +496,28 @@ class RowLedger:
                     self._add_answer(index, other if position else first, merged=False)
 
     def record_verdict(
-        self, row: int, attempt: int, verdict: Verdict, *, stage: str
+        self,
+        row: int,
+        attempt: int,
+        verdict: Verdict,
+        *,
+        stage: str,
+        raw_answer: Any = None,
     ) -> None:
         """The judge's verdict on ``row``'s answer from ``attempt``.
 
         ``stage`` is the stage that judged the answer (today, the parse
         stage). Without a contract an unparseable answer is a lost row, and
         today's error list names that stage, so the ledger must know it.
+
+        ``raw_answer`` is the answer as the model gave it, for the quarantine.
+        The ledger holds it only while the row is not delivered, and only for
+        the policy's ``raw_answer_cap`` rows lowest in input order; it lets go
+        of it as soon as the row is delivered (a later attempt passing). In a
+        snapshot it shows on the attempt's record, for a quarantined row
+        within the cap. A row evicted for a lower one is not restored if that
+        lower row is delivered later, so a few raw answers may be missing
+        when repairs succeed; statuses and checks stay exact.
         """
         judgement = self._clean_pass(verdict, stage)
         if judgement is not None:
@@ -489,6 +526,8 @@ class RowLedger:
                 index = self._checked_row(row)
                 if index is not None and self._checked_attempt(attempt):
                     self._add_verdict(index, attempt, judgement)
+                    if raw_answer is not None:
+                        self._hold_raw(index, attempt, raw_answer)
             return
         judgement, contradiction = _Judgement.of(verdict, stage)
         with self._lock:
@@ -508,6 +547,8 @@ class RowLedger:
                     f"but a required field failed; treated as not deliverable"
                 )
             self._add_verdict(index, attempt, judgement)
+            if raw_answer is not None:
+                self._hold_raw(index, attempt, raw_answer)
             if not self._policy.checked and not judgement.passed:
                 # Without a contract an unparseable answer is a lost row, as
                 # the parse step has always recorded it, stamped when it was
@@ -618,7 +659,7 @@ class RowLedger:
 
         A child's stop reason and its violations carry over to this ledger.
         """
-        answers, verdicts, failures, stops, violations = child._export()
+        answers, verdicts, failures, raws, stops, violations = child._export()
         mapping = list(parent_rows)
         with self._lock:
             if len(mapping) != child.row_count:
@@ -663,6 +704,10 @@ class RowLedger:
                     ours = self._numbered(replace(failure, attempt=attempt))
                     renumbered[key] = ours
                 self._add_failure(checked[child_row], ours)
+            # Last: a raw answer is held only for a row the merge left
+            # undelivered.
+            for child_row, attempt, raw in raws:
+                self._hold_raw(checked[child_row], attempt + offset(child_row), raw)
             self._stops |= stops
             for violation in violations:
                 self._violation(f"merged ledger: {violation}")
@@ -732,7 +777,18 @@ class RowLedger:
                 if outcome.status in _QUARANTINED_STATUSES:
                     quarantined += 1
                     keep_raw = quarantined <= self._policy.raw_answer_cap
-                if not keep_raw and any(
+                held = self._raw.get(row) if keep_raw else None
+                if held:
+                    outcome = replace(
+                        outcome,
+                        attempts=tuple(
+                            replace(a, raw_answer=held[a.attempt])
+                            if a.raw_answer is None and a.attempt in held
+                            else a
+                            for a in outcome.attempts
+                        ),
+                    )
+                elif not keep_raw and any(
                     a.raw_answer is not None for a in outcome.attempts
                 ):
                     outcome = replace(
@@ -839,6 +895,34 @@ class RowLedger:
         self._tally[_STATUS_BY_CODE[self._status[row]]] -= 1
         self._tally[status] += 1
         self._status[row] = _STATUS_CODES[status]
+        if self._raw and status in _COMPLETE_STATUSES:
+            # A delivered row's raw answer is never needed: let it go.
+            self._raw.pop(row, None)
+
+    def _hold_raw(self, row: int, attempt: int, raw: Any) -> None:
+        """Hold ``raw``, reported with ``row``'s verdict on ``attempt``.
+
+        Nothing is held for a row already delivered, or under a cap of 0.
+        Past the cap, the row highest in input order is let go: the snapshot
+        keeps raw answers for the lowest quarantined rows only. Two raw
+        answers for one attempt (resume re-judging) keep one by content.
+        """
+        cap = self._policy.raw_answer_cap
+        if cap == 0 or _STATUS_BY_CODE[self._status[row]] in _COMPLETE_STATUSES:
+            return
+        held = self._raw.get(row)
+        if held is None:
+            held = self._raw[row] = {}
+            heapq.heappush(self._raw_rows, -row)
+        existing = held.get(attempt)
+        if existing is None or repr(raw) < repr(existing):
+            held[attempt] = raw
+        while len(self._raw) > cap:
+            self._raw.pop(-heapq.heappop(self._raw_rows), None)
+        if len(self._raw_rows) > 2 * len(self._raw) + 64:
+            # Drop the heap's released rows, so it stays near the cap's size.
+            self._raw_rows = [-held_row for held_row in self._raw]
+            heapq.heapify(self._raw_rows)
 
     def _decided(self, row: int) -> bool:
         """Has a verdict or a failure: final for early stop's purposes."""
@@ -955,7 +1039,9 @@ class RowLedger:
             raise LedgerInvariantError(message)
         self._violations.append(message)
 
-    def _export(self) -> tuple[list, list, list, set[StopReason], list[str]]:
+    def _export(
+        self,
+    ) -> tuple[list, list, list, list, set[StopReason], list[str]]:
         """A consistent copy of this ledger's events, for a parent's merge."""
         answers: list[tuple[int, AttemptRecord]] = []
         verdicts: list[tuple[int, int, _Judgement]] = []
@@ -973,7 +1059,19 @@ class RowLedger:
                     for attempt, judgement in events.verdicts.items()
                 )
                 failures.extend((row, failure) for failure in events.failures)
-            return answers, verdicts, failures, set(self._stops), list(self._violations)
+            raws = [
+                (row, attempt, raw)
+                for row, held in self._raw.items()
+                for attempt, raw in held.items()
+            ]
+            return (
+                answers,
+                verdicts,
+                failures,
+                raws,
+                set(self._stops),
+                list(self._violations),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1006,6 +1104,11 @@ class _FieldJudgement:
     format_fixed: bool
     #: For a format-fixed field, why the answer failed before the fix.
     fixed_reasons: tuple[str, ...] = ()
+    #: The judge's outcome was "absent": a valid empty answer.
+    absent: bool = False
+    #: The rule of each of ``reasons``, in the same order, so delivery can
+    #: group failures by rule without parsing sentences.
+    rules: tuple[str, ...] = ()
 
     @property
     def failure_reasons(self) -> tuple[str, ...]:
@@ -1042,6 +1145,8 @@ class _Judgement:
                 reasons=tuple(str(r) for r in item.reasons),
                 format_fixed=bool(item.format_fixed),
                 fixed_reasons=tuple(str(r) for r in item.fixed_reasons),
+                absent=item.outcome == "absent",
+                rules=tuple(str(getattr(r, "rule", "")) for r in item.reasons),
             )
             for item in verdict.fields
         )
@@ -1086,6 +1191,14 @@ class _Judgement:
         """
         return (self.passed, -self.failed_check_count, repr(self.fields))
 
+
+#: The ledger's copy of one verdict, as :attr:`RowOutcome.verdicts` holds it:
+#: ``passed``, and per field (``fields``) its ``name``, ``required``,
+#: ``failed``, ``absent``, ``format_fixed``, ``reasons`` (sentences),
+#: ``rules`` (the rule of each reason) and ``fixed_reasons``. Read-only, and
+#: shared between rows whose verdicts are equal.
+Judgement = _Judgement
+FieldJudgement = _FieldJudgement
 
 # Without a contract, an answer that no verdict or failure contradicts passes:
 # the "unchecked" contract accepts whatever today's parsing produces.
@@ -1261,8 +1374,9 @@ class _CompactRows:
     :class:`_Listed` and the columns hold their numbers; 0 means "none". A
     cost is kept exactly as a 64-bit coefficient and a one-byte exponent
     when it fits, which a priced call's cost does, and listed otherwise.
-    Raw answers are kept only when given, in a dict: the pipeline gives
-    none, and a caller that does keeps them all until the snapshot anyway.
+    Raw answers given with an answer are kept in a dict, until the snapshot.
+    The pipeline gives none here: it reports a raw answer with a verdict
+    that did not pass, which the ledger holds apart (``RowLedger._raw``).
     """
 
     def __init__(self) -> None:
@@ -1472,7 +1586,16 @@ def _decide(
         for reason in events.verdicts[attempt].failure_reasons
     )
     base = RowOutcome(
-        row, RowStatus.FAILED, failed_checks=failed_checks, attempts=attempts
+        row,
+        RowStatus.FAILED,
+        failed_checks=failed_checks,
+        attempts=attempts,
+        failed_attempts=_failed_attempts(events),
+        verdicts=tuple(
+            (attempt, events.verdicts[attempt])
+            for attempt in sorted(events.verdicts)
+            if policy.checked or not events.verdicts[attempt].passed
+        ),
     )
 
     judgements = dict(events.verdicts)
@@ -1495,6 +1618,30 @@ def _decide(
             return _failed_check(base, events, policy, latest_attempt), None
 
     return _lost(base, events, policy)
+
+
+def _failed_attempts(events: _RowEvents) -> tuple[tuple[int, str], ...]:
+    """Each attempt with a failure and no verdict, and what failed on it.
+
+    A provider failure names the provider: it is what left the attempt with
+    nothing to judge. Otherwise the stage that failed first, by report order.
+    """
+    if not events.failures:
+        return ()
+    first: dict[int, _Failure] = {}
+    for failure in events.failures:
+        if failure.attempt in events.verdicts:
+            continue
+        current = first.get(failure.attempt)
+        if current is None or (not failure.provider, failure.tie_key) < (
+            not current.provider,
+            current.tie_key,
+        ):
+            first[failure.attempt] = failure
+    return tuple(
+        (attempt, "provider" if failure.provider else failure.stage)
+        for attempt, failure in sorted(first.items())
+    )
 
 
 def _delivered(

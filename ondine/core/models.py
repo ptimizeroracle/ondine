@@ -15,6 +15,8 @@ from uuid import UUID, uuid4
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from ondine.harness.contract import OutputContract
+    from ondine.harness.delivery import Delivery, RunReport
     from ondine.harness.ledger import LedgerSnapshot, RowLedger
 
 # Sentinel written into an output cell when a row is skipped under the SKIP
@@ -178,11 +180,31 @@ class ExecutionResult:
         metadata: Additional execution metadata
         row_ledger: The run's row ledger, frozen
             (``ondine.harness.ledger.LedgerSnapshot``): one final status per
-            input row, sub-pipelines merged in. ``errors``, ``metrics`` and
-            the blanked cells are read from the same events with today's
-            rules; the snapshot is the ledger's own view, which the harness
-            migration will make the default. ``None`` for a result built by
+            input row, sub-pipelines merged in. ``None`` for a result built by
             hand.
+        contract: The run's output contract
+            (``ondine.harness.contract.OutputContract``), or ``None`` for a
+            result built by hand.
+        awaiting_merge: True for a sub-pipeline's result (a streaming chunk,
+            an auto-retry pass) whose live ledger its parent will merge
+            (:meth:`merge_ledger_into`). The live ledger is then kept past a
+            read of :attr:`row_ledger` until that merge; any other result
+            keeps only the snapshot once it is read.
+
+    What the views read depends on the contract:
+
+    * **No contract declared** (the unchecked contract): ``data``,
+      ``errors``, ``lost_row_indices``, ``is_complete`` and ``metrics`` are
+      today's, read from the ledger's events with today's rules.
+    * **A checked contract**: ``data`` is the delivered frame (values kept or
+      blanked by status, plus the ``status``, ``reason``, ``checks``,
+      ``repair_method`` and ``delivered_by`` columns), and ``errors``,
+      ``lost_row_indices``, ``is_complete`` and the loss counters in
+      ``metrics`` are read from the snapshot. A rejected row is not lost: it
+      is in :attr:`rejected_row_indices`.
+
+    Either way :attr:`quarantine` and :attr:`report` are there, next to the
+    frame, never changing it.
 
     Example:
         ```python
@@ -219,8 +241,18 @@ class ExecutionResult:
         success: bool = True,
         metadata: dict[str, Any] | None = None,
         row_ledger: "RowLedger | LedgerSnapshot | None" = None,
+        contract: "OutputContract | None" = None,
+        *,
+        awaiting_merge: bool = False,
     ):
         self.data = data  # Store as-is (container)
+        self.contract = contract
+        # The delivery behind quarantine and report: set by the pipeline under
+        # a checked contract (adopt_delivery), else built on first read.
+        self._delivery: Delivery | None = None
+        # The report, kept on its own: without a contract a report read alone
+        # does not keep a delivery (a second copy of the frame) alive.
+        self._report: RunReport | None = None
         self.metrics = metrics
         self.costs = costs
         self.errors = errors or []
@@ -237,6 +269,7 @@ class ExecutionResult:
 
         self._live_ledger: RowLedger | None = None
         self._ledger_snapshot: LedgerSnapshot | None = None
+        self._awaiting_merge = awaiting_merge
         if isinstance(row_ledger, LedgerSnapshot) or row_ledger is None:
             self._ledger_snapshot = row_ledger
         else:
@@ -247,11 +280,21 @@ class ExecutionResult:
         """The run's row ledger, frozen: one final status per input row.
 
         Taken once, on first read, and the same object on every read after.
+        The live ledger is then released, unless a parent has yet to merge it
+        (``awaiting_merge``): a chunk result whose snapshot was read for
+        delivery must still merge into the stream's ledger. The merge
+        releases it then (:meth:`merge_ledger_into`).
         """
-        if self._live_ledger is not None:
+        if self._ledger_snapshot is None and self._live_ledger is not None:
             self._ledger_snapshot = self._live_ledger.snapshot()
+        if not self._awaiting_merge:
             self._live_ledger = None
         return self._ledger_snapshot
+
+    @property
+    def checked(self) -> bool:
+        """True when the run had a declared (checked) output contract."""
+        return self.contract is not None and self.contract.checked
 
     def merge_ledger_into(
         self, parent: "RowLedger", parent_rows: "Sequence[int]", *, retry: bool
@@ -259,17 +302,21 @@ class ExecutionResult:
         """Fold this sub-pipeline run's ledger into ``parent``, at ``parent_rows``.
 
         For a streaming chunk or an auto-retry pass: row ``i`` of this run is
-        ``parent_rows[i]`` of the parent (see ``RowLedger.merge``). This
-        result keeps its compact live ledger and freezes it only if someone
-        reads :attr:`row_ledger`: a snapshot costs several times the live
-        ledger, so a chunk result nobody inspects never pays for one. A
-        result with no live ledger (built by hand, or already read) merges
-        nothing.
+        ``parent_rows[i]`` of the parent (see ``RowLedger.merge``). The live
+        ledger is released after the merge, so the parent holds the only
+        live copy of these rows. The snapshot stays if :attr:`row_ledger` was
+        read before the merge; otherwise this result has none after it (a
+        snapshot costs several times the live ledger, and an auto-retry
+        pass nobody inspects should not pay for one). Read
+        :attr:`row_ledger` first to keep it. A result with no live ledger
+        (built by hand, or already merged) merges nothing.
         """
         live = self._live_ledger
         if live is None:
             return
         parent.merge(live, parent_rows, retry=retry)
+        self._live_ledger = None
+        self._awaiting_merge = False
 
     @property
     def duration(self) -> float:
@@ -302,7 +349,14 @@ class ExecutionResult:
         Check this before trusting the output as a full result; the rows that
         did not make it are listed in :attr:`errors` and counted in
         ``metrics.skipped_rows`` / ``metrics.failed_rows``.
+
+        Under a checked contract, complete means every row was accepted or
+        repaired: a rejected, unverified or failed row is a hole, even though
+        the run finished (read from the row ledger's snapshot).
         """
+        snapshot = self._checked_snapshot()
+        if snapshot is not None:
+            return snapshot.is_complete
         return self.metrics.skipped_rows == 0 and self.metrics.failed_rows == 0
 
     @property
@@ -314,8 +368,108 @@ class ExecutionResult:
         this to slice the survivors from the losses without hand-joining::
 
             good = result.to_pandas().drop(index=result.lost_row_indices)
+
+        Under a checked contract these are the rows whose status is
+        ``failed``. A rejected row had an answer, so it is not lost: it is in
+        :attr:`rejected_row_indices` instead.
         """
+        snapshot = self._checked_snapshot()
+        if snapshot is not None:
+            return snapshot.lost_row_indices
         return sorted({error.row_index for error in self.errors})
+
+    @property
+    def rejected_row_indices(self) -> list[int]:
+        """Input-frame indices of the rows whose answer failed a check, sorted.
+
+        Their output cells are blank (unless ``keep_valid_fields`` kept the
+        fields that passed) and the ``reason`` column says which check
+        blocked them. Always empty without a contract: nothing is checked.
+        """
+        snapshot = self.row_ledger
+        return [] if snapshot is None else snapshot.rejected_row_indices
+
+    @property
+    def quarantine(self) -> Any:
+        """Every rejected, unverified and failed row, as a pandas table.
+
+        One row per entry: the row's position and inputs, its raw answers
+        (for the first rows, within the ledger's cap), every failed check
+        with its rule and reason, the models used and the cost. Without a
+        contract it lists the failed rows. ``None`` for a result with no row
+        ledger (built by hand).
+        """
+        delivery = self._delivered()
+        return None if delivery is None else delivery.quarantine_to_pandas()
+
+    @property
+    def report(self) -> "RunReport | None":
+        """The run report: totals per status, coverage, reasons, cost, warnings.
+
+        ``report.render()`` gives it as text. ``None`` for a result with no
+        row ledger (built by hand). Built once, on first read.
+        """
+        if self._report is None:
+            delivery = self._delivery or self._build_delivery()
+            self._report = None if delivery is None else delivery.report
+        return self._report
+
+    def adopt_delivery(self, delivery: "Delivery", data: Any) -> None:
+        """Make ``delivery`` this result's output, under a checked contract.
+
+        ``data`` is the delivered frame as a container. The error list and
+        the loss counters become the snapshot's, so every view of the result
+        agrees with the ``status`` column.
+        """
+        self.data = data
+        self._delivery = delivery
+        self._report = delivery.report
+        snapshot = self.row_ledger
+        if snapshot is not None:
+            self.errors = list(snapshot.errors)
+            self.metrics.failed_rows = snapshot.failed_rows
+            self.metrics.skipped_rows = snapshot.skipped_rows
+
+    def _checked_snapshot(self) -> "LedgerSnapshot | None":
+        """The snapshot the views read under a checked contract, else None."""
+        return self.row_ledger if self.checked else None
+
+    def _delivered(self) -> "Delivery | None":
+        """The delivery behind :attr:`quarantine`, built once on first read."""
+        if self._delivery is None:
+            self._delivery = self._build_delivery()
+        return self._delivery
+
+    def _build_delivery(self) -> "Delivery | None":
+        """The delivery of this result, when the pipeline did not set one.
+
+        Without a contract: the values are the frame's own output cells, the
+        inputs its other columns. Nothing a delivery decides changes such a
+        frame, so it is never written back.
+        """
+        snapshot = self.row_ledger
+        if snapshot is None or self.contract is None:
+            return None
+        from ondine.harness.delivery import column_order, deliver
+
+        outputs = list(self.contract.output_columns)
+        rows = self.to_list()
+        frame_columns = getattr(self.data, "columns", None)
+        order = (
+            [str(column) for column in frame_columns]
+            if frame_columns is not None
+            else column_order(rows)
+        )
+        columns = [c for c in order if c not in outputs]
+        if len(rows) != len(snapshot.rows):
+            # The frame and the ledger disagree on the row count (a frame
+            # replaced by hand): the report still reads the ledger alone.
+            values: dict[int, dict[str, Any]] = {}
+            inputs: list[dict[str, Any]] = [{}] * len(snapshot.rows)
+        else:
+            values = {i: {c: row.get(c) for c in outputs} for i, row in enumerate(rows)}
+            inputs = [{c: row.get(c) for c in columns} for row in rows]
+        return deliver(snapshot, values, inputs, self.contract, input_columns=columns)
 
     def error_summary(self, limit: int = 3) -> str:
         """Why rows were lost, in the provider's words, most costly reason first.

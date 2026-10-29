@@ -54,9 +54,11 @@ try:  # Python 3.11+
 except ImportError:  # pragma: no cover - Python 3.10
     import sre_parse as _sre_parse  # type: ignore[no-redef]
 
-# Field types a declaration may name. "any" is never declared by a client: it
-# is what an undeclared output column, or a schema field Ondine cannot read
-# (a nested model, a list), becomes — present or not, it passes.
+# Field types a declaration may name. "any" declares no type rule: the value
+# passes whatever its type (allowed values and required still apply; the
+# text and number rules do not, since they need a type). A client may declare it (``with_output_field(..., type="any")``); it is also what an
+# undeclared output column, or a schema field Ondine cannot read (a nested
+# model, a list), becomes.
 FIELD_TYPES = ("text", "integer", "number", "boolean", "any")
 
 # Cleanups a client may allow before checking. They always run in this order,

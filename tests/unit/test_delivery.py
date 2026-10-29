@@ -5,11 +5,14 @@ section 4): every input row comes out, in input order; values are kept or
 blanked by status; the five harness columns appear only under a checked
 contract; the ``reason`` column names the check that blocked delivery last,
 plus the path taken; the quarantine and the run report are readings of the
-same snapshot; and the same snapshot always gives the same output.
+same snapshot; the same snapshot always gives the same output; and chunk
+reports merge into the whole run's report exactly.
 
 The snapshots come from the real ``build_contract`` -> ``judge`` ->
 ``RowLedger`` chain, so delivery is tested against what the ledger and the
-judge really produce, not against hand-built look-alikes.
+judge really produce, not against hand-built look-alikes. The values are what
+the parse stage writes into the results: per row, the latest answer's
+judged values, with a failed field's candidate (step 3, decision D-C).
 """
 
 from __future__ import annotations
@@ -30,11 +33,12 @@ from ondine.harness.contract import (
 )
 from ondine.harness.delivery import (
     HARNESS_COLUMNS,
-    CheckFailure,
     Delivery,
-    JudgedAnswer,
+    RunReport,
+    column_order,
     deliver,
     harness_column_conflicts,
+    merge_reports,
 )
 from ondine.harness.judge import judge
 from ondine.harness.ledger import (
@@ -62,16 +66,28 @@ def _contract(*fields: OutputField, **policy: Any) -> OutputContract:
 
 
 class Run:
-    """A real ledger fed by the real judge, plus the judged answers delivery reads."""
+    """A real ledger fed by the real judge, plus the values the parse stage writes.
+
+    ``values`` holds, per row, the judged values of its latest answer, a
+    failed field's candidate included: what the parse stage writes into the
+    results and delivery reads (decision D-C).
+    """
 
     def __init__(
-        self, contract: OutputContract, rows: int, *, raw_answer_cap: int = 1000
+        self,
+        contract: OutputContract,
+        rows: int,
+        *,
+        raw_answer_cap: int = 1000,
+        first_id: int = 0,
     ) -> None:
         self.contract = contract
         policy = LedgerPolicy.from_contract(contract, raw_answer_cap=raw_answer_cap)
         self.ledger = RowLedger(rows, policy, strict=True)
-        self.judged: dict[tuple[int, int], JudgedAnswer] = {}
-        self.inputs = [{"text": f"message {i}", "id": i} for i in range(rows)]
+        self.values: dict[int, dict[str, Any]] = {}
+        self.inputs = [
+            {"text": f"message {i}", "id": i} for i in range(first_id, first_id + rows)
+        ]
 
     def answer(
         self,
@@ -83,16 +99,19 @@ class Run:
         cost: str = "0.01",
     ) -> None:
         self.ledger.record_answer(
-            row,
-            attempt,
-            model=model,
-            tokens=10,
-            cost=Decimal(cost),
-            raw_answer=text,
+            row, attempt, model=model, tokens=10, cost=Decimal(cost)
         )
         verdict = judge(self.contract, text, self.inputs[row])
-        self.ledger.record_verdict(row, attempt, verdict, stage=PARSER)
-        self.judged[(row, attempt)] = JudgedAnswer.from_verdict(verdict)
+        # As the parse stage reports it: the raw text only with a verdict
+        # that did not pass.
+        self.ledger.record_verdict(
+            row,
+            attempt,
+            verdict,
+            stage=PARSER,
+            raw_answer=None if verdict.passed else text,
+        )
+        self.values[row] = {item.name: item.value for item in verdict.fields}
 
     def provider_failure(self, row: int, attempt: int) -> None:
         self.ledger.record_provider_failure(
@@ -102,7 +121,7 @@ class Run:
     def deliver(self, **options: Any) -> Delivery:
         return deliver(
             self.ledger.snapshot(),
-            self.judged,
+            self.values,
             self.inputs,
             self.contract,
             **options,
@@ -151,6 +170,33 @@ class TestUnchecked:
         assert report.coverage is None
         assert report.rule_pass_rates == ()
         assert report.invariant_holds
+
+    def test_values_are_delivered_as_given_whatever_the_status(self):
+        """Today's frame shows what the run wrote, even for a row the ledger
+        counts as failed (an error policy's default value): without a
+        contract, delivery blanks nothing."""
+        run = Run(build_contract(["label"]), 2)
+        run.answer(0, 1, "positive")
+        run.provider_failure(1, 1)
+        run.values[1] = {"_row_index": 1, "label": "default"}
+
+        out = run.deliver()
+
+        assert list(out.to_pandas()["label"]) == ["positive", "default"]
+        assert out.report.counts[RowStatus.FAILED] == 1
+        assert out.report.violations == ()
+
+    def test_unparseable_answer_is_quarantined_with_its_parse_check(self):
+        run = Run(build_contract(["a", "b"]), 1)
+        run.answer(0, 1, "garbage")
+
+        (entry,) = run.deliver().quarantine
+
+        assert entry.status is RowStatus.FAILED
+        assert [(c.attempt, c.field, c.rule) for c in entry.failed_checks] == [
+            (1, "a", "parse"),
+            (1, "b", "parse"),
+        ]
 
     def test_failed_rows_are_quarantined_even_without_a_contract(self):
         run = Run(build_contract(["label"]), 2)
@@ -225,13 +271,69 @@ class TestRows:
 
     def test_keep_valid_fields_delivers_the_passing_fields_of_a_rejected_row(self):
         run = Run(_contract(INTENT, AMOUNT, partial_rows="keep_valid_fields"), 1)
-        run.answer(0, 1, _json(intent="refund", amount=-3))
+        run.answer(0, 1, _json(intent="refund", amount=-3), model="haiku")
 
         frame = run.deliver().to_pandas()
 
         assert frame.loc[0, "status"] == "rejected"
         assert frame.loc[0, "intent"] == "refund"
         assert pd.isna(frame.loc[0, "amount"])
+        assert frame.loc[0, "delivered_by"] == "haiku"
+
+    def test_keep_valid_fields_with_nothing_valid_names_no_model(self):
+        run = Run(_contract(INTENT, partial_rows="keep_valid_fields"), 1)
+        run.answer(0, 1, _json(intent="upgrade"))
+
+        row = run.deliver().records()[0]
+
+        assert row["intent"] is None
+        assert row["delivered_by"] is None
+
+    def test_a_failed_candidate_never_ships_unless_the_row_is_unverified(self):
+        """The parse stage may write a failed field's candidate for every row;
+        only an unverified row delivers it."""
+        run = Run(_contract(INTENT, AMOUNT, partial_rows="keep_valid_fields"), 2)
+        run.answer(0, 1, _json(intent="upgrade", amount=3))
+        run.answer(1, 1, _json(intent="refund", amount=4))
+        run.values[1]["intent"] = "smuggled"  # not what the verdict passed
+
+        frame = run.deliver().to_pandas()
+
+        assert run.values[0]["intent"] == "upgrade"
+        assert pd.isna(frame.loc[0, "intent"])
+        assert frame.loc[0, "amount"] == 3
+        assert frame.loc[1, "intent"] == "smuggled"  # values are taken as given
+
+    def test_a_failed_row_is_blanked_even_when_values_were_written(self):
+        run = Run(_contract(INTENT), 1)
+        run.provider_failure(0, 1)
+        run.values[0] = {"intent": "refund"}
+
+        assert pd.isna(run.deliver().to_pandas().loc[0, "intent"])
+
+    def test_unverified_row_with_none_written_for_the_failed_field(self):
+        """``Verdict.values`` gives None for a failed field: an unverified
+        row then delivers None there, and the other fields as usual."""
+        run = Run(_contract(INTENT, AMOUNT, on_failure="deliver_flagged"), 1)
+        run.answer(0, 1, _json(intent="upgrade", amount=3))
+        run.values[0]["intent"] = None
+
+        row = run.deliver().records()[0]
+
+        assert row["status"] == "unverified"
+        assert row["intent"] is None
+        assert row["amount"] == 3
+
+    def test_values_extra_keys_and_missing_columns(self):
+        run = Run(_contract(INTENT, NOTE), 1)
+        run.answer(0, 1, _json(intent="refund", note="ok"))
+        run.values[0] = {"_row_index": 0, "intent": "refund"}
+
+        out = run.deliver()
+
+        assert "_row_index" not in out.columns
+        assert out.records()[0]["intent"] == "refund"
+        assert out.records()[0]["note"] is None
 
     def test_whole_row_policy_blanks_every_field_of_a_rejected_row(self):
         run = Run(_contract(INTENT, AMOUNT), 1)
@@ -349,6 +451,42 @@ class TestHarnessColumns:
         assert row["delivered_by"] is None
         assert row["checks"] == "intent: rejected"
 
+    def test_the_path_names_an_attempt_the_provider_failed(self):
+        """An attempt with no verdict still shows in the path (auto-retry)."""
+        run = Run(_contract(INTENT), 1)
+        run.provider_failure(0, 1)
+        run.answer(0, 2, _json(intent="upgrade"))
+
+        row = run.deliver().records()[0]
+
+        assert row["status"] == "rejected"
+        assert row["reason"].endswith(
+            "[path: attempt 1 failed (provider) -> attempt 2 failed check]"
+        )
+
+    def test_the_path_names_a_provider_failure_before_a_recovery(self):
+        run = Run(_contract(INTENT), 1)
+        run.provider_failure(0, 1)
+        run.answer(0, 2, _json(intent="They want to cancel."))
+
+        row = run.deliver().records()[0]
+
+        assert row["reason"].endswith(
+            "[path: attempt 1 failed (provider) -> attempt 2 format fix]"
+        )
+
+    def test_a_row_lost_twice_shows_both_attempts(self):
+        run = Run(_contract(INTENT), 1)
+        run.provider_failure(0, 1)
+        run.provider_failure(0, 2)
+
+        row = run.deliver().records()[0]
+
+        assert row["status"] == "failed"
+        assert row["reason"].endswith(
+            "[path: attempt 1 failed (provider) -> attempt 2 failed (provider)]"
+        )
+
     def test_failed_row_has_the_failure_and_no_checks(self):
         run = Run(_contract(INTENT), 1)
         run.provider_failure(0, 1)
@@ -427,6 +565,19 @@ class TestQuarantine:
         assert entry.cost == Decimal("0.11")
         assert "amount: -2" in entry.reason
 
+    def test_a_delivered_rows_raw_answer_is_not_quarantined_or_kept(self):
+        run = Run(_contract(INTENT), 2)
+        run.answer(0, 1, _json(intent="upgrade"))
+        run.answer(0, 2, _json(intent="refund"))
+        run.answer(1, 1, _json(intent="upsell"))
+
+        (entry,) = run.deliver().quarantine
+        snapshot = run.ledger.snapshot()
+
+        assert entry.row == 1
+        assert entry.attempts[0].raw_answer == _json(intent="upsell")
+        assert all(a.raw_answer is None for a in snapshot.rows[0].attempts)
+
     def test_raw_answers_follow_the_snapshot_cap(self):
         run = Run(_contract(INTENT), 2, raw_answer_cap=1)
         run.answer(0, 1, _json(intent="upgrade"))
@@ -438,17 +589,28 @@ class TestQuarantine:
         assert second.attempts[0].raw_answer is None
         assert second.failed_checks  # checks are exact whatever the cap
 
-    def test_checks_fall_back_to_the_ledger_when_no_judged_answer_was_given(self):
+    def test_checks_come_from_the_ledger_not_from_the_values(self):
+        """The values carry no checks: the quarantine reads the ledger's copy
+        of each verdict, so it is exact even when no values were given."""
         run = Run(_contract(INTENT), 1)
         run.answer(0, 1, _json(intent="upgrade"))
-        run.judged.clear()
+        run.values.clear()
 
         (entry,) = run.deliver().quarantine
 
         assert [(c.attempt, c.field, c.rule) for c in entry.failed_checks] == [
-            (None, None, None)
+            (1, "intent", "allowed_values")
         ]
         assert "'upgrade'" in entry.failed_checks[0].text
+
+    def test_a_provider_failure_has_no_failed_checks(self):
+        run = Run(_contract(INTENT), 1)
+        run.provider_failure(0, 1)
+
+        (entry,) = run.deliver().quarantine
+
+        assert entry.failed_checks == ()
+        assert entry.reason == "LLMInvocation: timeout"
 
     def test_quarantine_frame_has_one_row_per_entry(self):
         run = Run(_contract(INTENT), 2)
@@ -621,30 +783,41 @@ class TestReport:
         assert out.report.cost_per_delivered_row is None
         assert out.report.invariant_holds
 
-    def test_missing_judged_values_blank_the_row_and_are_reported(self):
-        run = Run(_contract(INTENT), 1)
-        run.answer(0, 1, _json(intent="refund"))
-        run.judged.clear()
+    @pytest.mark.parametrize("checked", [True, False])
+    def test_missing_values_of_a_delivered_row_blank_it_and_are_reported(self, checked):
+        contract = _contract(INTENT) if checked else build_contract(["intent"])
+        run = Run(contract, 1)
+        run.answer(0, 1, _json(intent="refund") if checked else "refund")
+        run.values.clear()
 
         out = run.deliver()
 
         assert pd.isna(out.to_pandas().loc[0, "intent"])
-        assert any("no judged answer" in v for v in out.report.violations)
-        assert "no judged answer" in out.report.render()
+        (violation,) = out.report.violations
+        assert violation.startswith("row 0: delivered")
+        assert "no values were given" in violation
+        assert "no values were given" in out.report.render()
+
+    def test_missing_values_of_a_blanked_row_are_not_a_violation(self):
+        run = Run(_contract(INTENT), 2)
+        run.answer(0, 1, _json(intent="upgrade"))
+        run.provider_failure(1, 1)
+        run.values.clear()
+
+        assert run.deliver().report.violations == ()
 
     @pytest.mark.parametrize("stray_row", [2, -1])
-    def test_judged_answers_for_rows_outside_the_input_are_reported(self, stray_row):
+    def test_values_for_rows_outside_the_input_are_reported(self, stray_row):
         run = Run(_contract(INTENT), 2)
         run.answer(0, 1, _json(intent="refund"))
         run.answer(1, 1, _json(intent="cancel"))
-        stray = JudgedAnswer.from_verdict(judge(run.contract, _json(intent="refund")))
-        run.judged[(stray_row, 1)] = stray
+        run.values[stray_row] = {"intent": "refund"}
 
         out = run.deliver()
 
         assert list(out.to_pandas()["intent"]) == ["refund", "cancel"]
         (violation,) = out.report.violations
-        assert f"row {stray_row}, attempt 1" in violation
+        assert f"values for row {stray_row}" in violation
         assert "outside the 2 input rows" in violation
 
 
@@ -665,22 +838,164 @@ class TestGuarantees:
         run = TestReport()._mixed_run()
         snapshot = run.ledger.snapshot()
 
-        first = deliver(snapshot, run.judged, run.inputs, run.contract)
-        second = deliver(snapshot, dict(run.judged), run.inputs, run.contract)
+        first = deliver(snapshot, run.values, run.inputs, run.contract)
+        second = deliver(snapshot, dict(run.values), run.inputs, run.contract)
 
         assert first == second
         pd.testing.assert_frame_equal(first.to_pandas(), second.to_pandas())
         assert first.report.render() == second.report.render()
 
-    def test_judged_mapping_order_does_not_matter(self):
+    def test_values_mapping_order_does_not_matter(self):
         run = TestReport()._mixed_run()
         snapshot = run.ledger.snapshot()
-        items = list(run.judged.items())
+        items = list(run.values.items())
         random.Random(7).shuffle(items)  # noqa: S311 - a seeded test shuffle
 
         assert deliver(snapshot, dict(items), run.inputs, run.contract) == deliver(
-            snapshot, run.judged, run.inputs, run.contract
+            snapshot, run.values, run.inputs, run.contract
         )
+
+    def test_the_values_given_are_not_mutated(self):
+        run = TestReport()._mixed_run()
+        before = {row: dict(cells) for row, cells in run.values.items()}
+
+        run.deliver()
+
+        assert run.values == before
+
+
+# ---------------------------------------------------------------------------
+# Streaming: chunk reports merge into the whole run's
+# ---------------------------------------------------------------------------
+
+#: One scripted event per row: an answer (text, model, cost) or a provider
+#: failure (None). Two answers for row 3: a repair by a later attempt.
+_EVENTS: list[tuple[int, int, str | None, str]] = [
+    (0, 1, _json(intent="refund", amount=1), "0.02"),
+    (1, 1, _json(intent="I'd say cancel", amount=1), "0.02"),
+    (2, 1, _json(intent="upgrade", amount=1), "0.03"),
+    (3, 1, _json(intent="upsell", amount=-5), "0.03"),
+    (3, 2, _json(intent="refund", amount=5), "0.30"),
+    (4, 1, _json(intent="refund", amount=-1), "0.04"),
+    (5, 1, None, "0"),
+    (6, 1, _json(intent="nope", amount="x"), "0.05"),
+]
+
+
+def _play(contract: OutputContract, rows: range, **options: Any) -> RunReport:
+    """The report of a ledger holding ``rows`` of the scripted run."""
+    run = Run(contract, len(rows), first_id=rows.start)
+    for row, attempt, text, cost in _EVENTS:
+        if row not in rows:
+            continue
+        if text is None:
+            run.provider_failure(row - rows.start, attempt)
+        else:
+            run.answer(row - rows.start, attempt, text, cost=cost)
+    return run.deliver(**options).report
+
+
+class TestMergeReports:
+    @pytest.mark.parametrize(
+        "cuts", [[(0, 8)], [(0, 3), (3, 8)], [(0, 1), (1, 4), (4, 6), (6, 8)]]
+    )
+    @pytest.mark.parametrize("flagged", [False, True])
+    def test_chunk_reports_merge_into_the_whole_runs_report(self, cuts, flagged):
+        policy = {"on_failure": "deliver_flagged"} if flagged else {}
+        contract = _contract(INTENT, AMOUNT, NOTE, **policy)
+        whole = _play(contract, range(8))
+        parts = [_play(contract, range(a, b)) for a, b in cuts]
+
+        merged = merge_reports(parts, contract)
+
+        assert merged == whole
+        assert merged.render() == whole.render()
+
+    def test_totals_are_exact_beyond_each_chunks_top_reasons(self):
+        contract = _contract(INTENT, AMOUNT)
+        whole = _play(contract, range(8))
+        parts = [_play(contract, range(a, a + 2), top_reasons=0) for a in (0, 2, 4, 6)]
+
+        merged = merge_reports(parts, contract)
+
+        assert all(part.top_rejection_reasons == () for part in parts)
+        assert merged.top_rejection_reasons == whole.top_rejection_reasons
+        assert merged.top_rejection_reasons  # the scripted run has some
+
+    def test_warnings_are_recomputed_over_the_whole_run(self):
+        contract = _contract(INTENT)
+        chunk = Run(contract, 2)
+        chunk.answer(0, 1, _json(intent="upgrade"))
+        chunk.answer(1, 1, _json(intent="refund"))
+        clean = Run(contract, 2)
+        clean.answer(0, 1, _json(intent="refund"))
+        clean.answer(1, 1, _json(intent="cancel"))
+        half = chunk.deliver(rejection_warning_threshold=0.3).report
+
+        merged = merge_reports(
+            [half, clean.deliver().report], contract, rejection_warning_threshold=0.3
+        )
+
+        assert any("rejected 1 of 2 rows" in w for w in half.warnings)
+        assert merged.counts[RowStatus.REJECTED] == 1
+        assert merged.total == 4
+        assert not any("rejected" in w for w in merged.warnings)
+        assert merged.coverage == pytest.approx(3 / 4)
+
+    def test_the_first_stop_reason_by_precedence_wins(self):
+        contract = _contract(INTENT)
+        crashed = Run(contract, 1)
+        crashed.ledger.record_run_stopped(StopReason.CRASH)
+        capped = Run(contract, 1)
+        capped.ledger.record_run_stopped(StopReason.BUDGET_CAP)
+
+        merged = merge_reports(
+            [crashed.deliver().report, capped.deliver().report], contract
+        )
+
+        assert merged.stop_reason is StopReason.BUDGET_CAP
+        assert merged.counts[RowStatus.FAILED] == 2
+
+    def test_violations_name_their_chunk(self):
+        contract = _contract(INTENT)
+        good = Run(contract, 1)
+        good.answer(0, 1, _json(intent="refund"))
+        slip = Run(contract, 1)
+        slip.answer(0, 1, _json(intent="refund"))
+        slip.values.clear()
+
+        merged = merge_reports([good.deliver().report, slip.deliver().report], contract)
+
+        (violation,) = merged.violations
+        assert violation.startswith("chunk 1: row 0: delivered")
+        assert merged.invariant_holds
+
+    def test_unchecked_reports_merge(self):
+        contract = build_contract(["label"])
+        first = Run(contract, 2)
+        first.answer(0, 1, "positive")
+        first.provider_failure(1, 1)
+        second = Run(contract, 1)
+        second.answer(0, 1, "negative", cost="0.05")
+
+        merged = merge_reports(
+            [first.deliver().report, second.deliver().report], contract
+        )
+
+        assert merged.total == 3
+        assert merged.counts[RowStatus.UNCHECKED] == 2
+        assert merged.counts[RowStatus.FAILED] == 1
+        assert merged.coverage is None
+        assert merged.rule_pass_rates == ()
+        assert merged.cost_total == Decimal("0.06")
+        assert merged.cost_per_delivered_row == Decimal("0.03")
+
+    def test_no_parts(self):
+        merged = merge_reports([], _contract(INTENT))
+
+        assert merged.total == 0
+        assert merged.invariant_holds
+        assert merged.coverage is None
 
 
 class TestOverRealPipelineOutput:
@@ -688,13 +1003,15 @@ class TestOverRealPipelineOutput:
 
     The spec's guarantee for the unchecked contract is that the frame is
     identical to today's. Comparing with a frame built by hand cannot prove
-    that; comparing with what ``Pipeline.execute()`` returns can.
+    that; comparing with what ``Pipeline.execute()`` returns can. The values
+    are the pipeline's own result rows, as the wiring hands them to delivery
+    (decision D-C), and the ledger is the run's own.
     """
 
-    @pytest.mark.xfail(
-        reason="needs step 2 verdict recording", raises=AssertionError, strict=True
-    )
-    def test_unchecked_frame_equals_the_pipelines_own_frame(self):
+    @pytest.mark.parametrize(("batch_size", "concurrency"), [(1, 1), (2, 4)])
+    def test_unchecked_frame_equals_the_pipelines_own_frame(
+        self, batch_size, concurrency
+    ):
         failing = token_for(2)
         frame = conformance_frame(5)
         result = (
@@ -703,8 +1020,8 @@ class TestOverRealPipelineOutput:
             .with_prompt("Answer for {marker}")
             .with_custom_llm_client(LedgerClient(fail_tokens={failing}))
             .with_max_retries(1)
-            .with_batch_size(1)
-            .with_concurrency(1)
+            .with_batch_size(batch_size)
+            .with_concurrency(concurrency)
             .build()
             .execute()
         )
@@ -712,47 +1029,44 @@ class TestOverRealPipelineOutput:
         snapshot = result.row_ledger
         contract = build_contract(["answer"])
         inputs = frame.to_dict("records")
-        # The judge is deterministic, so re-judging the recorded raw answers
-        # gives the verdicts the run itself reached.
-        judged = {
-            (outcome.row, attempt.attempt): JudgedAnswer.from_verdict(
-                judge(contract, attempt.raw_answer, inputs[outcome.row])
-            )
-            for outcome in snapshot.rows
-            for attempt in outcome.attempts
-            if attempt.raw_answer is not None
-        }
+        values = dict(enumerate(result.to_list()))
 
-        out = deliver(snapshot, judged, inputs, contract)
+        out = deliver(snapshot, values, inputs, contract)
 
-        today = result.to_pandas()[["marker", "answer"]]
+        today = result.to_pandas()
         pd.testing.assert_frame_equal(out.to_pandas(), today)
-        assert [o.status for o in snapshot.rows] == [
-            RowStatus.UNCHECKED,
+        assert out.columns == ("marker", "answer")
+        # A failing call loses its whole batch: row 2 alone, or rows 2 and 3.
+        lost = [2] if batch_size == 1 else [2, 3]
+        assert [o.row for o in snapshot.rows if o.status is RowStatus.FAILED] == lost
+        assert {o.status for o in snapshot.rows} == {
             RowStatus.UNCHECKED,
             RowStatus.FAILED,
-            RowStatus.UNCHECKED,
-            RowStatus.UNCHECKED,
-        ]
+        }
+        assert today["answer"].isna().tolist() == [row in lost for row in range(5)]
+        assert [e.row for e in out.quarantine] == lost
+        # A clean pass without a contract carries no check: not copied per row.
+        assert all(o.verdicts == () for o in snapshot.rows)
         assert out.report.violations == ()
-
-
-class TestJudgedAnswer:
-    def test_from_verdict_keeps_values_outcomes_and_rules(self):
-        contract = _contract(INTENT, AMOUNT, NOTE)
-        verdict = judge(contract, _json(intent="REFUND", amount="x"))
-
-        answer = JudgedAnswer.from_verdict(verdict)
-
-        assert [(f.name, f.outcome) for f in answer.fields] == [
-            ("intent", "value"),
-            ("amount", "failed"),
-            ("note", "absent"),
-        ]
-        assert answer.fields[0].value == "refund"
-        assert answer.fields[1].failures == (
-            CheckFailure(
-                field="amount", rule="type", text="amount: 'x' is not a number"
-            ),
+        assert out.report.invariant_holds
+        assert out.report.cost_total == sum(
+            (o.cost for o in snapshot.rows), Decimal("0")
         )
-        assert not answer.passed
+
+
+# ---------------------------------------------------------------------------
+# Column order
+# ---------------------------------------------------------------------------
+
+
+class TestColumnOrder:
+    def test_every_key_once_in_first_seen_order(self):
+        records = [{"b": 1, "a": 2}, {"c": 3, "b": 4}, {"a": 5, "d": 6}]
+
+        assert column_order(records) == ["b", "a", "c", "d"]
+
+    def test_no_records_no_columns(self):
+        assert column_order([]) == []
+
+    def test_reads_any_iterable_of_mappings_once(self):
+        assert column_order(iter([{"x": 1}, {"y": 2, "x": 3}])) == ["x", "y"]

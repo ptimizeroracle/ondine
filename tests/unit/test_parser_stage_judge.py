@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from ondine.adapters.containers.result_container import ResultContainerImpl
 from ondine.core.models import LLMResponse, ResponseBatch, RowMetadata
 from ondine.core.specifications import PromptSpec
-from ondine.harness.contract import OutputField, Relation, build_contract
+from ondine.harness.contract import OutputField, Relation, RunPolicy, build_contract
 from ondine.harness.judge import ParsedAnswer, judge
 from ondine.harness.ledger import RowLedger
 from ondine.harness.status import RowStatus
@@ -390,9 +390,9 @@ def recorded(monkeypatch) -> list[tuple]:
     calls: list[tuple] = []
     original = RowLedger.record_verdict
 
-    def spy(self, row, attempt, verdict, *, stage):
+    def spy(self, row, attempt, verdict, *, stage, **kwargs):
         calls.append((row, attempt, verdict, stage))
-        original(self, row, attempt, verdict, stage=stage)
+        original(self, row, attempt, verdict, stage=stage, **kwargs)
 
     monkeypatch.setattr(RowLedger, "record_verdict", spy)
     return calls
@@ -526,6 +526,7 @@ INTENT = OutputField("intent", allowed=["refund", "cancel"], normalise=["casefol
 
 
 def test_a_checked_contract_writes_deliverable_values_and_reports_verdicts():
+    """A rejected candidate is never written: no later stage may read it."""
     contract = build_contract(["intent"], fields=[INTENT])
     batch = _batch([_response("Refund"), _response("maybe")])
     context = ExecutionContext(total_rows=2)
@@ -544,6 +545,29 @@ def test_a_checked_contract_writes_deliverable_values_and_reports_verdicts():
     ]
     assert snapshot.violations == ()
     assert context.row_errors == []  # a rejection is not a lost row (#312)
+
+
+def test_under_deliver_flagged_a_failing_candidate_is_written():
+    """The one policy that ships a failing value writes it, flagged by delivery."""
+    contract = build_contract(
+        ["intent"],
+        fields=[INTENT],
+        policy=RunPolicy(on_failure="deliver_flagged"),
+    )
+    batch = _batch([_response("Refund"), _response("maybe")])
+    context = ExecutionContext(total_rows=2)
+    context.open_ledger(contract)
+    _report_answers(context, batch)
+
+    container = ResponseParserStage(
+        output_columns=["intent"], contract=contract
+    ).process(([batch], ["intent"]), context)
+
+    assert [row["intent"] for row in container.to_list()] == ["refund", "maybe"]
+    assert [row.status for row in context.ledger.snapshot().rows] == [
+        RowStatus.ACCEPTED,
+        RowStatus.UNVERIFIED,
+    ]
 
 
 def test_a_checked_contract_judges_each_row_against_its_own_inputs():
@@ -716,19 +740,13 @@ def test_a_contract_the_reader_cannot_build_falls_back_to_plain_text():
     assert contract.checked is False
 
 
-def test_a_declared_contract_is_the_runs_contract_end_to_end(monkeypatch):
-    """The seam harness step 3 builds on.
-
-    A declared contract refuses to run until delivery is wired
-    (``tests/e2e/test_harness_step2_fixes.py``); this lifts that refusal to
-    show the contract already reaches the judge and the ledger.
-    """
+def test_a_declared_contract_is_the_runs_contract_end_to_end():
+    """The declared contract reaches the judge, the ledger and delivery."""
     pipeline = _pipeline(["answer"])
     contract = build_contract(
         ["answer"], fields=[OutputField("answer", pattern=r"^ANS-row-000[0-2]$")]
     )
     pipeline._components = replace(pipeline._components, output_contract=contract)
-    monkeypatch.setattr(pipeline, "_refuse_unenforced_contract", lambda: None)
 
     assert pipeline._resolve_contract() is contract
     result = pipeline.execute()
@@ -744,3 +762,4 @@ def test_a_declared_contract_is_the_runs_contract_end_to_end(monkeypatch):
         "ANS-row-0002",
     ]
     assert result.to_pandas()["answer"].iloc[3:].isna().all()
+    assert list(result.to_pandas()["status"]) == ["accepted"] * 3 + ["rejected"] * 2

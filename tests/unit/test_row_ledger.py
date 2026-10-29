@@ -16,7 +16,9 @@ There is one vocabulary: the ledger reads what the judge returns, and
 from __future__ import annotations
 
 import dataclasses
+import gc
 import random
+import weakref
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -833,6 +835,142 @@ def test_raw_answers_are_kept_for_the_first_quarantined_rows_only():
     assert rows[2].attempts[0].raw_answer == "raw-2-1"
     assert rows[3].attempts[0].raw_answer is None
     assert rows[3].status is RowStatus.REJECTED
+
+
+# ---------------------------------------------------------------------------
+# Raw answers given with a verdict: held only for quarantined rows, within cap
+# ---------------------------------------------------------------------------
+
+
+class RawText:
+    """A raw answer a test can watch: a weak reference to it says when the
+    ledger let go of it, which no snapshot can show."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def judged_with_raw(
+    book: RowLedger, row: int, attempt: int, result: Verdict, raw: object
+) -> None:
+    """The parse stage's report: the answer, then its verdict with the raw text."""
+    book.record_answer(row, attempt, model="cheap", tokens=10, cost=Decimal("0.01"))
+    book.record_verdict(row, attempt, result, stage=PARSER, raw_answer=raw)
+
+
+def released(reference: weakref.ref) -> bool:
+    gc.collect()
+    return reference() is None
+
+
+def test_a_raw_answer_given_with_a_failed_verdict_reaches_the_quarantine():
+    book = ledger(1)
+    judged_with_raw(book, 0, 1, verdict(intent=failing("intent: no")), "bad text")
+
+    row = book.snapshot().rows[0]
+
+    assert row.status is RowStatus.REJECTED
+    assert [(a.attempt, a.raw_answer) for a in row.attempts] == [(1, "bad text")]
+
+
+def test_a_row_delivered_after_a_failed_attempt_keeps_no_raw_text():
+    """The ledger must not hold raw text for a row that ends delivered."""
+    book = ledger(1)
+    raw = RawText("upgrade")
+    watch = weakref.ref(raw)
+    judged_with_raw(book, 0, 1, verdict(intent=failing("intent: no")), raw)
+    del raw
+    assert not released(watch)  # rejected so far: held for the quarantine
+
+    judged(book, 0, 2, verdict(intent=PASS))
+
+    assert released(watch)
+    row = book.snapshot().rows[0]
+    assert row.status is RowStatus.REPAIRED
+    assert all(a.raw_answer is None for a in row.attempts if a.attempt == 1)
+
+
+def test_a_raw_answer_given_with_a_passing_verdict_is_not_held():
+    book = ledger(1)
+    raw = RawText("refund")
+    watch = weakref.ref(raw)
+    judged_with_raw(book, 0, 1, verdict(intent=PASS), raw)
+    del raw
+
+    assert released(watch)
+    assert book.snapshot().rows[0].attempts[0].raw_answer is None
+
+
+def test_raw_answers_beyond_the_cap_are_not_held_while_the_run_goes_on():
+    """Only the first quarantined rows, by input order, keep raw text."""
+    contract = build_contract(["intent"], fields=[OutputField("intent")])
+    book = ledger(3, LedgerPolicy.from_contract(contract, raw_answer_cap=1))
+    raws = {row: RawText(f"bad-{row}") for row in (2, 0, 1)}
+    watches = {row: weakref.ref(raw) for row, raw in raws.items()}
+    for row in (2, 0, 1):  # arrival order is not input order
+        judged_with_raw(book, row, 1, verdict(intent=failing("no")), raws[row])
+    del raws
+
+    assert not released(watches[0])
+    assert released(watches[1])
+    assert released(watches[2])
+    rows = book.snapshot().rows
+    assert rows[0].attempts[0].raw_answer.text == "bad-0"
+    assert rows[1].attempts[0].raw_answer is None
+    assert rows[2].attempts[0].raw_answer is None
+    assert [r.status for r in rows] == [RowStatus.REJECTED] * 3
+
+
+def test_a_zero_cap_holds_no_raw_answer():
+    contract = build_contract(["intent"], fields=[OutputField("intent")])
+    book = ledger(1, LedgerPolicy.from_contract(contract, raw_answer_cap=0))
+    raw = RawText("bad")
+    watch = weakref.ref(raw)
+    judged_with_raw(book, 0, 1, verdict(intent=failing("no")), raw)
+    del raw
+
+    assert released(watch)
+    assert book.snapshot().rows[0].attempts[0].raw_answer is None
+
+
+def test_an_unparseable_answer_without_a_contract_keeps_its_raw_answer():
+    book = ledger(1, UNCHECKED)
+    judged_with_raw(
+        book, 0, 1, unchecked_verdict(answer=failing("not JSON")), "{broken"
+    )
+
+    row = book.snapshot().rows[0]
+
+    assert row.status is RowStatus.FAILED
+    assert row.attempts[0].raw_answer == "{broken"
+
+
+def test_a_retry_merge_carries_raw_answers_onto_the_parents_attempts():
+    parent = ledger(1)
+    parent.record_provider_failure([0], 1, stage="LLM", message="503")
+    retry = ledger(1)
+    judged_with_raw(retry, 0, 1, verdict(intent=failing("no")), "bad retry")
+
+    parent.merge(retry, [0], retry=True)
+
+    row = parent.snapshot().rows[0]
+    assert row.status is RowStatus.REJECTED
+    assert [(a.attempt, a.raw_answer) for a in row.attempts] == [(2, "bad retry")]
+
+
+def test_a_merge_that_delivers_a_row_releases_its_raw_answer():
+    parent = ledger(1)
+    raw = RawText("bad")
+    watch = weakref.ref(raw)
+    judged_with_raw(parent, 0, 1, verdict(intent=failing("no")), raw)
+    del raw
+    retry = ledger(1)
+    judged(retry, 0, 1, verdict(intent=PASS))
+
+    parent.merge(retry, [0], retry=True)
+
+    assert released(watch)
+    assert parent.snapshot().rows[0].status is RowStatus.REPAIRED
 
 
 # ---------------------------------------------------------------------------

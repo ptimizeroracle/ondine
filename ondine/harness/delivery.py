@@ -2,17 +2,18 @@
 
 Three outputs, all readings of one :class:`~ondine.harness.ledger.LedgerSnapshot`:
 
-1. **The dataframe.** Every input row, in input order, with the output values
-   kept or blanked by status: accepted, repaired, unverified and unchecked
-   rows keep their value; rejected and failed rows are blanked. Under a
-   checked contract five columns follow: ``status``, ``reason``, ``checks``,
-   ``repair_method``, ``delivered_by``.
+1. **The dataframe.** Every input row, in input order. Under a checked
+   contract the output values are kept or blanked by status: accepted and
+   repaired rows keep them, unverified rows (``deliver_flagged``) keep them
+   flagged, rejected and failed rows are blanked; five columns follow:
+   ``status``, ``reason``, ``checks``, ``repair_method``, ``delivered_by``.
 2. **The quarantine.** One entry per rejected, unverified or failed row: its
    inputs, every attempt's raw answer (within the snapshot's cap), every
    failed check with its rule and reason, the models used and the cost.
 3. **The run report.** Totals per status and the invariant that they sum to
    the row count, coverage, the top rejection reasons, the pass rate per
-   rule, cost, and warnings.
+   rule, cost, and warnings. :func:`merge_reports` combines the reports of
+   streaming chunks into the whole run's, with exact totals.
 
 Why delivery is built this way:
 
@@ -20,33 +21,36 @@ Why delivery is built this way:
   the snapshot. Before the harness, a row's fate was re-derived by a blanking
   pass matching marker strings and by a quality report counting empty cells.
   Both become readings here, so they can no longer disagree with the ledger.
-* **The value comes from the judge, not the ledger.** The ledger records
-  which attempt a row delivers, not the values: it only needs a verdict's
-  pass or fail. Delivery takes the judged answers as a separate input,
-  a mapping keyed by ``(row, attempt)`` and built from the
-  judge's verdicts with :meth:`JudgedAnswer.from_verdict`. Giving every
-  judged attempt, not only the delivered one, lets the quarantine name each
-  failed check's rule and the ``reason`` column show the path taken.
+* **The values come from the parse stage; everything else from the ledger.**
+  The parse stage already wrote each row's judged values into the results,
+  so delivery takes them as they are (row -> ``{column: value}``) instead of
+  re-judging raw answers, and the pipeline keeps nothing new per row. Which
+  of those values ship is the ledger's call: the row's status and, under a
+  checked contract, each field's status. The checks, the rules that failed
+  and the path taken come from the ledger's copy of each verdict
+  (:attr:`RowOutcome.verdicts`).
 * **No contract, no change.** Under the unchecked contract the dataframe is
-  the input rows with today's output values, and no column is added. The
-  quarantine and the report are new outputs next to it, never changes to it.
+  the input rows with the values given, untouched, and no column is added:
+  the values are today's output, whatever the status. The quarantine and the
+  report are new outputs next to it, never changes to it.
 * **Plain structures inside, pandas only at the edge.** Rows are tuples in a
   fixed column order, like the dict rows ``ResultContainerImpl`` holds;
   :meth:`Delivery.to_pandas` builds a frame only when asked. That keeps
-  delivery deterministic and cheap to compare: the same snapshot and judged
-  answers always give an equal :class:`Delivery`.
+  delivery deterministic and cheap to compare: the same snapshot and values
+  always give an equal :class:`Delivery`.
 * **Wiring defects are loud, model behaviour is data.** An input whose row
   count differs from the snapshot's, or a column clash with the harness
   columns, raises :class:`ValueError`: no correct frame exists. A delivered
-  attempt without a judged answer is delivered empty and listed in the
-  report's violations, so a bookkeeping slip never ships a wrong value and
-  never hides.
+  row without values is delivered empty and listed in the report's
+  violations, so a bookkeeping slip never ships a wrong value and never
+  hides.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -57,8 +61,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from ondine.harness.contract import OutputContract
-    from ondine.harness.judge import Verdict
-    from ondine.harness.ledger import AttemptRecord, LedgerSnapshot, RowOutcome
+    from ondine.harness.ledger import (
+        AttemptRecord,
+        Judgement,
+        LedgerSnapshot,
+        RowOutcome,
+    )
 
 #: The columns a checked contract adds, in this order. Delivery owns the set;
 #: later features fill values, never add columns (design v1, section 2).
@@ -78,10 +86,18 @@ DEFAULT_REJECTION_WARNING_THRESHOLD = 0.2
 #: How many rejection reasons the report lists.
 DEFAULT_TOP_REASONS = 10
 
-#: Statuses whose row keeps its value in the dataframe.
+#: Statuses whose row delivers a value.
 _KEEPS_VALUE = frozenset(
     {RowStatus.ACCEPTED, RowStatus.REPAIRED, RowStatus.UNVERIFIED, RowStatus.UNCHECKED}
 )
+#: Field statuses whose value ships, by row status, under a checked contract.
+#: A rejected row ships passing fields only under ``keep_valid_fields``.
+_PASSING_FIELDS = frozenset({RowStatus.ACCEPTED, RowStatus.REPAIRED})
+_SHIPS = {
+    RowStatus.ACCEPTED: _PASSING_FIELDS,
+    RowStatus.REPAIRED: _PASSING_FIELDS,
+    RowStatus.UNVERIFIED: _PASSING_FIELDS | {RowStatus.UNVERIFIED},
+}
 #: Statuses that get a quarantine entry.
 _QUARANTINED = (RowStatus.REJECTED, RowStatus.UNVERIFIED, RowStatus.FAILED)
 #: Statuses whose answer failed a check, for the rejection reasons.
@@ -89,7 +105,7 @@ _FAILED_A_CHECK = frozenset({RowStatus.REJECTED, RowStatus.UNVERIFIED})
 
 
 # ---------------------------------------------------------------------------
-# Input: the judged answers
+# Output
 # ---------------------------------------------------------------------------
 
 
@@ -97,94 +113,15 @@ _FAILED_A_CHECK = frozenset({RowStatus.REJECTED, RowStatus.UNVERIFIED})
 class CheckFailure:
     """One failed check: the field, the rule, and the judge's sentence.
 
-    ``field`` and ``rule`` are None only when the judged answer was not given
-    and the text comes from the ledger, which keeps reasons as sentences.
-    ``attempt`` is set in the quarantine, where checks from every attempt are
-    listed together.
+    ``field`` and ``rule`` are None only when the ledger kept the sentence
+    without them. ``attempt`` is set in the quarantine, where checks from
+    every attempt are listed together.
     """
 
     field: str | None
     rule: str | None
     text: str
     attempt: int | None = None
-
-
-@dataclass(frozen=True)
-class JudgedField:
-    """One field of a judged answer: what delivery may write in its column.
-
-    Attributes:
-        name: The output column.
-        outcome: "value", "absent" (a valid empty answer) or "failed".
-        value: The deliverable value; for a failed field, the best candidate,
-            delivered only when the row is unverified.
-        required: Whether a failure of this field fails the row.
-        format_fixed: The value was found inside a wordy answer.
-        failures: Every failed check of this field.
-    """
-
-    name: str
-    outcome: str
-    value: Any = None
-    required: bool = True
-    format_fixed: bool = False
-    failures: tuple[CheckFailure, ...] = ()
-
-
-@dataclass(frozen=True)
-class JudgedAnswer:
-    """The judge's result for one attempt, in the form delivery reads.
-
-    A copy rather than the judge's own :class:`~ondine.harness.judge.Verdict`
-    so delivery depends on the few attributes it needs, and a verdict changed
-    after the fact cannot change what was delivered.
-    """
-
-    fields: tuple[JudgedField, ...]
-
-    @classmethod
-    def from_verdict(cls, verdict: Verdict) -> JudgedAnswer:
-        """Copy what delivery needs from ``verdict``."""
-        return cls(
-            tuple(
-                JudgedField(
-                    name=str(item.name),
-                    outcome=str(item.outcome),
-                    value=item.value,
-                    required=bool(item.required),
-                    format_fixed=bool(item.format_fixed),
-                    failures=_failures(item.reasons),
-                )
-                for item in verdict.fields
-            )
-        )
-
-    @property
-    def passed(self) -> bool:
-        """No required field failed."""
-        return not any(f.required and f.outcome == "failed" for f in self.fields)
-
-    @property
-    def format_fixed(self) -> bool:
-        """Any field was delivered through the format fix."""
-        return any(f.format_fixed for f in self.fields)
-
-    @property
-    def failures(self) -> tuple[CheckFailure, ...]:
-        """Every failed check, in field order."""
-        return tuple(failure for f in self.fields for failure in f.failures)
-
-    def get(self, name: str) -> JudgedField | None:
-        """The field named ``name``, or None when the answer lacks it."""
-        for item in self.fields:
-            if item.name == name:
-                return item
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Output
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -287,7 +224,7 @@ class RunReport:
         coverage: (accepted + repaired) / total. None without a contract,
             where nothing is accepted or repaired, and for an empty input.
         top_rejection_reasons: Blocking checks of rejected and unverified
-            rows, most frequent first.
+            rows, most frequent first, at most the limit asked for.
         rejected_after_provider_failure: Rejected rows whose repair a provider
             failure cut short; counted apart, as they point at the provider.
         rule_pass_rates: One entry per declared rule, plus any rule seen
@@ -302,6 +239,11 @@ class RunReport:
         invariant_holds: The status counts sum to the row count and agree
             with the snapshot's own counts.
         invariant_line: That fact, as a sentence for the report.
+        rejection_reasons: Every blocking check, ranked like
+            ``top_rejection_reasons`` but uncapped, so chunk reports merge
+            into exact totals (:func:`merge_reports`).
+        judged_rows: Rows with a final judged answer: the ``judged`` of
+            every pass rate.
     """
 
     total: int
@@ -318,6 +260,8 @@ class RunReport:
     stop_reason: StopReason | None
     invariant_holds: bool
     invariant_line: str
+    rejection_reasons: tuple[RejectionReason, ...] = ()
+    judged_rows: int = 0
 
     def render(self) -> str:
         """The report as plain text, one fact per line."""
@@ -416,8 +360,21 @@ _QUARANTINE_COLUMNS = (
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Entry points
 # ---------------------------------------------------------------------------
+
+
+def column_order(records: Iterable[Mapping[str, Any]]) -> list[str]:
+    """Every key of ``records``, once each, in first-seen order.
+
+    The column names of rows given as mappings, when nothing else states
+    them: the rows of a result, or the input rows handed to :func:`deliver`.
+    Reads ``records`` once, so any iterable will do.
+    """
+    seen: dict[str, None] = {}
+    for record in records:
+        seen.update(dict.fromkeys(record))
+    return list(seen)
 
 
 def harness_column_conflicts(columns: Iterable[str]) -> list[str]:
@@ -433,7 +390,7 @@ def harness_column_conflicts(columns: Iterable[str]) -> list[str]:
 
 def deliver(
     snapshot: LedgerSnapshot,
-    judged: Mapping[tuple[int, int], JudgedAnswer],
+    values: Mapping[int, Mapping[str, Any]],
     input_rows: Sequence[Mapping[str, Any]],
     contract: OutputContract,
     *,
@@ -444,11 +401,23 @@ def deliver(
     """Build the dataframe, the quarantine and the run report.
 
     Args:
-        snapshot: The ledger's frozen snapshot of the run.
-        judged: ``(row, attempt)`` -> :class:`JudgedAnswer`, built from the
-            judge's verdicts. Must hold every delivered attempt; should hold
-            every judged attempt.
-        input_rows: The original input rows, in input order.
+        snapshot: The ledger's frozen snapshot of the run (or of one
+            streaming chunk).
+        values: Snapshot row number (``RowOutcome.row``) -> the output values
+            the parse stage wrote for that row, ``{output column: value}``.
+            Extra keys (``_row_index``) are ignored; a row or column missing
+            here delivers None. Under a checked contract, a failed field's
+            value reaches the client only on an unverified row
+            (``deliver_flagged``): write the judge's candidate
+            (``FieldVerdict.value``) there, since ``Verdict.values`` gives
+            None for it. Delivery blanks everything else the status forbids,
+            so a candidate written for any other row never ships. The values
+            must be the delivered attempt's (``RowOutcome.delivered_attempt``).
+            In a pipeline run the latest answer is that attempt, because a
+            later attempt only comes from the auto-retry pass, which re-runs
+            failed rows only (D-D).
+        input_rows: The original input rows, in input order, one per
+            snapshot row.
         contract: The run's contract: output columns, whether it is checked,
             and the partial-rows policy.
         input_columns: The input's column order. Defaults to the keys of the
@@ -468,7 +437,9 @@ def deliver(
             f"the ledger snapshot has {total} rows but {len(input_rows)} input "
             f"rows were given; delivery needs exactly one input row per ledger row"
         )
-    inputs = list(input_columns) if input_columns is not None else _keys(input_rows)
+    inputs = (
+        list(input_columns) if input_columns is not None else column_order(input_rows)
+    )
     outputs = list(contract.output_columns)
     if contract.checked:
         clashes = harness_column_conflicts([*inputs, *outputs])
@@ -482,17 +453,19 @@ def deliver(
         columns.extend(HARNESS_COLUMNS)
 
     violations = list(snapshot.violations)
-    by_row = _by_row(judged, total, violations)
+    stray = _stray_rows(values, total)
+    if stray:
+        violations.append(stray)
     keep_valid = contract.policy.partial_rows == "keep_valid_fields"
     rows: list[tuple[Any, ...]] = []
     quarantine: list[QuarantineEntry] = []
     for outcome, input_row in zip(snapshot.rows, input_rows, strict=True):
-        answers = by_row.get(outcome.row, {})
-        view = _RowView(outcome, answers)
-        values, delivered_by = view.values(outputs, keep_valid, violations)
+        view = _RowView(outcome)
+        given = values.get(outcome.row)
         record = {column: input_row.get(column) for column in inputs}
-        record.update(values)
         if contract.checked:
+            cells, delivered_by = view.cells(outputs, given, keep_valid, violations)
+            record.update(cells)
             record.update(
                 status=outcome.status.value,
                 reason=view.reason_column(),
@@ -500,19 +473,94 @@ def deliver(
                 repair_method=view.repair_method(),
                 delivered_by=delivered_by,
             )
+        else:
+            record.update(_as_given(outputs, given, outcome, violations))
         rows.append(tuple(record[column] for column in columns))
         if outcome.status in _QUARANTINED:
             quarantine.append(view.quarantine_entry(input_row))
 
     report = _report(
-        snapshot,
-        by_row,
-        contract,
-        violations,
-        rejection_warning_threshold,
-        top_reasons,
+        snapshot, contract, violations, rejection_warning_threshold, top_reasons
     )
     return Delivery(tuple(columns), tuple(rows), tuple(quarantine), report)
+
+
+def merge_reports(
+    reports: Iterable[RunReport],
+    contract: OutputContract,
+    *,
+    rejection_warning_threshold: float = DEFAULT_REJECTION_WARNING_THRESHOLD,
+    top_reasons: int = DEFAULT_TOP_REASONS,
+) -> RunReport:
+    """The whole run's report from the reports of its parts (streaming chunks).
+
+    Exact, not estimated: counts, costs, rejection reasons and pass rates are
+    sums over the parts, and coverage, the cost per delivered row and the
+    warnings are recomputed from those sums. For parts that cover disjoint
+    rows, given in input order, the result equals the report of one snapshot
+    holding all their rows, except that each part's violations keep a
+    ``chunk N:`` prefix so a slip can be traced to its chunk.
+
+    Args:
+        reports: The parts' reports, in input order.
+        contract: The run's contract, for the declared rules' order.
+        rejection_warning_threshold: As for :func:`deliver`.
+        top_reasons: As for :func:`deliver`.
+    """
+    parts = list(reports)
+    counts = dict.fromkeys(FINAL_STATUSES, 0)
+    reasons: dict[tuple[str | None, str | None], int] = {}
+    examples: dict[tuple[str | None, str | None], str] = {}
+    failed: dict[tuple[str, str], int] = {}
+    seen_rules: set[tuple[str, str]] = set()
+    judged = 0
+    violations: list[str] = []
+    for number, part in enumerate(parts):
+        for status in FINAL_STATUSES:
+            counts[status] += part.counts.get(status, 0)
+        for reason in part.rejection_reasons:
+            key = (reason.field, reason.rule)
+            reasons[key] = reasons.get(key, 0) + reason.count
+            examples.setdefault(key, reason.example)
+        for rate in part.rule_pass_rates:
+            key = (rate.field, rate.rule)
+            seen_rules.add(key)
+            failed[key] = failed.get(key, 0) + rate.judged - rate.passed
+        judged += part.judged_rows
+        violations.extend(f"chunk {number}: {v}" for v in part.violations)
+
+    total = sum(part.total for part in parts)
+    holds = all(part.invariant_holds for part in parts)
+    stops = {part.stop_reason for part in parts if part.stop_reason is not None}
+    declared = _declared_rules(contract)
+    extra = sorted(key for key in seen_rules if key not in declared)
+    rates = (
+        tuple(
+            RulePassRate(name, rule, judged - failed.get((name, rule), 0), judged)
+            for name, rule in [*declared, *extra]
+        )
+        if contract.checked
+        else ()
+    )
+    return _assemble(
+        contract,
+        total=total,
+        counts=counts,
+        holds=holds,
+        reasons=_ranked(reasons, examples),
+        rates=rates,
+        judged=judged,
+        rejected_after_provider_failure=sum(
+            part.rejected_after_provider_failure for part in parts
+        ),
+        cost_total=sum((part.cost_total for part in parts), Decimal("0")),
+        cost_on_rejected=sum((part.cost_on_rejected for part in parts), Decimal("0")),
+        violations=violations,
+        stop_reason=next((r for r in StopReason if r in stops), None),
+        rejection_threshold=rejection_warning_threshold,
+        top_reasons=top_reasons,
+        broken_detail="",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -522,22 +570,25 @@ def deliver(
 
 @dataclass(frozen=True)
 class _RowView:
-    """One row's outcome next to its judged answers, read every way delivery needs."""
+    """One row's outcome, read every way delivery needs."""
 
     outcome: RowOutcome
-    answers: Mapping[int, JudgedAnswer]
+
+    @cached_property
+    def verdicts(self) -> dict[int, Judgement]:
+        return dict(self.outcome.verdicts)
 
     @property
     def final_attempt(self) -> int | None:
         """The attempt the status rests on: delivered, else the latest judged."""
         if self.outcome.delivered_attempt is not None:
             return self.outcome.delivered_attempt
-        return max(self.answers, default=None)
+        return max((a for a, _ in self.outcome.verdicts), default=None)
 
     @property
-    def final_answer(self) -> JudgedAnswer | None:
+    def final_verdict(self) -> Judgement | None:
         attempt = self.final_attempt
-        return None if attempt is None else self.answers.get(attempt)
+        return None if attempt is None else self.verdicts.get(attempt)
 
     def model_of(self, attempt: int | None) -> str | None:
         for record in self.outcome.attempts:
@@ -545,56 +596,66 @@ class _RowView:
                 return record.model
         return None
 
-    def values(
-        self, outputs: Sequence[str], keep_valid: bool, violations: list[str]
+    def cells(
+        self,
+        outputs: Sequence[str],
+        given: Mapping[str, Any] | None,
+        keep_valid: bool,
+        violations: list[str],
     ) -> tuple[dict[str, Any], str | None]:
-        """The output values to deliver, and the model that produced them."""
+        """Under a checked contract: the values that ship, and who made them.
+
+        A field ships when its row status allows it and its own status (from
+        the deciding verdict) is one that row status delivers. A field the
+        ledger has no status for takes the row's.
+        """
         cells: dict[str, Any] = dict.fromkeys(outputs)
         status = self.outcome.status
-        if status in _KEEPS_VALUE:
-            attempt = self.outcome.delivered_attempt
-            answer = None if attempt is None else self.answers.get(attempt)
-            if answer is None:
-                violations.append(
-                    f"row {self.outcome.row}: attempt {attempt} is delivered "
-                    f"({status.value}) but no judged answer was given for it; "
-                    f"delivered empty"
-                )
-                return cells, None
-            flagged = status is RowStatus.UNVERIFIED
-            for name in outputs:
-                item = answer.get(name)
-                if item is not None and (
-                    item.outcome == "value" or (flagged and item.outcome == "failed")
-                ):
-                    cells[name] = item.value
-            return cells, self.outcome.delivered_by
-        if status is RowStatus.REJECTED and keep_valid:
-            answer = self.final_answer
-            if answer is None:
-                return cells, None
-            kept = False
-            for name in outputs:
-                item = answer.get(name)
-                if item is not None and item.outcome == "value":
-                    cells[name] = item.value
-                    kept = True
-            return cells, self.model_of(self.final_attempt) if kept else None
-        return cells, None
+        ships = _SHIPS.get(status)
+        delivered_by = self.outcome.delivered_by
+        if ships is None and status is RowStatus.REJECTED and keep_valid:
+            ships = _PASSING_FIELDS
+            delivered_by = self.model_of(self.final_attempt)
+        if ships is None:
+            return cells, None
+        if given is None:
+            if status in _KEEPS_VALUE:
+                violations.append(_no_values(self.outcome))
+            return cells, None
+        fields = dict(self.outcome.field_statuses)
+        kept = False
+        for name in outputs:
+            if fields.get(name, status) in ships and name in given:
+                cells[name] = given[name]
+                kept = True
+        if status is RowStatus.REJECTED and not kept:
+            delivered_by = None
+        return cells, delivered_by
 
     def path(self) -> str:
-        """Each attempt and what came of it, in attempt order."""
+        """Each attempt and what came of it, in attempt order.
+
+        An attempt that failed and was never judged shows what failed on it
+        ("failed (provider)"), so a row an auto-retry recovered or rejected
+        still shows the attempt the provider lost. A row whose one attempt
+        failed has no path: its reason already names that failure.
+        """
+        verdicts = self.verdicts
+        failed = dict(self.outcome.failed_attempts)
+        if not verdicts and not self.outcome.attempts and len(failed) == 1:
+            return ""
         attempts = sorted(
-            {record.attempt for record in self.outcome.attempts} | set(self.answers)
+            {a.attempt for a in self.outcome.attempts} | set(verdicts) | set(failed)
         )
         steps = []
         for attempt in attempts:
-            answer = self.answers.get(attempt)
-            if answer is None:
-                label = "answered"
-            elif not answer.passed:
+            verdict = verdicts.get(attempt)
+            if verdict is None:
+                what = failed.get(attempt)
+                label = "answered" if what is None else f"failed ({what})"
+            elif not verdict.passed:
                 label = "failed check"
-            elif answer.format_fixed:
+            elif any(f.format_fixed for f in verdict.fields):
                 label = "format fix"
             else:
                 label = "passed"
@@ -612,13 +673,14 @@ class _RowView:
         return f"{reason} [path: {path}]" if reason and path else reason
 
     def checks_column(self) -> str:
-        """Per-field results of the answer the status rests on."""
-        answer = self.final_answer
+        """Per-field results of the verdict the status rests on."""
+        verdict = self.final_verdict
+        by_name = {f.name: f for f in verdict.fields} if verdict is not None else {}
         parts = []
         for name, status in self.outcome.field_statuses:
-            item = answer.get(name) if answer is not None else None
+            item = by_name.get(name)
             text = status.value
-            if status is RowStatus.ACCEPTED and item and item.outcome == "absent":
+            if status is RowStatus.ACCEPTED and item is not None and item.absent:
                 text = "absent"
             elif status is RowStatus.REPAIRED and item is not None:
                 text = f"repaired ({'format' if item.format_fixed else 're-ask'})"
@@ -634,21 +696,26 @@ class _RowView:
         status = self.outcome.status
         if status not in (RowStatus.REPAIRED, RowStatus.UNVERIFIED):
             return "none"
-        answer = self.final_answer
-        if answer is not None and answer.format_fixed:
+        verdict = self.final_verdict
+        if verdict is not None and any(f.format_fixed for f in verdict.fields):
             return "format"
         if status is RowStatus.REPAIRED:
             return "re-ask"
-        earlier = [k for k in self.answers if k < (self.final_attempt or 0)]
+        final = self.final_attempt or 0
+        earlier = [a for a, _ in self.outcome.verdicts if a < final]
         return "re-ask" if earlier else "none"
+
+    def failures(self) -> list[CheckFailure]:
+        """Every failed check of every judged attempt, by attempt then field."""
+        return [
+            failure
+            for attempt, verdict in self.outcome.verdicts
+            for failure in _failures_of(verdict, attempt)
+        ]
 
     def quarantine_entry(self, input_row: Mapping[str, Any]) -> QuarantineEntry:
         outcome = self.outcome
-        checks = tuple(
-            CheckFailure(f.field, f.rule, f.text, attempt)
-            for attempt in sorted(self.answers)
-            for f in self.answers[attempt].failures
-        )
+        checks = tuple(self.failures())
         if not checks:
             checks = tuple(
                 CheckFailure(None, None, text) for text in outcome.failed_checks
@@ -666,6 +733,82 @@ class _RowView:
         )
 
 
+def _as_given(
+    outputs: Sequence[str],
+    given: Mapping[str, Any] | None,
+    outcome: RowOutcome,
+    violations: list[str],
+) -> dict[str, Any]:
+    """Without a contract: the values as given, whatever the status.
+
+    They are today's output: a row the ledger counts as failed may still
+    hold what today's run wrote for it (an error policy's default value), and
+    today's frame shows it, so delivery does too.
+    """
+    if given is None:
+        if outcome.status in _KEEPS_VALUE:
+            violations.append(_no_values(outcome))
+        return dict.fromkeys(outputs)
+    return {name: given.get(name) for name in outputs}
+
+
+def _stray_rows(values: Mapping[int, Any], total: int) -> str:
+    """A violation naming the keys of ``values`` that are not a row, or "".
+
+    Such values have nowhere to go: they mean the caller's row numbers and
+    the snapshot's disagree (a chunk given the whole run's values, say). One
+    line however many there are, naming the first few.
+    """
+    stray = sorted(
+        (key for key in values if not (isinstance(key, int) and 0 <= key < total)),
+        key=repr,
+    )
+    if not stray:
+        return ""
+    shown = ", ".join(repr(key) for key in stray[:_STRAY_SHOWN])
+    more = f" and {len(stray) - _STRAY_SHOWN} more" if len(stray) > _STRAY_SHOWN else ""
+    noun = "row" if len(stray) == 1 else "rows"
+    return (
+        f"values for {noun} {shown}{more} are outside the {total} input rows; ignored"
+    )
+
+
+#: How many stray rows a violation names.
+_STRAY_SHOWN = 5
+
+
+def _no_values(outcome: RowOutcome) -> str:
+    return (
+        f"row {outcome.row}: delivered ({outcome.status.value}, attempt "
+        f"{outcome.delivered_attempt}) but no values were given for it; "
+        f"delivered empty"
+    )
+
+
+def _failures_of(verdict: Judgement, attempt: int | None) -> list[CheckFailure]:
+    """The failed checks of one verdict, in field order.
+
+    A failed field with no reason gets the ledger's own sentence for it, so
+    no failed field goes unlisted.
+    """
+    failures: list[CheckFailure] = []
+    for item in verdict.fields:
+        if not item.failed:
+            continue
+        if not item.reasons:
+            failures.append(
+                CheckFailure(item.name, None, f"{item.name}: failed a check", attempt)
+            )
+            continue
+        count = len(item.reasons)
+        rules = (*item.rules[:count], *(None,) * (count - len(item.rules)))
+        failures.extend(
+            CheckFailure(item.name, rule or None, text, attempt)
+            for text, rule in zip(item.reasons, rules, strict=True)
+        )
+    return failures
+
+
 # ---------------------------------------------------------------------------
 # The run report
 # ---------------------------------------------------------------------------
@@ -673,7 +816,6 @@ class _RowView:
 
 def _report(
     snapshot: LedgerSnapshot,
-    by_row: Mapping[int, Mapping[int, JudgedAnswer]],
     contract: OutputContract,
     violations: list[str],
     rejection_threshold: float,
@@ -683,29 +825,79 @@ def _report(
     counts = dict.fromkeys(FINAL_STATUSES, 0)
     for outcome in snapshot.rows:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
-    summed = sum(counts.values())
     agrees = all(snapshot.counts.get(s, 0) == counts[s] for s in counts)
-    holds = summed == total and agrees and set(counts) == set(FINAL_STATUSES)
+    holds = agrees and set(counts) == set(FINAL_STATUSES)
+    detail = (
+        f" (snapshot counts {dict((s.value, n) for s, n in snapshot.counts.items())})"
+    )
+
+    views = [_RowView(o) for o in snapshot.rows]
+    judged = sum(1 for view in views if view.final_verdict is not None)
+    return _assemble(
+        contract,
+        total=total,
+        counts=counts,
+        holds=holds,
+        reasons=_rejection_reasons(views),
+        rates=_rule_pass_rates(contract, views, judged) if contract.checked else (),
+        judged=judged,
+        rejected_after_provider_failure=sum(
+            1
+            for o in snapshot.rows
+            if o.status is RowStatus.REJECTED and o.sub_reason == PROVIDER_SUB_REASON
+        ),
+        cost_total=sum((o.cost for o in snapshot.rows), Decimal("0")),
+        cost_on_rejected=sum(
+            (o.cost for o in snapshot.rows if o.status is RowStatus.REJECTED),
+            Decimal("0"),
+        ),
+        violations=violations,
+        stop_reason=snapshot.stop_reason,
+        rejection_threshold=rejection_threshold,
+        top_reasons=top_reasons,
+        broken_detail=detail,
+    )
+
+
+def _assemble(
+    contract: OutputContract,
+    *,
+    total: int,
+    counts: dict[RowStatus, int],
+    holds: bool,
+    reasons: tuple[RejectionReason, ...],
+    rates: tuple[RulePassRate, ...],
+    judged: int,
+    rejected_after_provider_failure: int,
+    cost_total: Decimal,
+    cost_on_rejected: Decimal,
+    violations: list[str],
+    stop_reason: StopReason | None,
+    rejection_threshold: float,
+    top_reasons: int,
+    broken_detail: str,
+) -> RunReport:
+    """The report from its totals: what one snapshot and merged parts share.
+
+    Everything derived (the invariant, coverage, cost per delivered row,
+    warnings) is computed here and only here, so a merged report and a
+    single snapshot's report cannot derive them differently.
+    """
+    summed = sum(counts.values())
+    holds = holds and summed == total
     if holds:
         line = f"Totals: {summed} of {total} rows have exactly one status (holds)"
     else:
         line = (
-            f"Totals: INVARIANT BROKEN: statuses sum to {summed} for {total} rows "
-            f"(snapshot counts {dict((s.value, n) for s, n in snapshot.counts.items())})"
+            f"Totals: INVARIANT BROKEN: statuses sum to {summed} for {total} rows"
+            f"{broken_detail}"
         )
         violations.append(line)
 
-    views = [_RowView(o, by_row.get(o.row, {})) for o in snapshot.rows]
     delivered = sum(counts[s] for s in _KEEPS_VALUE)
-    cost_total = sum((o.cost for o in snapshot.rows), Decimal("0"))
-    cost_rejected = sum(
-        (o.cost for o in snapshot.rows if o.status is RowStatus.REJECTED),
-        Decimal("0"),
-    )
     coverage = None
     if contract.checked and total:
         coverage = (counts[RowStatus.ACCEPTED] + counts[RowStatus.REPAIRED]) / total
-    rates = _rule_pass_rates(contract, views) if contract.checked else ()
 
     warnings = [
         f"rule {r.field}.{r.rule} failed on {r.judged - r.passed} of {r.judged} "
@@ -720,9 +912,9 @@ def _report(
             f"rejected {rejected} of {total} rows ({rejected / total:.1%}), above "
             f"the {rejection_threshold:.0%} warning threshold"
         )
-    if snapshot.stop_reason is not None:
+    if stop_reason is not None:
         warnings.append(
-            f"the run stopped early ({snapshot.stop_reason.value}); rows it never "
+            f"the run stopped early ({stop_reason.value}); rows it never "
             f"reached are failed"
         )
 
@@ -730,67 +922,70 @@ def _report(
         total=total,
         counts=MappingProxyType(counts),
         coverage=coverage,
-        top_rejection_reasons=_top_reasons(views, top_reasons),
-        rejected_after_provider_failure=sum(
-            1
-            for o in snapshot.rows
-            if o.status is RowStatus.REJECTED and o.sub_reason == PROVIDER_SUB_REASON
-        ),
+        top_rejection_reasons=reasons[: max(top_reasons, 0)],
+        rejected_after_provider_failure=rejected_after_provider_failure,
         rule_pass_rates=rates,
         cost_total=cost_total,
         cost_per_delivered_row=cost_total / delivered if delivered else None,
-        cost_on_rejected=cost_rejected,
+        cost_on_rejected=cost_on_rejected,
         warnings=tuple(warnings),
         violations=tuple(violations),
-        stop_reason=snapshot.stop_reason,
+        stop_reason=stop_reason,
         invariant_holds=holds,
         invariant_line=line,
+        rejection_reasons=reasons,
+        judged_rows=judged,
     )
 
 
-def _top_reasons(views: Sequence[_RowView], limit: int) -> tuple[RejectionReason, ...]:
-    """Blocking checks of rows that failed one, counted once per row."""
+def _rejection_reasons(views: Sequence[_RowView]) -> tuple[RejectionReason, ...]:
+    """Blocking checks of rows that failed one, counted once per row, ranked."""
     counts: dict[tuple[str | None, str | None], int] = {}
     examples: dict[tuple[str | None, str | None], str] = {}
     for view in views:
         if view.outcome.status not in _FAILED_A_CHECK:
             continue
-        answer = view.final_answer
+        verdict = view.final_verdict
         keys: dict[tuple[str | None, str | None], str]
-        if answer is None:
+        if verdict is None:
             keys = {(None, None): view.outcome.reason}
         else:
-            blocking = [
-                failure for f in answer.fields if f.required for failure in f.failures
-            ] or list(answer.failures)
+            required = {f.name for f in verdict.fields if f.required}
+            failures = _failures_of(verdict, None)
+            blocking = [f for f in failures if f.field in required] or failures
             keys = {}
             for failure in blocking:
                 keys.setdefault((failure.field, failure.rule), failure.text)
         for key, text in keys.items():
             counts[key] = counts.get(key, 0) + 1
             examples.setdefault(key, text)
+    return _ranked(counts, examples)
+
+
+def _ranked(
+    counts: Mapping[tuple[str | None, str | None], int],
+    examples: Mapping[tuple[str | None, str | None], str],
+) -> tuple[RejectionReason, ...]:
+    """Most frequent first; ties by field, then rule."""
     ranked = sorted(counts, key=lambda k: (-counts[k], k[0] or "", k[1] or ""))
     return tuple(
-        RejectionReason(key[0], key[1], counts[key], examples[key])
-        for key in ranked[: max(limit, 0)]
+        RejectionReason(key[0], key[1], counts[key], examples[key]) for key in ranked
     )
 
 
 def _rule_pass_rates(
-    contract: OutputContract, views: Sequence[_RowView]
+    contract: OutputContract, views: Sequence[_RowView], judged: int
 ) -> tuple[RulePassRate, ...]:
     """Pass rate per rule over each row's final judged answer."""
     keys = _declared_rules(contract)
-    judged = 0
     failed: dict[tuple[str, str], int] = {}
     for view in views:
-        answer = view.final_answer
-        if answer is None:
+        verdict = view.final_verdict
+        if verdict is None:
             continue
-        judged += 1
         for key in dict.fromkeys(
             (f.field, f.rule)
-            for f in answer.failures
+            for f in _failures_of(verdict, None)
             if f.field is not None and f.rule is not None
         ):
             failed[key] = failed.get(key, 0) + 1
@@ -829,43 +1024,6 @@ def _declared_rules(contract: OutputContract) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _by_row(
-    judged: Mapping[tuple[int, int], JudgedAnswer],
-    total: int,
-    violations: list[str],
-) -> dict[int, dict[int, JudgedAnswer]]:
-    """The judged answers grouped by row, attempts in ascending order.
-
-    Sorted so nothing downstream depends on the mapping's insertion order. An
-    answer for a row outside the input has nowhere to go: it is left out and
-    listed in ``violations``, since it means the caller's keys and the
-    ledger's rows disagree.
-    """
-    grouped: dict[int, dict[int, JudgedAnswer]] = {}
-    for row, attempt in sorted(judged):
-        if 0 <= row < total:
-            grouped.setdefault(row, {})[attempt] = judged[(row, attempt)]
-        else:
-            violations.append(
-                f"judged answer for row {row}, attempt {attempt} is outside the "
-                f"{total} input rows; ignored"
-            )
-    return grouped
-
-
-def _failures(reasons: Iterable[Any]) -> tuple[CheckFailure, ...]:
-    """The judge's reasons as check failures."""
-    return tuple(CheckFailure(str(r.field), str(r.rule), str(r.text)) for r in reasons)
-
-
-def _keys(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Every key of ``rows``, in first-seen order."""
-    seen: dict[str, None] = {}
-    for row in rows:
-        seen.update(dict.fromkeys(row))
-    return list(seen)
-
-
 def _rule_name(name: str | None, rule: str | None) -> str:
     if name is None or rule is None:
         return "unknown rule"
@@ -878,12 +1036,12 @@ __all__ = [
     "HARNESS_COLUMNS",
     "CheckFailure",
     "Delivery",
-    "JudgedAnswer",
-    "JudgedField",
     "QuarantineEntry",
     "RejectionReason",
     "RulePassRate",
     "RunReport",
+    "column_order",
     "deliver",
     "harness_column_conflicts",
+    "merge_reports",
 ]

@@ -546,7 +546,48 @@ def test_the_contract_lives_on_components_not_in_the_specs():
 
 
 # ---------------------------------------------------------------------------
-# Not yet enforced
+# Harness column clashes
+# ---------------------------------------------------------------------------
+
+
+def test_a_column_named_like_a_harness_column_fails_the_build():
+    """An input "status" would be overwritten, an output "reason" lost at the end."""
+    builder = _builder(outputs=("intent", "reason"), inputs=("text", "status"))
+
+    with (
+        patch("ondine.api.pipeline_builder.Pipeline") as pipeline_class,
+        pytest.raises(ContractError) as raised,
+    ):
+        builder.with_output_field("intent", allowed=["refund"]).build()
+
+    pipeline_class.assert_not_called()
+    (problem,) = raised.value.problems
+    assert "'status'" in problem
+    assert "'reason'" in problem
+    assert "rename" in problem
+
+
+def test_a_clash_is_listed_with_every_other_contract_problem():
+    builder = _builder(outputs=("intent", "checks")).with_output_field(
+        "intent", allowed=[]
+    )
+
+    problems = _problems(builder)
+
+    assert len(problems) == 2
+    assert any("allowed values are empty" in p for p in problems)
+    assert any("'checks'" in p for p in problems)
+
+
+def test_without_a_contract_a_harness_column_name_is_free():
+    """No contract adds no harness column, so nothing can clash (parity)."""
+    pipeline = _builder(outputs=("intent", "reason"), inputs=("status",)).build()
+
+    assert pipeline._components.output_contract is None
+
+
+# ---------------------------------------------------------------------------
+# Docstrings describe what runs
 # ---------------------------------------------------------------------------
 
 
@@ -560,12 +601,21 @@ def test_the_contract_lives_on_components_not_in_the_specs():
     ],
     ids=lambda method: method.__name__,
 )
-def test_every_contract_option_says_it_is_not_enforced_yet(method):
-    """Until delivery is wired, running with a contract raises; the docs say so."""
+def test_every_contract_option_describes_the_enforced_behaviour(method):
+    """A declared contract runs and judges every row; nothing says otherwise."""
     doc = " ".join((method.__doc__ or "").split())
 
-    assert "not yet enforced" in doc.lower()
-    assert "NotImplementedError" in doc
+    assert "not yet enforced" not in doc.lower()
+    assert "NotImplementedError" not in doc
+    assert "build()" in doc
+    assert "reject" in doc.lower()
+
+
+def test_the_policy_docstring_says_early_stop_is_step_4():
+    doc = " ".join((PipelineBuilder.with_contract_policy.__doc__ or "").split())
+
+    assert "step 4" in doc
+    assert "never stops early" in doc
 
 
 def test_the_type_keyword_lists_every_field_type():

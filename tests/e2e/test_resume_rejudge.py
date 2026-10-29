@@ -77,9 +77,9 @@ def verdicts(monkeypatch) -> list[tuple]:
     calls: list[tuple] = []
     original = RowLedger.record_verdict
 
-    def spy(self, row, attempt, verdict, *, stage):
+    def spy(self, row, attempt, verdict, *, stage, **kwargs):
         calls.append((row, attempt, verdict, stage))
-        original(self, row, attempt, verdict, stage=stage)
+        original(self, row, attempt, verdict, stage=stage, **kwargs)
 
     monkeypatch.setattr(RowLedger, "record_verdict", spy)
     return calls
