@@ -17,25 +17,9 @@
 #                         job that signs asks for id-token: write itself (#239)
 #   cache-poisoning       no compiler or dependency cache on the paths that
 #                         produce published artifacts (#239)
-rules:
-  # 2 findings. Trusted publishing replaces the stored PyPI token with a
-  # short-lived OIDC credential — the strongest of the four, because it deletes
-  # a secret rather than narrowing one.
-  #
-  # It cannot be turned on from this side alone: PyPI must first be told which
-  # repository, workflow and environment are allowed to publish
-  # (pypi.org → ondine → Publishing → Add a trusted publisher:
-  #  owner ptimizeroracle, repo ondine, workflow publish-pypi.yml,
-  #  environment Ondine). Changing the workflow before that exists would fail
-  # the next release at the upload step, so the order matters:
-  #
-  #   1. add the trusted publisher on PyPI
-  #   2. drop `password: ${{ secrets.PYPI_API_TOKEN }}` from publish-prod and
-  #      add `id-token: write` (already present for Sigstore)
-  #   3. delete the PYPI_API_TOKEN secret
-  #   4. remove this ignore
-  #
-  # Tracked in #239.
-  use-trusted-publishing:
-    ignore:
-      - "publish-pypi.yml"
+#   use-trusted-publishing PyPI and TestPyPI trust this repository's
+#                         publish-pypi.yml workflow in the Ondine environment
+#                         directly; no API token is stored (#239)
+#
+# Nothing is exempted any more. Add a rule here only with the reason beside it.
+rules: {}
