@@ -19,6 +19,7 @@ failed.
 from __future__ import annotations
 
 import math
+import os
 import subprocess
 import sys
 import textwrap
@@ -846,7 +847,7 @@ def test_verdict_is_the_same_in_another_process():
             capture_output=True,
             text=True,
             check=True,
-            env={"PYTHONHASHSEED": seed},
+            env={**os.environ, "PYTHONHASHSEED": seed},
         ).stdout
         for seed in ("1", "2", "3")
     }
@@ -854,11 +855,23 @@ def test_verdict_is_the_same_in_another_process():
     assert len(outputs) == 1
 
 
+#: Timing checks cross-check the pattern analysis against Python's regex engine.
+#: On shared CI runners (notably Windows and macOS) a linear pattern can time
+#: like n**1.7, too close to the quadratic cases to gate a merge on, so they
+#: run only on request: ONDINE_TIMING_TESTS=1. The guarantee itself (unsafe
+#: patterns are refused at build time) is tested deterministically above.
+timing_only = pytest.mark.skipif(
+    not os.environ.get("ONDINE_TIMING_TESTS"),
+    reason="timing check; set ONDINE_TIMING_TESTS=1 to run",
+)
+
+
 def _best_judge_time(contract, answer) -> float:
     """The fastest of several runs: the least noisy estimate of the work done."""
     return min(timeit.repeat(lambda: judge(contract, answer), number=1, repeat=5))
 
 
+@timing_only
 def test_format_fix_time_grows_with_the_answer_not_beyond():
     """Eight times the answer costs about eight times the time.
 
