@@ -7,6 +7,7 @@ Implements Memento pattern for checkpoint serialization.
 from __future__ import annotations
 
 import threading
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -35,76 +36,6 @@ if TYPE_CHECKING:
 #: has no contract, so it runs under the unchecked one, as every run does
 #: until contracts are wired.
 _UNCHECKED_POLICY = LedgerPolicy.from_contract(build_contract(["output"]))
-
-
-def record_answer(
-    ledger: RowLedger,
-    row_indices: Sequence[int],
-    *,
-    model: str,
-    tokens: int,
-    cost: Decimal,
-    attempt: int = 1,
-) -> None:
-    """Report one model answer that covers ``row_indices`` to ``ledger``.
-
-    A mega-batch answers several rows with one billed call, so its cost and
-    tokens are shared equally among them, the first row taking what does not
-    divide evenly: the rows' costs and tokens then sum exactly to what the
-    call cost, which a ``Decimal`` division alone would miss in the last digit.
-
-    Lives here rather than on the context alone because resume rebuilds a
-    previous attempt's answers into a ledger of their own.
-    """
-    count = len(row_indices)
-    if count == 0:
-        return
-    token_share, extra_tokens = divmod(tokens, count)
-    cost_share = cost / count
-    for position, row in enumerate(row_indices):
-        first = position == 0
-        ledger.record_answer(
-            row,
-            attempt,
-            model=model,
-            tokens=token_share + (extra_tokens if first else 0),
-            cost=cost - cost_share * (count - 1) if first else cost_share,
-        )
-
-
-class _LossCount:
-    """A loss counter that reads the ledger, plus what a checkpoint carried.
-
-    ``failed_rows`` and ``skipped_rows`` used to be plain counters the stages
-    incremented. They are views of the ledger now, but two things still set
-    them: a checkpoint restores the previous attempt's counts (whose rows the
-    new ledger never saw), and existing code may assign or ``+=`` them.
-    Assigning sets the carried-over part so that the counter reads exactly
-    the value assigned; later losses add to it, as they always did.
-
-    A descriptor-typed dataclass field, so the constructor keeps its
-    ``failed_rows=`` / ``skipped_rows=`` arguments unchanged.
-    """
-
-    def __init__(self, kind: str) -> None:
-        self._kind = kind
-        self._carried = ""
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        self._carried = f"_carried_{name}"
-
-    def __get__(self, context: Any, owner: Any = None) -> int:
-        if context is None:
-            return 0  # the dataclass default
-        carried: int = context.__dict__.get(self._carried, 0)
-        return carried + self._reported(context)
-
-    def __set__(self, context: Any, value: int) -> None:
-        context.__dict__[self._carried] = value - self._reported(context)
-
-    def _reported(self, context: ExecutionContext) -> int:
-        losses = context._reported_losses(limit=0)
-        return losses.skipped_rows if self._kind == "skipped" else losses.failed_rows
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +126,15 @@ class RunProgressState:
             return self.total_cost
 
 
+def _warn_counter_assignment(name: str) -> None:
+    warnings.warn(
+        f"Assigning ExecutionContext.{name} is deprecated: the row ledger counts "
+        f"losses. Report them with record_failed_rows or record_skipped_rows.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 @dataclass
 class ExecutionContext:
     """
@@ -270,10 +210,11 @@ class ExecutionContext:
     # Intermediate data storage
     intermediate_data: dict[str, Any] = field(default_factory=dict)
 
-    # Statistics: how many rows were lost, read from the ledger (see _LossCount),
-    # plus whatever a checkpoint carried over from a previous attempt.
-    failed_rows: _LossCount = _LossCount("parse_failure")
-    skipped_rows: _LossCount = _LossCount("skipped")
+    # Rows a previous attempt lost, carried over by from_checkpoint: this
+    # run's ledger never saw those rows, so the failed_rows and skipped_rows
+    # counters add these to the losses reported to it.
+    _carried_failed_rows: int = field(default=0, init=False, repr=False)
+    _carried_skipped_rows: int = field(default=0, init=False, repr=False)
 
     # The single record of what happened to every row (ondine.harness.ledger).
     # The stages report losses and answers through the record_* methods below;
@@ -402,6 +343,37 @@ class ExecutionContext:
         return self._ledger
 
     @property
+    def failed_rows(self) -> int:
+        """Rows lost to a stage failure or an unreadable answer, this run and before.
+
+        Read only: a loss is reported (:meth:`record_failed_rows`), never
+        assigned. Includes what a checkpoint carried over.
+        """
+        return self._carried_failed_rows + self._reported_losses(0).failed_rows
+
+    @failed_rows.setter
+    def failed_rows(self, value: int) -> None:
+        # Deprecated write path, kept so custom stages that assigned the
+        # counter keep working. Report losses with record_failed_rows instead.
+        _warn_counter_assignment("failed_rows")
+        self._carried_failed_rows = value - self._reported_losses(0).failed_rows
+
+    @property
+    def skipped_rows(self) -> int:
+        """Rows lost to a provider failure the error policy gave up on.
+
+        Read only, like :attr:`failed_rows`, and likewise includes what a
+        checkpoint carried over.
+        """
+        return self._carried_skipped_rows + self._reported_losses(0).skipped_rows
+
+    @skipped_rows.setter
+    def skipped_rows(self, value: int) -> None:
+        # Deprecated write path; see failed_rows.
+        _warn_counter_assignment("skipped_rows")
+        self._carried_skipped_rows = value - self._reported_losses(0).skipped_rows
+
+    @property
     def row_errors(self) -> list[ErrorInfo]:
         """Which rows did not survive, and why: one entry per lost row.
 
@@ -428,12 +400,12 @@ class ExecutionContext:
         """Record one model answer covering ``row_indices`` (one row, or a batch).
 
         Without this a row that answered would look, to the ledger, like a row
-        the run never reached. See :func:`record_answer` for how a batch's
-        cost is shared.
+        the run never reached. See :meth:`RowLedger.record_batch_answer` for
+        how a batch's cost is shared.
         """
         rows = list(row_indices)
-        record_answer(
-            self._ledger_covering(rows), rows, model=model, tokens=tokens, cost=cost
+        self._ledger_covering(rows).record_batch_answer(
+            rows, 1, model=model, tokens=tokens, cost=cost
         )
 
     def record_skipped_rows(
@@ -582,7 +554,7 @@ class ExecutionContext:
         Returns:
             Restored ExecutionContext
         """
-        return cls(
+        context = cls(
             session_id=UUID(data["session_id"]),
             pipeline_id=UUID(data["pipeline_id"]),
             start_time=datetime.fromisoformat(data["start_time"]),
@@ -597,9 +569,10 @@ class ExecutionContext:
             accumulated_cost=Decimal(data["accumulated_cost"]),
             accumulated_tokens=data["accumulated_tokens"],
             intermediate_data=data.get("intermediate_data", {}),
-            failed_rows=data.get("failed_rows", 0),
-            skipped_rows=data.get("skipped_rows", 0),
         )
+        context._carried_failed_rows = data.get("failed_rows", 0)
+        context._carried_skipped_rows = data.get("skipped_rows", 0)
+        return context
 
     # Aliases for backward compatibility
     def to_dict(self) -> dict[str, Any]:

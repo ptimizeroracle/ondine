@@ -21,6 +21,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from ondine import PipelineBuilder
 from ondine.harness.contract import (
     OutputContract,
     OutputField,
@@ -36,8 +37,14 @@ from ondine.harness.delivery import (
     harness_column_conflicts,
 )
 from ondine.harness.judge import judge
-from ondine.harness.ledger import LedgerPolicy, RowLedger, StopReason
+from ondine.harness.ledger import (
+    PROVIDER_SUB_REASON,
+    LedgerPolicy,
+    RowLedger,
+    StopReason,
+)
 from ondine.harness.status import RowStatus
+from tests.e2e.conformance_harness import LedgerClient, conformance_frame, token_for
 
 PARSER = "ResponseParser"
 
@@ -290,18 +297,23 @@ class TestHarnessColumns:
         assert row["repair_method"] == "none"
         assert row["delivered_by"] == "haiku"
 
-    def test_format_fixed_row(self):
+    def test_format_fixed_row_names_what_the_fix_repaired(self):
+        """The judge keeps the pre-fix check in ``fixed_reasons``; the ledger's
+        note reads it, and delivery shows the ledger's reason as it is."""
         run = Run(_contract(INTENT), 1)
         run.answer(0, 1, _json(intent="They want to cancel."))
+        fixed = "intent: 'They want to cancel.' is not one of the 3 allowed values"
 
         row = run.deliver().records()[0]
 
         assert row["status"] == "repaired"
         assert row["repair_method"] == "format"
         assert row["checks"] == "intent: repaired (format)"
+        assert row["reason"].startswith("intent: format fix")
+        assert row["reason"].count(fixed) == 1
+        assert row["reason"].endswith("[path: attempt 1 format fix]")
         assert row["reason"] == (
-            "intent: format fix (before the fix: intent: 'They want to cancel.' "
-            "is not one of the 3 allowed values) [path: attempt 1 format fix]"
+            f"{run.ledger.snapshot().rows[0].reason} [path: attempt 1 format fix]"
         )
 
     def test_row_repaired_by_a_later_attempt(self):
@@ -450,12 +462,55 @@ class TestQuarantine:
             "row",
             "status",
             "reason",
+            "sub_reason",
             "inputs",
             "raw_answers",
             "failed_checks",
             "models",
             "cost",
         ]
+
+    def test_record_keeps_each_checks_attempt_field_and_rule(self):
+        run = Run(_contract(INTENT, AMOUNT), 1)
+        run.answer(0, 1, _json(intent="upgrade", amount=1))
+        run.answer(0, 2, _json(intent="refund", amount=-2))
+
+        (record,) = [e.to_record() for e in run.deliver().quarantine]
+
+        assert record["failed_checks"] == [
+            {
+                "attempt": 1,
+                "field": "intent",
+                "rule": "allowed_values",
+                "reason": "intent: 'upgrade' is not one of the 3 allowed values",
+            },
+            {
+                "attempt": 2,
+                "field": "amount",
+                "rule": "minimum",
+                "reason": "amount: -2 is below the minimum 0",
+            },
+        ]
+
+    def test_record_keeps_the_provider_sub_reason(self):
+        run = Run(_contract(INTENT), 1)
+        run.answer(0, 1, _json(intent="upgrade"))
+        run.provider_failure(0, 2)
+
+        (entry,) = run.deliver().quarantine
+        record = entry.to_record()
+
+        assert entry.status is RowStatus.REJECTED
+        assert record["sub_reason"] == PROVIDER_SUB_REASON
+        assert "repair cut short by provider failure" in record["reason"]
+
+    def test_record_sub_reason_is_none_when_the_ledger_gives_none(self):
+        run = Run(_contract(INTENT), 1)
+        run.answer(0, 1, _json(intent="upgrade"))
+
+        (entry,) = run.deliver().quarantine
+
+        assert entry.to_record()["sub_reason"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -577,6 +632,21 @@ class TestReport:
         assert any("no judged answer" in v for v in out.report.violations)
         assert "no judged answer" in out.report.render()
 
+    @pytest.mark.parametrize("stray_row", [2, -1])
+    def test_judged_answers_for_rows_outside_the_input_are_reported(self, stray_row):
+        run = Run(_contract(INTENT), 2)
+        run.answer(0, 1, _json(intent="refund"))
+        run.answer(1, 1, _json(intent="cancel"))
+        stray = JudgedAnswer.from_verdict(judge(run.contract, _json(intent="refund")))
+        run.judged[(stray_row, 1)] = stray
+
+        out = run.deliver()
+
+        assert list(out.to_pandas()["intent"]) == ["refund", "cancel"]
+        (violation,) = out.report.violations
+        assert f"row {stray_row}, attempt 1" in violation
+        assert "outside the 2 input rows" in violation
+
 
 # ---------------------------------------------------------------------------
 # Inputs that cannot be delivered, and determinism
@@ -611,6 +681,60 @@ class TestGuarantees:
         assert deliver(snapshot, dict(items), run.inputs, run.contract) == deliver(
             snapshot, run.judged, run.inputs, run.contract
         )
+
+
+class TestOverRealPipelineOutput:
+    """Delivery over a real run, not a hand-built frame.
+
+    The spec's guarantee for the unchecked contract is that the frame is
+    identical to today's. Comparing with a frame built by hand cannot prove
+    that; comparing with what ``Pipeline.execute()`` returns can.
+    """
+
+    @pytest.mark.xfail(
+        reason="needs step 2 verdict recording", raises=AssertionError, strict=True
+    )
+    def test_unchecked_frame_equals_the_pipelines_own_frame(self):
+        failing = token_for(2)
+        frame = conformance_frame(5)
+        result = (
+            PipelineBuilder.create()
+            .from_dataframe(frame, input_columns=["marker"], output_columns=["answer"])
+            .with_prompt("Answer for {marker}")
+            .with_custom_llm_client(LedgerClient(fail_tokens={failing}))
+            .with_max_retries(1)
+            .with_batch_size(1)
+            .with_concurrency(1)
+            .build()
+            .execute()
+        )
+        assert result.row_ledger is not None
+        snapshot = result.row_ledger
+        contract = build_contract(["answer"])
+        inputs = frame.to_dict("records")
+        # The judge is deterministic, so re-judging the recorded raw answers
+        # gives the verdicts the run itself reached.
+        judged = {
+            (outcome.row, attempt.attempt): JudgedAnswer.from_verdict(
+                judge(contract, attempt.raw_answer, inputs[outcome.row])
+            )
+            for outcome in snapshot.rows
+            for attempt in outcome.attempts
+            if attempt.raw_answer is not None
+        }
+
+        out = deliver(snapshot, judged, inputs, contract)
+
+        today = result.to_pandas()[["marker", "answer"]]
+        pd.testing.assert_frame_equal(out.to_pandas(), today)
+        assert [o.status for o in snapshot.rows] == [
+            RowStatus.UNCHECKED,
+            RowStatus.UNCHECKED,
+            RowStatus.FAILED,
+            RowStatus.UNCHECKED,
+            RowStatus.UNCHECKED,
+        ]
+        assert out.report.violations == ()
 
 
 class TestJudgedAnswer:

@@ -36,7 +36,7 @@ from ondine.core.specifications import (
     PipelineSpecifications,
 )
 from ondine.harness.contract import ContractError, OutputContract, build_contract
-from ondine.harness.ledger import LedgerPolicy, RowLedger, StopReason
+from ondine.harness.ledger import LedgerPolicy, LedgerSnapshot, RowLedger, StopReason
 
 # The strings the three loss paths leave in a cell before #262's blanking pass
 # rewrites them to None. Matched only within rows already recorded in `errors`,
@@ -58,7 +58,6 @@ from ondine.orchestration import (
     SyncExecutor,
     create_progress_tracker,
 )
-from ondine.orchestration.execution_context import record_answer
 from ondine.orchestration.progress_tracker import NoOpProgressTracker
 
 if TYPE_CHECKING:
@@ -73,12 +72,34 @@ from ondine.stages import (
     ResultWriterStage,
     create_response_parser,
 )
-from ondine.stages.batch_processor import BatchProcessor
+from ondine.stages.llm_invocation_stage import report_response
 from ondine.utils import RateLimiter, RetryHandler, get_logger
 from ondine.utils.budget_controller import BudgetExceededError
 from ondine.utils.optional_dependencies import raise_parquet_extra_error
 
 logger = get_logger(__name__)
+
+
+#: The stage name the ledger gives context verification (grounding,
+#: contradiction, confidence), which runs inside the pipeline, not as a stage.
+_VERIFICATION_STAGE = "ContextVerification"
+
+
+def _report_unlisted_stage_failure(
+    ledger: RowLedger, rows: list[int], *, stage: str, message: str
+) -> None:
+    """A stage failure of ``rows`` that today's error list never named.
+
+    The ledger must not call those rows delivered. Today's error list and loss
+    counters must not change in this migration step, though, and they count
+    only losses reported to the ledger directly (``RowLedger.reported_losses``).
+    So the failure arrives the way a sub-pipeline's do: in a ledger of its
+    own, merged.
+    """
+    failure = RowLedger(len(rows), ledger.policy)
+    failure.record_stage_failure(range(len(rows)), stage=stage, message=message)
+    ledger.widen(max(rows) + 1)
+    ledger.merge(failure, rows)
 
 
 def _values_contradict(val_a: str, val_b: str, tolerance: int | float | None) -> bool:
@@ -172,8 +193,12 @@ class Pipeline:
         # Session of the most recent run — the key a resume needs. See the
         # session_id property.
         self._session_id: UUID | None = None
-        # Row ledger of the most recent run. See the row_ledger property.
+        # Row ledger of the most recent run, live while the run is under way;
+        # frozen into _ledger_snapshot on the first read after it ended. See
+        # the row_ledger property.
         self._row_ledger: RowLedger | None = None
+        self._ledger_finished = True
+        self._ledger_snapshot: LedgerSnapshot | None = None
 
     @property
     def session_id(self) -> UUID | None:
@@ -190,17 +215,26 @@ class Pipeline:
         return self._session_id
 
     @property
-    def row_ledger(self) -> RowLedger | None:
-        """The row ledger of the most recent run, or None before the first one.
+    def row_ledger(self) -> LedgerSnapshot | None:
+        """The row ledger of the most recent run, frozen; None before the first.
 
-        One status per input row (``ondine.harness.ledger``). For a streamed
-        run it is the whole run's ledger, each chunk merged in at its input
-        rows; a chunk's own result carries the chunk's ledger. Set as soon as
-        the run knows its rows, so a run that raised (a budget stop, a crash)
-        still shows which rows it reached: the rest are failed, "run stopped
-        before this row".
+        One final status per input row (``ondine.harness.ledger``). For a
+        streamed run it covers the whole run, each chunk merged in at its
+        input rows; a chunk's own result carries the chunk's snapshot. A run
+        that raised (a budget stop, a crash) has one too, showing which rows
+        it reached: the rest are failed, "run stopped before this row".
+
+        Read while a stream is still running, it is a snapshot of that moment,
+        taken afresh on each read. Once the run has ended it is taken on the
+        first read and the same object is returned after that.
         """
-        return self._row_ledger
+        if self._ledger_snapshot is not None or self._row_ledger is None:
+            return self._ledger_snapshot
+        snapshot = self._row_ledger.snapshot()
+        if self._ledger_finished:
+            self._ledger_snapshot = snapshot
+            self._row_ledger = None
+        return snapshot
 
     def add_observer(self, observer: ExecutionObserver) -> "Pipeline":
         """
@@ -399,7 +433,7 @@ class Pipeline:
             context = ExecutionContext(pipeline_id=self.id)
 
         self._session_id = context.session_id
-        self._row_ledger = None  # opened once the input is loaded
+        self._hold_ledger(None, finished=True)  # the input is not loaded yet
         self._attach_response_cache(context, checkpoint_dir)
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
         context.components = self._components
@@ -471,7 +505,7 @@ class Pipeline:
 
         try:
             # Execute stages (preprocessing happens inside if enabled)
-            result_df = self._execute_stages(context, state_manager)
+            result_df, ledger = self._execute_stages(context, state_manager)
 
             # Mark completion
             context.end_time = datetime.now()
@@ -500,14 +534,16 @@ class Pipeline:
                 #
                 # errors and the loss counters in metrics are read from the
                 # run's ledger by today's rules (RowLedger.reported_losses),
-                # here, before the auto-retry pass merges into the ledger:
-                # that pass has never edited them.
+                # which a merged sub-pipeline (the auto-retry pass) never
+                # changes.
                 errors=context.row_errors,
                 execution_id=context.session_id,
                 start_time=context.start_time,
                 end_time=context.end_time,
                 success=True,
-                row_ledger=self._row_ledger,
+                # Frozen on first read (ExecutionResult.row_ledger), which
+                # comes after the auto-retry pass below has merged in.
+                row_ledger=ledger,
             )
 
             # Optional: Auto-retry failed rows
@@ -518,8 +554,9 @@ class Pipeline:
                     retry_source = context.intermediate_data.get("loaded_data")
                 # Pass container directly (no Pandas conversion)
                 result = self._auto_retry_failed_rows(
-                    result, retry_source, ledger=self._row_ledger
+                    result, retry_source, ledger=ledger
                 )
+            self._hold_ledger(ledger, finished=True)
 
             # Replace the internal loss markers ([SKIPPED], "null", "") with a
             # single None, so a lost row reads as missing to df.isna() instead of
@@ -628,7 +665,7 @@ class Pipeline:
             return result
 
         except KeyboardInterrupt:
-            self._record_run_stopped(StopReason.CRASH)
+            self._record_run_stopped(context, StopReason.CRASH)
             self.logger.warning("\n🛑 Pipeline interrupted by user.")
             # Save checkpoint on interrupt
             state_manager.save_checkpoint(context)
@@ -639,9 +676,10 @@ class Pipeline:
 
         except Exception as e:
             self._record_run_stopped(
+                context,
                 StopReason.BUDGET_CAP
                 if isinstance(e, BudgetExceededError)
-                else StopReason.CRASH
+                else StopReason.CRASH,
             )
             # Save checkpoint on error
             state_manager.save_checkpoint(context)
@@ -707,8 +745,11 @@ class Pipeline:
 
     def _execute_stages(
         self, context: ExecutionContext, state_manager: StateManager
-    ) -> pd.DataFrame:
-        """Execute all pipeline stages with checkpointing."""
+    ) -> tuple[Any, RowLedger]:
+        """Execute all pipeline stages with checkpointing.
+
+        Returns the results and the run's row ledger, every stage's events in.
+        """
         specs = self.specifications
 
         # Create progress tracker (stored on context for show_summary later)
@@ -723,8 +764,11 @@ class Pipeline:
 
     def _execute_stages_with_tracking(
         self, context: ExecutionContext, state_manager: StateManager
-    ) -> pd.DataFrame:
-        """Execute stages with progress tracking enabled."""
+    ) -> tuple[Any, RowLedger]:
+        """Execute stages with progress tracking enabled.
+
+        Returns the results and the run's row ledger (see _execute_stages).
+        """
         specs = self.specifications
         resume_mode = bool(context.intermediate_data.get("resumed_from_checkpoint"))
 
@@ -748,7 +792,7 @@ class Pipeline:
 
         # The input's size is known: every row now exists in the run's
         # ledger, pending, before any stage reports on it.
-        self._row_ledger = context.open_ledger(self._unchecked_contract())
+        ledger = context.open_ledger(self._unchecked_contract())
 
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
@@ -768,12 +812,13 @@ class Pipeline:
             # Store preprocessed data for retry
             context.intermediate_data["preprocessed_data"] = working_df
 
-        # Rows a previous attempt finished, read before this attempt adds its
-        # own answers to the same cache.
+        # Rows a previous attempt finished, read once, before this attempt
+        # adds its own answers to the same cache: resume skips them here and
+        # merges their cached answers into the ledger after the model stage.
         previous_rows: set[int] = set()
         if resume_mode:
             previous_rows = self._resume_completed_indices(context)
-            working_df = self._filter_container_for_resume(working_df, context)
+            working_df = self._filter_container_for_resume(working_df, previous_rows)
             self.logger.info(
                 f"Resume mode: {len(working_df)} rows still need processing"
             )
@@ -933,7 +978,7 @@ class Pipeline:
         response_batches = self._restore_completed_response_batches(context)
         if previous_rows:
             self._merge_previous_attempt(
-                context, response_batches, previous_rows, stage=llm_stage.name
+                ledger, response_batches, previous_rows, stage=llm_stage.name
             )
 
         # Save checkpoint after expensive LLM stage
@@ -1005,7 +1050,10 @@ class Pipeline:
         # Stage 5: Write results (if output spec provided)
         if specs.output:
             writer = ResultWriterStage()
-            return self._execute_stage(writer, (df, results_df, specs.output), context)
+            written = self._execute_stage(
+                writer, (df, results_df, specs.output), context
+            )
+            return written, ledger
 
         # Merge results with original data container
         # Build lookup from results by row_index
@@ -1034,7 +1082,7 @@ class Pipeline:
             if col not in merged_columns:
                 merged_columns.append(col)
 
-        return ResultContainerImpl(data=merged_rows, columns=merged_columns)
+        return ResultContainerImpl(data=merged_rows, columns=merged_columns), ledger
 
     @staticmethod
     def _input_row_lookup(
@@ -1094,6 +1142,7 @@ class Pipeline:
         result_rows = list(results_df)
         input_row_for = self._input_row_lookup(result_rows, working_df, context)
         stored_claim_ids: dict[int, str] = {}
+        blanked: list[int] = []  # input rows grounding "skip" emptied
 
         for idx, row in enumerate(result_rows):
             output_text_parts = []
@@ -1149,11 +1198,25 @@ class Pipeline:
                         for col in output_cols:
                             row[col] = None
                         grounding_score = None
+                        row_index = row.get("_row_index")
+                        blanked.append(row_index if isinstance(row_index, int) else idx)
 
             if include_confidence:
                 row["_grounding_score"] = grounding_score
             if grounding_cfg and grounding_action == "flag":
                 row["_grounding_score"] = grounding_score
+
+        if blanked:
+            _report_unlisted_stage_failure(
+                context.ledger,
+                blanked,
+                stage=_VERIFICATION_STAGE,
+                message=(
+                    f"the answer is not grounded in the row's input (score "
+                    f"below {grounding_threshold}); grounding action 'skip' "
+                    f"emptied it"
+                ),
+            )
 
         if contradiction_cfg:
             key_cols = contradiction_cfg.get("key_columns") or input_cols
@@ -1246,7 +1309,7 @@ class Pipeline:
         return ResultContainerImpl(data=result_rows, columns=columns + extra_cols)
 
     def _filter_container_for_resume(
-        self, container: Any, context: ExecutionContext
+        self, container: Any, already_done: set[int]
     ) -> Any:
         """Return only rows that still need processing, preserving original indices.
 
@@ -1255,11 +1318,10 @@ class Pipeline:
         so a row already answered is never re-called even though the contiguous
         checkpoint watermark stops below it (#241). Without a cache there is no
         per-row record to consult, so we fall back to the watermark and re-do
-        the (bounded) window above it.
+        the (bounded) window above it. ``already_done`` is that set, from
+        :meth:`_resume_completed_indices`.
         """
         from ondine.adapters.containers import DictListContainer
-
-        already_done = self._resume_completed_indices(context)
 
         filtered_rows = []
         for idx, row in enumerate(container):
@@ -1639,10 +1701,13 @@ class Pipeline:
         except BudgetExceededError:
             ledger.record_run_stopped(StopReason.BUDGET_CAP)
             raise
-        except Exception:
+        except BaseException:
+            # A crash, a cancelled task, or a consumer that stopped reading
+            # (GeneratorExit at the yield): the rows not reached never will be.
             ledger.record_run_stopped(StopReason.CRASH)
             raise
         finally:
+            self._hold_ledger(ledger, finished=True)
             if producer_task and not producer_task.done():
                 producer_task.cancel()
                 try:
@@ -1767,6 +1832,7 @@ class Pipeline:
         df = self.dataframe
         ledger = self._start_stream_ledger(0 if df is None else len(df))
         if df is None or df.empty:
+            self._hold_ledger(ledger, finished=True)
             return
 
         first_rows = list(range(0, len(df), chunk_size))
@@ -1810,9 +1876,13 @@ class Pipeline:
         except BudgetExceededError:
             ledger.record_run_stopped(StopReason.BUDGET_CAP)
             raise
-        except Exception:
+        except BaseException:
+            # A crash, a cancelled task, or a consumer that stopped reading
+            # (GeneratorExit at the yield): the rows not reached never will be.
             ledger.record_run_stopped(StopReason.CRASH)
             raise
+        finally:
+            self._hold_ledger(ledger, finished=True)
 
     def _execute_stage(
         self, stage: Any, input_data: Any, context: ExecutionContext
@@ -1876,59 +1946,62 @@ class Pipeline:
             self.logger.debug(f"Unchecked contract falls back to plain text: {error}")
             return build_contract(columns)
 
-    def _record_run_stopped(self, reason: StopReason) -> None:
-        """Tell the run's ledger it stopped: rows it never reached become failed."""
-        if self._row_ledger is not None:
-            self._row_ledger.record_run_stopped(reason)
+    def _hold_ledger(self, ledger: RowLedger | None, *, finished: bool) -> None:
+        """Make ``ledger`` the one :attr:`row_ledger` reads.
+
+        ``finished``: nothing reports to it any more, so its first snapshot
+        is final and replaces it. False while a stream is still merging
+        chunks into it.
+        """
+        self._row_ledger = ledger
+        self._ledger_finished = finished
+        self._ledger_snapshot = None
+
+    def _record_run_stopped(
+        self, context: ExecutionContext, reason: StopReason
+    ) -> None:
+        """A run raised: rows its ledger never heard of become failed, for ``reason``.
+
+        The context's ledger, which the stages reported to. If the run raised
+        before its input was loaded, that ledger covers the rows the context
+        knew of, none for a fresh run.
+        """
+        ledger = context.ledger
+        ledger.record_run_stopped(reason)
+        self._hold_ledger(ledger, finished=True)
 
     def _merge_previous_attempt(
         self,
-        context: ExecutionContext,
+        ledger: RowLedger,
         restored: list[ResponseBatch],
         previous_rows: set[int],
         *,
         stage: str,
     ) -> None:
-        """Merge into the run's ledger what a previous attempt left in the cache.
+        """Merge into ``ledger`` what a previous attempt left in the cache.
 
         Resume does not re-ask rows the cache holds, so this attempt reports
         nothing for them; without this they would read, to the ledger, as
-        rows the run never reached. The previous attempt's answers and skips
-        are rebuilt into a ledger of their own and merged, as any
-        sub-pipeline's are. Merged rather than reported directly, so today's
-        error list and counters, which never named a restored row, stay as
-        they were (see RowLedger.reported_losses).
+        rows the run never reached. The previous attempt's responses are
+        reported again, the way the model stage reported them
+        (``report_response``), into a context of their own whose ledger is
+        then merged, as any sub-pipeline's is. Merged rather than reported to
+        this run's context, so today's error list and counters, which never
+        named a restored row, stay as they were (``RowLedger.reported_losses``).
         """
-        run = context.ledger
-        previous = RowLedger(run.row_count, run.policy)
+        previous = ExecutionContext(total_rows=ledger.row_count)
+        previous.open_ledger(self._unchecked_contract())
         for batch in restored:
             for response, metadata in zip(
                 batch.responses, batch.metadata, strict=False
             ):
                 # The restore path rebuilds every cached row as an LLMResponse.
                 if (
-                    not isinstance(response, LLMResponse)
-                    or metadata.row_index not in previous_rows
+                    isinstance(response, LLMResponse)
+                    and metadata.row_index in previous_rows
                 ):
-                    continue
-                rows = BatchProcessor.row_indices(metadata)
-                details = response.metadata
-                if isinstance(details, dict) and details.get("action") == "skipped":
-                    previous.record_provider_failure(
-                        rows,
-                        1,
-                        stage=stage,
-                        message=str(details.get("error", "skipped by error policy")),
-                    )
-                else:
-                    record_answer(
-                        previous,
-                        rows,
-                        model=str(response.model),
-                        tokens=response.tokens_in + response.tokens_out,
-                        cost=response.cost,
-                    )
-        run.merge(previous, range(run.row_count))
+                    report_response(previous, response, metadata, stage=stage)
+        ledger.merge(previous.ledger, range(previous.ledger.row_count))
 
     def _start_stream_ledger(self, row_count: int) -> RowLedger:
         """The whole streamed run's ledger; each chunk's merges into it.
@@ -1938,23 +2011,25 @@ class Pipeline:
         chunk read are not in it at all.
         """
         policy = LedgerPolicy.from_contract(self._unchecked_contract())
-        self._row_ledger = RowLedger(row_count, policy)
-        return self._row_ledger
+        ledger = RowLedger(row_count, policy)
+        self._hold_ledger(ledger, finished=False)
+        return ledger
 
     @staticmethod
     def _merge_chunk_ledger(
-        ledger: RowLedger, chunk_result: Any, first_row: int, rows: int
+        ledger: RowLedger, chunk_result: ExecutionResult, first_row: int, rows: int
     ) -> None:
         """Merge a chunk's ledger into the run's, at the chunk's input rows.
 
-        The chunk's own result keeps its chunk-local numbering, as today; the
-        run's ledger is where row ``first_row + i`` is known as itself.
+        The chunk's own result keeps its chunk-local numbering, as today, and
+        from here on only its frozen snapshot: the chunk's live ledger is not
+        kept past the merge, so a stream holds one live ledger, the run's,
+        however many chunks it has run.
         """
-        child = getattr(chunk_result, "row_ledger", None)
-        if not isinstance(child, RowLedger):
-            return  # a chunk result built without a pipeline run
         ledger.widen(first_row + rows)
-        ledger.merge(child, range(first_row, first_row + rows))
+        chunk_result.merge_ledger_into(
+            ledger, range(first_row, first_row + rows), retry=False
+        )
 
     def _attach_response_cache(self, context: ExecutionContext, checkpoint_dir) -> None:
         """Give *context* the durable response cache, unless nothing can read it.
@@ -2212,10 +2287,10 @@ class Pipeline:
 
             # Execute retry
             retry_result = retry_pipeline.execute()
-            if ledger is not None and retry_pipeline.row_ledger is not None:
+            if ledger is not None:
                 # Pass row i is input row failed_indices[i]: result rows are
                 # in input order.
-                ledger.merge(retry_pipeline.row_ledger, failed_indices, retry=True)
+                retry_result.merge_ledger_into(ledger, failed_indices, retry=True)
 
             # Merge retry results back (pure Python)
             retry_result_rows = retry_result.to_list()

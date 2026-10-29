@@ -51,16 +51,15 @@ from tests.e2e.test_harness_parity import (
 )
 
 if TYPE_CHECKING:
-    from ondine.harness.ledger import LedgerSnapshot, RowLedger
+    from ondine.harness.ledger import LedgerSnapshot
 
 U = RowStatus.UNCHECKED
 F = RowStatus.FAILED
 
 
-def statuses(ledger: RowLedger | None, rows: int) -> list[RowStatus]:
+def statuses(snapshot: LedgerSnapshot | None, rows: int) -> list[RowStatus]:
     """The ledger's statuses, after checking the section 6 invariant."""
-    assert ledger is not None, "the run left no ledger"
-    snapshot = ledger.snapshot()
+    assert snapshot is not None, "the run left no ledger"
     assert_one_status_per_row(snapshot, rows)
     return [outcome.status for outcome in snapshot.rows]
 
@@ -72,12 +71,10 @@ def assert_one_status_per_row(snapshot: LedgerSnapshot, rows: int) -> None:
     assert snapshot.violations == ()
 
 
-def reasons(ledger: RowLedger) -> dict[int, str]:
+def reasons(snapshot: LedgerSnapshot) -> dict[int, str]:
     """Reason per failed row."""
     return {
-        outcome.row: outcome.reason
-        for outcome in ledger.snapshot().rows
-        if outcome.status is F
+        outcome.row: outcome.reason for outcome in snapshot.rows if outcome.status is F
     }
 
 
@@ -102,7 +99,7 @@ def test_whole_frame_paths_give_one_status_per_row(run):
     assert reasons(result.row_ledger) == {2: f"LLMInvocation: {failure(PERMANENT)}"}
     # With no stop and no sub-pipeline, the ledger's own error list is the
     # legacy one, entry for entry.
-    snapshot = result.row_ledger.snapshot()
+    snapshot = result.row_ledger
     assert _shape(snapshot.errors) == _shape(result.errors)
     assert snapshot.lost_row_indices == result.lost_row_indices
     assert snapshot.is_complete is result.is_complete
@@ -114,7 +111,7 @@ def test_every_answered_row_records_its_answer_and_cost():
 
     result = _run_sync(client)
 
-    rows = result.row_ledger.snapshot().rows
+    rows = result.row_ledger.rows
     assert [len(row.attempts) for row in rows] == [1, 1, 0, 1, 1, 1]
     assert sum(row.cost for row in rows) == result.costs.total_cost
 
@@ -125,7 +122,7 @@ def test_a_mega_batch_gives_one_status_per_row():
     result = build(client, conformance_frame(6), batch_size=3).build().execute()
 
     assert statuses(result.row_ledger, 6) == [F, F, F, U, U, U]
-    rows = result.row_ledger.snapshot().rows
+    rows = result.row_ledger.rows
     assert sum(row.cost for row in rows) == COST_PER_CALL
 
 
@@ -235,7 +232,7 @@ def test_auto_retry_merges_its_pass_as_a_later_attempt():
     ).execute()
 
     assert statuses(result.row_ledger, 6) == [U, U, F, U, F, U]
-    rows = result.row_ledger.snapshot().rows
+    rows = result.row_ledger.rows
     assert rows[1].delivered_attempt == 2
     assert [a.attempt for a in rows[1].attempts] == [1, 2]
     assert reasons(result.row_ledger)[4] == f"LLMInvocation: {hiccup(TRANSIENT)}"
@@ -250,7 +247,7 @@ def test_auto_retry_after_a_mega_batch_gives_one_status_per_row():
     ).execute()
 
     assert statuses(result.row_ledger, 6) == [F, F, F, U, U, U]
-    assert result.row_ledger.snapshot().rows[4].delivered_attempt == 2
+    assert result.row_ledger.rows[4].delivered_attempt == 2
 
 
 # ── resume: the previous attempt's answers merged from the cache ──────────
@@ -286,7 +283,7 @@ def test_resume_gives_one_status_per_row_across_both_attempts(tmp_path):
     )
 
     assert statuses(resumed.row_ledger, 6) == [U, U, F, U, U, U]
-    rows = resumed.row_ledger.snapshot().rows
+    rows = resumed.row_ledger.rows
     # Rows 0 and 1 were answered by the first attempt, restored from its cache.
     assert [len(row.attempts) for row in rows] == [1, 1, 0, 1, 1, 1]
     assert observe(resumed) == WHOLE_FRAME_OUTCOME
@@ -367,4 +364,4 @@ def test_an_async_run_leaves_its_ledger_on_the_pipeline_too():
 
     result = asyncio.run(pipeline.execute_async())
 
-    assert pipeline.row_ledger is result.row_ledger
+    assert pipeline.row_ledger == result.row_ledger

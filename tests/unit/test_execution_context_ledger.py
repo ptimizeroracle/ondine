@@ -14,6 +14,7 @@ from decimal import Decimal
 import pytest
 
 from ondine.harness.contract import OutputField, build_contract
+from ondine.harness.ledger import RowLedger
 from ondine.harness.status import RowStatus
 from ondine.orchestration.execution_context import ExecutionContext
 
@@ -130,7 +131,9 @@ def test_opening_under_a_different_policy_after_reports_is_refused():
 
 def test_checkpoint_counts_are_carried_and_new_losses_add_to_them():
     """Resume restores the counters but not the rows behind them, as before."""
-    context = ExecutionContext(total_rows=3, failed_rows=2, skipped_rows=1)
+    data = ExecutionContext(total_rows=3).to_checkpoint()
+    data.update(failed_rows=2, skipped_rows=1)
+    context = ExecutionContext.from_checkpoint(data)
 
     context.record_skipped_rows(0, 1, stage="LLMInvocation", message="down")
 
@@ -149,20 +152,42 @@ def test_a_checkpoint_round_trip_keeps_the_counts():
     assert (data["failed_rows"], data["skipped_rows"]) == (1, 1)
     assert (restored.failed_rows, restored.skipped_rows) == (1, 1)
     assert restored.row_errors == []
+    assert restored.to_checkpoint()["failed_rows"] == 1
 
 
-def test_assigning_a_count_sets_what_it_reads():
-    context = ExecutionContext(total_rows=2)
-    context.record_failed_rows([0], stage="ResponseParser", message="not JSON")
+def test_a_checkpoint_without_counts_carries_none():
+    data = ExecutionContext(total_rows=1).to_checkpoint()
+    del data["failed_rows"], data["skipped_rows"]
 
-    context.failed_rows += 1
+    restored = ExecutionContext.from_checkpoint(data)
 
-    assert context.failed_rows == 2
-    context.record_failed_rows([1], stage="ResponseParser", message="not JSON")
-    assert context.failed_rows == 3
+    assert (restored.failed_rows, restored.skipped_rows) == (0, 0)
 
 
-def test_the_counts_still_appear_in_the_repr():
-    context = ExecutionContext(total_rows=1, skipped_rows=4)
+@pytest.mark.parametrize("counter", ["failed_rows", "skipped_rows"])
+def test_assigning_a_count_still_works_but_is_deprecated(counter):
+    """Custom stages that did `context.failed_rows += n` keep working.
 
-    assert "skipped_rows=4" in repr(context)
+    ExecutionContext is public, so the old write path stays for now; it warns,
+    and the value read back is the value assigned, on top of what the ledger
+    has counted.
+    """
+    context = ExecutionContext(total_rows=4)
+    context.record_failed_rows([0], stage="s", message="m")
+    before = getattr(context, counter)
+
+    with pytest.warns(DeprecationWarning, match=counter):
+        setattr(context, counter, before + 2)
+
+    assert getattr(context, counter) == before + 2
+
+
+def test_record_answers_is_one_batch_answer_on_the_ledger():
+    """The context reports to the ledger; the ledger shares the call's cost."""
+    context = ExecutionContext(total_rows=3)
+    book = RowLedger(3, context.ledger.policy)
+
+    context.record_answers([2, 0], model="m", tokens=5, cost=Decimal("0.0003"))
+    book.record_batch_answer([2, 0], 1, model="m", tokens=5, cost=Decimal("0.0003"))
+
+    assert context.ledger.snapshot().rows == book.snapshot().rows

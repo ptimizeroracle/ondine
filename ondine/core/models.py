@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
-    from ondine.harness.ledger import RowLedger
+    from collections.abc import Sequence
+
+    from ondine.harness.ledger import LedgerSnapshot, RowLedger
 
 # Sentinel written into an output cell when a row is skipped under the SKIP
 # error policy. It is a failure marker, NOT valid output — quality checks and
@@ -174,12 +176,13 @@ class ExecutionResult:
             ``skip`` policy this stays True even if some rows were skipped —
             use :attr:`is_complete` to check that every row produced output.
         metadata: Additional execution metadata
-        row_ledger: The run's row ledger (``ondine.harness.ledger``): one
-            status per input row, sub-pipelines merged in. ``errors``,
-            ``metrics`` and the blanked cells are read from it with today's
-            rules; ``row_ledger.snapshot()`` gives the ledger's own view,
-            which the harness migration will make the default. ``None`` for a
-            result built by hand.
+        row_ledger: The run's row ledger, frozen
+            (``ondine.harness.ledger.LedgerSnapshot``): one final status per
+            input row, sub-pipelines merged in. ``errors``, ``metrics`` and
+            the blanked cells are read from the same events with today's
+            rules; the snapshot is the ledger's own view, which the harness
+            migration will make the default. ``None`` for a result built by
+            hand.
 
     Example:
         ```python
@@ -215,7 +218,7 @@ class ExecutionResult:
         end_time: datetime | None = None,
         success: bool = True,
         metadata: dict[str, Any] | None = None,
-        row_ledger: "RowLedger | None" = None,
+        row_ledger: "RowLedger | LedgerSnapshot | None" = None,
     ):
         self.data = data  # Store as-is (container)
         self.metrics = metrics
@@ -226,7 +229,47 @@ class ExecutionResult:
         self.end_time = end_time
         self.success = success
         self.metadata = metadata or {}
-        self.row_ledger = row_ledger
+        # A finished run's live ledger is frozen on first read, not here: a
+        # snapshot costs a few hundred bytes per row, which a caller who never
+        # reads it should not pay. Nothing reports to a finished run's ledger,
+        # so the snapshot is the same whenever it is taken.
+        from ondine.harness.ledger import LedgerSnapshot
+
+        self._live_ledger: RowLedger | None = None
+        self._ledger_snapshot: LedgerSnapshot | None = None
+        if isinstance(row_ledger, LedgerSnapshot) or row_ledger is None:
+            self._ledger_snapshot = row_ledger
+        else:
+            self._live_ledger = row_ledger
+
+    @property
+    def row_ledger(self) -> "LedgerSnapshot | None":
+        """The run's row ledger, frozen: one final status per input row.
+
+        Taken once, on first read, and the same object on every read after.
+        """
+        if self._live_ledger is not None:
+            self._ledger_snapshot = self._live_ledger.snapshot()
+            self._live_ledger = None
+        return self._ledger_snapshot
+
+    def merge_ledger_into(
+        self, parent: "RowLedger", parent_rows: "Sequence[int]", *, retry: bool
+    ) -> None:
+        """Fold this sub-pipeline run's ledger into ``parent``, at ``parent_rows``.
+
+        For a streaming chunk or an auto-retry pass: row ``i`` of this run is
+        ``parent_rows[i]`` of the parent (see ``RowLedger.merge``). This
+        result keeps its compact live ledger and freezes it only if someone
+        reads :attr:`row_ledger`: a snapshot costs several times the live
+        ledger, so a chunk result nobody inspects never pays for one. A
+        result with no live ledger (built by hand, or already read) merges
+        nothing.
+        """
+        live = self._live_ledger
+        if live is None:
+            return
+        parent.merge(live, parent_rows, retry=retry)
 
     @property
     def duration(self) -> float:

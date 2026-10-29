@@ -19,6 +19,9 @@ How it works, and why it is built this way:
   the result depend on arrival order — the ledger keeps the events and decides
   a row's status from all of them at once, ordered by attempt number. The same
   events in any order give the same statuses.
+* **Kept in a few bytes per row.** The ledger is opened on every run, so the
+  common row (answered once, judged once or never) is kept in parallel arrays
+  rather than as records, and only rows with more to say get a full record.
 * **The status rules live here and nowhere else.** Failed vs rejected, the
   worst-required-field rule, the provider sub-reason, which answer an
   unverified row delivers, early stop: changing one of them changes this
@@ -34,8 +37,8 @@ How it works, and why it is built this way:
 
 The ledger reads the judge's own :class:`~ondine.harness.judge.Verdict`, with
 no adapter and no second vocabulary: ``Verdict.passed`` for the row, and per
-``FieldVerdict`` its ``name``, ``outcome``, ``required``, ``format_fixed`` and
-``reasons``. A field passes unless its outcome is ``"failed"``; an ``"absent"``
+``FieldVerdict`` its ``name``, ``outcome``, ``required``, ``format_fixed``,
+``reasons`` and ``fixed_reasons``. A field passes unless its outcome is ``"failed"``; an ``"absent"``
 optional field is a valid answer. The ledger copies only those attributes, so
 the judge may add fields to its verdict without touching this module.
 
@@ -55,9 +58,10 @@ from __future__ import annotations
 
 import operator
 import threading
+from array import array
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from enum import Enum
 from itertools import islice
 from types import MappingProxyType
@@ -282,6 +286,11 @@ class LedgerSnapshot:
 class ReportedLosses:
     """The losses reported to one ledger, read the way ``ExecutionContext`` kept them.
 
+    Temporary: a second reading of the events, with today's rules, next to
+    the snapshot's own. Migration step 3 deletes it, together with
+    :meth:`RowLedger.reported_losses`, when ``result.errors`` and the loss
+    counters are read from the snapshot instead.
+
     Migration step 1 makes the ledger the only record of row fate, but the
     result's error list and loss counters must not change until a later step
     changes them on purpose (the parity net freezes them). The snapshot's own
@@ -298,7 +307,7 @@ class ReportedLosses:
 
     Attributes:
         errors: One entry per lost row, in report order, at most the limit
-            asked for.
+            asked for and at most ``RowLedger.MAX_RECORDED_ROW_ERRORS``.
         skipped_rows: Rows whose first report was a provider failure.
         failed_rows: Rows whose first report was a stage failure or an
             unparseable answer.
@@ -322,10 +331,18 @@ class RowLedger:
     early stop is reached, or a frozen snapshot. Thread-safe: stages on
     different threads may report into the same ledger.
 
-    Polling is cheap. Each row's live status is cached and re-derived only
-    after a new event for that row, so :meth:`early_stop_reached` and
-    :meth:`counts` cost the rows changed since the last call, not the whole
-    input, and the model-call stage may ask once per batch.
+    Cheap to keep and to poll, because it is opened on every run:
+
+    * **Memory.** The common row (answered once, judged once or, without a
+      contract, never) is kept in a few bytes of parallel arrays, with the
+      values many rows share (model, verdict, failure) stored once. Only a
+      row whose events take another shape (several attempts, an answer and a
+      failure) gets a full record. See :class:`_CompactRows`.
+    * **Polling.** Each row's live status is re-derived when an event for it
+      lands, so :meth:`counts` and :meth:`early_stop_reached` read stored
+      statuses and the model-call stage may ask once per batch. A compact
+      row's status depends only on its shape, so it is derived once per
+      shape, not once per row.
     """
 
     #: Error entries kept in the back-compatibility error list. Same bound and
@@ -342,29 +359,34 @@ class RowLedger:
     ) -> None:
         if row_count < 0:
             raise ValueError(f"row_count cannot be negative, got {row_count}")
-        self._row_count = row_count
+        self._row_count = 0
         self._policy = policy
         self._strict = strict
-        # Only rows with at least one event have an entry; the rest are pending.
-        self._rows: dict[int, _RowEvents] = {}
+        # A row's events live in one of two places: the compact columns (the
+        # common shapes), or a full record here once its events need one.
+        self._compact = _CompactRows()
+        self._full: dict[int, _RowEvents] = {}
         self._stops: set[StopReason] = set()
         self._violations: list[str] = []
-        # Stage failures carry no attempt; this numbers them in report order,
-        # the one tie the pipeline's own order decides (see _lost).
+        # Numbers each failure in report order: the one tie the pipeline's own
+        # order decides (see _lost). One number per report, shared by its rows.
         self._failure_sequence = 0
-        # Live status of each row with events, re-derived only when ``_dirty``
-        # says an event changed it. A row's live status depends on its own
-        # events and the fixed policy alone (the stop reason only matters to a
-        # row with no events, at snapshot), so the cache is exact.
-        self._live: dict[int, RowStatus] = {}
-        self._dirty: set[int] = set()
+        # Live status code of every row (_STATUS_BY_CODE), kept current as
+        # events land. A row's live status depends on its own events and the
+        # fixed policy alone (the stop reason only matters to a row with no
+        # events, at snapshot), so it never goes stale.
+        self._status = bytearray()
         self._tally: dict[RowStatus, int] = dict.fromkeys(RowStatus, 0)
-        # First direct loss report per row, for reported_losses(). A dict keeps
-        # insertion order, which is report order, so the bounded error list is
-        # a slice and never a sort; the skip count keeps the counts O(1).
-        self._reported: dict[int, _Cause] = {}
+        # Live status of each compact shape (see _CompactRows.shape).
+        self._shape_status: dict[int, RowStatus] = {}
+        # For reported_losses(): which rows were reported lost, the first
+        # entries in report order, and exact counts.
+        self._reported = bytearray()
+        self._reported_errors: list[tuple[int, _Cause]] = []
         self._reported_skipped = 0
+        self._reported_failed = 0
         self._lock = threading.Lock()
+        self._widen(row_count)
 
     @property
     def row_count(self) -> int:
@@ -386,7 +408,7 @@ class RowLedger:
         Never shrinks: an event already reported cannot fall outside.
         """
         with self._lock:
-            self._row_count = max(self._row_count, row_count)
+            self._widen(row_count)
 
     # -- events -------------------------------------------------------------
 
@@ -412,6 +434,41 @@ class RowLedger:
                 return
             record = AttemptRecord(attempt, model, tokens, cost, raw_answer)
             self._add_answer(index, record, merged=False)
+
+    def record_batch_answer(
+        self,
+        rows: Iterable[int],
+        attempt: int,
+        *,
+        model: str,
+        tokens: int,
+        cost: Decimal,
+    ) -> None:
+        """One billed model call answered every row of ``rows`` on ``attempt``.
+
+        A mega-batch answers several rows with one call. Its tokens and cost
+        are shared among the rows, the first row taking what does not divide
+        evenly, so the rows' tokens and costs sum exactly to the call's. The
+        shares are rounded down to nine decimal places past the cost's own, so
+        they stay small enough to keep compactly; the first row absorbs that
+        rounding too.
+        """
+        batch = list(rows)
+        if not batch:
+            return
+        token_share, extra_tokens = divmod(tokens, len(batch))
+        first_cost, cost_share = _split_cost(cost, len(batch))
+        with self._lock:
+            if not self._checked_attempt(attempt):
+                return
+            first = AttemptRecord(
+                attempt, model, token_share + extra_tokens, first_cost
+            )
+            other = AttemptRecord(attempt, model, token_share, cost_share)
+            for position, row in enumerate(batch):
+                index = self._checked_row(row)
+                if index is not None:
+                    self._add_answer(index, other if position else first, merged=False)
 
     def record_verdict(
         self, row: int, attempt: int, verdict: Verdict, *, stage: str
@@ -463,12 +520,8 @@ class RowLedger:
         with self._lock:
             if not self._checked_attempt(attempt):
                 return
-            for row in rows:
-                checked = self._checked_row(row)
-                if checked is not None:
-                    failure = _Failure(attempt, True, stage, message, retryable)
-                    self._add_failure(checked, failure)
-                    self._report_loss(checked, failure.cause)
+            failure = self._numbered(_Failure(attempt, True, stage, message, retryable))
+            self._add_failures(rows, failure)
 
     def record_stage_failure(
         self, rows: Iterable[int], *, stage: str, message: str
@@ -482,12 +535,8 @@ class RowLedger:
         always ruled.
         """
         with self._lock:
-            for row in rows:
-                checked = self._checked_row(row)
-                if checked is not None:
-                    failure = _Failure(1, False, stage, message, False)
-                    self._add_failure(checked, failure)
-                    self._report_loss(checked, failure.cause)
+            failure = self._numbered(_Failure(1, False, stage, message, False))
+            self._add_failures(rows, failure)
 
     def record_run_stopped(self, reason: StopReason) -> None:
         """The run stopped. Rows still undecided at snapshot become failed.
@@ -545,24 +594,33 @@ class RowLedger:
                     "merge: two child rows map to the same parent row; merge refused"
                 )
                 return
-            offsets = {
-                child_row: self._last_attempt(parent_row) if retry else 0
-                for child_row, parent_row in enumerate(checked)
-            }
+            # Read before any child event lands: they move the last attempt.
+            offsets = [self._last_attempt(row) for row in checked] if retry else None
+
+            def offset(child_row: int) -> int:
+                return 0 if offsets is None else offsets[child_row]
+
             for child_row, record in answers:
-                attempt = record.attempt + offsets[child_row]
-                self._add_answer(
-                    checked[child_row], replace(record, attempt=attempt), merged=True
-                )
+                attempt = record.attempt + offset(child_row)
+                if attempt != record.attempt:
+                    record = replace(record, attempt=attempt)
+                self._add_answer(checked[child_row], record, merged=True)
             for child_row, attempt, judgement in verdicts:
                 self._add_verdict(
-                    checked[child_row], attempt + offsets[child_row], judgement
+                    checked[child_row], attempt + offset(child_row), judgement
                 )
             # In the child's report order, so stage failures keep their
-            # pipeline order after the merge.
+            # pipeline order after the merge. One child report stays one
+            # report here (per attempt it lands on), shared by its rows.
+            renumbered: dict[tuple[int, int], _Failure] = {}
             for child_row, failure in sorted(failures, key=lambda f: f[1].sequence):
-                attempt = failure.attempt + offsets[child_row]
-                self._add_failure(checked[child_row], replace(failure, attempt=attempt))
+                attempt = failure.attempt + offset(child_row)
+                key = (failure.sequence, attempt)
+                ours = renumbered.get(key)
+                if ours is None:
+                    ours = self._numbered(replace(failure, attempt=attempt))
+                    renumbered[key] = ours
+                self._add_failure(checked[child_row], ours)
             self._stops |= stops
             for violation in violations:
                 self._violation(f"merged ledger: {violation}")
@@ -575,24 +633,21 @@ class RowLedger:
             raise IndexError(f"row {row} is outside 0..{self._row_count - 1}")
         with self._lock:
             outcome, _ = _decide(
-                row, self._rows.get(row), self._policy, self._stop_reason(), False
+                row, self._events_of(row), self._policy, self._stop_reason(), False
             )
         return outcome
 
     def counts(self) -> Mapping[RowStatus, int]:
         """Live counts per status, pending included. They sum to the row count.
 
-        Cost: re-derives only the rows with an event since the last call to
-        this or :meth:`early_stop_reached` (amortised, one derivation per
-        event), plus a copy of the seven-entry tally. Safe to poll.
+        Cost: a copy of the seven-entry tally, kept current as events land.
+        Safe to poll.
         """
         with self._lock:
-            self._refresh()
             tally = {
                 status: self._tally[status]
                 for status in (*FINAL_STATUSES, RowStatus.PENDING)
             }
-            tally[RowStatus.PENDING] += self._row_count - len(self._live)
         return MappingProxyType(tally)
 
     def early_stop_reached(self) -> bool:
@@ -602,8 +657,7 @@ class RowLedger:
         one of them is decided: rows 50+ finishing first must not stand in for
         rows 0-49, and a row still in flight could change the count.
 
-        Cost: the rows changed since the last poll, plus a look-up per row of
-        the window; no row is re-derived without a new event.
+        Cost: a look-up per row of the window; no row is re-derived.
         """
         fraction = self._policy.early_stop_fraction
         if fraction is None:
@@ -611,14 +665,13 @@ class RowLedger:
         window = min(self._row_count, self._policy.early_stop_window)
         if window == 0:
             return False
+        rejected_code = _STATUS_CODES[RowStatus.REJECTED]
         with self._lock:
-            self._refresh()
             rejected = 0
             for row in range(window):
-                events = self._rows.get(row)
-                if events is None or not events.decided:
+                if not self._decided(row):
                     return False
-                rejected += self._live[row] is RowStatus.REJECTED
+                rejected += self._status[row] == rejected_code
         return rejected > fraction * window
 
     def snapshot(self) -> LedgerSnapshot:
@@ -631,13 +684,15 @@ class RowLedger:
             skipped = failed = quarantined = 0
             for row in range(self._row_count):
                 outcome, cause = _decide(
-                    row, self._rows.get(row), self._policy, stop, True
+                    row, self._events_of(row), self._policy, stop, True
                 )
                 keep_raw = False
                 if outcome.status in _QUARANTINED_STATUSES:
                     quarantined += 1
                     keep_raw = quarantined <= self._policy.raw_answer_cap
-                if not keep_raw and outcome.attempts:
+                if not keep_raw and any(
+                    a.raw_answer is not None for a in outcome.attempts
+                ):
                     outcome = replace(
                         outcome,
                         attempts=tuple(
@@ -672,8 +727,8 @@ class RowLedger:
 
         Args:
             limit: Error entries to build, the first ones by report order;
-                ``None`` for :attr:`MAX_RECORDED_ROW_ERRORS`. ``0`` reads the
-                counts alone.
+                ``None`` for :attr:`MAX_RECORDED_ROW_ERRORS`, which is also
+                the most this ledger keeps. ``0`` reads the counts alone.
 
         Cost: the entries built, never the input's size, so a context may
         read its counters at every checkpoint.
@@ -683,40 +738,70 @@ class RowLedger:
         with self._lock:
             errors = tuple(
                 cause.error_info(row)
-                for row, cause in islice(self._reported.items(), max(limit, 0))
+                for row, cause in islice(self._reported_errors, max(limit, 0))
             )
-            skipped = self._reported_skipped
-            failed = len(self._reported) - skipped
+            skipped, failed = self._reported_skipped, self._reported_failed
         return ReportedLosses(errors=errors, skipped_rows=skipped, failed_rows=failed)
 
     # -- internals ----------------------------------------------------------
 
-    def _report_loss(self, row: int, cause: _Cause) -> None:
-        """Keep ``cause`` if it is the first loss reported for ``row``."""
-        if row in self._reported:
+    def _widen(self, row_count: int) -> None:
+        added = row_count - self._row_count
+        if added <= 0:
             return
-        self._reported[row] = cause
+        self._row_count = row_count
+        self._compact.widen(row_count)
+        self._status.extend(bytes(added))
+        self._reported.extend(bytes(added))
+        self._tally[RowStatus.PENDING] += added
+
+    def _report_loss(self, row: int, cause: _Cause) -> None:
+        """Count ``row`` lost, under ``cause``, if no loss was reported for it yet."""
+        if self._reported[row]:
+            return
+        self._reported[row] = 1
         if cause.error_type == "skipped":
             self._reported_skipped += 1
+        else:
+            self._reported_failed += 1
+        if len(self._reported_errors) < self.MAX_RECORDED_ROW_ERRORS:
+            self._reported_errors.append((row, cause))
 
-    def _events(self, row: int) -> _RowEvents:
-        """``row``'s events, for a caller about to add one: its status is stale."""
-        events = self._rows.get(row)
+    def _events_of(self, row: int) -> _RowEvents | None:
+        """All of ``row``'s events, or None. Read only: may be a fresh copy."""
+        events = self._full.get(row)
+        return events if events is not None else self._compact.events(row)
+
+    def _full_record(self, row: int) -> _RowEvents:
+        """``row``'s full record, moving its events out of the compact columns."""
+        events = self._full.get(row)
         if events is None:
-            events = self._rows[row] = _RowEvents()
-        stale = self._live.pop(row, None)
-        if stale is not None:
-            self._tally[stale] -= 1
-        self._dirty.add(row)
+            events = self._compact.take(row) or _RowEvents()
+            self._full[row] = events
         return events
 
-    def _refresh(self) -> None:
-        """Re-derive the live status of every row with a new event."""
-        for row in self._dirty:
-            outcome, _ = _decide(row, self._rows[row], self._policy, None, False)
-            self._live[row] = outcome.status
-            self._tally[outcome.status] += 1
-        self._dirty.clear()
+    def _restatus(self, row: int) -> None:
+        """Re-derive ``row``'s live status after an event; keep the tally exact."""
+        events = self._full.get(row)
+        if events is not None:
+            status = _decide(row, events, self._policy, None, False)[0].status
+        else:
+            shape = self._compact.shape(row)
+            cached = self._shape_status.get(shape)
+            if cached is None:
+                cached = _decide(
+                    row, self._compact.events(row), self._policy, None, False
+                )[0].status
+                self._shape_status[shape] = cached
+            status = cached
+        self._tally[_STATUS_BY_CODE[self._status[row]]] -= 1
+        self._tally[status] += 1
+        self._status[row] = _STATUS_CODES[status]
+
+    def _decided(self, row: int) -> bool:
+        """Has a verdict or a failure: final for early stop's purposes."""
+        events = self._full.get(row)
+        return events.decided if events is not None else self._compact.decided(row)
 
     def _add_answer(self, row: int, record: AttemptRecord, *, merged: bool) -> None:
         """Store an answer; one per attempt, the same one in any arrival order.
@@ -725,24 +810,38 @@ class RowLedger:
         repeat with different content arriving by merge means two
         sub-pipelines answered one row on one attempt: a defect upstream.
         """
-        answers = self._events(row).answers
+        if row not in self._full and self._compact.store_answer(row, record):
+            self._restatus(row)
+            return
+        answers = self._full_record(row).answers
         existing = answers.get(record.attempt)
         if existing is None:
             answers[record.attempt] = record
-            return
-        if merged and _answer_rank(existing) != _answer_rank(record):
-            self._violation(
-                f"row {row} attempt {record.attempt}: two merged ledgers each "
-                f"answered it ({existing.model}, {record.model}); kept one by "
-                f"content"
-            )
-        answers[record.attempt] = max(existing, record, key=_answer_rank)
+        else:
+            if merged and _answer_rank(existing) != _answer_rank(record):
+                self._violation(
+                    f"row {row} attempt {record.attempt}: two merged ledgers "
+                    f"each answered it ({existing.model}, {record.model}); kept "
+                    f"one by content"
+                )
+            answers[record.attempt] = max(existing, record, key=_answer_rank)
+        self._restatus(row)
+
+    def _add_failures(self, rows: Iterable[int], failure: _Failure) -> None:
+        """Add one reported failure to each of ``rows``, and count them lost."""
+        cause = failure.cause
+        for row in rows:
+            index = self._checked_row(row)
+            if index is not None:
+                self._add_failure(index, failure)
+                self._report_loss(index, cause)
 
     def _add_failure(self, row: int, failure: _Failure) -> None:
-        self._failure_sequence += 1
-        self._events(row).failures.append(
-            replace(failure, sequence=self._failure_sequence)
-        )
+        if row not in self._full and self._compact.store_failure(row, failure):
+            self._restatus(row)
+            return
+        self._full_record(row).failures.append(failure)
+        self._restatus(row)
 
     def _add_verdict(self, row: int, attempt: int, judgement: _Judgement) -> None:
         """Store a verdict; a different one for the same attempt is a conflict.
@@ -753,23 +852,36 @@ class RowLedger:
         the conflict can only ever blank a value, never ship a bad one. Every
         choice here is by content, so arrival order never shows.
         """
-        verdicts = self._events(row).verdicts
+        if row not in self._full and self._compact.store_verdict(
+            row, attempt, judgement
+        ):
+            self._restatus(row)
+            return
+        verdicts = self._full_record(row).verdicts
         existing = verdicts.get(attempt)
         if existing is None:
             verdicts[attempt] = judgement
-            return
-        if existing == judgement:
+        elif existing == judgement:
             # Equal verdicts may differ only in the stage that reported them.
             verdicts[attempt] = min(existing, judgement, key=lambda j: j.stage)
-            return
-        self._violation(
-            f"row {row} attempt {attempt}: two different verdicts; kept the safer one"
-        )
-        verdicts[attempt] = min(existing, judgement, key=_Judgement.safety_rank)
+        else:
+            self._violation(
+                f"row {row} attempt {attempt}: two different verdicts; kept the "
+                f"safer one"
+            )
+            verdicts[attempt] = min(existing, judgement, key=_Judgement.safety_rank)
+        self._restatus(row)
+
+    def _numbered(self, failure: _Failure) -> _Failure:
+        """``failure`` with the next report number (see ``_Failure.sequence``)."""
+        self._failure_sequence += 1
+        return replace(failure, sequence=self._failure_sequence)
 
     def _last_attempt(self, row: int) -> int:
-        events = self._rows.get(row)
-        return 0 if events is None else events.last_attempt
+        events = self._full.get(row)
+        if events is not None:
+            return events.last_attempt
+        return self._compact.last_attempt(row)
 
     def _stop_reason(self) -> StopReason | None:
         for reason in StopReason:
@@ -803,22 +915,22 @@ class RowLedger:
 
     def _export(self) -> tuple[list, list, list, set[StopReason], list[str]]:
         """A consistent copy of this ledger's events, for a parent's merge."""
+        answers: list[tuple[int, AttemptRecord]] = []
+        verdicts: list[tuple[int, int, _Judgement]] = []
+        failures: list[tuple[int, _Failure]] = []
         with self._lock:
-            answers = [
-                (row, record)
-                for row, events in self._rows.items()
-                for record in events.answers.values()
-            ]
-            verdicts = [
-                (row, attempt, judgement)
-                for row, events in self._rows.items()
-                for attempt, judgement in events.verdicts.items()
-            ]
-            failures = [
-                (row, failure)
-                for row, events in self._rows.items()
-                for failure in events.failures
-            ]
+            for row in range(self._row_count):
+                if not self._status[row]:
+                    continue  # no events
+                events = self._events_of(row)
+                if events is None:  # pragma: no cover - a status needs events
+                    continue
+                answers.extend((row, record) for record in events.answers.values())
+                verdicts.extend(
+                    (row, attempt, judgement)
+                    for attempt, judgement in events.verdicts.items()
+                )
+                failures.extend((row, failure) for failure in events.failures)
             return answers, verdicts, failures, set(self._stops), list(self._violations)
 
 
@@ -850,6 +962,8 @@ class _FieldJudgement:
     failed: bool
     reasons: tuple[str, ...]
     format_fixed: bool
+    #: For a format-fixed field, why the answer failed before the fix.
+    fixed_reasons: tuple[str, ...] = ()
 
     @property
     def failure_reasons(self) -> tuple[str, ...]:
@@ -885,6 +999,7 @@ class _Judgement:
                 failed=item.outcome == "failed",
                 reasons=tuple(str(r) for r in item.reasons),
                 format_fixed=bool(item.format_fixed),
+                fixed_reasons=tuple(str(r) for r in item.fixed_reasons),
             )
             for item in verdict.fields
         )
@@ -985,8 +1100,10 @@ class _Failure:
         return (self.sequence,)
 
 
-@dataclass
+@dataclass(slots=True)
 class _RowEvents:
+    """A row's events in full, for a row the compact columns cannot hold."""
+
     answers: dict[int, AttemptRecord] = field(default_factory=dict)
     verdicts: dict[int, _Judgement] = field(default_factory=dict)
     failures: list[_Failure] = field(default_factory=list)
@@ -1025,6 +1142,257 @@ class _Cause:
         if self.timestamp is not None:
             info.timestamp = self.timestamp
         return info
+
+
+# ---------------------------------------------------------------------------
+# Compact row storage
+# ---------------------------------------------------------------------------
+
+#: Live status codes, one byte per row. Code 0 is a row with no events.
+_STATUS_BY_CODE: tuple[RowStatus, ...] = (
+    RowStatus.PENDING,
+    *(status for status in RowStatus if status is not RowStatus.PENDING),
+)
+_STATUS_CODES: dict[RowStatus, int] = {
+    status: code for code, status in enumerate(_STATUS_BY_CODE)
+}
+
+_INT64 = range(-(2**63), 2**63)
+_SMALL = range(1, 2**16)  # what an unsigned 16-bit column holds, 0 aside
+#: In ``_CompactRows.cost_exponent``: the cost column holds a number in
+#: ``_CompactRows.costs`` instead of a coefficient.
+_LISTED_COST = 127
+_COST_EXPONENTS = range(-128, _LISTED_COST)
+#: A cost coefficient of at most this many digits fits a signed 64-bit column.
+_COST_DIGITS = 18
+#: Batch cost shares keep this many decimal places past the cost's own.
+_SHARE_PLACES = 9
+
+
+class _Listed:
+    """Distinct values stored once, each known by a number from 1.
+
+    A column then holds the number, and many rows share one value: the model
+    of a run, the verdict "passed", one provider failure across a batch.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self._values: list[Any] = []
+        self._numbers: dict[Any, int] = {}
+        self._limit = limit
+
+    def number(self, value: Any, key: Any) -> int | None:
+        """The number of ``value`` (known by ``key``), or None when full."""
+        number = self._numbers.get(key)
+        if number is None:
+            if len(self._values) >= self._limit:
+                return None
+            self._values.append(value)
+            number = self._numbers[key] = len(self._values)
+        return number
+
+    def __getitem__(self, number: int) -> Any:
+        return self._values[number - 1]
+
+
+class _CompactRows:
+    """The common rows in a few bytes each, as parallel arrays indexed by row.
+
+    Most rows of a run are answered once and judged once or, without a
+    contract, not judged at all. Kept as records (a dict of answers, a dict of
+    verdicts, a list of failures, a ``Decimal``), each such row cost the
+    ledger about 700 bytes; at 5M rows, gigabytes for a run that went well.
+
+    Two shapes are kept here, and only these:
+
+    * **answered:** one answer (model, attempt, tokens, cost, raw answer),
+      plus at most one verdict, on that same attempt;
+    * **lost:** one failure and nothing else.
+
+    A row whose events leave these shapes (a second answer, a verdict on
+    another attempt, a failure next to an answer) is moved out by
+    :meth:`take` into a full :class:`_RowEvents`, and never comes back: the
+    shapes kept here stay simple enough to read back exactly, and the
+    status rules see the same events either way (:meth:`events`).
+
+    Values many rows share (model, verdict, failure) are stored once in a
+    :class:`_Listed` and the columns hold their numbers; 0 means "none". A
+    cost is kept exactly as a 64-bit coefficient and a one-byte exponent
+    when it fits, which a priced call's cost does, and listed otherwise.
+    Raw answers are kept only when given, in a dict: the pipeline gives
+    none, and a caller that does keeps them all until the snapshot anyway.
+    """
+
+    def __init__(self) -> None:
+        self.model = array("H")
+        self.attempt = array("H")
+        self.tokens = array("q")
+        self.cost = array("q")
+        self.cost_exponent = array("b")
+        self.verdict = array("I")
+        self.failure = array("I")
+        self.raw: dict[int, Any] = {}
+        self.models = _Listed(_SMALL.stop - 1)
+        self.costs = _Listed(_INT64.stop - 1)
+        self.verdicts = _Listed(2**32 - 1)
+        self.failures = _Listed(2**32 - 1)
+
+    def widen(self, row_count: int) -> None:
+        added = row_count - len(self.model)
+        for column in (
+            self.model,
+            self.attempt,
+            self.tokens,
+            self.cost,
+            self.cost_exponent,
+            self.verdict,
+            self.failure,
+        ):
+            column.frombytes(bytes(added * column.itemsize))
+
+    # -- storing: each returns False when the row must take a full record ---
+
+    def store_answer(self, row: int, record: AttemptRecord) -> bool:
+        """Keep ``record`` as ``row``'s only event, if it fits."""
+        if self.model[row] or self.failure[row]:
+            return False
+        if type(record.attempt) is not int or record.attempt not in _SMALL:
+            return False
+        if type(record.tokens) is not int or record.tokens not in _INT64:
+            return False
+        cost = self._encoded_cost(record.cost)
+        if cost is None or not isinstance(record.model, str):
+            return False
+        model = self.models.number(record.model, record.model)
+        if model is None:
+            return False
+        self.model[row] = model
+        self.attempt[row] = record.attempt
+        self.tokens[row] = record.tokens
+        self.cost[row], self.cost_exponent[row] = cost
+        if record.raw_answer is not None:
+            self.raw[row] = record.raw_answer
+        return True
+
+    def store_verdict(self, row: int, attempt: int, judgement: _Judgement) -> bool:
+        """Keep ``judgement`` on ``row``'s answer, if it judges that answer."""
+        if not self.model[row] or self.verdict[row] or self.attempt[row] != attempt:
+            return False
+        number = self.verdicts.number(judgement, (judgement, judgement.stage))
+        if number is None:
+            return False
+        self.verdict[row] = number
+        return True
+
+    def store_failure(self, row: int, failure: _Failure) -> bool:
+        """Keep ``failure`` as ``row``'s only event, if it has none yet."""
+        if self.model[row] or self.failure[row]:
+            return False
+        number = self.failures.number(failure, failure.sequence)
+        if number is None:
+            return False
+        self.failure[row] = number
+        return True
+
+    # -- reading ------------------------------------------------------------
+
+    def shape(self, row: int) -> int:
+        """What ``row``'s live status depends on, given the policy.
+
+        One answer with no verdict, one answer with a given verdict (its
+        number), or one failure. The attempt, model and cost never change a
+        status, so rows of one shape share one status.
+        """
+        if self.verdict[row]:
+            return self.verdict[row]
+        return 0 if self.model[row] else -1
+
+    def decided(self, row: int) -> bool:
+        """Has a verdict or a failure."""
+        return bool(self.verdict[row] or self.failure[row])
+
+    def last_attempt(self, row: int) -> int:
+        if self.model[row]:
+            return self.attempt[row]
+        if self.failure[row]:
+            return int(self.failures[self.failure[row]].attempt)
+        return 0
+
+    def events(self, row: int) -> _RowEvents | None:
+        """``row``'s events as a fresh record, or None when it has none here."""
+        if self.failure[row]:
+            return _RowEvents(failures=[self.failures[self.failure[row]]])
+        if not self.model[row]:
+            return None
+        attempt = self.attempt[row]
+        events = _RowEvents()
+        events.answers[attempt] = AttemptRecord(
+            attempt,
+            self.models[self.model[row]],
+            self.tokens[row],
+            self._cost(row),
+            self.raw.get(row),
+        )
+        if self.verdict[row]:
+            events.verdicts[attempt] = self.verdicts[self.verdict[row]]
+        return events
+
+    def take(self, row: int) -> _RowEvents | None:
+        """Move ``row``'s events out of the columns, into a full record."""
+        events = self.events(row)
+        self.model[row] = self.attempt[row] = self.verdict[row] = 0
+        self.tokens[row] = self.cost[row] = self.cost_exponent[row] = 0
+        self.failure[row] = 0
+        self.raw.pop(row, None)
+        return events
+
+    # -- costs --------------------------------------------------------------
+
+    def _encoded_cost(self, cost: Any) -> tuple[int, int] | None:
+        """``cost`` as (coefficient, exponent), or (number, ``_LISTED_COST``)."""
+        if not isinstance(cost, Decimal):
+            return None
+        sign, digits, exponent = cost.as_tuple()
+        if (
+            isinstance(exponent, int)
+            and exponent in _COST_EXPONENTS
+            and len(digits) <= _COST_DIGITS
+            and (any(digits) or not sign)  # -0 would read back as 0
+        ):
+            coefficient = int("".join(map(str, digits)))
+            return -coefficient if sign else coefficient, exponent
+        number = self.costs.number(cost, str(cost))
+        return None if number is None else (number, _LISTED_COST)
+
+    def _cost(self, row: int) -> Decimal:
+        exponent = self.cost_exponent[row]
+        if exponent == _LISTED_COST:
+            return self.costs[self.cost[row]]  # type: ignore[no-any-return]
+        # The string constructor is exact and keeps the exponent: "100E-4"
+        # reads back as 0.0100, never 0.01.
+        return Decimal(f"{self.cost[row]}E{exponent}")
+
+
+def _split_cost(cost: Decimal, count: int) -> tuple[Decimal, Decimal]:
+    """(the first row's share, every other row's share) of one call's cost.
+
+    The shares sum exactly to ``cost``. Each other share is ``cost / count``
+    rounded down to :data:`_SHARE_PLACES` decimal places past the cost's own,
+    and the first row takes what is left. Unrounded, ``cost / count`` carries
+    28 digits, too many to keep compactly.
+    """
+    if count == 1:
+        return cost, cost
+    share = cost / count
+    exponent = cost.as_tuple().exponent if isinstance(cost, Decimal) else None
+    if isinstance(exponent, int):
+        try:
+            share = share.quantize(
+                Decimal(1).scaleb(exponent - _SHARE_PLACES), rounding=ROUND_DOWN
+            )
+        except InvalidOperation:  # pragma: no cover - a cost of 28+ digits
+            pass
+    return cost - share * (count - 1), share
 
 
 # ---------------------------------------------------------------------------
@@ -1224,7 +1592,7 @@ def _field_statuses(
                 notes.append(f"optional field failed: {'; '.join(f.failure_reasons)}")
         elif f.format_fixed:
             statuses.append((f.name, RowStatus.REPAIRED))
-            detail = f" ({'; '.join(f.reasons)})" if f.reasons else ""
+            detail = f" ({'; '.join(f.fixed_reasons)})" if f.fixed_reasons else ""
             notes.append(f"{f.name}: format fix{detail}")
         elif f.name in earlier:
             statuses.append((f.name, RowStatus.REPAIRED))

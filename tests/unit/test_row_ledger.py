@@ -52,6 +52,8 @@ class FieldSpec:
     reasons: tuple[str, ...] = ()
     format_fixed: bool = False
     required: bool = True
+    #: For a format-fixed field: why the answer failed before the fix.
+    fixed_reasons: tuple[str, ...] = ()
 
 
 PASS = FieldSpec()
@@ -63,7 +65,9 @@ def failing(reason: str, *, required: bool = True) -> FieldSpec:
 
 
 def fixed(reason: str = "") -> FieldSpec:
-    return FieldSpec(format_fixed=True, reasons=(reason,) if reason else ())
+    """A field the format fix delivered. Like the judge, the pre-fix check goes
+    in ``fixed_reasons``: the field passed, so ``reasons`` stays empty."""
+    return FieldSpec(format_fixed=True, fixed_reasons=(reason,) if reason else ())
 
 
 def verdict(*, checked: bool = True, **fields: FieldSpec) -> Verdict:
@@ -78,6 +82,9 @@ def verdict(*, checked: bool = True, **fields: FieldSpec) -> Verdict:
                 reasons=tuple(Reason(name, "allowed_values", r) for r in spec.reasons),
                 format_fixed=spec.format_fixed,
                 required=spec.required,
+                fixed_reasons=tuple(
+                    Reason(name, "allowed_values", r) for r in spec.fixed_reasons
+                ),
             )
             for name, spec in fields.items()
         ),
@@ -222,6 +229,16 @@ def test_a_format_fix_on_a_required_field_makes_the_row_repaired():
 
     assert row.status is RowStatus.REPAIRED
     assert "format fix" in row.reason
+
+
+def test_the_format_fix_note_says_what_the_fix_repaired():
+    """The judge keeps the pre-fix check in ``fixed_reasons``; the note reads it."""
+    book = ledger(1)
+    judged(book, 0, 1, verdict(intent=fixed("intent: 'wordy' is not allowed")))
+
+    row = book.snapshot().rows[0]
+
+    assert row.reason == "intent: format fix (intent: 'wordy' is not allowed)"
 
 
 def test_a_later_attempt_that_passes_after_a_failed_check_is_repaired():
@@ -585,6 +602,10 @@ def test_shuffled_events_give_the_same_statuses_and_reasons(seed):
         event(shuffled)
 
     assert _fingerprint(shuffled) == _fingerprint(in_order)
+    # Down to every attempt's model, tokens and cost: a row kept compactly
+    # (answered, then judged) reads the same as one whose events arrived in
+    # an order that needed the full record.
+    assert shuffled.snapshot().rows == in_order.snapshot().rows
     assert [r.status for r in in_order.snapshot().rows] == [
         RowStatus.ACCEPTED,
         RowStatus.REPAIRED,
@@ -1206,4 +1227,51 @@ def test_polling_early_stop_and_counts_only_re_decides_rows_that_changed(monkeyp
     judged(book, 120, 1, verdict(intent=PASS))
     assert book.early_stop_reached() is False
     assert book.counts()[RowStatus.ACCEPTED] == 41  # row 3 is repaired
-    assert sorted(set(calls)) == [3, 120]
+    # Only the rows with new events may be re-decided, and a row answered and
+    # judged once like many before it may not need deciding at all.
+    assert 3 in calls
+    assert set(calls) <= {3, 120}
+
+
+# ---------------------------------------------------------------------------
+# One answer for a batch of rows
+# ---------------------------------------------------------------------------
+
+
+def test_a_batch_answer_shares_tokens_and_cost_the_first_row_taking_the_rest():
+    book = ledger(4, UNCHECKED)
+
+    book.record_batch_answer([2, 0, 3], 1, model="m", tokens=10, cost=Decimal("0.0001"))
+
+    rows = book.snapshot().rows
+    first, others = rows[2].attempts[0], [rows[0].attempts[0], rows[3].attempts[0]]
+    assert [first.tokens, *(a.tokens for a in others)] == [4, 3, 3]
+    assert first.cost + sum(a.cost for a in others) == Decimal("0.0001")
+    assert others[0].cost == others[1].cost
+    assert first.cost >= others[0].cost
+    assert {a.model for a in (first, *others)} == {"m"}
+    assert rows[1].attempts == ()
+
+
+def test_a_batch_answer_for_one_row_keeps_the_calls_numbers():
+    book = ledger(1, UNCHECKED)
+
+    book.record_batch_answer([0], 2, model="m", tokens=7, cost=Decimal("0.0100"))
+
+    record = book.snapshot().rows[0].attempts[0]
+    assert (record.attempt, record.tokens, str(record.cost)) == (2, 7, "0.0100")
+
+
+def test_a_batch_answer_for_no_rows_records_nothing():
+    book = ledger(1, UNCHECKED)
+
+    book.record_batch_answer([], 1, model="m", tokens=7, cost=Decimal("0.01"))
+
+    assert book.counts()[RowStatus.PENDING] == 1
+
+
+def test_a_batch_answer_naming_a_row_outside_the_input_is_a_broken_invariant():
+    with pytest.raises(LedgerInvariantError):
+        ledger(1, UNCHECKED).record_batch_answer(
+            [0, 1], 1, model="m", tokens=2, cost=Decimal("0.02")
+        )

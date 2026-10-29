@@ -121,8 +121,6 @@ class JudgedField:
         required: Whether a failure of this field fails the row.
         format_fixed: The value was found inside a wordy answer.
         failures: Every failed check of this field.
-        fixed_failures: For a format-fixed field, the checks the answer
-            failed before the fix: the check that blocked it.
     """
 
     name: str
@@ -131,7 +129,6 @@ class JudgedField:
     required: bool = True
     format_fixed: bool = False
     failures: tuple[CheckFailure, ...] = ()
-    fixed_failures: tuple[CheckFailure, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -157,7 +154,6 @@ class JudgedAnswer:
                     required=bool(item.required),
                     format_fixed=bool(item.format_fixed),
                     failures=_failures(item.reasons),
-                    fixed_failures=_failures(item.fixed_reasons),
                 )
                 for item in verdict.fields
             )
@@ -220,14 +216,28 @@ class QuarantineEntry:
     cost: Decimal
 
     def to_record(self) -> dict[str, Any]:
-        """The entry as one flat row of the quarantine table."""
+        """The entry as one row of the quarantine table.
+
+        Each failed check stays a small dict with its attempt, field and rule
+        next to the sentence, so a client can group the table by rule without
+        parsing text.
+        """
         return {
             "row": self.row,
             "status": self.status.value,
             "reason": self.reason,
+            "sub_reason": self.sub_reason,
             "inputs": dict(self.inputs),
             "raw_answers": [a.raw_answer for a in self.attempts],
-            "failed_checks": [c.text for c in self.failed_checks],
+            "failed_checks": [
+                {
+                    "attempt": c.attempt,
+                    "field": c.field,
+                    "rule": c.rule,
+                    "reason": c.text,
+                }
+                for c in self.failed_checks
+            ],
             "models": list(self.models),
             "cost": self.cost,
         }
@@ -396,6 +406,7 @@ _QUARANTINE_COLUMNS = (
     "row",
     "status",
     "reason",
+    "sub_reason",
     "inputs",
     "raw_answers",
     "failed_checks",
@@ -470,8 +481,8 @@ def deliver(
     if contract.checked:
         columns.extend(HARNESS_COLUMNS)
 
-    by_row = _by_row(judged, total)
     violations = list(snapshot.violations)
+    by_row = _by_row(judged, total, violations)
     keep_valid = contract.policy.partial_rows == "keep_valid_fields"
     rows: list[tuple[Any, ...]] = []
     quarantine: list[QuarantineEntry] = []
@@ -593,22 +604,10 @@ class _RowView:
     def reason_column(self) -> str:
         """The ledger's reason (the check that blocked last), then the path.
 
-        For a format fix, the ledger's note names the fix but not what it
-        fixed: the judge keeps that apart, in ``fixed_reasons``. It is added
-        here, unless the ledger's reason already holds it.
+        The reason is the ledger's, unchanged: it already names what a format
+        fix repaired, so delivery adds only the path.
         """
         reason = self.outcome.reason
-        answer = self.final_answer
-        if self.outcome.status is RowStatus.REPAIRED and answer is not None:
-            before = [
-                failure.text
-                for item in answer.fields
-                if item.format_fixed
-                for failure in item.fixed_failures
-                if failure.text not in reason
-            ]
-            if before:
-                reason = f"{reason} (before the fix: {'; '.join(before)})"
         path = self.path()
         return f"{reason} [path: {path}]" if reason and path else reason
 
@@ -831,16 +830,26 @@ def _declared_rules(contract: OutputContract) -> list[tuple[str, str]]:
 
 
 def _by_row(
-    judged: Mapping[tuple[int, int], JudgedAnswer], total: int
+    judged: Mapping[tuple[int, int], JudgedAnswer],
+    total: int,
+    violations: list[str],
 ) -> dict[int, dict[int, JudgedAnswer]]:
     """The judged answers grouped by row, attempts in ascending order.
 
-    Sorted so nothing downstream depends on the mapping's insertion order.
+    Sorted so nothing downstream depends on the mapping's insertion order. An
+    answer for a row outside the input has nowhere to go: it is left out and
+    listed in ``violations``, since it means the caller's keys and the
+    ledger's rows disagree.
     """
     grouped: dict[int, dict[int, JudgedAnswer]] = {}
     for row, attempt in sorted(judged):
         if 0 <= row < total:
             grouped.setdefault(row, {})[attempt] = judged[(row, attempt)]
+        else:
+            violations.append(
+                f"judged answer for row {row}, attempt {attempt} is outside the "
+                f"{total} input rows; ignored"
+            )
     return grouped
 
 
