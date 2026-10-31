@@ -190,3 +190,29 @@ class BatchProcessor:
         if metadata.custom and metadata.custom.get("is_batch"):
             return int(metadata.custom.get("batch_size", 1))
         return 1
+
+    @staticmethod
+    def row_indices(metadata: RowMetadata) -> list[int]:
+        """The input rows one prompt answers, in batch order.
+
+        An aggregated batch names its rows in ``batch_metadata.row_ids``,
+        which need not be consecutive (resume can leave gaps). Metadata
+        without that list falls back to ``batch_size`` rows from
+        ``row_index``, as the skip path has always assumed; a plain prompt
+        answers its own row.
+        """
+        custom = metadata.custom or {}
+        if not custom.get("is_batch"):
+            return [metadata.row_index]
+        batch_metadata = custom.get("batch_metadata")
+        row_ids = (
+            batch_metadata.get("row_ids") if isinstance(batch_metadata, dict) else None
+        )
+        if (
+            isinstance(row_ids, list)
+            and row_ids
+            and all(isinstance(r, int) for r in row_ids)
+        ):
+            return list(row_ids)
+        first = metadata.row_index
+        return list(range(first, first + BatchProcessor.get_batch_size(metadata)))

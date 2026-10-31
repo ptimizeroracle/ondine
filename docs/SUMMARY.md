@@ -16,6 +16,7 @@
 * [Provider Batch API Mode](guides/provider-batch.md)
 * [Multiple Output Columns](guides/multi-column.md)
 * [Structured Output (Pydantic)](guides/structured-output.md)
+* [Output Contracts](guides/output-contracts.md)
 * [Pipeline Composition](guides/pipeline-composition.md)
 
 ## Accuracy & Reliability

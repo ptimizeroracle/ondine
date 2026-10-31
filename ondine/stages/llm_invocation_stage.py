@@ -1,8 +1,10 @@
 """LLM invocation stage with concurrency and retry logic."""
 
 import asyncio
+from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -19,9 +21,11 @@ from ondine.core.models import (
     LLMResponse,
     PromptBatch,
     ResponseBatch,
+    RowMetadata,
     ValidationResult,
 )
 from ondine.core.specifications import ErrorPolicy
+from ondine.harness.ledger import RowLedger
 from ondine.orchestration.concurrency_controller import ConcurrencyController
 from ondine.orchestration.deployment_tracker import DeploymentTracker
 from ondine.orchestration.progress_reporter import ProgressReporter
@@ -34,6 +38,135 @@ from ondine.utils import (
 )
 from ondine.utils.budget_controller import BudgetExceededError
 from ondine.utils.rate_limiter import RateLimiterProtocol
+
+if TYPE_CHECKING:
+    from ondine.orchestration.execution_context import ExecutionContext
+
+# What the error policy did with a call the provider never answered, as the
+# stage marks it in the response's metadata ("action"). The response cache
+# keeps that metadata, so a resumed run reads the same mark.
+_SKIPPED = "skipped"  # no value: the cell gets SKIPPED_OUTPUT_MARKER
+_SUBSTITUTED = "substituted"  # the policy's default value stands in
+
+
+def skipped_by_error_policy(response: Any) -> bool:
+    """True when the error policy skipped this call: its rows are already lost.
+
+    A later stage that cannot read the skip marker must not report those rows
+    a second time (see :func:`report_response`).
+    """
+    return _policy_action(response) == _SKIPPED
+
+
+def model_answered(response: Any) -> bool:
+    """True when ``response`` is the model's answer, not the error policy's.
+
+    False when the error policy skipped the call or substituted its default:
+    :func:`report_response` reports both as provider failures, so a later
+    stage must not treat their text as an answer. Reads the same mark
+    :func:`report_response` does, so the stages agree on what was answered.
+    """
+    return _policy_action(response) is None
+
+
+def report_response(
+    context: "ExecutionContext",
+    response: LLMResponse,
+    metadata: RowMetadata,
+    *,
+    stage: str,
+) -> None:
+    """Tell ``context`` what one model call's response means for its rows.
+
+    The one place that reads a response for the row ledger. It knows:
+
+    * **which rows** the call answered: one row, or every row a mega-batch
+      prompt held (``BatchProcessor.row_indices``). A batch's rows need not be
+      consecutive: a resume gap or a prompt that could not be built leaves
+      holes, and a range from the first row would name the wrong rows;
+    * **what the error policy did**: a skipped call is a provider failure of
+      every row it held; a substituted default is a provider failure too,
+      although the default is delivered. Anything else is the model's answer;
+    * **whose cost it is**: the call's tokens and cost go to its rows, shared
+      by the context's ledger, so the rows' costs sum to the call's.
+
+    The live stage, resume (replaying a previous attempt's cached responses)
+    and the batch splitter (through :func:`skipped_by_error_policy`) all use
+    it, so the three can never read a response differently.
+    """
+    rows = BatchProcessor.row_indices(metadata)
+    action = _policy_action(response)
+    if action == _SKIPPED:
+        message = _policy_error(response, "skipped by error policy")
+        for first_row, count in _consecutive_runs(rows):
+            context.record_skipped_rows(
+                first_row_index=first_row, count=count, stage=stage, message=message
+            )
+    elif action == _SUBSTITUTED:
+        _report_substitution(
+            context,
+            rows,
+            stage=stage,
+            message=_policy_error(response, "the provider gave no answer"),
+        )
+    else:
+        context.record_answers(
+            rows,
+            model=str(response.model),
+            tokens=response.tokens_in + response.tokens_out,
+            cost=response.cost,
+        )
+
+
+def _policy_action(response: Any) -> str | None:
+    details = getattr(response, "metadata", None)
+    if isinstance(details, dict):
+        action = details.get("action")
+        if action in (_SKIPPED, _SUBSTITUTED):
+            return str(action)
+    return None
+
+
+def _policy_error(response: LLMResponse, fallback: str) -> str:
+    return str(response.metadata.get("error", fallback))
+
+
+def _consecutive_runs(rows: Sequence[int]) -> list[tuple[int, int]]:
+    """``rows`` as ``(first, count)`` runs of consecutive rows, in their order."""
+    runs: list[list[int]] = []
+    for row in rows:
+        if runs and row == runs[-1][0] + runs[-1][1]:
+            runs[-1][1] += 1
+        else:
+            runs.append([row, 1])
+    return [(first, count) for first, count in runs]
+
+
+def _report_substitution(
+    context: "ExecutionContext", rows: list[int], *, stage: str, message: str
+) -> None:
+    """A provider failure whose rows the error policy filled with its default.
+
+    The ledger must not call those rows answered: the value delivered is the
+    policy's, not the model's. Today's error list and loss counters never
+    named them, though, and must not start to in this migration step. Those
+    views count only losses reported to the ledger directly
+    (``RowLedger.reported_losses``), so the failure arrives the way a
+    sub-pipeline's do: in a ledger of its own, merged.
+
+    Without a contract the reason says the default was delivered, as it is.
+    Under a checked contract delivery blanks a failed row whatever the error
+    policy wrote, so the reason does not claim it.
+    """
+    ledger = context.ledger
+    if not ledger.policy.checked:
+        message = f"{message} (the error policy delivered its default value)"
+    substitution = RowLedger(len(rows), ledger.policy)
+    substitution.record_provider_failure(
+        range(len(rows)), 1, stage=stage, message=message
+    )
+    ledger.widen(max(rows) + 1)
+    ledger.merge(substitution, rows)
 
 
 class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
@@ -413,26 +546,14 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         is_batch = bool(metadata.custom and metadata.custom.get("is_batch"))
         context.complete_rows(metadata.row_index, batch_size if is_batch else 1)
 
-        # Count skipped rows so partial failures are visible in the final
-        # metrics (and thus the CLI/progress surfaces) and so the whole-run
-        # guard can raise when nothing succeeded. Both the async and sync
-        # error paths funnel their skip markers through here, so this is the
-        # one place the count has to live. A skipped batch loses every row in
-        # it, not just one.
-        #
-        # The indices go with the count: a run that skips 3 rows out of 5M is
-        # a success by every headline number, and without them the caller has
-        # no way to find those 3 rows other than scanning the output for the
-        # ``[SKIPPED]`` marker.
-        if isinstance(response.metadata, dict) and (
-            response.metadata.get("action") == "skipped"
-        ):
-            context.record_skipped_rows(
-                first_row_index=metadata.row_index,
-                count=batch_size,
-                stage=self.name,
-                message=str(response.metadata.get("error", "skipped by error policy")),
-            )
+        # What the response means for its rows: an answer, or a loss the
+        # error policy decided. Both the async and sync error paths funnel
+        # through here, so a skip is counted once, and the skipped rows are
+        # named, not only counted: a run that skips 3 rows out of 5M is a
+        # success by every headline number, and without the indices the
+        # caller has no way to find those 3 rows. Reported before the budget
+        # check below, so the answer that crosses the budget still counts.
+        report_response(context, response, metadata, stage=self.name)
 
         # Update cost and token tracking
         if hasattr(response, "cost") and hasattr(response, "tokens_in"):
@@ -516,10 +637,22 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
                 model=self.llm_client.model,
                 cost=Decimal("0.0"),
                 latency_ms=0.0,
-                metadata={"error": str(error), "action": "skipped"},
+                metadata={"error": str(error), "action": _SKIPPED},
             )
         if decision.action == ErrorAction.USE_DEFAULT:
-            return decision.default_value  # type: ignore[no-any-return]
+            default = decision.default_value
+            if not isinstance(default, LLMResponse):
+                return default  # type: ignore[no-any-return]
+            # The default is delivered as before; the mark says it is not the
+            # model's answer, for the ledger (see report_response).
+            return replace(
+                default,
+                metadata={
+                    **(default.metadata or {}),
+                    "error": str(error),
+                    "action": _SUBSTITUTED,
+                },
+            )
         # FAIL action
         raise error
 
