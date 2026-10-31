@@ -38,6 +38,7 @@ from ondine.core.models import LLMResponse, ResponseBatch, RowMetadata
 from ondine.core.specifications import PromptSpec
 from ondine.harness.contract import (
     MAX_PATTERN_INPUT,
+    OutputContract,
     OutputField,
     Relation,
     build_contract,
@@ -381,6 +382,47 @@ def test_format_fix_needs_word_boundaries():
     verdict = judge(_intent(), "refunded")
 
     assert verdict.passed is False
+
+
+def _consistency() -> OutputContract:
+    return build_contract(
+        ["verdict"],
+        fields=[OutputField("verdict", allowed=["consistent", "inconsistent"])],
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "The summary is not consistent with the document.",
+        "The summary is not fully consistent.",
+        "It isn't consistent.",
+        "The summary is **mostly consistent** with the document.",
+        "The summary is **partly consistent**, with one error.",
+        "NOT CONSISTENT",
+    ],
+)
+def test_a_qualified_value_is_not_fixed_into_a_flat_one(answer):
+    """Real Haiku answers: delivering `consistent` would state what they deny."""
+    verdict = judge(_consistency(), answer)
+
+    assert verdict["verdict"].outcome == "failed"
+    assert verdict["verdict"].format_fixed is False
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "The summary is **factually consistent** with the document.",
+        "No, I read it twice. It is consistent.",
+        "This is not a contradiction: consistent",
+    ],
+)
+def test_a_word_that_does_not_qualify_the_value_leaves_the_fix_alone(answer):
+    verdict = judge(_consistency(), answer)
+
+    assert verdict["verdict"].value == "consistent"
+    assert verdict["verdict"].format_fixed is True
 
 
 def test_format_fix_finds_an_alias_too():

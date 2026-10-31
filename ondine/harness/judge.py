@@ -82,6 +82,39 @@ _ROLE_PREFIXES = ("assistant:", "user:", "system:")
 _NUMBER = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
 _LONGEST_NUMBER_TEXT = 100
 _PREVIEW_CHARS = 40
+#: Words that change what a value right after them says: negations and degree
+#: words. Doubt ("probably refund") is absent on purpose: it still names refund.
+_QUALIFIERS = frozenset(
+    {
+        "almost",
+        "barely",
+        "broadly",
+        "fairly",
+        "generally",
+        "hardly",
+        "largely",
+        "mainly",
+        "mostly",
+        "nearly",
+        "neither",
+        "never",
+        "no",
+        "nor",
+        "not",
+        "partially",
+        "partly",
+        "roughly",
+        "slightly",
+        "somewhat",
+        "without",
+    }
+)
+#: How many words before a value can qualify it ("not entirely consistent"),
+#: and how many characters to read to find them, so that a check stays constant
+#: time however long the answer is.
+_QUALIFIER_WORDS = 3
+_QUALIFIER_REACH = 80
+_WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)?")
 _COMPARE_WORDS = {
     "<": "less than",
     "<=": "at most",
@@ -676,7 +709,9 @@ def _format_fix(rules: FieldRules, raw: str) -> Any:
     inside a longer match ("card" inside "card lost") does not count. Exactly
     one distinct allowed value must remain; two or more is ambiguous and the
     field stays failed. Numbers must stand alone: "2" is not in "12", "-2" or
-    "2.5".
+    "2.5". A value the answer qualifies stays failed too: "not consistent" and
+    "mostly consistent" do not say "consistent", and delivering it would state
+    what the model denied or doubted.
     """
     numeric = rules.declaration.type in ("integer", "number")
     haystack = rules.key(raw)
@@ -699,9 +734,26 @@ def _format_fix(rules: FieldRules, raw: str) -> Any:
         if end <= furthest:
             continue  # inside a longer match that starts at or before it
         furthest = end
+        if _is_qualified(haystack, start):
+            return _MISSING
         if allowed not in found:
             found.append(allowed)
     return found[0] if len(found) == 1 else _MISSING
+
+
+def _is_qualified(text: str, start: int) -> bool:
+    """Does a negation or a degree word lead up to the value at ``start``?
+
+    Looks at the few words before the value, within its own sentence or
+    clause. English only: in another language the answer is read as if
+    unqualified.
+    """
+    before = text[max(0, start - _QUALIFIER_REACH) : start].casefold()
+    clause = re.split(r"[.,;:!?\n]", before)[-1]
+    return any(
+        word in _QUALIFIERS or word.endswith(("n't", "n’t"))
+        for word in _WORD.findall(clause)[-_QUALIFIER_WORDS:]
+    )
 
 
 def _stands_alone(text: str, start: int, end: int, *, numeric: bool) -> bool:
