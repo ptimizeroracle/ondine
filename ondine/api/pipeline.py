@@ -416,11 +416,12 @@ class Pipeline:
         result carries the chunk's report. A run that raised (a budget stop,
         a crash) has one too: the rows it never reached are failed.
 
-        A streamed run's report is its chunks' reports merged, in input
-        order (``ondine.harness.delivery.merge_reports``), built on each
-        read: it needs no row value, so a stream keeps none and its memory
-        stays bounded. Rows no chunk has delivered yet count as failed, as
-        in :attr:`row_ledger`.
+        A streamed run's report needs no row value, so a stream keeps none
+        and its memory stays bounded. Under a checked contract it is the
+        chunks' reports merged, in input order
+        (``ondine.harness.delivery.merge_reports``), built on each read.
+        Without one it comes from the run's ledger. Rows no chunk has
+        delivered yet count as failed, as in :attr:`row_ledger`.
         """
         if self._last_result is not None:
             return self._last_result.report
@@ -2310,7 +2311,9 @@ class Pipeline:
         policy = LedgerPolicy.from_contract(contract)
         ledger = RowLedger(row_count, policy)
         self._hold_ledger(ledger, finished=False)
-        self._stream_reports = _StreamReports(contract, policy)
+        self._stream_reports = (
+            _StreamReports(contract, policy) if contract.checked else None
+        )
         return ledger
 
     def _merge_chunk_ledger(
@@ -2322,16 +2325,22 @@ class Pipeline:
     ) -> None:
         """Merge a chunk's ledger into the run's, at the chunk's input rows.
 
-        The chunk's report is read first and kept for the run report: reading
-        it freezes the chunk's snapshot, which the chunk's own result keeps,
-        with its chunk-local numbering, as today. The merge then releases the
-        chunk's live ledger, so a stream holds one live ledger, the run's,
-        however many chunks it has run.
+        Under a checked contract the chunk's report is read first and kept
+        for the run report: reading it freezes the chunk's snapshot, which the
+        chunk's own result keeps, with its chunk-local numbering, as today.
+        The merge then releases the chunk's live ledger, so a stream holds one
+        live ledger, the run's, however many chunks it has run.
+
+        With no contract a report costs a copy of the chunk's rows and hardly
+        anyone reads one, so none is built here. The chunk keeps its compact
+        ledger for a report read later, and the run report comes from the
+        run's ledger.
         """
         ledger.widen(first_row + rows)
-        report = chunk_result.report
+        checked = self._stream_reports is not None
+        report = chunk_result.report if checked else None
         chunk_result.merge_ledger_into(
-            ledger, range(first_row, first_row + rows), retry=False
+            ledger, range(first_row, first_row + rows), retry=False, keep=not checked
         )
         if self._stream_reports is not None:
             self._stream_reports.add(report, rows)

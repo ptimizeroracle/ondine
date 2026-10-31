@@ -297,7 +297,12 @@ class ExecutionResult:
         return self.contract is not None and self.contract.checked
 
     def merge_ledger_into(
-        self, parent: "RowLedger", parent_rows: "Sequence[int]", *, retry: bool
+        self,
+        parent: "RowLedger",
+        parent_rows: "Sequence[int]",
+        *,
+        retry: bool,
+        keep: bool = False,
     ) -> None:
         """Fold this sub-pipeline run's ledger into ``parent``, at ``parent_rows``.
 
@@ -310,12 +315,18 @@ class ExecutionResult:
         pass nobody inspects should not pay for one). Read
         :attr:`row_ledger` first to keep it. A result with no live ledger
         (built by hand, or already merged) merges nothing.
+
+        ``keep`` leaves the live ledger on this result instead, so a snapshot
+        can still be taken if :attr:`row_ledger` is read later. For a chunk
+        whose report is rarely read: the compact ledger is far smaller than
+        a snapshot, and it goes when the caller drops the chunk.
         """
         live = self._live_ledger
         if live is None:
             return
         parent.merge(live, parent_rows, retry=retry)
-        self._live_ledger = None
+        if not keep:
+            self._live_ledger = None
         self._awaiting_merge = False
 
     @property

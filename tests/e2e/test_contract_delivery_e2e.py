@@ -29,6 +29,7 @@ from ondine.context.memory_store import InMemoryContextStore
 from ondine.core.exceptions import PipelineExecutionError
 from ondine.harness.contract import ContractError
 from ondine.harness.delivery import HARNESS_COLUMNS, merge_reports
+from ondine.harness.ledger import LedgerSnapshot, RowLedger
 from ondine.harness.status import FINAL_STATUSES, RowStatus
 from ondine.utils.budget_controller import BudgetExceededError
 from tests.e2e.conformance_harness import (
@@ -889,3 +890,55 @@ def test_a_clashing_source_column_is_fine_without_a_contract():
     )
 
     assert list(result.to_pandas()["status"]) == ["open"] * 3
+
+
+# ---------------------------------------------------------------------------
+# A stream with no contract pays for a report only when one is read
+# ---------------------------------------------------------------------------
+
+
+def _unchecked_stream(client: LedgerClient):
+    return _builder(client).with_streaming(chunk_size=2).build()
+
+
+def test_an_unchecked_stream_nobody_reads_takes_no_snapshot(monkeypatch):
+    """A report per chunk cost a copy of each chunk's rows, on every stream."""
+    snapshots: list[RowLedger] = []
+    real_snapshot = RowLedger.snapshot
+
+    def counting(ledger: RowLedger) -> LedgerSnapshot:
+        snapshots.append(ledger)
+        return real_snapshot(ledger)
+
+    monkeypatch.setattr(RowLedger, "snapshot", counting)
+    pipeline = _unchecked_stream(ScriptedClient(ANSWERS))
+
+    for _ in pipeline.execute_stream():
+        pass
+
+    assert snapshots == []
+
+
+def test_an_unchecked_streams_run_report_matches_the_same_run_executed_whole():
+    streamed = _unchecked_stream(ScriptedClient(ANSWERS, fail_rows={LOST}))
+    whole = _builder(ScriptedClient(ANSWERS, fail_rows={LOST})).build()
+
+    list(streamed.execute_stream())
+    expected = whole.execute().report
+
+    report = streamed.run_report
+    assert report.counts == expected.counts
+    assert report.coverage == expected.coverage
+    assert report.cost_total == expected.cost_total
+    assert report.cost_per_delivered_row == expected.cost_per_delivered_row
+    assert report.warnings == expected.warnings
+
+
+def test_an_unchecked_chunk_keeps_its_own_report_after_the_stream():
+    pipeline = _unchecked_stream(ScriptedClient(ANSWERS, fail_rows={LOST}))
+
+    chunks = list(pipeline.execute_stream())
+
+    assert [chunk.report.total for chunk in chunks] == [2, 2, 1]
+    assert [len(chunk.row_ledger.rows) for chunk in chunks] == [2, 2, 1]
+    assert sum(chunk.report.counts[FAILED] for chunk in chunks) == 1

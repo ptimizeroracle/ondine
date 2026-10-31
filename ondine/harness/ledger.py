@@ -481,6 +481,9 @@ class RowLedger:
         batch = list(rows)
         if not batch:
             return
+        if len(batch) == 1:  # one row per call: nothing to share
+            self.record_answer(batch[0], attempt, model=model, tokens=tokens, cost=cost)
+            return
         token_share, extra_tokens = divmod(tokens, len(batch))
         first_cost, cost_share = _split_cost(cost, len(batch))
         with self._lock:
@@ -1649,13 +1652,14 @@ def _delivered(
 ) -> RowOutcome:
     """The latest verdict passed: accepted, repaired, or (no contract) unchecked."""
     answer = events.answers.get(attempt)
-    delivered = replace(
-        base,
-        delivered_attempt=attempt,
-        delivered_by=answer.model if answer is not None else None,
-    )
+    delivered_by = answer.model if answer is not None else None
     if not policy.checked:
-        return replace(delivered, status=RowStatus.UNCHECKED)
+        return replace(
+            base,
+            status=RowStatus.UNCHECKED,
+            delivered_attempt=attempt,
+            delivered_by=delivered_by,
+        )
 
     statuses, notes = _field_statuses(events, attempt, RowStatus.REJECTED)
     verdict = events.verdicts[attempt]
@@ -1664,7 +1668,12 @@ def _delivered(
     ]
     status = max(required, key=_FIELD_RANK.__getitem__, default=RowStatus.ACCEPTED)
     return replace(
-        delivered, status=status, reason="; ".join(notes), field_statuses=statuses
+        base,
+        status=status,
+        reason="; ".join(notes),
+        field_statuses=statuses,
+        delivered_attempt=attempt,
+        delivered_by=delivered_by,
     )
 
 
