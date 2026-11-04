@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from ondine.core.models import ResponseBatch, RowMetadata
+from ondine.stages.llm_invocation_stage import skipped_by_error_policy
 from ondine.stages.pipeline_stage import PipelineStage
 from ondine.strategies.batch_formatting import (
     BatchFormattingStrategy,
@@ -62,12 +63,12 @@ class BatchDisaggregatorStage(PipelineStage):
         A batch the error policy already skipped arrives here as an unparseable
         marker string and would otherwise be counted a second time — once as
         skipped upstream, once as a parse failure here — turning 4 lost rows
-        into 8 across two counters.
+        into 8 across two counters. The LLM stage, which reported the skip,
+        is the one that knows how to recognise it.
         """
         if context is None or not hasattr(context, "record_failed_rows"):
             return
-        metadata = getattr(llm_response, "metadata", None)
-        if isinstance(metadata, dict) and metadata.get("action") == "skipped":
+        if skipped_by_error_policy(llm_response):
             return
         context.record_failed_rows(
             [index for index in row_indices if isinstance(index, int)],

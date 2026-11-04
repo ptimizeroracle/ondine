@@ -1,5 +1,8 @@
 r"""Factory for creating response parsers based on configuration."""
 
+from collections.abc import Mapping, Sequence
+from typing import Any
+
 from ondine.core.specifications import PromptSpec
 from ondine.stages.response_parser_stage import (
     JSONParser,
@@ -58,41 +61,74 @@ def create_response_parser(
             output_columns=["score", "explanation"]
         )
     """
-    response_format = prompt_spec.response_format.lower()
-
-    if response_format == "json":
+    parse_mode = validate_response_format(
+        prompt_spec.response_format,
+        output_columns,
+        prompt_spec.regex_patterns,
+        json_fields=prompt_spec.json_fields,
+    )
+    if parse_mode == "regex":
+        logger.info("Creating RegexParser for pattern-based extraction")
+        return RegexParser(patterns=prompt_spec.regex_patterns or {})
+    if parse_mode == "json":
         logger.info("Creating JSONParser for multi-field extraction")
+        return JSONParser(strict=False)
+    logger.info("Creating RawTextParser (default, backward compatible)")
+    return RawTextParser()
 
-        # Validate JSON fields match output columns
-        if prompt_spec.json_fields:
-            json_set = set(prompt_spec.json_fields)
+
+def validate_response_format(
+    response_format: str,
+    output_columns: Sequence[str],
+    regex_patterns: Mapping[str, Any] | None = None,
+    *,
+    json_fields: Sequence[str] | None = None,
+) -> str:
+    """Check a response format against the output columns; return how to read it.
+
+    The one place that knows the response-format rules. The parser factory
+    builds its parser from the result, and the pipeline calls it to fail a
+    run the way the factory always failed it.
+
+    Args:
+        response_format: "raw", "json" or "regex", in any case.
+        output_columns: The columns each answer fills.
+        regex_patterns: For "regex": a pattern per output column.
+        json_fields: For "json": the fields the prompt asks for. A mismatch
+            with the output columns is only logged; the columns win.
+
+    Returns:
+        "text" (one column of raw text), "json" (an object; also "raw" with
+        several columns, since raw text can fill only one) or "regex".
+
+    Raises:
+        ValueError: An unknown format, or a regex format without a pattern
+            for every output column.
+    """
+    fmt = response_format.lower()
+
+    if fmt == "json":
+        if json_fields:
+            json_set = set(json_fields)
             output_set = set(output_columns)
             if json_set != output_set:
                 logger.warning(
                     f"JSON fields {json_set} don't match output columns {output_set}. "
                     f"Using output_columns as authoritative."
                 )
+        return "json"
 
-        return JSONParser(strict=False)
-
-    if response_format == "regex":
-        logger.info("Creating RegexParser for pattern-based extraction")
-
-        if not prompt_spec.regex_patterns:
+    if fmt == "regex":
+        if not regex_patterns:
             raise ValueError(
                 "response_format='regex' requires regex_patterns to be specified"
             )
-
-        # Validate regex patterns cover all output columns
-        pattern_cols = set(prompt_spec.regex_patterns.keys())
-        output_set = set(output_columns)
-        missing = output_set - pattern_cols
+        missing = set(output_columns) - set(regex_patterns.keys())
         if missing:
             raise ValueError(f"Missing regex patterns for output columns: {missing}")
+        return "regex"
 
-        return RegexParser(patterns=prompt_spec.regex_patterns)
-
-    if response_format == "raw":
+    if fmt == "raw":
         if len(output_columns) > 1:
             # Raw text fills one column named "output" — none of the several
             # asked for — so every cell came back empty from a run that
@@ -101,13 +137,12 @@ def create_response_parser(
             # the first column rather than being discarded.
             logger.info(
                 f"{len(output_columns)} output columns: reading each response as "
-                f"a JSON object with keys {output_columns}. Ask for that shape in "
-                f"the prompt, or set response_format='regex' / structured output."
+                f"a JSON object with keys {list(output_columns)}. Ask for that "
+                f"shape in the prompt, or set response_format='regex' / "
+                f"structured output."
             )
-            return JSONParser(strict=False)
-
-        logger.info("Creating RawTextParser (default, backward compatible)")
-        return RawTextParser()
+            return "json"
+        return "text"
 
     # Should never reach here due to Pydantic validation
     raise ValueError(

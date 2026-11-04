@@ -5,10 +5,11 @@ This is the primary entry point that users interact with.
 """
 
 import math
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -35,6 +36,18 @@ from ondine.core.models import (
 from ondine.core.specifications import (
     PipelineSpecifications,
 )
+from ondine.harness.contract import ContractError, OutputContract, build_contract
+from ondine.harness.delivery import (
+    HARNESS_COLUMNS,
+    Delivery,
+    RunReport,
+    column_order,
+    deliver,
+    harness_column_conflicts,
+    merge_reports,
+)
+from ondine.harness.ledger import LedgerPolicy, LedgerSnapshot, RowLedger, StopReason
+from ondine.harness.status import RowStatus
 
 # The strings the three loss paths leave in a cell before #262's blanking pass
 # rewrites them to None. Matched only within rows already recorded in `errors`,
@@ -68,12 +81,189 @@ from ondine.stages import (
     PromptFormatterStage,
     ResponseParserStage,
     ResultWriterStage,
-    create_response_parser,
 )
+from ondine.stages.llm_invocation_stage import report_response
+from ondine.stages.parser_factory import validate_response_format
 from ondine.utils import RateLimiter, RetryHandler, get_logger
+from ondine.utils.budget_controller import BudgetExceededError
 from ondine.utils.optional_dependencies import raise_parquet_extra_error
 
 logger = get_logger(__name__)
+
+
+#: The stage name the ledger gives context verification (grounding,
+#: contradiction, confidence), which runs inside the pipeline, not as a stage.
+_VERIFICATION_STAGE = "ContextVerification"
+
+#: Why provider-batch mode refuses a declared output contract (see
+#: Pipeline.submit).
+PROVIDER_BATCH_CONTRACT_MESSAGE = (
+    "Output contracts are not supported in provider-batch mode yet (#338): "
+    "submit() hands the provider's raw answers back with no parsing, so there "
+    "is nothing to check them against. Run the pipeline with execute(), or "
+    "remove the with_output_field / with_output_relation / "
+    "with_contract_policy / as_contract=True declarations."
+)
+
+
+def _report_unlisted_stage_failure(
+    ledger: RowLedger, rows: list[int], *, stage: str, message: str
+) -> None:
+    """A stage failure of ``rows`` that today's error list never named.
+
+    The ledger must not call those rows delivered. Today's error list and loss
+    counters must not change in this migration step, though, and they count
+    only losses reported to the ledger directly (``RowLedger.reported_losses``).
+    So the failure arrives the way a sub-pipeline's do: in a ledger of its
+    own, merged.
+    """
+    failure = RowLedger(len(rows), ledger.policy)
+    failure.record_stage_failure(range(len(rows)), stage=stage, message=message)
+    ledger.widen(max(rows) + 1)
+    ledger.merge(failure, rows)
+
+
+#: Where a checkpoint records the run's contract (see _stamp_contract).
+_CONTRACT_RECORD = "output_contract"
+
+
+def _stamp_contract(context: ExecutionContext, contract: OutputContract) -> None:
+    """Record a checked contract in ``context``, so its checkpoint carries it.
+
+    The fingerprint proves a resumed run judges under the same rules; the
+    parts, one short text per declaration, let a refusal name what changed.
+    Nothing is recorded without a contract, so such a run's checkpoint is
+    what it always was.
+    """
+    if contract.checked:
+        context.intermediate_data[_CONTRACT_RECORD] = {
+            "fingerprint": contract.fingerprint,
+            "parts": _contract_parts(contract),
+        }
+
+
+def _contract_parts(contract: OutputContract) -> dict[str, str]:
+    """Each declaration of ``contract`` under a name a client recognises."""
+    schema = contract.schema
+    parts = {
+        "output columns": repr(list(contract.output_columns)),
+        "response format": repr((contract.parse_mode, contract.regex_patterns)),
+        "run policy": repr(contract.policy),
+        "schema": ""
+        if schema is None
+        else f"{schema.__module__}.{schema.__qualname__}",
+    }
+    for declaration in contract.fields:
+        parts[f"field '{declaration.name}'"] = repr(declaration)
+    for relation in contract.relations:
+        parts[f"relation '{relation.describe()}'"] = "declared"
+    return parts
+
+
+def _contract_changes(before: dict[str, Any], after: dict[str, str]) -> list[str]:
+    """What differs between two contracts' parts, as short phrases."""
+    changes = []
+    for name in dict.fromkeys([*before, *after]):
+        if name not in after:
+            changes.append(f"{name} removed")
+        elif name not in before:
+            changes.append(f"{name} added")
+        elif before[name] != after[name]:
+            changes.append(f"{name} changed")
+    # Same declarations, different fingerprint: what the parts do not spell
+    # out changed (a schema's own fields or validators).
+    return changes or ["the schema's fields or validators changed"]
+
+
+def _failed_rows(ledger: RowLedger, rows: int) -> list[int]:
+    """The rows auto-retry re-runs under a checked contract: status failed.
+
+    A row nothing reported on is pending until the snapshot calls it failed,
+    so it counts as failed here too.
+    """
+    lost = (RowStatus.FAILED, RowStatus.PENDING)
+    return [row for row in range(rows) if ledger.outcome(row).status in lost]
+
+
+#: Statuses whose answer passed the contract, so context verification sees it.
+_PASSED = (RowStatus.ACCEPTED, RowStatus.REPAIRED)
+
+
+def _verified_rows(result_rows: list[dict], ledger: RowLedger) -> range | set[int]:
+    """Positions in ``result_rows`` that context verification may read.
+
+    Every row without a contract. Under a checked contract only the rows
+    whose answer passed it: the parse stage has reported every verdict to
+    ``ledger`` by now, keyed by the row's ``_row_index``.
+    """
+    if not ledger.policy.checked:
+        return range(len(result_rows))
+    verified = set()
+    for position, row in enumerate(result_rows):
+        row_index = row.get("_row_index", position)
+        if (
+            isinstance(row_index, int)
+            and 0 <= row_index < ledger.row_count
+            and ledger.outcome(row_index).status in _PASSED
+        ):
+            verified.add(position)
+    return verified
+
+
+def _empty_output_rows(rows: list[dict], output_columns: list[str]) -> list[int]:
+    """The rows auto-retry re-runs without a contract: every output cell empty.
+
+    Pure Python, no pandas. A cell is empty when it is None or a blank
+    string; any other value is a result.
+    """
+    empty = []
+    for index, row in enumerate(rows):
+        if all(
+            value is None or (isinstance(value, str) and not value.strip())
+            for value in (row.get(column) for column in output_columns)
+        ):
+            empty.append(index)
+    return empty
+
+
+class _StreamReports:
+    """What a streamed run keeps for its whole-run report: one report per chunk.
+
+    Each chunk's report is small (counts, ranked reasons, cost), so the run
+    report is built by merging them (``merge_reports``), never from the
+    rows' values, which a stream does not keep. The rows the merged chunks
+    do not cover (not reached yet, or never after a stop) are failed, as in
+    the run's ledger snapshot.
+    """
+
+    def __init__(self, contract: OutputContract, policy: LedgerPolicy) -> None:
+        self.contract = contract
+        self.policy = policy
+        self.chunks: list[RunReport] = []
+        self.rows = 0  # input rows the merged chunks cover
+        self.stop: StopReason | None = None
+
+    def add(self, report: RunReport | None, rows: int) -> None:
+        """Record the next chunk's report, in input order."""
+        if report is not None:
+            self.chunks.append(report)
+        self.rows += rows
+
+    def report(self, total_rows: int) -> RunReport:
+        """The whole run's report, over ``total_rows`` input rows."""
+        parts = list(self.chunks)
+        rest = max(total_rows - self.rows, 0)
+        if rest or self.stop is not None:
+            # The rows no chunk delivered: all failed, so no value is needed.
+            tail = RowLedger(rest, self.policy)
+            if self.stop is not None:
+                tail.record_run_stopped(self.stop)
+            parts.append(
+                deliver(
+                    tail.snapshot(), {}, [{}] * rest, self.contract, input_columns=[]
+                ).report
+            )
+        return merge_reports(parts, self.contract)
 
 
 def _values_contradict(val_a: str, val_b: str, tolerance: int | float | None) -> bool:
@@ -167,6 +357,17 @@ class Pipeline:
         # Session of the most recent run — the key a resume needs. See the
         # session_id property.
         self._session_id: UUID | None = None
+        # Row ledger of the most recent run, live while the run is under way;
+        # frozen into _ledger_snapshot on the first read after it ended. See
+        # the row_ledger property.
+        self._row_ledger: RowLedger | None = None
+        self._ledger_finished = True
+        self._ledger_snapshot: LedgerSnapshot | None = None
+        # Result of the most recent execute() that returned one; its report
+        # is the run report (see run_report).
+        self._last_result: ExecutionResult | None = None
+        # The chunk reports of the most recent streamed run (see run_report).
+        self._stream_reports: _StreamReports | None = None
 
     @property
     def session_id(self) -> UUID | None:
@@ -181,6 +382,73 @@ class Pipeline:
         failure, not just after a success.
         """
         return self._session_id
+
+    @property
+    def row_ledger(self) -> LedgerSnapshot | None:
+        """The row ledger of the most recent run, frozen; None before the first.
+
+        One final status per input row (``ondine.harness.ledger``). For a
+        streamed run it covers the whole run, each chunk merged in at its
+        input rows; a chunk's own result carries the chunk's snapshot. A run
+        that raised (a budget stop, a crash) has one too, showing which rows
+        it reached: the rest are failed, "run stopped before this row".
+
+        Read while a stream is still running, it is a snapshot of that moment,
+        taken afresh on each read. Once the run has ended it is taken on the
+        first read and the same object is returned after that.
+        """
+        if self._ledger_snapshot is not None or self._row_ledger is None:
+            return self._ledger_snapshot
+        snapshot = self._row_ledger.snapshot()
+        if self._ledger_finished:
+            self._ledger_snapshot = snapshot
+            self._row_ledger = None
+        return snapshot
+
+    @property
+    def run_report(self) -> RunReport | None:
+        """The run report of the most recent run; None before the first.
+
+        Totals per status (always summing to the input's row count),
+        coverage, the top rejection reasons, cost and warnings. For a run
+        that returned a result it is ``result.report``. For a streamed run it
+        covers the whole run, each chunk's rows merged in; each chunk's own
+        result carries the chunk's report. A run that raised (a budget stop,
+        a crash) has one too: the rows it never reached are failed.
+
+        A streamed run's report needs no row value, so a stream keeps none
+        and its memory stays bounded. Under a checked contract it is the
+        chunks' reports merged, in input order
+        (``ondine.harness.delivery.merge_reports``), built on each read.
+        Without one it comes from the run's ledger. Rows no chunk has
+        delivered yet count as failed, as in :attr:`row_ledger`.
+        """
+        if self._last_result is not None:
+            return self._last_result.report
+        if self._stream_reports is not None:
+            return self._stream_reports.report(self._held_row_count())
+        snapshot = self.row_ledger
+        if snapshot is None:
+            return None
+        # A run that raised delivered no frame. Its counts, reasons and cost
+        # are the ledger's; each row is given as having no values, so no row
+        # reads as delivered empty.
+        no_values: Mapping[str, Any] = MappingProxyType({})
+        rows = len(snapshot.rows)
+        return deliver(
+            snapshot,
+            dict.fromkeys(range(rows), no_values),
+            [no_values] * rows,
+            self._resolve_contract(),
+            input_columns=[],
+        ).report
+
+    def _held_row_count(self) -> int:
+        """How many input rows the ledger :attr:`row_ledger` reads covers."""
+        if self._row_ledger is not None:
+            return self._row_ledger.row_count
+        snapshot = self._ledger_snapshot
+        return 0 if snapshot is None else len(snapshot.rows)
 
     def add_observer(self, observer: ExecutionObserver) -> "Pipeline":
         """
@@ -366,19 +634,29 @@ class Pipeline:
             checkpoint_interval=self.specifications.processing.checkpoint_interval,
         )
 
+        # The run's contract, chosen once: the judge, the ledger and delivery
+        # all read this one (see _resolve_contract).
+        contract = self._resolve_contract()
+
         if resume_from:
             # Resume from checkpoint
             context = state_manager.load_checkpoint(resume_from)
             if not context:
                 raise ValueError(f"No checkpoint found for session {resume_from}")
+            # Before any model call: resume re-judges the cached answers, so
+            # they must be judged under the rules of the first attempt (D2).
+            self._check_resume_contract(context, contract, resume_from)
             self.logger.info(
                 f"Resuming from checkpoint at row {context.last_processed_row}"
             )
         else:
             # Create new context
             context = ExecutionContext(pipeline_id=self.id)
+            _stamp_contract(context, contract)
 
         self._session_id = context.session_id
+        self._hold_ledger(None, finished=True)  # the input is not loaded yet
+        self._stream_reports = None  # not a stream: the result has the report
         self._attach_response_cache(context, checkpoint_dir)
         context.intermediate_data["resumed_from_checkpoint"] = bool(resume_from)
         context.components = self._components
@@ -450,7 +728,7 @@ class Pipeline:
 
         try:
             # Execute stages (preprocessing happens inside if enabled)
-            result_df = self._execute_stages(context, state_manager)
+            result_df, ledger = self._execute_stages(context, state_manager)
 
             # Mark completion
             context.end_time = datetime.now()
@@ -476,28 +754,56 @@ class Pipeline:
                 # succeeded: with the SKIP default a partial loss is otherwise
                 # invisible to code — right row count, no exception, and the
                 # only trace a sentinel string in the output frame.
+                #
+                # errors and the loss counters in metrics are read from the
+                # run's ledger by today's rules (RowLedger.reported_losses),
+                # which a merged sub-pipeline (the auto-retry pass) never
+                # changes. Under a checked contract, delivery replaces them
+                # with the snapshot's (ExecutionResult.adopt_delivery).
                 errors=context.row_errors,
                 execution_id=context.session_id,
                 start_time=context.start_time,
                 end_time=context.end_time,
                 success=True,
+                # Frozen on first read (ExecutionResult.row_ledger), which
+                # comes after the auto-retry pass below has merged in.
+                row_ledger=ledger,
+                contract=contract,
+                # A chunk's or a retry pass's ledger merges into its parent's
+                # after this; any other result keeps only its snapshot.
+                awaiting_merge=self._is_subpipeline,
             )
 
             # Optional: Auto-retry failed rows
             if self.specifications.processing.auto_retry_failed:
-                # Get preprocessed data from context (or loaded data if no preprocessing)
-                retry_source = context.intermediate_data.get("preprocessed_data")
-                if retry_source is None:
-                    retry_source = context.intermediate_data.get("loaded_data")
                 # Pass container directly (no Pandas conversion)
-                result = self._auto_retry_failed_rows(result, retry_source)
+                result = self._auto_retry_failed_rows(
+                    result, context.full_input(), ledger=ledger
+                )
+            self._hold_ledger(ledger, finished=True)
 
-            # Replace the internal loss markers ([SKIPPED], "null", "") with a
-            # single None, so a lost row reads as missing to df.isna() instead of
-            # as three inconsistent strings. Runs after auto-retry so a recovered
-            # row keeps its real value. See _blank_lost_cells for why this is
-            # keyed off errors rather than by matching cell strings.
-            self._blank_lost_cells(result, self.specifications.dataset.output_columns)
+            if contract.checked:
+                # The client's frame is read from the ledger's snapshot: values
+                # kept or blanked by status, plus the five harness columns. An
+                # auto-retry pass is not delivered on its own: the run it
+                # belongs to delivers its rows, with the pass merged in.
+                if not self._is_internal_retry:
+                    delivery, data = self._deliver(result, contract, context)
+                    result.adopt_delivery(delivery, data)
+                    # The pipeline's view of the run is the result's
+                    # snapshot, not a second one.
+                    self._ledger_snapshot = result.row_ledger
+                    self._row_ledger = None
+            else:
+                # Replace the internal loss markers ([SKIPPED], "null", "")
+                # with a single None, so a lost row reads as missing to
+                # df.isna() instead of as three inconsistent strings. Runs
+                # after auto-retry so a recovered row keeps its real value.
+                # See _blank_lost_cells for why this is keyed off errors
+                # rather than by matching cell strings.
+                self._blank_lost_cells(
+                    result, self.specifications.dataset.output_columns
+                )
 
             # A run that produced no usable output is a failure, not a
             # success — raise loudly instead of returning a frame full of
@@ -517,6 +823,14 @@ class Pipeline:
                     f"{len(result.lost_row_indices)} of {result.metrics.total_rows} "
                     f"row(s) produced no output. {result.error_summary()}. "
                     f"Indices: result.lost_row_indices; details: result.errors."
+                )
+            if contract.checked and result.rejected_row_indices:
+                self.logger.warning(
+                    f"{len(result.rejected_row_indices)} of "
+                    f"{result.metrics.total_rows} row(s) failed the output "
+                    f"contract and were rejected. Indices: "
+                    f"result.rejected_row_indices; details: result.quarantine "
+                    f"and the reason column."
                 )
 
             if self.specifications.processing.cleanup_on_success:
@@ -575,6 +889,9 @@ class Pipeline:
             if tracker_ref is not None:
                 tracker_ref.show_summary(result)
 
+            # The run report of the most recent run (Pipeline.run_report).
+            self._last_result = result
+
             # Record terminal success in the registry. We snapshot the
             # row count and cost so the MCP ``ondine_status`` tool can
             # report final figures without re-reading the result object.
@@ -599,6 +916,7 @@ class Pipeline:
             return result
 
         except KeyboardInterrupt:
+            self._record_run_stopped(context, StopReason.CRASH)
             self.logger.warning("\n🛑 Pipeline interrupted by user.")
             # Save checkpoint on interrupt
             state_manager.save_checkpoint(context)
@@ -608,6 +926,12 @@ class Pipeline:
             raise
 
         except Exception as e:
+            self._record_run_stopped(
+                context,
+                StopReason.BUDGET_CAP
+                if isinstance(e, BudgetExceededError)
+                else StopReason.CRASH,
+            )
             # Save checkpoint on error
             state_manager.save_checkpoint(context)
             self.logger.error(
@@ -672,8 +996,11 @@ class Pipeline:
 
     def _execute_stages(
         self, context: ExecutionContext, state_manager: StateManager
-    ) -> pd.DataFrame:
-        """Execute all pipeline stages with checkpointing."""
+    ) -> tuple[Any, RowLedger]:
+        """Execute all pipeline stages with checkpointing.
+
+        Returns the results and the run's row ledger, every stage's events in.
+        """
         specs = self.specifications
 
         # Create progress tracker (stored on context for show_summary later)
@@ -688,8 +1015,11 @@ class Pipeline:
 
     def _execute_stages_with_tracking(
         self, context: ExecutionContext, state_manager: StateManager
-    ) -> pd.DataFrame:
-        """Execute stages with progress tracking enabled."""
+    ) -> tuple[Any, RowLedger]:
+        """Execute stages with progress tracking enabled.
+
+        Returns the results and the run's row ledger (see _execute_stages).
+        """
         specs = self.specifications
         resume_mode = bool(context.intermediate_data.get("resumed_from_checkpoint"))
 
@@ -711,6 +1041,26 @@ class Pipeline:
         context.intermediate_data["loaded_data"] = df
         working_df = df
 
+        # The input's size is known: every row now exists in the run's
+        # ledger, pending, before any stage reports on it.
+        contract = self._resolve_contract()
+        if contract.checked:
+            # The builder checks the declared columns; only the loaded data
+            # shows the ones the prompt never reads (a ticket's own `status`).
+            # Delivery would overwrite them, so refuse before any model call.
+            clashes = harness_column_conflicts(
+                [*df.columns, *specs.dataset.output_columns]
+            )
+            if clashes:
+                raise ContractError(
+                    [
+                        f"{column}: the source data has a column with this name, "
+                        f"which the harness adds to the output; rename it"
+                        for column in clashes
+                    ]
+                )
+        ledger = context.open_ledger(contract)
+
         # Optional: Preprocess loaded data
         if specs.processing.enable_preprocessing:
             from ondine.utils.input_preprocessing import preprocess_container
@@ -729,8 +1079,13 @@ class Pipeline:
             # Store preprocessed data for retry
             context.intermediate_data["preprocessed_data"] = working_df
 
+        # Rows a previous attempt finished, read once, before this attempt
+        # adds its own answers to the same cache: resume skips them here and
+        # merges their cached answers into the ledger after the model stage.
+        previous_rows: set[int] = set()
         if resume_mode:
-            working_df = self._filter_container_for_resume(working_df, context)
+            previous_rows = self._resume_completed_indices(context)
+            working_df = self._filter_container_for_resume(working_df, previous_rows)
             self.logger.info(
                 f"Resume mode: {len(working_df)} rows still need processing"
             )
@@ -888,6 +1243,10 @@ class Pipeline:
         )
         context.intermediate_data["response_batches"] = response_batches
         response_batches = self._restore_completed_response_batches(context)
+        if previous_rows:
+            self._merge_previous_attempt(
+                ledger, response_batches, previous_rows, stage=llm_stage.name
+            )
 
         # Save checkpoint after expensive LLM stage
         if state_manager.should_checkpoint(context.last_processed_row):
@@ -913,19 +1272,22 @@ class Pipeline:
             context.intermediate_data["disaggregated_responses"] = response_batches
             self.logger.info("Batch disaggregation complete")
 
-        # Stage 4: Parse responses (using configured parser)
-        # Check if custom parser provided in metadata
+        # Stage 4: Parse responses: the judge reads each answer under the
+        # run's contract, or maps the output of the client's own parser.
         custom_parser = self._components.custom_parser
-        if custom_parser:
-            parser = custom_parser
-        else:
-            parser = create_response_parser(
-                prompt_spec=specs.prompt,
-                output_columns=specs.dataset.output_columns,
+        if not custom_parser:
+            # The judge reads the text under the run's contract; a response
+            # format it cannot honour fails here, as it always has.
+            validate_response_format(
+                specs.prompt.response_format,
+                specs.dataset.output_columns,
+                specs.prompt.regex_patterns,
+                json_fields=specs.prompt.json_fields,
             )
         parser_stage = ResponseParserStage(
-            parser=parser,
+            parser=custom_parser or None,
             output_columns=specs.dataset.output_columns,
+            contract=contract,
         )
         results_df = self._execute_stage(
             parser_stage,
@@ -955,10 +1317,15 @@ class Pipeline:
                 context,
             )
 
-        # Stage 5: Write results (if output spec provided)
-        if specs.output:
+        # Stage 5: Write results (if output spec provided). Under a checked
+        # contract the file carries the delivered frame, which exists only
+        # once auto-retry has merged in: execute() writes it then (_deliver).
+        if specs.output and not contract.checked:
             writer = ResultWriterStage()
-            return self._execute_stage(writer, (df, results_df, specs.output), context)
+            written = self._execute_stage(
+                writer, (df, results_df, specs.output), context
+            )
+            return written, ledger
 
         # Merge results with original data container
         # Build lookup from results by row_index
@@ -987,7 +1354,7 @@ class Pipeline:
             if col not in merged_columns:
                 merged_columns.append(col)
 
-        return ResultContainerImpl(data=merged_rows, columns=merged_columns)
+        return ResultContainerImpl(data=merged_rows, columns=merged_columns), ledger
 
     @staticmethod
     def _input_row_lookup(
@@ -1001,10 +1368,7 @@ class Pipeline:
         rows re-sent, so position *i* in one is a different row in the other.
         Falls back to position when a result has no usable ``_row_index``.
         """
-        full_input = context.intermediate_data.get("preprocessed_data")
-        if full_input is None:
-            full_input = context.intermediate_data.get("loaded_data", working_df)
-        input_rows: list[dict] = list(full_input)
+        input_rows: list[dict] = list(context.full_input(default=working_df))
         working_rows: list[dict] = list(working_df)
 
         def input_row_for(position: int) -> dict:
@@ -1028,7 +1392,14 @@ class Pipeline:
         specs: PipelineSpecifications,
         context: ExecutionContext,
     ) -> Any:
-        """Apply context store verification (grounding, contradiction, confidence)."""
+        """Apply context store verification (grounding, contradiction, confidence).
+
+        Under a checked contract only the rows whose answer passed the
+        contract (status accepted or repaired) are verified: a rejected or
+        unverified candidate is never grounded, scored, compared, or stored
+        as evidence a later run can be primed with. Without a contract every
+        row is verified, as always.
+        """
         from ondine.context.protocol import EvidenceRecord
 
         output_cols = specs.dataset.output_columns
@@ -1046,9 +1417,17 @@ class Pipeline:
 
         result_rows = list(results_df)
         input_row_for = self._input_row_lookup(result_rows, working_df, context)
+        verified = _verified_rows(result_rows, context.ledger)
         stored_claim_ids: dict[int, str] = {}
+        blanked: list[int] = []  # input rows grounding "skip" emptied
 
         for idx, row in enumerate(result_rows):
+            if idx not in verified:
+                # Never verified: read as a row with no answer.
+                if include_confidence:
+                    row["_grounding_score"] = None
+                    row["_confidence_score"] = None
+                continue
             output_text_parts = []
             for col in output_cols:
                 val = row.get(col)
@@ -1102,11 +1481,25 @@ class Pipeline:
                         for col in output_cols:
                             row[col] = None
                         grounding_score = None
+                        row_index = row.get("_row_index")
+                        blanked.append(row_index if isinstance(row_index, int) else idx)
 
             if include_confidence:
                 row["_grounding_score"] = grounding_score
             if grounding_cfg and grounding_action == "flag":
                 row["_grounding_score"] = grounding_score
+
+        if blanked:
+            _report_unlisted_stage_failure(
+                context.ledger,
+                blanked,
+                stage=_VERIFICATION_STAGE,
+                message=(
+                    f"the answer is not grounded in the row's input (score "
+                    f"below {grounding_threshold}); grounding action 'skip' "
+                    f"emptied it"
+                ),
+            )
 
         if contradiction_cfg:
             key_cols = contradiction_cfg.get("key_columns") or input_cols
@@ -1115,6 +1508,8 @@ class Pipeline:
 
             key_to_claims: dict[str, list[tuple[int, str, str]]] = {}
             for idx, row in enumerate(result_rows):
+                if idx not in verified:
+                    continue
                 # Key columns are usually input columns, which the parsed
                 # result row does not carry; read them from the input row, or
                 # every row shares an empty key and any two answers conflict
@@ -1199,7 +1594,7 @@ class Pipeline:
         return ResultContainerImpl(data=result_rows, columns=columns + extra_cols)
 
     def _filter_container_for_resume(
-        self, container: Any, context: ExecutionContext
+        self, container: Any, already_done: set[int]
     ) -> Any:
         """Return only rows that still need processing, preserving original indices.
 
@@ -1208,11 +1603,10 @@ class Pipeline:
         so a row already answered is never re-called even though the contiguous
         checkpoint watermark stops below it (#241). Without a cache there is no
         per-row record to consult, so we fall back to the watermark and re-do
-        the (bounded) window above it.
+        the (bounded) window above it. ``already_done`` is that set, from
+        :meth:`_resume_completed_indices`.
         """
         from ondine.adapters.containers import DictListContainer
-
-        already_done = self._resume_completed_indices(context)
 
         filtered_rows = []
         for idx, row in enumerate(container):
@@ -1508,6 +1902,14 @@ class Pipeline:
         producer_task = None
         producer_error = None
 
+        # The whole run's ledger. A file's length is unknown until it has been
+        # read, so that ledger grows chunk by chunk; a frame's is known now.
+        known_rows = 0
+        if not source_path and self.dataframe is not None:
+            known_rows = len(self.dataframe)
+        ledger = self._start_stream_ledger(known_rows)
+        first_row = 0  # input position of the next chunk's first row
+
         try:
             # Create data source
             if source_path:
@@ -1555,6 +1957,8 @@ class Pipeline:
                 chunk_result = await self._process_chunk_async(
                     chunk_df, execution_id, chunk_index
                 )
+                self._merge_chunk_ledger(ledger, chunk_result, first_row, len(chunk_df))
+                first_row += len(chunk_df)
 
                 # Update aggregates
                 total_rows += chunk_result.metrics.processed_rows
@@ -1579,7 +1983,16 @@ class Pipeline:
             if producer_error is not None:
                 raise producer_error
 
+        except BudgetExceededError:
+            self._stop_stream(ledger, StopReason.BUDGET_CAP)
+            raise
+        except BaseException:
+            # A crash, a cancelled task, or a consumer that stopped reading
+            # (GeneratorExit at the yield): the rows not reached never will be.
+            self._stop_stream(ledger, StopReason.CRASH)
+            raise
         finally:
+            self._hold_ledger(ledger, finished=True)
             if producer_task and not producer_task.done():
                 producer_task.cancel()
                 try:
@@ -1702,10 +2115,13 @@ class Pipeline:
         import asyncio
 
         df = self.dataframe
+        ledger = self._start_stream_ledger(0 if df is None else len(df))
         if df is None or df.empty:
+            self._hold_ledger(ledger, finished=True)
             return
 
-        chunks = [df.iloc[i : i + chunk_size] for i in range(0, len(df), chunk_size)]
+        first_rows = list(range(0, len(df), chunk_size))
+        chunks = [df.iloc[i : i + chunk_size] for i in first_rows]
         execution_id = uuid4()
 
         self.logger.info(
@@ -1715,23 +2131,43 @@ class Pipeline:
 
         pending_task: asyncio.Task | None = None
 
-        for chunk_index, chunk_df in enumerate(chunks):
-            # Launch this chunk's full pipeline as async task
-            task = asyncio.create_task(
-                self._process_chunk_async(chunk_df, execution_id, chunk_index)
-            )
+        try:
+            for chunk_index, chunk_df in enumerate(chunks):
+                # Launch this chunk's full pipeline as async task
+                task = asyncio.create_task(
+                    self._process_chunk_async(chunk_df, execution_id, chunk_index)
+                )
 
-            # If previous chunk is in flight, await it and yield
+                # If previous chunk is in flight, await it and yield
+                if pending_task is not None:
+                    result = await pending_task
+                    self._merge_chunk_ledger(
+                        ledger,
+                        result,
+                        first_rows[chunk_index - 1],
+                        len(chunks[chunk_index - 1]),
+                    )
+                    yield result
+
+                pending_task = task
+
+            # Drain the last chunk
             if pending_task is not None:
                 result = await pending_task
+                self._merge_chunk_ledger(
+                    ledger, result, first_rows[-1], len(chunks[-1])
+                )
                 yield result
-
-            pending_task = task
-
-        # Drain the last chunk
-        if pending_task is not None:
-            result = await pending_task
-            yield result
+        except BudgetExceededError:
+            self._stop_stream(ledger, StopReason.BUDGET_CAP)
+            raise
+        except BaseException:
+            # A crash, a cancelled task, or a consumer that stopped reading
+            # (GeneratorExit at the yield): the rows not reached never will be.
+            self._stop_stream(ledger, StopReason.CRASH)
+            raise
+        finally:
+            self._hold_ledger(ledger, finished=True)
 
     def _execute_stage(
         self, stage: Any, input_data: Any, context: ExecutionContext
@@ -1762,6 +2198,291 @@ class Pipeline:
             for observer in self.observers:
                 observer.on_stage_error(stage, context, e)
             raise
+
+    # ── the row ledger ────────────────────────────────────────────────────
+    #
+    # The data-quality harness. The ledger is the only record of row fate,
+    # and the parse stage asks the judge for every answer and reports its
+    # verdict there. A run's contract is the one the builder compiled, or the
+    # unchecked one. Under the unchecked contract today's outputs (errors,
+    # counters, blanked cells) are read from the ledger with today's rules
+    # (RowLedger.reported_losses). Under a checked contract the client's
+    # frame, errors and counters are read from its snapshot (_deliver).
+
+    def _resolve_contract(self) -> OutputContract:
+        """The run's output contract: the one place a run's contract is chosen.
+
+        The ledger's policy, the parse stage's judge, a resumed attempt's
+        restored answers and every streamed chunk all read it from here, so
+        they cannot judge one run under two contracts.
+
+        The builder's compiled contract when the client declared one
+        (``PipelineComponents.output_contract``). Otherwise the unchecked
+        contract, built from the pipeline's output columns and response
+        format: nothing is checked under it, and the judge reads every answer
+        exactly as the parser factory's parser does. A response format the
+        contract cannot read (a regex format missing a column's pattern) is
+        the parser factory's problem to report, not a reason to refuse a run
+        that works today, so it falls back to a plain-text contract over the
+        same columns; the ledger's policy is the same either way.
+        """
+        declared = self._components.output_contract
+        if declared is not None:
+            return declared
+        dataset = self.specifications.dataset
+        prompt = self.specifications.prompt
+        columns = list(dataset.output_columns) or ["output"]
+        try:
+            return build_contract(
+                columns,
+                response_format=prompt.response_format,
+                regex_patterns=prompt.regex_patterns,
+            )
+        except ContractError as error:
+            self.logger.debug(f"Unchecked contract falls back to plain text: {error}")
+            return build_contract(columns)
+
+    def _hold_ledger(self, ledger: RowLedger | None, *, finished: bool) -> None:
+        """Make ``ledger`` the one :attr:`row_ledger` reads.
+
+        ``finished``: nothing reports to it any more, so its first snapshot
+        is final and replaces it. False while a stream is still merging
+        chunks into it.
+        """
+        self._row_ledger = ledger
+        self._ledger_finished = finished
+        self._ledger_snapshot = None
+        self._last_result = None
+
+    def _record_run_stopped(
+        self, context: ExecutionContext, reason: StopReason
+    ) -> None:
+        """A run raised: rows its ledger never heard of become failed, for ``reason``.
+
+        The context's ledger, which the stages reported to. If the run raised
+        before its input was loaded, that ledger covers the rows the context
+        knew of, none for a fresh run.
+        """
+        ledger = context.ledger
+        ledger.record_run_stopped(reason)
+        self._hold_ledger(ledger, finished=True)
+
+    def _merge_previous_attempt(
+        self,
+        ledger: RowLedger,
+        restored: list[ResponseBatch],
+        previous_rows: set[int],
+        *,
+        stage: str,
+    ) -> None:
+        """Merge into ``ledger`` what a previous attempt left in the cache.
+
+        Resume does not re-ask rows the cache holds, so this attempt reports
+        nothing for them; without this they would read, to the ledger, as
+        rows the run never reached. The previous attempt's responses are
+        reported again, the way the model stage reported them
+        (``report_response``), into a context of their own whose ledger is
+        then merged, as any sub-pipeline's is. Merged rather than reported to
+        this run's context, so today's error list and counters, which never
+        named a restored row, stay as they were (``RowLedger.reported_losses``).
+        """
+        previous = ExecutionContext(total_rows=ledger.row_count)
+        previous.open_ledger(self._resolve_contract())
+        for batch in restored:
+            for response, metadata in zip(
+                batch.responses, batch.metadata, strict=False
+            ):
+                # The restore path rebuilds every cached row as an LLMResponse.
+                if (
+                    isinstance(response, LLMResponse)
+                    and metadata.row_index in previous_rows
+                ):
+                    report_response(previous, response, metadata, stage=stage)
+        ledger.merge(previous.ledger, range(previous.ledger.row_count))
+
+    def _start_stream_ledger(self, row_count: int) -> RowLedger:
+        """The whole streamed run's ledger; each chunk's merges into it.
+
+        ``row_count`` is 0 when the stream reads a file whose length is
+        unknown: the ledger then widens chunk by chunk, so rows past the last
+        chunk read are not in it at all.
+        """
+        contract = self._resolve_contract()
+        policy = LedgerPolicy.from_contract(contract)
+        ledger = RowLedger(row_count, policy)
+        self._hold_ledger(ledger, finished=False)
+        self._stream_reports = (
+            _StreamReports(contract, policy) if contract.checked else None
+        )
+        return ledger
+
+    def _merge_chunk_ledger(
+        self,
+        ledger: RowLedger,
+        chunk_result: ExecutionResult,
+        first_row: int,
+        rows: int,
+    ) -> None:
+        """Merge a chunk's ledger into the run's, at the chunk's input rows.
+
+        Under a checked contract the chunk's report is read first and kept
+        for the run report: reading it freezes the chunk's snapshot, which the
+        chunk's own result keeps, with its chunk-local numbering, as today.
+        The merge then releases the chunk's live ledger, so a stream holds one
+        live ledger, the run's, however many chunks it has run.
+
+        With no contract a report costs a copy of the chunk's rows and hardly
+        anyone reads one, so none is built here. The chunk keeps its compact
+        ledger for a report read later, and the run report comes from the
+        run's ledger.
+        """
+        ledger.widen(first_row + rows)
+        checked = self._stream_reports is not None
+        report = chunk_result.report if checked else None
+        chunk_result.merge_ledger_into(
+            ledger, range(first_row, first_row + rows), retry=False, keep=not checked
+        )
+        if self._stream_reports is not None:
+            self._stream_reports.add(report, rows)
+
+    def _stop_stream(self, ledger: RowLedger, reason: StopReason) -> None:
+        """A stream raised: its unreached rows are failed, for ``reason``."""
+        ledger.record_run_stopped(reason)
+        if self._stream_reports is not None:
+            self._stream_reports.stop = reason
+
+    def _deliver(
+        self,
+        result: ExecutionResult,
+        contract: OutputContract,
+        context: ExecutionContext,
+    ) -> tuple[Delivery, Any]:
+        """The delivery of ``result``'s ledger snapshot, and the frame it makes.
+
+        Under a checked contract only; the caller adopts both
+        (``ExecutionResult.adopt_delivery``). The values are the ones the
+        parse stage wrote, read from the result's own rows (decision D-C):
+        row ``i`` of the result is input row ``i``, auto-retry recoveries
+        merged in. Delivery keeps or blanks each one by the row's status and
+        adds the five harness columns.
+
+        The frame keeps today's column order (inputs, outputs, then any
+        column context verification added), with the harness columns last.
+        An input or output column named like a harness column is refused by
+        delivery, never overwritten. With an output spec the file is written
+        here, from the delivered frame, so it carries the same columns and
+        statuses as the result; the frame returned is then the one written.
+        """
+        from ondine.adapters.containers import ResultContainerImpl
+
+        snapshot = result.row_ledger
+        if snapshot is None:  # pragma: no cover - every pipeline run has one
+            raise RuntimeError("a pipeline run's result has no row ledger")
+        outputs = list(contract.output_columns)
+        rows = result.to_list()
+        frame_columns = getattr(result.data, "columns", None)
+        order = (
+            [str(column) for column in frame_columns]
+            if frame_columns is not None
+            else column_order(rows)
+        )
+        inputs = [column for column in order if column not in outputs]
+        delivery = deliver(
+            snapshot,
+            {
+                i: {column: row.get(column) for column in outputs}
+                for i, row in enumerate(rows)
+            },
+            [{column: row.get(column) for column in inputs} for row in rows],
+            contract,
+            input_columns=inputs,
+        )
+        columns = [*order, *(c for c in outputs if c not in order), *HARNESS_COLUMNS]
+        records = delivery.records()
+        data: Any = ResultContainerImpl(
+            data=[
+                {column: record.get(column) for column in columns} for record in records
+            ],
+            columns=columns,
+        )
+        if self.specifications.output is not None:
+            data = self._write_delivered(data, columns, context)
+        return delivery, data
+
+    def _write_delivered(
+        self, delivered: Any, columns: list[str], context: ExecutionContext
+    ) -> Any:
+        """Write the delivered frame to the output spec; return what was written.
+
+        The result writer merges its results into the loaded input by row
+        position, with the client's merge strategy, exactly as it writes an
+        unchecked run's results: here every column that is not an input
+        column, the harness columns included.
+        """
+        from ondine.adapters.containers import ResultContainerImpl
+
+        original = context.intermediate_data["loaded_data"]
+        written_columns = [c for c in columns if c not in list(original.columns)]
+        for column in self.specifications.dataset.output_columns:
+            if column not in written_columns:
+                written_columns.append(column)
+        results = ResultContainerImpl(
+            data=[
+                {"_row_index": index, **{c: row.get(c) for c in written_columns}}
+                for index, row in enumerate(delivered)
+            ],
+            columns=["_row_index", *written_columns],
+        )
+        return self._execute_stage(
+            ResultWriterStage(),
+            (original, results, self.specifications.output),
+            context,
+        )
+
+    def _check_resume_contract(
+        self, context: ExecutionContext, contract: OutputContract, session: UUID
+    ) -> None:
+        """Refuse to resume under rules other than the first attempt's (D2).
+
+        Resume re-judges the answers the first attempt left in the cache. The
+        judge is deterministic, so the same contract gives the same statuses;
+        a different one would silently give others. The checkpoint records
+        the contract (:func:`_stamp_contract`) for that check. Without a
+        contract, on either side, nothing is recorded and nothing changes.
+
+        Raises:
+            ValueError: The contract changed (the message names what), the
+                contract was dropped, or the checkpoint records none while
+                this run declares one, so the rules cannot be proven equal.
+        """
+        stored = context.intermediate_data.get(_CONTRACT_RECORD)
+        if not contract.checked:
+            if stored is not None:
+                raise ValueError(
+                    f"Cannot resume session {session}: its checkpoint was made "
+                    f"under an output contract and this run declares none. "
+                    f"Resume with the same contract declarations, or start a "
+                    f"new run."
+                )
+            return
+        if not isinstance(stored, dict) or "fingerprint" not in stored:
+            raise ValueError(
+                f"Cannot resume session {session} under an output contract: "
+                f"its checkpoint records no contract (it was made without one, "
+                f"or by an earlier Ondine), so Ondine cannot prove its answers "
+                f"were judged under the same rules. Start a new run."
+            )
+        if stored["fingerprint"] == contract.fingerprint:
+            return
+        changes = _contract_changes(
+            stored.get("parts") or {}, _contract_parts(contract)
+        )
+        raise ValueError(
+            f"Cannot resume session {session}: the output contract changed "
+            f"since it started ({'; '.join(changes)}). Resume re-judges the "
+            f"answers already received, so they must be judged under the same "
+            f"rules. Restore the previous declarations, or start a new run."
+        )
 
     def _attach_response_cache(self, context: ExecutionContext, checkpoint_dir) -> None:
         """Give *context* the durable response cache, unless nothing can read it.
@@ -1866,9 +2587,22 @@ class Pipeline:
 
         A run over an empty dataset is not a failure and is left alone, as is
         the internal auto-retry pass (see ``_is_internal_retry``).
+
+        Under a checked contract a blank frame is not silent: every row says
+        why in its status. A rejected row is the contract doing its job, like
+        a filter, so the guard raises only when every row failed, which means
+        no row got a usable answer at all.
         """
         if not output_columns or self._is_internal_retry:
             return
+        if result.checked:
+            snapshot = result.row_ledger
+            if (
+                snapshot is None
+                or not snapshot.rows
+                or snapshot.counts.get(RowStatus.FAILED, 0) < len(snapshot.rows)
+            ):
+                return
 
         quality = result.validate_output_quality(output_columns)
         if quality.total_rows == 0 or quality.valid_outputs > 0:
@@ -1906,7 +2640,11 @@ class Pipeline:
         )
 
     def _auto_retry_failed_rows(
-        self, result: ExecutionResult, original_container: Any
+        self,
+        result: ExecutionResult,
+        original_container: Any,
+        *,
+        ledger: RowLedger | None = None,
     ) -> ExecutionResult:
         """
         Row-level quality retry (re-executes entire pipeline for failed rows).
@@ -1936,6 +2674,13 @@ class Pipeline:
         Args:
             result: Initial execution result
             original_container: Original (preprocessed) input DataContainer
+            ledger: The run's row ledger. Each pass's own ledger merges into it
+                as a later attempt of the rows it re-ran, so a recovered row's
+                status is the recovery. Without a contract the result's
+                ``errors`` and counters are left as the first pass reported
+                them, as they always were. Under a checked contract the
+                ledger also picks the rows to re-run: those whose status is
+                failed, never rejected ones.
 
         Returns:
             ExecutionResult with retried rows merged in
@@ -1953,30 +2698,23 @@ class Pipeline:
         # Convert original container to list for indexing
         original_rows = original_container.to_list()
 
+        # Under a checked contract the ledger says which rows failed (D-D).
+        # Only a failed row (no usable answer) is re-run: a rejected row had
+        # an answer that failed a check, and asking again with no feedback is
+        # not a repair. Without a contract, today's rule: empty output cells.
+        checked = ledger is not None and ledger.policy.checked
+
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
             # Get current result as list of dicts
             result_rows = result.to_list()
 
             # Find failed row indices (pure Python - no Pandas)
-            failed_indices = []
-            for idx, row in enumerate(result_rows):
-                # Check if ALL output columns are null/empty
-                all_failed = True
-                for col in output_cols:
-                    value = row.get(col)
-                    if value is not None:
-                        # Check if it's a non-empty string
-                        if isinstance(value, str):
-                            if value.strip():
-                                all_failed = False
-                                break
-                        else:
-                            # Non-string, non-None value is valid
-                            all_failed = False
-                            break
-                if all_failed:
-                    failed_indices.append(idx)
+            failed_indices = (
+                _failed_rows(ledger, len(result_rows))
+                if checked and ledger is not None
+                else _empty_output_rows(result_rows, output_cols)
+            )
 
             if not failed_indices:
                 break
@@ -2011,6 +2749,10 @@ class Pipeline:
 
             # Execute retry
             retry_result = retry_pipeline.execute()
+            if ledger is not None:
+                # Pass row i is input row failed_indices[i]: result rows are
+                # in input order.
+                retry_result.merge_ledger_into(ledger, failed_indices, retry=True)
 
             # Merge retry results back (pure Python)
             retry_result_rows = retry_result.to_list()
@@ -2079,7 +2821,14 @@ class Pipeline:
         Returns:
             RunHandle with ``status == SUBMITTED_REMOTE`` and the
             ``provider_job_id`` populated.
+
+        Raises:
+            NotImplementedError: An output contract is declared. Provider-batch
+                mode has no parse step yet to check answers in (#338).
         """
+        declared = self._components.output_contract
+        if declared is not None and declared.checked:
+            raise NotImplementedError(PROVIDER_BATCH_CONTRACT_MESSAGE)
         if self.specifications.processing.execution_mode != "provider_batch":
             raise ValueError(
                 "submit() requires execution_mode='provider_batch'. "

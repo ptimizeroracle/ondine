@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
 
     from ondine.context.protocol import ContextStore
 
@@ -30,11 +30,36 @@ from ondine.core.specifications import (
     ProcessingSpec,
     PromptSpec,
 )
+from ondine.harness.contract import (
+    ContractError,
+    OutputContract,
+    OutputField,
+    Relation,
+    RunPolicy,
+    build_contract,
+)
+from ondine.harness.delivery import HARNESS_COLUMNS, harness_column_conflicts
 from ondine.orchestration import (
     AsyncExecutor,
     ExecutionStrategy,
     StreamingExecutor,
 )
+
+
+def _row_model(schema: Any) -> Any:
+    """The model one row is checked against.
+
+    A batch wrapper, a model whose only field is ``items: list[Row]`` (the
+    shape ``with_batch_size(>1)`` asks for), gives ``Row``: each item is one
+    row, and ``items`` is no output column. Any other schema is the row model
+    itself.
+    """
+    fields = getattr(schema, "model_fields", None)
+    if not isinstance(fields, dict) or list(fields) != ["items"]:
+        return schema
+    annotation = fields["items"].annotation
+    element = get_args(annotation)[0] if get_origin(annotation) is list else None
+    return element if hasattr(element, "model_fields") else schema
 
 
 class PipelineBuilder:
@@ -76,6 +101,12 @@ class PipelineBuilder:
         self._streaming_enabled: bool = False
         self._streaming_chunk_size: int = 10000
         self._streaming_max_pending: int = 3
+        # Output contract declarations. They are compiled and validated together
+        # in build(), so every problem is reported at once (ondine.harness).
+        self._contract_fields: list[OutputField] = []
+        self._contract_relations: list[Relation] = []
+        self._contract_policy: RunPolicy | None = None
+        self._schema_as_contract: bool = False
 
     @staticmethod
     def create() -> PipelineBuilder:
@@ -1411,6 +1442,8 @@ class PipelineBuilder:
         self,
         schema: Any,
         mode: str = "auto",
+        *,
+        as_contract: bool = False,
     ) -> PipelineBuilder:
         """
         Configure structured output using a Pydantic model.
@@ -1439,6 +1472,20 @@ class PipelineBuilder:
                 - "tools": Function calling mode (most reliable, not all models support)
                 - "json": JSON mode (universal compatibility, works with all models)
                 - "json_schema": OpenAI's native JSON schema mode
+            as_contract: Also declare the schema as the output contract. Off
+                by default: a schema shapes the answer but rejects nothing
+                unless you opt in. The contract is validated at ``build()``.
+                Its types, ``Literal``/``Enum`` values, bounds, patterns,
+                lengths and validators are then checks on every answer, a
+                validator's own message is the reason a row fails, and the
+                result gains the ``status``, ``reason``, ``checks``,
+                ``repair_method`` and ``delivered_by`` columns, a quarantine
+                and a run report. For a batch wrapper (a model whose only field is
+                ``items: list[Row]``, as ``with_batch_size(>1)`` uses) the
+                contract is read from ``Row``, since each item is one row.
+                Combine with :meth:`with_output_field` for output columns the
+                schema does not declare, and set the run policy with
+                :meth:`with_contract_policy`.
 
         Returns:
             Self for chaining
@@ -1453,11 +1500,19 @@ class PipelineBuilder:
 
             # Force TOOLS mode (for OpenAI/Anthropic)
             .with_structured_output(MySchema, mode="tools")
+
+            # Declare the schema's rules as the contract
+            .with_structured_output(MySchema, as_contract=True)
             ```
+
+        Note:
+            Each call replaces the whole structured-output configuration,
+            ``as_contract`` included.
         """
         if not hasattr(self, "_custom_metadata"):
             self._custom_metadata = {}
         self._structured_output_model = schema
+        self._schema_as_contract = as_contract
         self._custom_metadata["instructor_mode"] = mode
 
         # Auto-inject JSONParser if no parser configured
@@ -1468,6 +1523,300 @@ class PipelineBuilder:
             self._custom_parser = JSONParser()
 
         return self
+
+    # ── Output contract ────────────────────────────────────────────
+    #
+    # What a deliverable value is: per-column rules, field-to-field rules, the
+    # opt-in schema switch (with_structured_output(..., as_contract=True)) and
+    # the run policy. Nothing is checked here; build() compiles every
+    # declaration into one OutputContract and reports all problems at once.
+    # The run then judges every answer against it and delivers each row with
+    # its status (Pipeline._deliver).
+
+    def with_output_field(
+        self,
+        name: str | OutputField,
+        *,
+        allowed: Sequence[Any] | None = None,
+        aliases: Mapping[str, Any] | None = None,
+        type: str | None = None,
+        minimum: float | None = None,
+        maximum: float | None = None,
+        pattern: str | None = None,
+        min_length: int | None = None,
+        max_length: int | None = None,
+        required: bool | None = None,
+        absent: Any = None,
+        normalise: Sequence[str] | None = None,
+    ) -> PipelineBuilder:
+        """
+        Declare what a deliverable value of one output column is.
+
+        The declaration is validated at ``build()``. Every answer is then
+        checked against it. A row whose value breaks it is rejected (blanked,
+        listed in ``result.rejected_row_indices`` and quarantined) or, under
+        ``with_contract_policy(on_failure="deliver_flagged")``, delivered
+        flagged as unverified. Columns you do not declare are not checked.
+        With any contract declared, the result gains the ``status``,
+        ``reason``, ``checks``, ``repair_method`` and ``delivered_by``
+        columns.
+
+        A keyword left out (or ``None``) declares no such rule.
+
+        Args:
+            name: The output column, or a prepared
+                :class:`~ondine.harness.contract.OutputField` (then pass no
+                other keyword).
+            allowed: The only values the column may take.
+            aliases: Other spellings, each mapped to one allowed value, which
+                is what is delivered.
+            type: "text" (default), "integer", "number", "boolean" or
+                "any". "any" declares no type rule: the value passes whatever
+                it is, as an undeclared column does. It is the type a schema
+                field Ondine cannot read (a nested model, a list) gets. The
+                keyword is named ``type`` to match ``OutputField.type``.
+            minimum: Inclusive lower bound, for integer and number columns.
+            maximum: Inclusive upper bound, for integer and number columns.
+            pattern: A regular expression a text value must contain a match
+                for; anchor it with ``^...$`` to match the whole value.
+            min_length: Fewest characters a text value may have.
+            max_length: Most characters a text value may have.
+            required: True (default): the column must hold a value. False: it
+                may be absent (missing, null, empty, or equal to ``absent``).
+            absent: For an optional column, the answer that means "no value"
+                (for example "n/a"). It is delivered empty.
+            normalise: Cleanups applied before checking, from "strip",
+                "collapse_whitespace", "strip_punctuation", "casefold". A text
+                value is delivered cleaned.
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # The common case: the labels a column may take
+            builder.with_output_field("intent", allowed=["refund", "billing"])
+
+            # Several rules on several columns
+            (
+                builder
+                .with_output_field(
+                    "intent",
+                    allowed=["refund", "billing"],
+                    aliases={"money back": "refund"},
+                    normalise=["strip", "casefold"],
+                )
+                .with_output_field("amount", type="number", minimum=0)
+                .with_output_field("sku", required=False, absent="n/a")
+            )
+            ```
+
+        Raises:
+            TypeError: An ``OutputField`` was passed together with keywords.
+
+        Note:
+            Calls for different columns add up. Declare all of a column's
+            rules in one call: a second, different declaration for the same
+            column fails ``build()`` (as does a column the enforced schema
+            already declares), because silently merging or replacing would
+            hide which one you meant. Repeating the same declaration is
+            harmless. Problems in the rules themselves (a minimum above the
+            maximum, an unknown column, an unsafe pattern) are reported by
+            ``build()``, all at once.
+        """
+        rules = {
+            key: value
+            for key, value in {
+                "allowed": allowed,
+                "aliases": aliases,
+                "type": type,
+                "minimum": minimum,
+                "maximum": maximum,
+                "pattern": pattern,
+                "min_length": min_length,
+                "max_length": max_length,
+                "required": required,
+                "absent": absent,
+                "normalise": normalise,
+            }.items()
+            if value is not None
+        }
+        if isinstance(name, OutputField):
+            if rules:
+                raise TypeError(
+                    "with_output_field() takes either an OutputField or rule "
+                    f"keywords, not both; got an OutputField and {', '.join(rules)}"
+                )
+            declaration = name
+        else:
+            declaration = OutputField(name, **rules)
+        if declaration not in self._contract_fields:
+            self._contract_fields.append(declaration)
+        return self
+
+    def with_output_relation(
+        self,
+        left: str,
+        op: str,
+        right: str | None = None,
+        *,
+        input_column: str | None = None,
+    ) -> PipelineBuilder:
+        """
+        Declare a rule between two output columns, or an output and an input.
+
+        The rule is validated at ``build()``. It reads ``left op right``, with
+        ``op`` one of ``< <= == != >= >``, and is checked only when both
+        values passed their own column rules, so one bad value gives one
+        reason, not two. A row that breaks it is rejected, like a row that
+        breaks a column rule.
+
+        Args:
+            left: An output column.
+            op: The comparison.
+            right: Another output column. Give this or ``input_column``.
+            input_column: An input column of the same row, instead of
+                ``right``.
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # An end date never before its start date
+            builder.with_output_relation("end", ">=", "start")
+
+            # A refund never above the order total in the input
+            builder.with_output_relation("refund", "<=", input_column="total")
+            ```
+
+        Note:
+            Calls add up; repeating the same rule is harmless. Unknown
+            columns and comparisons of incompatible types are reported by
+            ``build()``.
+        """
+        relation = Relation(left, op, right, input_column)
+        if relation not in self._contract_relations:
+            self._contract_relations.append(relation)
+        return self
+
+    def with_contract_policy(
+        self,
+        on_failure: Literal["reject", "deliver_flagged"] = "reject",
+        partial_rows: Literal["whole_row", "keep_valid_fields"] = "whole_row",
+        early_stop_fraction: float | None = RunPolicy.early_stop_fraction,
+        early_stop_window: int = RunPolicy.early_stop_window,
+    ) -> PipelineBuilder:
+        """
+        Set how a run treats rows that fail the output contract.
+
+        The policy is validated at ``build()``. Early stop is declared here
+        but not acted on yet (harness step 4): a run never stops early.
+
+        Only meaningful with a contract: declare one with
+        :meth:`with_output_field`, :meth:`with_output_relation` or
+        ``with_structured_output(..., as_contract=True)``. Without this call
+        the defaults below apply.
+
+        Args:
+            on_failure: "reject" (default) blanks a failing row and puts it
+                in the quarantine; "deliver_flagged" delivers its value with
+                the status unverified.
+            partial_rows: "whole_row" (default) rejects the row and blanks
+                every column when any required column fails;
+                "keep_valid_fields" still rejects it but delivers the columns
+                that passed.
+            early_stop_fraction: The run will stop when more than this share
+                of the first ``early_stop_window`` rows (by input order) is
+                rejected, which usually means a broken prompt or contract.
+                Default 0.5. ``None`` turns early stop off.
+            early_stop_window: How many rows the share is measured over.
+                Default 50.
+
+        Returns:
+            Self for chaining
+
+        Example:
+            ```python
+            # Keep every row, flag the ones that failed a check
+            builder.with_contract_policy(on_failure="deliver_flagged")
+
+            # Never stop early
+            builder.with_contract_policy(early_stop_fraction=None)
+            ```
+
+        Note:
+            Each call sets the whole policy, like the builder's other
+            settings: an option left out of the last call takes its default.
+            Invalid values are reported by ``build()``, together with every
+            other contract problem. A policy with nothing declared to check
+            fails ``build()``, since it could never apply.
+        """
+        self._contract_policy = RunPolicy(
+            on_failure=on_failure,
+            partial_rows=partial_rows,
+            early_stop_fraction=early_stop_fraction,
+            early_stop_window=early_stop_window,
+        )
+        return self
+
+    def _compile_output_contract(
+        self, dataset: DatasetSpec, prompt: PromptSpec
+    ) -> OutputContract | None:
+        """The declared output contract, validated; ``None`` if none was declared.
+
+        Takes the final dataset and prompt specs, which give the output and
+        input columns and the response format. Every problem, in the
+        declarations or the policy, is raised in one ContractError.
+        """
+        schema = (
+            _row_model(self._structured_output_model)
+            if self._schema_as_contract
+            else None
+        )
+        declared = self._contract_fields or self._contract_relations
+        if not declared and schema is None:
+            if self._contract_policy is not None:
+                raise ContractError(
+                    [
+                        "with_contract_policy() was called but nothing is "
+                        "declared to check: add with_output_field(), "
+                        "with_output_relation() or "
+                        "with_structured_output(..., as_contract=True)"
+                    ]
+                )
+            return None
+        # A checked contract adds the harness columns to the result, so an
+        # input or output column of the same name would be overwritten or
+        # fail delivery after every model call. Refused here, with the rest.
+        clashes = harness_column_conflicts(
+            [*dataset.input_columns, *dataset.output_columns]
+        )
+        problems = (
+            [
+                f"column(s) {clashes} clash with the harness columns "
+                f"{list(HARNESS_COLUMNS)} a checked contract adds to the "
+                "result; rename them"
+            ]
+            if clashes
+            else []
+        )
+        try:
+            contract = build_contract(
+                dataset.output_columns,
+                fields=self._contract_fields,
+                relations=self._contract_relations,
+                policy=self._contract_policy,
+                schema=schema,
+                input_columns=dataset.input_columns,
+                response_format=prompt.response_format,
+                regex_patterns=prompt.regex_patterns,
+            )
+        except ContractError as error:
+            raise ContractError([*error.problems, *problems]) from None
+        if problems:
+            raise ContractError(problems)
+        return contract
 
     # ── Knowledge Base ─────────────────────────────────────────────
 
@@ -1789,6 +2138,11 @@ class PipelineBuilder:
 
         Raises:
             ValueError: If required specifications missing (dataset, prompt, or LLM)
+            ContractError: If the declared output contract has problems; it lists
+                every one (see with_output_field, with_output_relation,
+                with_contract_policy). An input or output column named like a
+                harness column (status, reason, checks, repair_method,
+                delivered_by) is one of them when a contract is declared.
 
         Example:
             ```python
@@ -1875,6 +2229,12 @@ class PipelineBuilder:
                     f"execution_mode='live'."
                 )
 
+        # Last check before a pipeline exists, so a broken contract costs
+        # nothing. Kept off the specs: a schema model does not serialize.
+        output_contract = self._compile_output_contract(
+            self._dataset_spec, self._prompt_spec
+        )
+
         specifications = PipelineSpecifications(
             dataset=self._dataset_spec,
             prompt=self._prompt_spec,
@@ -1895,5 +2255,6 @@ class PipelineBuilder:
                 context_store=self._context_store,
                 structured_output_model=self._structured_output_model,
                 custom_parser=self._custom_parser,
+                output_contract=output_contract,
             ),
         )

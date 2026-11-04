@@ -7,6 +7,7 @@ Implements Memento pattern for checkpoint serialization.
 from __future__ import annotations
 
 import threading
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -15,13 +16,26 @@ from uuid import UUID, uuid4
 
 from ondine.core.components import PipelineComponents
 from ondine.core.models import ErrorInfo, ProcessingStats
+from ondine.harness.contract import build_contract
+from ondine.harness.ledger import LedgerPolicy, ReportedLosses, RowLedger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from ondine.adapters.response_cache import ResponseCache
+    from ondine.harness.contract import OutputContract
     from ondine.observability.dispatcher import ObserverDispatcher
     from ondine.orchestration.observers import ExecutionObserver
+
+
+# ---------------------------------------------------------------------------
+# Row fate: the context's view of its row ledger
+# ---------------------------------------------------------------------------
+
+#: The policy of a ledger nobody opened: a context driven outside a pipeline
+#: has no contract, so it runs under the unchecked one, as every run does
+#: until contracts are wired.
+_UNCHECKED_POLICY = LedgerPolicy.from_contract(build_contract(["output"]))
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +126,15 @@ class RunProgressState:
             return self.total_cost
 
 
+def _warn_counter_assignment(name: str) -> None:
+    warnings.warn(
+        f"Assigning ExecutionContext.{name} is deprecated: the row ledger counts "
+        f"losses. Report them with record_failed_rows or record_skipped_rows.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 @dataclass
 class ExecutionContext:
     """
@@ -187,31 +210,26 @@ class ExecutionContext:
     # Intermediate data storage
     intermediate_data: dict[str, Any] = field(default_factory=dict)
 
-    # Statistics
-    failed_rows: int = 0
-    skipped_rows: int = 0
+    # Rows a previous attempt lost, carried over by from_checkpoint: this
+    # run's ledger never saw those rows, so the failed_rows and skipped_rows
+    # counters add these to the losses reported to it.
+    _carried_failed_rows: int = field(default=0, init=False, repr=False)
+    _carried_skipped_rows: int = field(default=0, init=False, repr=False)
 
-    # Which rows did not survive, and why.
-    #
-    # The counters above say *how many* rows were lost; without this list the
-    # only way to learn *which* ones is to scan the output frame for the
-    # ``[SKIPPED]`` marker — string-matching a sentinel, from user code. That
-    # left ``ExecutionResult.errors`` documented but permanently empty.
-    #
-    # Bounded on purpose: a 5M-row run where the provider is down would
-    # otherwise hold 5M ErrorInfo objects to say one thing. The count in
-    # ``skipped_rows`` stays exact regardless of how many entries were kept.
-    row_errors: list[ErrorInfo] = field(default_factory=list, repr=False)
+    # The single record of what happened to every row (ondine.harness.ledger).
+    # The stages report losses and answers through the record_* methods below;
+    # failed_rows, skipped_rows and row_errors are views of it. The pipeline
+    # opens it once the input's size is known (open_ledger); a context driven
+    # outside a pipeline gets one on its first report. Not serialized: a
+    # checkpoint keeps the counters, and resume rebuilds answered rows from
+    # the response cache.
+    _ledger: RowLedger | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
-    # Rows already recorded as lost. A row is lost once: when a later stage
-    # trips over the hole an earlier one left (a parser handed the skip marker
-    # the invocation stage wrote), the first cause is the real one, and
-    # counting the row again would make skipped + failed exceed the rows lost.
-    _lost_rows: set[int] = field(default_factory=set, repr=False)
-
-    #: Entries kept before ``row_errors`` stops growing. Enough to identify a
-    #: pattern in the failures; small enough to never be the reason a run runs
-    #: out of memory.
+    #: Entries kept in ``row_errors``. Enough to identify a pattern in the
+    #: failures; small enough to never be the reason a run runs out of memory.
+    #: The counters stay exact regardless.
     MAX_RECORDED_ROW_ERRORS: ClassVar[int] = 1000
 
     # Observers for progress notifications (backward compatibility)
@@ -285,6 +303,125 @@ class ExecutionContext:
             self.pending_completions.discard(watermark)
         self.last_processed_row = watermark
 
+    def full_input(self, default: Any = None) -> Any:
+        """The run's full input: the preprocessed data, else the loaded data.
+
+        Rows are numbered by position in it (``RowMetadata.row_index``), on
+        resume too. ``default`` when the pipeline stored neither (a context
+        driven outside a pipeline). An empty preprocessed input still counts:
+        only a missing one falls back.
+        """
+        data = self.intermediate_data
+        full = data.get("preprocessed_data")
+        if full is None:
+            full = data.get("loaded_data")
+        return default if full is None else full
+
+    # -- row fate: events go to the ledger, the old surface reads it ---------
+
+    def open_ledger(self, contract: OutputContract) -> RowLedger:
+        """Start this run's ledger over ``total_rows`` rows, under ``contract``.
+
+        Called by the pipeline once the input is loaded, so every row exists,
+        pending, before any stage reports on it. If something reported before
+        that (a context created earlier and handed in), its ledger is kept and
+        widened: its events must not be lost. It must then already run under
+        the contract's policy, since statuses already derived cannot be
+        re-decided under another.
+
+        Raises:
+            RuntimeError: a ledger with a different policy already holds
+                reports.
+        """
+        policy = LedgerPolicy.from_contract(contract)
+        if self._ledger is None:
+            self._ledger = RowLedger(self.total_rows, policy)
+        elif self._ledger.policy != policy:
+            raise RuntimeError(
+                "rows were reported to this context before its ledger was "
+                "opened, under a different policy than the contract's"
+            )
+        else:
+            self._ledger.widen(self.total_rows)
+        return self._ledger
+
+    @property
+    def ledger(self) -> RowLedger:
+        """The ledger every row event of this run goes to.
+
+        Opened by the pipeline (:meth:`open_ledger`). A context driven outside
+        a pipeline gets an unchecked one sized ``total_rows`` on first use.
+        """
+        if self._ledger is None:
+            self._ledger = RowLedger(self.total_rows, _UNCHECKED_POLICY)
+        return self._ledger
+
+    @property
+    def failed_rows(self) -> int:
+        """Rows lost to a stage failure or an unreadable answer, this run and before.
+
+        Read only: a loss is reported (:meth:`record_failed_rows`), never
+        assigned. Includes what a checkpoint carried over.
+        """
+        return self._carried_failed_rows + self._reported_losses(0).failed_rows
+
+    @failed_rows.setter
+    def failed_rows(self, value: int) -> None:
+        # Deprecated write path, kept so custom stages that assigned the
+        # counter keep working. Report losses with record_failed_rows instead.
+        _warn_counter_assignment("failed_rows")
+        self._carried_failed_rows = value - self._reported_losses(0).failed_rows
+
+    @property
+    def skipped_rows(self) -> int:
+        """Rows lost to a provider failure the error policy gave up on.
+
+        Read only, like :attr:`failed_rows`, and likewise includes what a
+        checkpoint carried over.
+        """
+        return self._carried_skipped_rows + self._reported_losses(0).skipped_rows
+
+    @skipped_rows.setter
+    def skipped_rows(self, value: int) -> None:
+        # Deprecated write path; see failed_rows.
+        _warn_counter_assignment("skipped_rows")
+        self._carried_skipped_rows = value - self._reported_losses(0).skipped_rows
+
+    @property
+    def row_errors(self) -> list[ErrorInfo]:
+        """Which rows did not survive, and why: one entry per lost row.
+
+        The counters say *how many* rows were lost; without this list the only
+        way to learn *which* ones is to scan the output frame for the
+        ``[SKIPPED]`` marker. Bounded by ``MAX_RECORDED_ROW_ERRORS``: a 5M-row
+        run where the provider is down would otherwise hold 5M entries to say
+        one thing.
+
+        A view of the ledger (:meth:`RowLedger.reported_losses`), in report
+        order, each lost row once under its first cause — exactly the list
+        this context used to keep itself. A fresh list on every read.
+        """
+        return list(self._reported_losses(self.MAX_RECORDED_ROW_ERRORS).errors)
+
+    def record_answers(
+        self,
+        row_indices: Iterable[int],
+        *,
+        model: str,
+        tokens: int,
+        cost: Decimal,
+    ) -> None:
+        """Record one model answer covering ``row_indices`` (one row, or a batch).
+
+        Without this a row that answered would look, to the ledger, like a row
+        the run never reached. See :meth:`RowLedger.record_batch_answer` for
+        how a batch's cost is shared.
+        """
+        rows = list(row_indices)
+        self._ledger_covering(rows).record_batch_answer(
+            rows, 1, model=model, tokens=tokens, cost=cost
+        )
+
     def record_skipped_rows(
         self,
         first_row_index: int,
@@ -294,21 +431,19 @@ class ExecutionContext:
     ) -> None:
         """Record that `count` rows starting at `first_row_index` were skipped.
 
+        A provider failure in the ledger: the error policy gave up on a call
+        the provider did not answer. A row is lost once; a later report about
+        the same row does not count it again.
+
         Args:
             first_row_index: Index of the first lost row, in the input frame.
             count: How many consecutive rows were lost (1 for a single row).
             stage: Stage that gave up on them.
             message: Provider or policy explanation, kept verbatim.
         """
-        newly_lost = self._claim_lost_rows(
-            range(first_row_index, first_row_index + count)
-        )
-        self.skipped_rows += len(newly_lost)
-        self._record_row_errors(
-            newly_lost,
-            stage=stage,
-            message=message,
-            error_type="skipped",
+        rows = list(range(first_row_index, first_row_index + count))
+        self._ledger_covering(rows).record_provider_failure(
+            rows, 1, stage=stage, message=message
         )
 
     def record_failed_rows(
@@ -321,53 +456,34 @@ class ExecutionContext:
 
         Distinct from a skip: a skip is the error policy deciding to move on,
         while this is work that came back unusable — a batch response the
-        parser could not read, a provider that returned nothing. Both lose
-        rows, and both used to be invisible in the metrics.
+        parser could not read, a prompt that could not be built. A stage
+        failure in the ledger. Both lose rows, and both used to be invisible
+        in the metrics.
 
         Takes explicit indices rather than a range: a batch's rows are whatever
         the aggregator put in it, not necessarily consecutive.
         """
-        newly_lost = self._claim_lost_rows(row_indices)
-        self.failed_rows += len(newly_lost)
-        self._record_row_errors(
-            newly_lost, stage=stage, message=message, error_type="parse_failure"
+        rows = list(row_indices)
+        self._ledger_covering(rows).record_stage_failure(
+            rows, stage=stage, message=message
         )
 
-    def _claim_lost_rows(self, row_indices: Iterable[int]) -> list[int]:
-        """The rows among ``row_indices`` not already recorded as lost.
+    def _ledger_covering(self, rows: Sequence[int]) -> RowLedger:
+        """The ledger, widened if a report names a row past its end.
 
-        Marks them lost, so a second report about the same row is ignored.
+        Only a context driven outside a pipeline needs this: it may report
+        rows without ever being told the input's size.
         """
-        newly_lost = [index for index in row_indices if index not in self._lost_rows]
-        self._lost_rows.update(newly_lost)
-        return newly_lost
+        ledger = self.ledger
+        highest = max((row for row in rows if isinstance(row, int)), default=-1)
+        if highest >= ledger.row_count:
+            ledger.widen(highest + 1)
+        return ledger
 
-    def _record_row_errors(
-        self,
-        row_indices: Iterable[int],
-        *,
-        stage: str,
-        message: str,
-        error_type: str,
-    ) -> None:
-        """Append one ErrorInfo per lost row, up to the recording limit.
-
-        Keeps the counters and ``row_errors`` in step so the count and the
-        detail can never disagree — a caller re-processing the losers needs
-        indices, not a batch id.
-        """
-        for row_index in row_indices:
-            if len(self.row_errors) >= self.MAX_RECORDED_ROW_ERRORS:
-                return
-            self.row_errors.append(
-                ErrorInfo(
-                    row_index=row_index,
-                    stage=stage,
-                    error_type=error_type,
-                    message=message,
-                    retryable=False,
-                )
-            )
+    def _reported_losses(self, limit: int) -> ReportedLosses:
+        if self._ledger is None:
+            return ReportedLosses(errors=(), skipped_rows=0, failed_rows=0)
+        return self._ledger.reported_losses(limit)
 
     def add_cost(self, cost: Decimal, tokens: int) -> None:
         """Add cost and token usage.
@@ -452,7 +568,7 @@ class ExecutionContext:
         Returns:
             Restored ExecutionContext
         """
-        return cls(
+        context = cls(
             session_id=UUID(data["session_id"]),
             pipeline_id=UUID(data["pipeline_id"]),
             start_time=datetime.fromisoformat(data["start_time"]),
@@ -467,9 +583,10 @@ class ExecutionContext:
             accumulated_cost=Decimal(data["accumulated_cost"]),
             accumulated_tokens=data["accumulated_tokens"],
             intermediate_data=data.get("intermediate_data", {}),
-            failed_rows=data.get("failed_rows", 0),
-            skipped_rows=data.get("skipped_rows", 0),
         )
+        context._carried_failed_rows = data.get("failed_rows", 0)
+        context._carried_skipped_rows = data.get("skipped_rows", 0)
+        return context
 
     # Aliases for backward compatibility
     def to_dict(self) -> dict[str, Any]:

@@ -32,6 +32,14 @@ class ResultWriterStage(
     - Write to configured destination
     - Support atomic writes
     - Return merged ResultContainer
+
+    Every column of the results except ``_row_index`` is merged and written.
+    Without a contract that is the output columns (and any column context
+    verification added), straight after parsing. Under a checked output
+    contract the pipeline calls this stage after delivery, with the
+    delivered values and the five harness columns (``status``, ``reason``,
+    ``checks``, ``repair_method``, ``delivered_by``), so the file says what
+    happened to every row, as the result does.
     """
 
     def __init__(self):

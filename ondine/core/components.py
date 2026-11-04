@@ -20,7 +20,10 @@ entry in a dict that is expected to serialize.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ondine.harness.contract import OutputContract
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,14 @@ class PipelineComponents:
 
     Every field is optional; the default instance means "build everything from
     the specifications", which is the common case.
+
+    Attributes:
+        output_contract: The output contract the builder compiled and validated
+            from the client's declarations, or ``None`` when nothing was
+            declared. It lives here, not in the specifications, because a
+            contract derived from a structured-output schema holds the schema
+            model, which does not serialize. The pipeline resolves the contract
+            a run uses in one place, falling back to the unchecked contract.
     """
 
     llm_client: Any | None = None
@@ -36,3 +47,4 @@ class PipelineComponents:
     context_store: Any | None = None
     structured_output_model: Any | None = None
     custom_parser: Any | None = None
+    output_contract: OutputContract | None = None
