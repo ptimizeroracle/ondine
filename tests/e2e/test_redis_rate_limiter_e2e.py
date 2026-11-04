@@ -206,6 +206,8 @@ rl = RedisRateLimiter(
     redis_url=url,
     scope=scope,
 )
+print("ready", flush=True)
+sys.stdin.readline()
 granted = 0
 deadline = time.monotonic() + 2.0
 while granted < n and time.monotonic() < deadline:
@@ -217,8 +219,9 @@ print(granted)
 
 def test_real_redis_two_processes_share_one_bucket(redis_url, fresh_scope) -> None:
     """Spawn two real subprocesses each trying to acquire 10 tokens
-    from a burst-4 bucket. Combined grants must be ≤ 4 + refill
-    during the test window. This is the only test in the suite
+    from a burst-4 bucket over the same 2s window. Combined grants
+    must be ≤ 4 + refill during the window; two separate buckets
+    would grant about twice that. This is the only test in the suite
     that proves the cross-process property with true OS processes.
     """
     import redis as _redis
@@ -240,13 +243,22 @@ def test_real_redis_two_processes_share_one_bucket(redis_url, fresh_scope) -> No
         return subprocess.Popen(
             [sys.executable, "-c", _WORKER_SCRIPT],
             env=env,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
 
-    t0 = time.monotonic()
     p1 = _spawn()
     p2 = _spawn()
+    # Importing ondine takes a variable time per process. Start both
+    # 2s windows together, or one process can drain the bucket before
+    # the other has begun and the windows barely overlap.
+    for p in (p1, p2):
+        assert p.stdout.readline().strip() == b"ready", p.stderr.read().decode()
+    t0 = time.monotonic()
+    for p in (p1, p2):
+        p.stdin.write(b"go\n")
+        p.stdin.flush()
     out1, err1 = p1.communicate(timeout=15)
     out2, err2 = p2.communicate(timeout=15)
     elapsed = time.monotonic() - t0
@@ -265,7 +277,8 @@ def test_real_redis_two_processes_share_one_bucket(redis_url, fresh_scope) -> No
         f"combined grants {total} exceeds theoretical max 6 "
         f"(a={granted_a}, b={granted_b}, elapsed={elapsed:.2f}s)"
     )
-    # Proof both processes actually participated.
-    assert granted_a > 0
-    assert granted_b > 0
+    # The burst alone is 4, so the shared bucket did grant tokens. How
+    # they split between the processes is not promised: one process
+    # may win every race.
+    assert total >= 4, f"a={granted_a}, b={granted_b}"
     conn.delete(f"{key_base}:bucket", f"{key_base}:penalty")

@@ -81,11 +81,8 @@ def test_real_http_anthropic_iso8601_z_header(httpserver: HTTPServer) -> None:
     """Anthropic's anthropic-ratelimit-requests-reset uses ISO-8601
     with a `Z` UTC suffix. Python 3.10 datetime.fromisoformat
     rejects that literal; the parser must normalise."""
-    reset_at = (
-        (datetime.now(tz=timezone.utc) + timedelta(seconds=7))
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    now = datetime.now(tz=timezone.utc)
+    reset_at = (now + timedelta(seconds=7)).isoformat().replace("+00:00", "Z")
     httpserver.expect_request("/v1/messages").respond_with_json(
         {"error": {"type": "rate_limit_error"}},
         status=429,
@@ -96,10 +93,11 @@ def test_real_http_anthropic_iso8601_z_header(httpserver: HTTPServer) -> None:
         json={"model": "x", "messages": []},
     )
     assert resp.status_code == 429
-    parser = RetryAfterParser()
+    # The parser reads the instant the reset was set from, so the delay
+    # does not depend on how long the round trip took.
+    parser = RetryAfterParser(utcnow=lambda: now)
     delay = parser.parse(dict(resp.headers))
-    assert delay is not None
-    assert 5.0 <= delay <= 8.0
+    assert delay == pytest.approx(7.0)
 
 
 def test_real_http_openai_exception_shape(httpserver: HTTPServer) -> None:
