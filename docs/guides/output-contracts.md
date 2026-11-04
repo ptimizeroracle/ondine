@@ -199,6 +199,7 @@ Two outputs are new and sit next to the result: `result.quarantine` lists the fa
 | No early stop yet | `early_stop_fraction` and `early_stop_window` are validated, but a run does not stop early. |
 | No provider-batch mode | `submit()` with a contract raises an error. See [Provider Batch API Mode](provider-batch.md). |
 | No re-ask or escalation yet | A rejected row is not sent back to the model, and no stronger model is tried. |
+| A loosely worded prompt blanks many rows | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. In a test with a 77-label intent task and a loosely worded prompt, about a third of rows were rejected, and about two thirds of those answers were right. With "Reply with only the label", no row was rejected. Until re-ask exists, ask for the value alone. |
 
 ## Related
 
