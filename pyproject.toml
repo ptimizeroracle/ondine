@@ -65,6 +65,7 @@ dev = [
     "pydocstyle>=6.3.0",
     "interrogate>=1.7.0",
     "fastmcp>=3.0.0",
+    "pytest-httpserver>=1.2.0",
 ]
 redis = [
     "redis>=5.0.0",
