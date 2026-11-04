@@ -81,6 +81,17 @@ def _pandas_copy_on_write_toggle():
         pd.options.mode.copy_on_write = False
 
 
+@pytest.fixture(scope="session")
+def httpserver_listen_address():
+    """Bind the pytest-httpserver server to 127.0.0.1, on a free port.
+
+    The default host, "localhost", gives a server that listens on IPv4 only.
+    Windows tries ::1 first for "localhost", so each client connection
+    stalled about 2 seconds before it fell back to IPv4.
+    """
+    return ("127.0.0.1", 0)
+
+
 class MockLLMClient(LLMClient):
     """Mock LLM client for testing without API calls."""
 
