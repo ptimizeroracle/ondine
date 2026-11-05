@@ -204,6 +204,7 @@ ignore = [
 "benchmarks/**/*.py" = ["S311"]
 # N, K and n follow statistical notation (population, right rows, sample).
 "benchmarks/ruler/*.py" = ["S311", "N803", "N806"]
+"ondine/ruler/*.py" = ["N803", "N806"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -5,7 +5,7 @@ This is the primary entry point that users interact with.
 """
 
 import math
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -36,7 +36,12 @@ from ondine.core.models import (
 from ondine.core.specifications import (
     PipelineSpecifications,
 )
-from ondine.harness.contract import ContractError, OutputContract, build_contract
+from ondine.harness.contract import (
+    ContractError,
+    OutputContract,
+    OutputField,
+    build_contract,
+)
 from ondine.harness.delivery import (
     HARNESS_COLUMNS,
     Delivery,
@@ -70,6 +75,12 @@ from ondine.orchestration import (
     create_progress_tracker,
 )
 from ondine.orchestration.progress_tracker import NoOpProgressTracker
+from ondine.ruler.certificate import Certificate
+from ondine.ruler.delivered import CertificationError, DeliveredValues
+from ondine.ruler.ruler import certifiable, resolve_gold
+from ondine.ruler.ruler import certify as certify_values
+from ondine.ruler.sample import Sample
+from ondine.ruler.sample import draw as draw_ruler_sample
 
 if TYPE_CHECKING:
     from ondine.orchestration.backends.provider_batch import ProviderBatchBackend
@@ -511,6 +522,121 @@ class Pipeline:
             result.add_error("No LLM model specified")
 
         return result
+
+    def draw_sample(
+        self,
+        result: ExecutionResult,
+        *,
+        size: int | None = None,
+        precision: float | None = None,
+        fields: Sequence[OutputField] | None = None,
+    ) -> Sample:
+        """Draw the rows to label for certifying ``result``.
+
+        Ondine draws them, from the rows that delivered a value to certify,
+        with a seed derived from the run: drawing again on the same result
+        returns the same rows. Label ``sample.inputs`` any way you like, then
+        pass the labels and the sample to :meth:`certify`.
+
+        Args:
+            result: A finished result of :meth:`execute`.
+            size: Rows to draw; 200 by default.
+            precision: Instead of ``size``: the half-width the range should not
+                exceed at worst, e.g. 0.03 for ±3 points.
+            fields: Declarations to read the outputs by, for a run with no
+                contract.
+
+        Raises:
+            CertificationError: Nothing to certify, or the arguments conflict.
+        """
+        _, names, _ = self._ruler_fields(result, fields)
+        delivered = DeliveredValues.read(result, names)
+        inputs = result.to_pandas()[list(self.specifications.dataset.input_columns)]
+        return draw_ruler_sample(
+            delivered, names, inputs, size=size, precision=precision
+        )
+
+    def certify(
+        self,
+        result: ExecutionResult,
+        gold: Any,
+        *,
+        sample: Sample | None = None,
+        fields: Sequence[OutputField] | None = None,
+        tolerance: Mapping[str, float] | None = None,
+    ) -> Certificate:
+        """Measure how many delivered values are right, against your labels.
+
+        The claim depends on which rows have labels: a sample from
+        :meth:`draw_sample` gives accuracy with an exact 95% range; labels for
+        every delivered row give the exact accuracy; labels for rows you
+        picked give a check (agreement on those rows only). Each label is
+        read by the field's contract rules, as the model's answer was. The
+        result and its run report are never changed.
+
+        Args:
+            result: A finished result of :meth:`execute`.
+            gold: The labels: a column of the data by name, values aligned
+                with the input rows, or a mapping row -> label; with several
+                fields, a mapping field -> any of those. A cell may hold a list
+                of acceptable answers; an empty cell leaves the row unresolved.
+            sample: The sample the labels were made for.
+            fields: Declarations to read the outputs by, for a run with no
+                contract.
+            tolerance: Field -> allowed absolute difference, for numbers.
+
+        Raises:
+            CertificationError: The labels break the field's rules (every one
+                is listed), the sample is from another run, or nothing can be
+                certified.
+        """
+        contract, names, skipped = self._ruler_fields(result, fields)
+        delivered = DeliveredValues.read(result, names)
+        if isinstance(gold, Mapping) and gold and all(key in names for key in gold):
+            certified = [name for name in names if name in gold]
+            skipped = [
+                *skipped,
+                *((n, "no labels given") for n in names if n not in gold),
+            ]
+        else:
+            certified = names
+        labels = resolve_gold(gold, certified, result.to_pandas())
+        return certify_values(
+            delivered,
+            contract,
+            certified,
+            skipped,
+            labels,
+            sample=sample,
+            tolerance=tolerance,
+            read_delivered=not (
+                result.contract is not None and result.contract.checked
+            ),
+        )
+
+    def _ruler_fields(
+        self, result: ExecutionResult, declarations: Sequence[OutputField] | None
+    ) -> tuple[OutputContract, list[str], list[tuple[str, str]]]:
+        """The contract values are read by, its certifiable fields, the rest."""
+        run_contract = result.contract
+        if run_contract is not None and run_contract.checked:
+            if declarations:
+                raise CertificationError(
+                    "the run has an output contract; its rules are used, so pass no fields"
+                )
+            contract = run_contract
+        elif declarations:
+            contract = build_contract(fields=list(declarations))
+        else:
+            raise CertificationError(
+                "the run has no output contract; pass fields=[OutputField(...)] "
+                "to say how its values are read and compared"
+            )
+        names, skipped = certifiable(contract)
+        if not names:
+            reasons = "; ".join(f"{n}: {why}" for n, why in skipped)
+            raise CertificationError(f"no field can be certified ({reasons})")
+        return contract, names, skipped
 
     def estimate_cost(self) -> CostEstimate:
         """

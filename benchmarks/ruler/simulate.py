@@ -39,13 +39,9 @@ from functools import cache
 from pathlib import Path
 
 import numpy as np
-from intervals import (
-    allocate,
-    binom_bounds,
-    hypergeom_bounds,
-    stratum_alphas,
-    two_tier_bounds,
-)
+from combinations import allocate, binom_bounds, stratum_alphas, two_tier_bounds
+
+from ondine.ruler.intervals import hypergeom_bounds
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "golden"))
