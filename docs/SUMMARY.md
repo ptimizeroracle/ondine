@@ -17,6 +17,7 @@
 * [Multiple Output Columns](guides/multi-column.md)
 * [Structured Output (Pydantic)](guides/structured-output.md)
 * [Output Contracts](guides/output-contracts.md)
+* [Certified Columns](guides/certified-columns.md)
 * [Pipeline Composition](guides/pipeline-composition.md)
 
 ## Accuracy & Reliability

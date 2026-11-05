@@ -203,6 +203,7 @@ Two outputs are new and sit next to the result: `result.quarantine` lists the fa
 
 ## Related
 
+- [Certified Columns](certified-columns.md): how many delivered values are right
 - [Structured Output (Pydantic)](structured-output.md)
 - [Error Handling & Retries](error-handling.md)
 - [Checkpointing & Recovery](checkpointing.md)

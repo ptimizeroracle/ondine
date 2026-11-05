@@ -3,7 +3,8 @@
 Computed from hypergeometric and binomial sums, not simulated: for each
 population, sample size and true accuracy, the coverage is the probability,
 summed over every possible sample result, that the interval contains the
-truth. The bounds come from ``intervals.py`` (the code that ships); the
+truth. The bounds come from ``ondine.ruler.intervals`` (the code that ships; the
+binomial form from ``combinations.py``); the
 probabilities come from scipy, an independent implementation.
 
 Pass rule (fixed in the design before running): the minimum coverage over
@@ -22,8 +23,10 @@ import time
 from pathlib import Path
 
 import numpy as np
-from intervals import binom_bounds, hypergeom_bounds
+from combinations import binom_bounds
 from scipy import stats
+
+from ondine.ruler.intervals import hypergeom_bounds
 
 HERE = Path(__file__).resolve().parent
 ALPHA = 0.05

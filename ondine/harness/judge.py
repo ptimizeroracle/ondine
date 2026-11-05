@@ -284,6 +284,23 @@ def judge(
     return _judge_checked(contract, answer, inputs or {})
 
 
+def read_field(contract: OutputContract, name: str, value: Any) -> FieldVerdict:
+    """Read one value for one field, by that field's rules alone.
+
+    The same reading an answer's field gets: normalisation, aliases, allowed
+    values, type, bounds and the format fix. Relations and schema validators
+    are not run, since they need the other fields. Used to read a reference
+    answer (a gold label) exactly as the model's answer was read.
+
+    Raises:
+        KeyError: ``name`` is not a field of a checked ``contract``.
+    """
+    for rules in contract.rules:
+        if rules.name == name:
+            return _check_field(rules, value, "is missing")
+    raise KeyError(name)
+
+
 # ---------------------------------------------------------------------------
 # Unchecked: today's parse step, reproduced exactly
 # ---------------------------------------------------------------------------

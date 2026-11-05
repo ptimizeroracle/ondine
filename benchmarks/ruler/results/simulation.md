@@ -1,6 +1,6 @@
 # Coverage on synthetic populations
 
-135 cells × 2,000 draws, sample 200, seed 20261104, 2 s. Pass rule: coverage ≥ 94% in every cell (Monte Carlo band about ±1 point).
+135 cells × 2,000 draws, sample 200, seed 20261104, 1 s. Pass rule: coverage ≥ 94% in every cell (Monte Carlo band about ±1 point).
 
 **PASS**: lowest 94.40% — faithfulness/haiku, original gold, N=1,000.
 

@@ -1,6 +1,6 @@
 # Exact coverage of the single-source interval
 
-Accuracy 0.500 to 0.999 (400 points per case), 76 cases, 192 s. Pass rule: minimum coverage ≥ 95.0%.
+Accuracy 0.500 to 0.999 (400 points per case), 76 cases, 147 s. Pass rule: minimum coverage ≥ 95.0%.
 
 **PASS**: minimum 95.0012% (n=2000, N=100000, accuracy 0.566).
 
