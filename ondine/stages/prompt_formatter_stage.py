@@ -16,6 +16,7 @@ from ondine.core.models import (
     ValidationResult,
 )
 from ondine.core.specifications import PromptSpec
+from ondine.harness.reask import REASK_COLUMN
 from ondine.stages.pipeline_stage import PipelineStage
 
 # A str.format placeholder: {name}, optionally with attribute/index access, a
@@ -233,6 +234,13 @@ class PromptFormatterStage(
                         prompt_spec.few_shot_examples
                     )
                     prompt = f"{examples_text}\n\n{prompt}"
+
+                # A re-ask's correction comes last, after everything the row
+                # was first asked, so it is what the model reads before it
+                # answers again (ondine.harness.reask).
+                re_ask = row.get(REASK_COLUMN)
+                if re_ask:
+                    prompt = f"{prompt}\n\n{re_ask}"
 
                 # NOTE: Do NOT add system message to prompt here
                 # It will be passed separately via metadata for caching optimization
