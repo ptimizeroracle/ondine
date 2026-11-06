@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/ptimizeroracle/ondine/compare/v2.2.0...v2.3.0) (2026-11-06)
+
+
+### Features
+
+* **harness:** re-ask rows whose answer failed a check ([#348](https://github.com/ptimizeroracle/ondine/issues/348)) ([fda9f41](https://github.com/ptimizeroracle/ondine/commit/fda9f41cbdb0dc0ace662358467e777896accea0))
+* **ruler:** certify delivered columns against your labels ([#346](https://github.com/ptimizeroracle/ondine/issues/346)) ([3d2dea3](https://github.com/ptimizeroracle/ondine/commit/3d2dea373cf9ff715b532ed3da8f629824e8fa6a))
+
 ## [2.2.0](https://github.com/ptimizeroracle/ondine/compare/v2.1.1...v2.2.0) (2026-11-04)
 
 
