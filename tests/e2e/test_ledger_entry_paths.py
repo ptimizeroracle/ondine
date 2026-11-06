@@ -46,7 +46,6 @@ from tests.e2e.test_harness_parity import (
     _run_sync,
     build,
     failure,
-    hiccup,
     observe,
 )
 
@@ -215,11 +214,11 @@ def test_a_stream_stopped_by_its_budget_fails_the_rows_it_never_reached():
 
 
 def test_auto_retry_merges_its_pass_as_a_later_attempt():
-    """The re-asked empty row is delivered from the retry pass's attempt.
+    """The re-asked rows are delivered from the retry pass's attempt.
 
-    The legacy views are today's: the retry pass never touched the error
-    list, and the parity net freezes that. The ledger records the pass as
-    attempt 2 of row 1 and keeps the two lost rows failed.
+    The ledger records the pass as attempt 2 of the empty row 1 and of the
+    transient row 4, which the pass recovers; the permanent row 2 fails on
+    every pass and stays failed.
     """
     empty_row = token_for(1)
     client = ScriptedLedgerClient(
@@ -231,11 +230,14 @@ def test_auto_retry_merges_its_pass_as_a_later_attempt():
         attempts=2,
     ).execute()
 
-    assert statuses(result.row_ledger, 6) == [U, U, F, U, F, U]
+    assert statuses(result.row_ledger, 6) == [U, U, F, U, U, U]
     rows = result.row_ledger.rows
     assert rows[1].delivered_attempt == 2
     assert [a.attempt for a in rows[1].attempts] == [1, 2]
-    assert reasons(result.row_ledger)[4] == f"LLMInvocation: {hiccup(TRANSIENT)}"
+    assert rows[4].delivered_attempt == 2
+    assert reasons(result.row_ledger)[2] == (
+        f"LLMInvocation: {failure(PERMANENT, attempt=3)}"
+    )
     assert sum(row.cost for row in rows) == result.costs.total_cost
 
 

@@ -222,7 +222,7 @@ def _verified_rows(result_rows: list[dict], ledger: RowLedger) -> range | set[in
 
 
 def _empty_output_rows(rows: list[dict], output_columns: list[str]) -> list[int]:
-    """The rows auto-retry re-runs without a contract: every output cell empty.
+    """The rows whose every output cell is empty.
 
     Pure Python, no pandas. A cell is empty when it is None or a blank
     string; any other value is a result.
@@ -235,6 +235,41 @@ def _empty_output_rows(rows: list[dict], output_columns: list[str]) -> list[int]
         ):
             empty.append(index)
     return empty
+
+
+def _unchecked_retry_rows(
+    rows: list[dict], output_columns: list[str], ledger: RowLedger | None
+) -> list[int]:
+    """The rows auto-retry re-runs without a contract: lost or empty.
+
+    A row is lost when its ledger status is failed (a provider error the
+    skip policy dropped, a stage failure, an unparseable answer). Its cell
+    still holds a loss marker such as ``[SKIPPED]`` here, because the pass
+    runs before ``_blank_lost_cells``, so the cell alone does not show the
+    loss. A row whose every output cell is empty is re-run too, as before.
+    """
+    retry = set(_empty_output_rows(rows, output_columns))
+    if ledger is not None:
+        retry.update(
+            row
+            for row in range(min(len(rows), ledger.row_count))
+            if ledger.outcome(row).status is RowStatus.FAILED
+        )
+    return sorted(retry)
+
+
+def _holds_answer(row: dict, output_columns: list[str]) -> bool:
+    """True when some output cell of ``row`` holds a value, not a loss marker."""
+    for column in output_columns:
+        value = row.get(column)
+        if value is None:
+            continue
+        if isinstance(value, str) and (
+            not value.strip() or value in _LOST_CELL_MARKERS
+        ):
+            continue
+        return True
+    return False
 
 
 class _StreamReports:
@@ -2776,6 +2811,45 @@ class Pipeline:
             errors=result.errors,
         )
 
+    @staticmethod
+    def _drop_recovered_losses(
+        result: ExecutionResult,
+        retried: set[int],
+        output_columns: list[str],
+        ledger: RowLedger | None,
+    ) -> None:
+        """Take the rows auto-retry recovered out of an unchecked run's losses.
+
+        ``errors`` and the loss counters were read before the pass ran, so a
+        row the skip policy dropped and the pass then answered would still be
+        reported lost, and ``_blank_lost_cells`` would treat it as lost. A
+        row counts as recovered when the ledger no longer calls it failed and
+        one of its output cells holds a real value. The counters are lowered
+        by the counter each row was reported in (``reported_loss_counts``),
+        so they stay exact past the bounded error list. Under a checked
+        contract delivery replaces all of this with the snapshot's view.
+        """
+        rows = result.to_list()
+        recovered = {
+            row
+            for row in retried
+            if row < len(rows)
+            and _holds_answer(rows[row], output_columns)
+            and (ledger is None or ledger.outcome(row).status is not RowStatus.FAILED)
+        }
+        if not recovered:
+            return
+        kept = [error for error in result.errors if error.row_index not in recovered]
+        if ledger is not None:
+            skipped, failed = ledger.reported_loss_counts(recovered)
+        else:
+            dropped = [e for e in result.errors if e.row_index in recovered]
+            skipped = sum(e.error_type == "skipped" for e in dropped)
+            failed = len(dropped) - skipped
+        result.errors = kept
+        result.metrics.skipped_rows = max(0, result.metrics.skipped_rows - skipped)
+        result.metrics.failed_rows = max(0, result.metrics.failed_rows - failed)
+
     def _auto_retry_failed_rows(
         self,
         result: ExecutionResult,
@@ -2838,8 +2912,13 @@ class Pipeline:
         # Under a checked contract the ledger says which rows failed (D-D).
         # Only a failed row (no usable answer) is re-run: a rejected row had
         # an answer that failed a check, and asking again with no feedback is
-        # not a repair. Without a contract, today's rule: empty output cells.
+        # not a repair. Without a contract: the rows the ledger calls failed
+        # (a skipped row still holds its [SKIPPED] marker here) and the rows
+        # whose output cells are all empty.
         checked = ledger is not None and ledger.policy.checked
+        # Unchecked: every row a pass re-ran, to take the recovered ones out
+        # of the reported losses afterwards.
+        retried: set[int] = set()
 
         # Try up to max_retry_attempts
         for attempt in range(1, specs.processing.max_retry_attempts + 1):
@@ -2850,11 +2929,12 @@ class Pipeline:
             failed_indices = (
                 _failed_rows(ledger, len(result_rows))
                 if checked and ledger is not None
-                else _empty_output_rows(result_rows, output_cols)
+                else _unchecked_retry_rows(result_rows, output_cols, ledger)
             )
 
             if not failed_indices:
                 break
+            retried.update(failed_indices)
 
             self.logger.info(
                 f"Retry attempt {attempt}/{specs.processing.max_retry_attempts}: "
@@ -2922,6 +3002,8 @@ class Pipeline:
             # Continue to next attempt to maximize completeness
             # (Don't stop early - use all attempts to get closest to 100%)
 
+        if not checked and retried:
+            self._drop_recovered_losses(result, retried, output_cols, ledger)
         return result
 
     #: Margin on a re-ask's estimated cost: the correction makes its prompt
