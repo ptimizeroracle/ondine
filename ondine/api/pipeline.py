@@ -906,6 +906,17 @@ class Pipeline:
                 result = self._auto_retry_failed_rows(
                     result, context.full_input(), ledger=ledger
                 )
+            # Re-ask after auto-retry, so a row auto-retry recovered with an
+            # answer that fails a check is asked again too. A pass is never
+            # re-asked on its own: the run it belongs to runs every round.
+            if (
+                contract.checked
+                and contract.policy.re_ask
+                and not self._is_internal_retry
+            ):
+                self._re_ask_failing_rows(
+                    result, context.full_input(), ledger, contract
+                )
             self._hold_ledger(ledger, finished=True)
 
             if contract.checked:
@@ -2912,6 +2923,109 @@ class Pipeline:
             # (Don't stop early - use all attempts to get closest to 100%)
 
         return result
+
+    #: Margin on a re-ask's estimated cost: the correction makes its prompt
+    #: longer than the row's first one.
+    _RE_ASK_COST_MARGIN = Decimal("1.25")
+
+    def _re_ask_failing_rows(
+        self,
+        result: ExecutionResult,
+        original_container: Any,
+        ledger: RowLedger,
+        contract: OutputContract,
+    ) -> None:
+        """Ask again, up to ``re_ask`` rounds, each row whose answer failed a check.
+
+        Each round is a sub-pipeline over the rows still failing, each row
+        carrying its correction (``ondine.harness.reask``) in a hidden column
+        the prompt formatter appends after rendering. Its ledger merges into
+        ``ledger`` as later attempts, so the ledger's usual rule decides:
+        a passing answer makes the row repaired, a failing one leaves it as it
+        was. Values merge into ``result``'s rows, which delivery reads.
+
+        Budget: a round asks only the rows the run's remaining budget can pay
+        for, estimated from each row's own first answer with a margin, in
+        input order. The sub-pipeline itself has no cap, so it never stops
+        halfway with answers paid for and lost.
+        """
+        from ondine.adapters.containers.result_container import ResultContainerImpl
+        from ondine.core.specifications import DataSourceType
+        from ondine.harness.reask import (
+            REASK_COLUMN,
+            correction,
+            failing_rows,
+            instruction,
+            last_failure,
+        )
+
+        if original_container is None:
+            return
+        original_rows = original_container.to_list()
+        output_cols = self.specifications.dataset.output_columns
+        max_budget = self.specifications.processing.max_budget
+
+        rounds = contract.policy.re_ask
+        for round_number in range(1, rounds + 1):
+            failing = failing_rows(ledger.snapshot())
+            if max_budget is not None:
+                remaining = Decimal(str(max_budget)) - Decimal(
+                    str(result.costs.total_cost)
+                )
+                failing = self._affordable(failing, remaining)
+            if not failing:
+                return
+            rows = [outcome.row for outcome in failing]
+            self.logger.info(
+                f"Re-ask round {round_number}/{rounds}: {len(rows)} row(s) failed a check"
+            )
+            asked = []
+            for outcome in failing:
+                row = dict(original_rows[outcome.row])
+                answer, reasons, failed = last_failure(outcome)
+                row[REASK_COLUMN] = correction(
+                    answer, reasons, instruction=instruction(contract, failed)
+                )
+                asked.append(row)
+
+            specs = self.specifications.model_copy(deep=True)
+            specs.dataset.source_type = DataSourceType.DATAFRAME
+            specs.dataset.source_path = None
+            specs.processing.enable_preprocessing = False
+            specs.processing.auto_retry_failed = False
+            specs.processing.max_budget = None
+            specs.output = None
+            pass_pipeline = Pipeline(
+                specs, dataframe=pd.DataFrame(asked), components=self._components
+            )
+            pass_pipeline._is_internal_retry = True
+            pass_pipeline._is_subpipeline = True
+            pass_result = pass_pipeline.execute()
+            pass_result.merge_ledger_into(ledger, rows, retry=True)
+
+            result_rows = result.to_list()
+            for new_idx, row in enumerate(pass_result.to_list()):
+                for column in output_cols:
+                    result_rows[rows[new_idx]][column] = row.get(column)
+            result.data = ResultContainerImpl(
+                data=result_rows,
+                columns=list(result_rows[0].keys()) if result_rows else [],
+            )
+            result.costs.total_cost += pass_result.costs.total_cost
+            result.costs.total_tokens += pass_result.costs.total_tokens
+
+    def _affordable(self, failing: list[Any], remaining: Decimal) -> list[Any]:
+        """The leading rows of ``failing`` whose estimated re-asks fit ``remaining``."""
+        chosen = []
+        spent = Decimal("0")
+        for outcome in failing:
+            attempts = len(outcome.attempts) or 1
+            estimate = outcome.cost / attempts * self._RE_ASK_COST_MARGIN
+            if spent + estimate > remaining:
+                break
+            spent += estimate
+            chosen.append(outcome)
+        return chosen
 
     # ── Provider-batch mode (§5): submit + attach ─────────────────
     #

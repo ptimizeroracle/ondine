@@ -177,12 +177,22 @@ class RunPolicy:
             stop off.
         early_stop_window: How many rows, by input order, the fraction is
             measured over.
+        re_ask: Rounds in which a row whose answer failed a check is asked
+            again, with that answer and the reason; 0 (default) is off, at
+            most :data:`MAX_RE_ASK`.
     """
 
     on_failure: str = "reject"
     partial_rows: str = "whole_row"
     early_stop_fraction: float | None = 0.5
     early_stop_window: int = 50
+    re_ask: int = 0
+
+
+#: The most re-ask rounds a policy may ask for. Each round costs one more call
+#: per row still failing; past three, a model that keeps failing a check is
+#: not going to pass it.
+MAX_RE_ASK = 3
 
 
 @dataclass(frozen=True)
@@ -725,6 +735,15 @@ def policy_problems(policy: RunPolicy) -> list[str]:
     window = policy.early_stop_window
     if isinstance(window, bool) or not isinstance(window, int) or window < 1:
         problems.append(f"policy early_stop_window {window!r}: use at least 1 row")
+    re_ask = policy.re_ask
+    if (
+        isinstance(re_ask, bool)
+        or not isinstance(re_ask, int)
+        or not 0 <= re_ask <= MAX_RE_ASK
+    ):
+        problems.append(
+            f"policy re_ask {re_ask!r}: use a whole number of rounds from 0 (off) to {MAX_RE_ASK}"
+        )
     return problems
 
 
@@ -1418,6 +1437,9 @@ def _fingerprint(
             policy.partial_rows,
             _tagged(policy.early_stop_fraction),
             policy.early_stop_window,
+            # Only when set: a contract without re-ask keeps the fingerprint
+            # it had before re-ask existed, so its checkpoints still resume.
+            *([["re_ask", policy.re_ask]] if policy.re_ask else []),
         ],
         "schema": _schema_document(schema),
     }

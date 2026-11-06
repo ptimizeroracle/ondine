@@ -1706,6 +1706,7 @@ class PipelineBuilder:
         partial_rows: Literal["whole_row", "keep_valid_fields"] = "whole_row",
         early_stop_fraction: float | None = RunPolicy.early_stop_fraction,
         early_stop_window: int = RunPolicy.early_stop_window,
+        re_ask: int = RunPolicy.re_ask,
     ) -> PipelineBuilder:
         """
         Set how a run treats rows that fail the output contract.
@@ -1732,6 +1733,12 @@ class PipelineBuilder:
                 Default 0.5. ``None`` turns early stop off.
             early_stop_window: How many rows the share is measured over.
                 Default 50.
+            re_ask: Rounds in which a row whose answer failed a check is asked
+                again, with its previous answer and the reason it was not
+                accepted. Default 0 (off), at most 3. Each round costs one
+                call per row still failing and runs within the remaining
+                budget. A row fixed this way is ``repaired``, with the repair
+                method ``re-ask``.
 
         Returns:
             Self for chaining
@@ -1743,6 +1750,9 @@ class PipelineBuilder:
 
             # Never stop early
             builder.with_contract_policy(early_stop_fraction=None)
+
+            # Ask a rejected row once more, with the reason
+            builder.with_contract_policy(re_ask=1)
             ```
 
         Note:
@@ -1757,6 +1767,7 @@ class PipelineBuilder:
             partial_rows=partial_rows,
             early_stop_fraction=early_stop_fraction,
             early_stop_window=early_stop_window,
+            re_ask=re_ask,
         )
         return self
 

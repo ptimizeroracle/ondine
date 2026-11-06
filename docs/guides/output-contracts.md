@@ -104,12 +104,33 @@ Set the policy with `with_contract_policy()`. Each call sets the whole policy: a
 | `partial_rows` | `"whole_row"`, `"keep_valid_fields"` | `"whole_row"` | `whole_row`: one failed required field rejects the whole row. `keep_valid_fields`: the row is still rejected, but the fields that passed keep their values. |
 | `early_stop_fraction` | a share, or `None` | `0.5` | Declared, not enforced yet (see Current limits). |
 | `early_stop_window` | a row count | `50` | Declared, not enforced yet. |
+| `re_ask` | `0` to `3` | `0` | Rounds in which a row whose answer failed a check is asked again. See [Re-ask](#re-ask). |
 
 ```python
 builder.with_contract_policy(on_failure="deliver_flagged")
 ```
 
 A policy with nothing declared to check fails `build()`.
+
+## Re-ask
+
+With `re_ask=1`, a row whose answer failed a check is asked once more. The model gets its original prompt, then its previous answer, the reason it was not accepted, and what would be accepted:
+
+```text
+Your previous answer was:
+No. The summary gets two details wrong.
+It was not accepted: answer: 'No. The summary gets two details wrong.' is not one of the 2 allowed values.
+Reply with only one of these values, and nothing else: consistent, inconsistent.
+```
+
+- **Which rows:** rows whose answer failed a check (`rejected`, or `unverified` under `deliver_flagged`). A `failed` row had no answer to correct; auto-retry re-runs it.
+- **Outcome:** an answer that passes makes the row `repaired`, with `repair_method` `re-ask`. One that fails again leaves the row as it was, with both attempts in the `reason` path and the quarantine. A provider failure on the re-ask leaves the row `rejected`, with the sub-reason `provider`.
+- **Rounds:** each of up to three rounds asks only the rows still failing.
+- **Allowed values:** the correction lists them by name, up to 100 values. Past 100 it refers to them, since the prompt that offered them already lists them.
+- **Cost:** each re-ask is one more call, billed to its row. With `with_max_budget()`, a round asks only the rows the remaining budget can pay for. The estimate is each row's own first answer plus 25%, so a re-ask that costs much more than that can pass the cap, as an in-flight call already can.
+- **Resume:** `re_ask` is part of the policy. Resuming with a different value is refused, naming the policy.
+
+In a live test, GPT-6 Luna judged 200 summaries for faithfulness from a loosely worded prompt ("Is this summary consistent with the document?"). It answered "Yes" or "No" with an explanation, so 175 of 200 first answers were rejected. With `re_ask=1`, all 175 were fixed and 142 of them were right against the dataset's labels. Accuracy over all 200 rows was 78.5%, the same as with a strict prompt, for 77% more spend.
 
 ## What you get back
 
@@ -122,7 +143,7 @@ With a contract, the result's dataframe has five more columns after your output 
 | `status` | One of the six statuses. |
 | `reason` | The check that blocked delivery last, then the path taken, for example `[path: attempt 1 failed check]`. |
 | `checks` | The result per field, for example `intent: accepted; score: rejected`. |
-| `repair_method` | `none` or `format`. `re-ask` is reserved for when re-ask exists (see Current limits). |
+| `repair_method` | `none`, `format`, or `re-ask` (see [Re-ask](#re-ask)). |
 | `delivered_by` | The model that produced the delivered value. |
 
 If an input or output column already uses one of these names, `build()` refuses the pipeline and lists every clash. A column in your data that the prompt never reads, such as a ticket's own `status`, is refused when the data loads, before the first model call. Either way nothing is spent. Rename the column. Without a contract, these names are free: no column is added.
@@ -172,7 +193,7 @@ print(result.quarantine)
 
 ### Retries and resume
 
-Auto-retry re-runs only `failed` rows, never `rejected` ones.
+Auto-retry re-runs only `failed` rows, never `rejected` ones; re-ask is for those (see [Re-ask](#re-ask)).
 
 A checkpoint records the contract it was written under. Resuming with a different contract is refused before any model call. The message names the part that changed, for example `the output contract changed since it started (run policy changed)` or `(field 'intent' changed)`. Resume with the original contract, or start a new run.
 
@@ -198,8 +219,8 @@ Two outputs are new and sit next to the result: `result.quarantine` lists the fa
 |---|---|
 | No early stop yet | `early_stop_fraction` and `early_stop_window` are validated, but a run does not stop early. |
 | No provider-batch mode | `submit()` with a contract raises an error. See [Provider Batch API Mode](provider-batch.md). |
-| No re-ask or escalation yet | A rejected row is not sent back to the model, and no stronger model is tried. |
-| A loosely worded prompt blanks many rows | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. In a test with a 77-label intent task and a loosely worded prompt, about a third of rows were rejected, and about two thirds of those answers were right. With "Reply with only the label", no row was rejected. Until re-ask exists, ask for the value alone. |
+| No escalation yet | A failing row is asked again by the same model (with `re_ask`); no stronger model is tried. |
+| A loosely worded prompt blanks many rows without re-ask | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. Set `re_ask=1`, or ask for the value alone. |
 
 ## Related
 
