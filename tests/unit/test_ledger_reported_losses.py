@@ -209,3 +209,20 @@ def test_widen_adds_pending_rows_and_never_shrinks():
 
 def test_the_policy_is_readable():
     assert RowLedger(0, UNCHECKED).policy == UNCHECKED
+
+
+def test_reported_loss_counts_says_which_counter_each_row_is_in():
+    """The unchecked auto-retry pass lowers each recovered row's own counter.
+
+    Past the bounded error list too: the kind is kept for every row.
+    """
+    limit = RowLedger.MAX_RECORDED_ROW_ERRORS
+    book = RowLedger(limit + 4, UNCHECKED, strict=True)
+    book.record_provider_failure(range(limit), 1, stage="LLMInvocation", message="x")
+    book.record_provider_failure([limit], 1, stage="LLMInvocation", message="503")
+    book.record_stage_failure([limit + 1], stage="ResponseParser", message="bad")
+    _answer(book, limit + 2)
+
+    assert book.reported_loss_counts([0, limit, limit + 1]) == (2, 1)
+    # Never reported lost, or outside the ledger: in neither counter.
+    assert book.reported_loss_counts([limit + 2, limit + 3, -1, limit + 9]) == (0, 0)
