@@ -2368,6 +2368,50 @@ class Pipeline:
             self.logger.debug(f"Unchecked contract falls back to plain text: {error}")
             return build_contract(columns)
 
+    #: Margin on a retried row's estimated cost: a retry's answer can be
+    #: longer than the failed one it replaces.
+    _RETRY_COST_MARGIN = Decimal("1.25")
+
+    def _affordable_retries(
+        self,
+        failed_indices: list[int],
+        remaining: Decimal,
+        *,
+        spent: Decimal,
+        rows_asked: int,
+        ledger: RowLedger | None,
+    ) -> list[int]:
+        """The leading rows of ``failed_indices`` whose retries fit ``remaining``.
+
+        A row's retry is estimated at the larger of two figures, times a
+        margin. The run's cost per paid row: ``spent`` over the rows asked so
+        far, less the failed rows the ledger shows no paid answer for (a
+        provider error costs nothing, and would dilute the mean). And the
+        row's own cost per paid attempt, for a row longer than most.
+        Input order, like re-ask's ``_affordable``: the first row that does
+        not fit ends the pass, so a pass never skips ahead to cheaper rows.
+        """
+        own: dict[int, Decimal] = {}
+        free = 0
+        if ledger is not None:
+            for index in failed_indices:
+                outcome = ledger.outcome(index)
+                if outcome.attempts:
+                    own[index] = outcome.cost / len(outcome.attempts)
+                else:
+                    free += 1
+        per_row = spent / max(rows_asked - free, 1)
+
+        chosen: list[int] = []
+        planned = Decimal("0")
+        for index in failed_indices:
+            estimate = max(per_row, own.get(index, per_row)) * self._RETRY_COST_MARGIN
+            if planned + estimate > remaining:
+                break
+            planned += estimate
+            chosen.append(index)
+        return chosen
+
     def _hold_ledger(self, ledger: RowLedger | None, *, finished: bool) -> None:
         """Make ``ledger`` the one :attr:`row_ledger` reads.
 
@@ -2868,7 +2912,6 @@ class Pipeline:
 
             if not failed_indices:
                 break
-            rows_asked += len(failed_indices)
 
             self.logger.info(
                 f"Retry attempt {attempt}/{specs.processing.max_retry_attempts}: "
@@ -2877,6 +2920,7 @@ class Pipeline:
 
             # Extract failed rows from original data
             retry_rows = [original_rows[i] for i in failed_indices]
+            rows_asked += len(failed_indices)
 
             # Convert to DataFrame for pipeline (Pipeline still expects DataFrame input)
             retry_df = pd.DataFrame(retry_rows)
@@ -2941,50 +2985,6 @@ class Pipeline:
             # (Don't stop early - use all attempts to get closest to 100%)
 
         return result
-
-    #: Margin on a retried row's estimated cost: a retry's answer can be
-    #: longer than the failed one it replaces.
-    _RETRY_COST_MARGIN = Decimal("1.25")
-
-    def _affordable_retries(
-        self,
-        failed_indices: list[int],
-        remaining: Decimal,
-        *,
-        spent: Decimal,
-        rows_asked: int,
-        ledger: RowLedger | None,
-    ) -> list[int]:
-        """The leading rows of ``failed_indices`` whose retries fit ``remaining``.
-
-        A row's retry is estimated at the larger of two figures, times a
-        margin. The run's cost per paid row: ``spent`` over the rows asked so
-        far, less the failed rows the ledger shows no paid answer for (a
-        provider error costs nothing, and would dilute the mean). And the
-        row's own cost per paid attempt, for a row longer than most.
-        Input order, like re-ask's ``_affordable``: the first row that does
-        not fit ends the pass, so a pass never skips ahead to cheaper rows.
-        """
-        own: dict[int, Decimal] = {}
-        free = 0
-        if ledger is not None:
-            for index in failed_indices:
-                outcome = ledger.outcome(index)
-                if outcome.attempts:
-                    own[index] = outcome.cost / len(outcome.attempts)
-                else:
-                    free += 1
-        per_row = spent / max(rows_asked - free, 1)
-
-        chosen: list[int] = []
-        planned = Decimal("0")
-        for index in failed_indices:
-            estimate = max(per_row, own.get(index, per_row)) * self._RETRY_COST_MARGIN
-            if planned + estimate > remaining:
-                break
-            planned += estimate
-            chosen.append(index)
-        return chosen
 
     # ── Provider-batch mode (§5): submit + attach ─────────────────
     #
