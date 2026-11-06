@@ -2811,6 +2811,45 @@ class Pipeline:
             errors=result.errors,
         )
 
+    @staticmethod
+    def _drop_recovered_losses(
+        result: ExecutionResult,
+        retried: set[int],
+        output_columns: list[str],
+        ledger: RowLedger | None,
+    ) -> None:
+        """Take the rows auto-retry recovered out of an unchecked run's losses.
+
+        ``errors`` and the loss counters were read before the pass ran, so a
+        row the skip policy dropped and the pass then answered would still be
+        reported lost, and ``_blank_lost_cells`` would treat it as lost. A
+        row counts as recovered when the ledger no longer calls it failed and
+        one of its output cells holds a real value. The counters are lowered
+        by the counter each row was reported in (``reported_loss_counts``),
+        so they stay exact past the bounded error list. Under a checked
+        contract delivery replaces all of this with the snapshot's view.
+        """
+        rows = result.to_list()
+        recovered = {
+            row
+            for row in retried
+            if row < len(rows)
+            and _holds_answer(rows[row], output_columns)
+            and (ledger is None or ledger.outcome(row).status is not RowStatus.FAILED)
+        }
+        if not recovered:
+            return
+        kept = [error for error in result.errors if error.row_index not in recovered]
+        if ledger is not None:
+            skipped, failed = ledger.reported_loss_counts(recovered)
+        else:
+            dropped = [e for e in result.errors if e.row_index in recovered]
+            skipped = sum(e.error_type == "skipped" for e in dropped)
+            failed = len(dropped) - skipped
+        result.errors = kept
+        result.metrics.skipped_rows = max(0, result.metrics.skipped_rows - skipped)
+        result.metrics.failed_rows = max(0, result.metrics.failed_rows - failed)
+
     def _auto_retry_failed_rows(
         self,
         result: ExecutionResult,
@@ -2966,45 +3005,6 @@ class Pipeline:
         if not checked and retried:
             self._drop_recovered_losses(result, retried, output_cols, ledger)
         return result
-
-    @staticmethod
-    def _drop_recovered_losses(
-        result: ExecutionResult,
-        retried: set[int],
-        output_columns: list[str],
-        ledger: RowLedger | None,
-    ) -> None:
-        """Take the rows auto-retry recovered out of an unchecked run's losses.
-
-        ``errors`` and the loss counters were read before the pass ran, so a
-        row the skip policy dropped and the pass then answered would still be
-        reported lost, and ``_blank_lost_cells`` would treat it as lost. A
-        row counts as recovered when the ledger no longer calls it failed and
-        one of its output cells holds a real value. The counters are lowered
-        by the counter each row was reported in (``reported_loss_counts``),
-        so they stay exact past the bounded error list. Under a checked
-        contract delivery replaces all of this with the snapshot's view.
-        """
-        rows = result.to_list()
-        recovered = {
-            row
-            for row in retried
-            if row < len(rows)
-            and _holds_answer(rows[row], output_columns)
-            and (ledger is None or ledger.outcome(row).status is not RowStatus.FAILED)
-        }
-        if not recovered:
-            return
-        kept = [error for error in result.errors if error.row_index not in recovered]
-        if ledger is not None:
-            skipped, failed = ledger.reported_loss_counts(recovered)
-        else:
-            dropped = [e for e in result.errors if e.row_index in recovered]
-            skipped = sum(e.error_type == "skipped" for e in dropped)
-            failed = len(dropped) - skipped
-        result.errors = kept
-        result.metrics.skipped_rows = max(0, result.metrics.skipped_rows - skipped)
-        result.metrics.failed_rows = max(0, result.metrics.failed_rows - failed)
 
     #: Margin on a re-ask's estimated cost: the correction makes its prompt
     #: longer than the row's first one.
