@@ -237,13 +237,16 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
             ),
         )
 
-        # Extracted components
-        self._concurrency_ctrl = ConcurrencyController(
-            concurrency,
-            rate_limiter,
-            adaptive=adaptive_concurrency,
-        )
+        # Extracted components. The controller's semaphore binds to the event
+        # loop that first waits on it, and each process() runs its own loop,
+        # so every run of the stage gets a fresh one (see _process_async).
+        self._concurrency_args = (concurrency, rate_limiter, adaptive_concurrency)
+        self._concurrency_ctrl = self._new_concurrency_controller()
         self._batch_processor = BatchProcessor()
+
+    def _new_concurrency_controller(self) -> ConcurrencyController:
+        concurrency, rate_limiter, adaptive = self._concurrency_args
+        return ConcurrencyController(concurrency, rate_limiter, adaptive=adaptive)
 
     def process(self, batches: list[PromptBatch], context: Any) -> list[ResponseBatch]:
         """Execute LLM calls for all prompt batches using flatten-then-concurrent pattern."""
@@ -291,6 +294,9 @@ class LLMInvocationStage(PipelineStage[list[PromptBatch], list[ResponseBatch]]):
         self, batches: list[PromptBatch], context: Any
     ) -> list[ResponseBatch]:
         """Internal async implementation — shared by process() and process_async()."""
+        # A stage may run more than once (early stop asks the first rows, then
+        # the rest), each time in a new event loop.
+        self._concurrency_ctrl = self._new_concurrency_controller()
         # Initialize global connection pool
         await self.llm_client.start()
 

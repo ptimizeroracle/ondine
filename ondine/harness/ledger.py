@@ -361,7 +361,7 @@ class RowLedger:
       failure) gets a full record. See :class:`_CompactRows`.
     * **Polling.** Each row's live status is re-derived when an event for it
       lands, so :meth:`counts` and :meth:`early_stop_reached` read stored
-      statuses and the model-call stage may ask once per batch. A compact
+      statuses and may be polled freely. A compact
       row's status depends only on its shape, so it is derived once per
       shape, not once per row.
     """
@@ -749,26 +749,50 @@ class RowLedger:
     def early_stop_reached(self) -> bool:
         """True when more than the policy's share of the first rows is rejected.
 
+        Counted as :meth:`early_stop_tally` counts; False until it can count.
+        """
+        tally = self.early_stop_tally()
+        fraction = self._policy.early_stop_fraction
+        if tally is None or fraction is None:
+            return False
+        rejected, window = tally
+        return rejected > fraction * window
+
+    def early_stop_tally(self) -> tuple[int, int] | None:
+        """``(rejected, window)`` over the first rows; None when not decidable.
+
+        A row counts when its *first* judged answer was rejected, whatever
+        later repairs made of it: early stop judges the prompt, and a stream
+        merges a chunk only after the chunk's own re-ask. Under
+        ``deliver_flagged`` nothing counts, and a row lost by the provider
+        never counts.
+
         "First rows" means by input order, and the answer waits until every
         one of them is decided: rows 50+ finishing first must not stand in for
-        rows 0-49, and a row still in flight could change the count.
+        rows 0-49, and a row still in flight could change the count. None
+        also when early stop is off or the run has no rows.
 
-        Cost: a look-up per row of the window; no row is re-derived.
+        Cost: a look-up per row of the window; a row with one attempt (the
+        common case) is never re-derived.
         """
-        fraction = self._policy.early_stop_fraction
-        if fraction is None:
-            return False
+        if self._policy.early_stop_fraction is None or self._policy.deliver_flagged:
+            return None
         window = min(self._row_count, self._policy.early_stop_window)
         if window == 0:
-            return False
+            return None
         rejected_code = _STATUS_CODES[RowStatus.REJECTED]
         with self._lock:
             rejected = 0
             for row in range(window):
                 if not self._decided(row):
-                    return False
-                rejected += self._status[row] == rejected_code
-        return rejected > fraction * window
+                    return None
+                events = self._full.get(row)
+                if events is None:
+                    # One attempt: its verdict is the first and the latest.
+                    rejected += self._status[row] == rejected_code
+                elif events.verdicts:
+                    rejected += not events.verdicts[min(events.verdicts)].passed
+        return rejected, window
 
     def snapshot(self) -> LedgerSnapshot:
         """Freeze the ledger: every row final, counts summing to the row count."""

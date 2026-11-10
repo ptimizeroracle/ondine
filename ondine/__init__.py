@@ -62,6 +62,9 @@ from ondine.core.specifications import (
     PromptSpec,
 )
 
+# Harness: the error a run raises when its first rows fail the contract
+from ondine.harness.early_stop import EarlyStopError
+
 # Layer 5: Intent layer (LLM-drafted pipeline planning)
 from ondine.orchestration.intent import Plan, plan
 
@@ -83,6 +86,7 @@ __all__ = [
     "QualityReport",
     "ProcessingStats",
     "CostEstimate",
+    "EarlyStopError",
     "ContextStore",
     "EvidenceRecord",
     "GroundingResult",

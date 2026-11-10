@@ -29,6 +29,7 @@ from ondine.core.models import (
     CostEstimate,
     ExecutionResult,
     LLMResponse,
+    PromptBatch,
     ResponseBatch,
     RowMetadata,
     ValidationResult,
@@ -51,6 +52,7 @@ from ondine.harness.delivery import (
     harness_column_conflicts,
     merge_reports,
 )
+from ondine.harness.early_stop import EarlyStopError
 from ondine.harness.ledger import LedgerPolicy, LedgerSnapshot, RowLedger, StopReason
 from ondine.harness.status import RowStatus
 
@@ -256,6 +258,32 @@ def _unchecked_retry_rows(
             if ledger.outcome(row).status is RowStatus.FAILED
         )
     return sorted(retry)
+
+
+def _split_prompt_batches(
+    batches: list[PromptBatch], first_rows: int
+) -> tuple[list[PromptBatch], list[PromptBatch]]:
+    """The prompts of input rows ``0 .. first_rows-1``, and the rest.
+
+    Cut row by row, before batch prompts are built, so no prompt mixes a row
+    of each group. Order is kept within each group.
+    """
+    head: list[PromptBatch] = []
+    tail: list[PromptBatch] = []
+    for batch in batches:
+        parts: tuple[list[int], list[int]] = ([], [])
+        for position, meta in enumerate(batch.metadata):
+            parts[meta.row_index >= first_rows].append(position)
+        for group, positions in zip((head, tail), parts, strict=True):
+            if positions:
+                group.append(
+                    PromptBatch(
+                        prompts=[batch.prompts[i] for i in positions],
+                        metadata=[batch.metadata[i] for i in positions],
+                        batch_id=batch.batch_id,
+                    )
+                )
+    return head, tail
 
 
 def _holds_answer(row: dict, output_columns: list[str]) -> bool:
@@ -1100,7 +1128,9 @@ class Pipeline:
         except Exception as e:
             self._record_run_stopped(
                 context,
-                StopReason.BUDGET_CAP
+                StopReason.EARLY_STOP
+                if isinstance(e, EarlyStopError)
+                else StopReason.BUDGET_CAP
                 if isinstance(e, BudgetExceededError)
                 else StopReason.CRASH,
             )
@@ -1328,29 +1358,6 @@ class Pipeline:
         batches = self._execute_stage(formatter, (working_df, specs.prompt), context)
         context.intermediate_data["prompt_batches"] = batches
 
-        # Stage 2.5: Aggregate into batch prompts (if batch_size > 1)
-        if specs.prompt.batch_size > 1:
-            from ondine.strategies.json_batch_strategy import JsonBatchStrategy
-
-            # Select strategy
-            if specs.prompt.batch_strategy == "json":
-                strategy = JsonBatchStrategy()
-            else:
-                # CSV strategy will be implemented in Phase 4
-                strategy = JsonBatchStrategy()  # Fallback to JSON
-
-            aggregator = BatchAggregatorStage(
-                batch_size=specs.prompt.batch_size,
-                strategy=strategy,
-                model=specs.llm.model,
-                validate_context_window=False,  # Disabled for performance (slow on large datasets)
-            )
-            batches = self._execute_stage(aggregator, batches, context)
-            context.intermediate_data["aggregated_batches"] = batches
-            self.logger.info(
-                f"Batch aggregation enabled: {specs.prompt.batch_size} rows per API call"
-            )
-
         # Stage 3: Invoke LLM
         # Pass instructor_mode from metadata to LLMSpec if set
         llm_spec = specs.llm
@@ -1409,43 +1416,30 @@ class Pipeline:
             budget_controller=budget_controller,
             adaptive_concurrency=specs.processing.adaptive_concurrency,
         )
-        # Stage 3: Execute LLM invocation
-        response_batches = (
-            self._execute_stage(llm_stage, batches, context) if batches else []
-        )
-        context.intermediate_data["response_batches"] = response_batches
-        response_batches = self._restore_completed_response_batches(context)
-        if previous_rows:
-            self._merge_previous_attempt(
-                ledger, response_batches, previous_rows, stage=llm_stage.name
-            )
-
-        # Save checkpoint after expensive LLM stage
-        if state_manager.should_checkpoint(context.last_processed_row):
-            state_manager.save_checkpoint(context)
-
-        # Stage 3.5: Disaggregate batch responses (if batch_size > 1)
+        # Stages 2.5-4 build once and run once per group of rows: the whole
+        # input, or, under early stop, the window's rows and then the rest.
+        aggregator = None
+        disaggregator = None
         if specs.prompt.batch_size > 1:
             from ondine.strategies.json_batch_strategy import JsonBatchStrategy
 
-            # Select strategy (same as aggregator)
-            if specs.prompt.batch_strategy == "json":
-                strategy = JsonBatchStrategy()
-            else:
-                strategy = JsonBatchStrategy()  # Fallback to JSON
-
+            # Only JSON exists; any other strategy falls back to it.
+            aggregator = BatchAggregatorStage(
+                batch_size=specs.prompt.batch_size,
+                strategy=JsonBatchStrategy(),
+                model=specs.llm.model,
+                validate_context_window=False,  # Disabled for performance (slow on large datasets)
+            )
             disaggregator = BatchDisaggregatorStage(
-                strategy=strategy,
+                strategy=JsonBatchStrategy(),
                 retry_failed_individually=True,
             )
-            response_batches = self._execute_stage(
-                disaggregator, response_batches, context
+            self.logger.info(
+                f"Batch aggregation enabled: {specs.prompt.batch_size} rows per API call"
             )
-            context.intermediate_data["disaggregated_responses"] = response_batches
-            self.logger.info("Batch disaggregation complete")
 
-        # Stage 4: Parse responses: the judge reads each answer under the
-        # run's contract, or maps the output of the client's own parser.
+        # Stage 4 reads each answer under the run's contract, or maps the
+        # output of the client's own parser.
         custom_parser = self._components.custom_parser
         if not custom_parser:
             # The judge reads the text under the run's contract; a response
@@ -1461,11 +1455,64 @@ class Pipeline:
             output_columns=specs.dataset.output_columns,
             contract=contract,
         )
-        results_df = self._execute_stage(
-            parser_stage,
-            (response_batches, specs.dataset.output_columns),
-            context,
-        )
+
+        def answer(prompt_batches: list[PromptBatch], answered: set[int]) -> Any:
+            """Ask the model about these prompts; return every answer judged.
+
+            ``answered`` holds the response-cache rows an earlier group
+            already judged; they are skipped, and this group's are added.
+            """
+            # Stage 2.5: Aggregate into batch prompts (if batch_size > 1)
+            if aggregator is not None:
+                prompt_batches = self._execute_stage(
+                    aggregator, prompt_batches, context
+                )
+            # Stage 3: Execute LLM invocation. The response cache is the
+            # source of truth for what was answered, this attempt or before.
+            context.intermediate_data["response_batches"] = (
+                self._execute_stage(llm_stage, prompt_batches, context)
+                if prompt_batches
+                else []
+            )
+            response_batches = [
+                batch
+                for batch in self._restore_completed_response_batches(context)
+                if batch.metadata[0].row_index not in answered
+            ]
+            answered.update(batch.metadata[0].row_index for batch in response_batches)
+            if previous_rows:
+                self._merge_previous_attempt(
+                    ledger, response_batches, previous_rows, stage=llm_stage.name
+                )
+
+            # Save checkpoint after expensive LLM stage
+            if state_manager.should_checkpoint(context.last_processed_row):
+                state_manager.save_checkpoint(context)
+
+            # Stage 3.5: Disaggregate batch responses (if batch_size > 1)
+            if disaggregator is not None:
+                response_batches = self._execute_stage(
+                    disaggregator, response_batches, context
+                )
+            # Stage 4: Parse responses
+            return self._execute_stage(
+                parser_stage,
+                (response_batches, specs.dataset.output_columns),
+                context,
+            )
+
+        answered: set[int] = set()
+        window = self._early_stop_window(contract, resume_mode, len(working_df))
+        if window is None:
+            results_df = answer(batches, answered)
+        else:
+            # Early stop: judge the window's rows before asking about any
+            # other, then stop the run if too many were rejected.
+            head, tail = _split_prompt_batches(batches, window)
+            head_results = answer(head, answered)
+            self._check_early_stop(ledger, resume_from=context.session_id)
+            results_df = head_results
+            results_df.extend(list(answer(tail, answered)))
 
         # Stage 4.5: Context Store — grounding, storage, contradiction detection
         context_store = self._components.context_store
@@ -2080,6 +2127,8 @@ class Pipeline:
         if not source_path and self.dataframe is not None:
             known_rows = len(self.dataframe)
         ledger = self._start_stream_ledger(known_rows)
+        # A stream checks early stop between chunks, never inside one.
+        early_stop_window = self._resolve_contract().policy.early_stop_window
         first_row = 0  # input position of the next chunk's first row
 
         try:
@@ -2116,6 +2165,10 @@ class Pipeline:
                 chunk_pl = await queue.get()
                 if chunk_pl is None:
                     break
+                # Early stop, once the chunks so far hold the window: decided
+                # before this chunk costs anything.
+                if first_row >= early_stop_window:
+                    self._check_early_stop(ledger, stream=True)
 
                 # Convert Polars to Pandas for compatibility with existing stages
                 try:
@@ -2155,6 +2208,8 @@ class Pipeline:
             if producer_error is not None:
                 raise producer_error
 
+        except EarlyStopError:
+            raise  # the stop is recorded already
         except BudgetExceededError:
             self._stop_stream(ledger, StopReason.BUDGET_CAP)
             raise
@@ -2288,6 +2343,8 @@ class Pipeline:
 
         df = self.dataframe
         ledger = self._start_stream_ledger(0 if df is None else len(df))
+        # A stream checks early stop between chunks, never inside one.
+        early_stop_window = self._resolve_contract().policy.early_stop_window
         if df is None or df.empty:
             self._hold_ledger(ledger, finished=True)
             return
@@ -2320,6 +2377,15 @@ class Pipeline:
                         len(chunks[chunk_index - 1]),
                     )
                     yield result
+                    # Early stop, once the chunks merged hold the window. This
+                    # chunk is already in flight: it is cancelled.
+                    if first_rows[chunk_index] >= early_stop_window:
+                        try:
+                            self._check_early_stop(ledger, stream=True)
+                        except EarlyStopError:
+                            task.cancel()
+                            await asyncio.gather(task, return_exceptions=True)
+                            raise
 
                 pending_task = task
 
@@ -2330,6 +2396,8 @@ class Pipeline:
                     ledger, result, first_rows[-1], len(chunks[-1])
                 )
                 yield result
+        except EarlyStopError:
+            raise  # the stop is recorded already
         except BudgetExceededError:
             self._stop_stream(ledger, StopReason.BUDGET_CAP)
             raise
@@ -2457,6 +2525,67 @@ class Pipeline:
             planned += estimate
             chosen.append(index)
         return chosen
+
+    def _early_stop_window(
+        self, contract: OutputContract, resumed: bool, rows: int
+    ) -> int | None:
+        """How many first rows to judge before the others; None: no early stop.
+
+        Only a fresh, top-level run under a checked contract stops early, and
+        only with rows left past the window (stopping saves nothing
+        otherwise). A sub-pipeline's rows are its parent's to count; a
+        resumed run is one its client chose to finish.
+        """
+        policy = contract.policy
+        if (
+            not contract.checked
+            or policy.early_stop_fraction is None
+            or policy.on_failure == "deliver_flagged"
+            or resumed
+            or self._is_subpipeline
+            or rows <= policy.early_stop_window
+        ):
+            return None
+        return policy.early_stop_window
+
+    def _check_early_stop(
+        self,
+        ledger: RowLedger,
+        *,
+        resume_from: UUID | None = None,
+        stream: bool = False,
+    ) -> None:
+        """Raise :class:`EarlyStopError` if the ledger's first rows call for it.
+
+        Records the stop first, so the report the error quotes, and the
+        ledger the client reads afterwards, show the rows never asked as
+        failed for "early stop". ``resume_from`` is the session a client can
+        resume to finish the run anyway; streams have none.
+        """
+        tally = ledger.early_stop_tally()
+        if tally is None or not ledger.early_stop_reached():
+            return
+        if stream:
+            self._stop_stream(ledger, StopReason.EARLY_STOP)
+        else:
+            ledger.record_run_stopped(StopReason.EARLY_STOP)
+            self._hold_ledger(ledger, finished=True)
+        report = self.run_report
+        rejected, window = tally
+        fraction = self._resolve_contract().policy.early_stop_fraction
+        assert fraction is not None  # a tally exists only when early stop is on
+        resume_hint = (
+            None
+            if resume_from is None
+            else f"pipeline.execute(resume_from=UUID('{resume_from}'))"
+        )
+        raise EarlyStopError(
+            rejected,
+            window,
+            fraction,
+            () if report is None else report.top_rejection_reasons,
+            resume_hint=resume_hint,
+        )
 
     def _hold_ledger(self, ledger: RowLedger | None, *, finished: bool) -> None:
         """Make ``ledger`` the one :attr:`row_ledger` reads.

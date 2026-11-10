@@ -684,6 +684,34 @@ def test_early_stop_threshold_and_window_come_from_the_policy():
     assert off.early_stop_reached() is False
 
 
+def test_early_stop_counts_a_row_by_its_first_answer_even_once_repaired():
+    """A stream merges a chunk after its re-ask: the count must not change."""
+    book = ledger(200)
+    _first_rows(book, rejected=26)
+    for row in range(26):
+        judged(book, row, 2, verdict(intent=PASS))
+
+    assert book.counts()[RowStatus.REPAIRED] == 26
+    assert book.early_stop_tally() == (26, 50)
+    assert book.early_stop_reached() is True
+
+
+def test_early_stop_counts_a_row_whose_first_answer_passed_and_a_later_failed_as_passed():
+    book = ledger(200)
+    _first_rows(book, rejected=25)
+    judged(book, 30, 2, verdict(intent=failing("intent: no")))
+
+    assert book.early_stop_tally() == (25, 50)
+
+
+def test_early_stop_tally_is_none_until_the_window_is_decided_or_when_off():
+    book = ledger(200)
+    _first_rows(book, rejected=10, total=49)
+
+    assert book.early_stop_tally() is None
+    assert ledger(200, policy(early_stop_fraction=None)).early_stop_tally() is None
+
+
 def test_early_stop_on_a_run_shorter_than_the_window_uses_every_row():
     book = ledger(4)
     _first_rows(book, rejected=3, total=4)

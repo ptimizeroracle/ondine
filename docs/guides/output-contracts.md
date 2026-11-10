@@ -102,8 +102,8 @@ Set the policy with `with_contract_policy()`. Each call sets the whole policy: a
 |---|---|---|---|
 | `on_failure` | `"reject"`, `"deliver_flagged"` | `"reject"` | `reject` blanks a failing row. `deliver_flagged` keeps its value with the status `unverified`. |
 | `partial_rows` | `"whole_row"`, `"keep_valid_fields"` | `"whole_row"` | `whole_row`: one failed required field rejects the whole row. `keep_valid_fields`: the row is still rejected, but the fields that passed keep their values. |
-| `early_stop_fraction` | a share, or `None` | `0.5` | Declared, not enforced yet (see Current limits). |
-| `early_stop_window` | a row count | `50` | Declared, not enforced yet. |
+| `early_stop_fraction` | a share from 0 up to (not including) 1, or `None` | `0.5` | Stop the run when more than this share of the first rows is rejected. `None` turns early stop off. See [Early stop](#early-stop). |
+| `early_stop_window` | a row count | `50` | How many first rows, by input order, early stop counts. |
 | `re_ask` | `0` to `3` | `0` | Rounds in which a row whose answer failed a check is asked again. See [Re-ask](#re-ask). |
 
 ```python
@@ -130,7 +130,32 @@ Reply with only one of these values, and nothing else: consistent, inconsistent.
 - **Cost:** each re-ask is one more call, billed to its row. With `with_max_budget()`, a round asks only the rows the remaining budget can pay for. The estimate is each row's own first answer plus 25%, so a re-ask that costs much more than that can pass the cap, as an in-flight call already can.
 - **Resume:** `re_ask` is part of the policy. Resuming with a different value is refused, naming the policy.
 
-In a live test, GPT-6 Luna judged 200 summaries for faithfulness from a loosely worded prompt ("Is this summary consistent with the document?"). It answered "Yes" or "No" with an explanation, so 175 of 200 first answers were rejected. With `re_ask=1`, all 175 were fixed and 142 of them were right against the dataset's labels. Accuracy over all 200 rows was 78.5%, the same as with a strict prompt, for 77% more spend.
+In a live test, GPT-6 Luna judged 200 summaries for faithfulness from a loosely worded prompt ("Is this summary consistent with the document?"). It answered "Yes" or "No" with an explanation, so 175 of 200 first answers were rejected. With `re_ask=1`, all 175 were fixed and 142 of them were right against the dataset's labels. Accuracy over all 200 rows was 78.5%, the same as with a strict prompt, for 77% more spend. That test ran with early stop off. With the default policy, early stop would end such a run after its first 50 rows (see [Early stop](#early-stop)).
+
+## Early stop
+
+When more than half of the first 50 rows are rejected, the prompt or the contract is usually broken. Ondine judges those 50 rows before it asks the model about any other row. If more than `early_stop_fraction` of them are rejected, the run stops and raises `EarlyStopError`.
+
+```python
+from ondine import EarlyStopError
+
+try:
+    result = pipeline.execute()
+except EarlyStopError as stop:
+    print(stop)                            # the numbers, the top reason, the ways out
+    print(pipeline.run_report.render())    # every row; the rows never asked are failed
+```
+
+- **What counts:** a row whose *first* answer was rejected. A row that re-ask later fixes still counts, because early stop judges the prompt, and a prompt that fails most first answers costs a second call on each of them. Rows the provider lost do not count. Under `deliver_flagged` the run never stops early.
+- **When:** once, when the window's rows are judged. With `re_ask`, the window's rows are not re-asked before the check.
+- **Small runs:** a run of `early_stop_window` rows or fewer never stops early, since every row is already answered when the check could run.
+- **What you get:** the run raises, like a budget stop. `pipeline.row_ledger` and `pipeline.run_report` show each row. The rows never asked are `failed`, with the reason `run stopped before this row: early stop`, and the report's stop reason is `early stop`.
+- **Finish anyway:** resume the run with `pipeline.execute(resume_from=...)`, as the error message gives it. A resumed run does not check again, and the window's answers come from the response cache, so they are not paid again.
+- **Turn it off:** `with_contract_policy(early_stop_fraction=None)`. This changes the policy, so a run started with early stop on cannot be resumed with it off.
+- **Streams:** a stream checks between chunks, once the chunks so far hold the window. `execute_stream_pipelined()` has the next chunk in flight at that point and cancels it. A chunk already running in a worker thread can still finish its calls.
+- **Cost:** the window's rows are answered before the others start, so the run waits once for the slowest of them.
+
+In a live test, GPT-6 Luna judged the same 200 summaries with `re_ask=1` and the default policy. With the loosely worded prompt from the re-ask test, 47 of the first 50 first answers were rejected, so the run stopped after 50 rows and $0.0128. The same prompt run to the end with re-ask had cost $0.0459. With a prompt that asks for the value alone, the run did not stop: 200 of 200 rows were accepted.
 
 ## What you get back
 
@@ -217,10 +242,9 @@ Two outputs are new and sit next to the result: `result.quarantine` lists the fa
 
 | Limit | What happens today |
 |---|---|
-| No early stop yet | `early_stop_fraction` and `early_stop_window` are validated, but a run does not stop early. |
 | No provider-batch mode | `submit()` with a contract raises an error. See [Provider Batch API Mode](provider-batch.md). |
 | No escalation yet | A failing row is asked again by the same model (with `re_ask`); no stronger model is tried. |
-| A loosely worded prompt blanks many rows without re-ask | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. Set `re_ask=1`, or ask for the value alone. |
+| A loosely worded prompt blanks many rows without re-ask | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. Ask for the value alone. If more than half of the first 50 rows are rejected, early stop ends the run; to pay for re-asking them instead, set `re_ask=1` and `early_stop_fraction=None`. |
 
 ## Related
 
