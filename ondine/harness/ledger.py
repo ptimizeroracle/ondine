@@ -338,6 +338,12 @@ class ReportedLosses:
 # ---------------------------------------------------------------------------
 
 
+#: What ``RowLedger._reported`` holds for a row: not reported lost (0), or
+#: which of today's counters its first loss report went to.
+_REPORTED_SKIPPED = 1
+_REPORTED_FAILED = 2
+
+
 class RowLedger:
     """The only owner of every row's fate in one run (or one sub-pipeline).
 
@@ -844,6 +850,26 @@ class RowLedger:
             skipped, failed = self._reported_skipped, self._reported_failed
         return ReportedLosses(errors=errors, skipped_rows=skipped, failed_rows=failed)
 
+    def reported_loss_counts(self, rows: Iterable[int]) -> tuple[int, int]:
+        """How many of ``rows`` :meth:`reported_losses` counts, as (skipped, failed).
+
+        For a caller that takes recovered rows out of today's loss counters
+        (the unchecked auto-retry pass): it needs to know which counter each
+        row was in, including rows past the bounded error list. A row never
+        reported lost, or outside this ledger, counts in neither.
+        """
+        skipped = failed = 0
+        with self._lock:
+            for row in rows:
+                if not 0 <= row < self._row_count:
+                    continue
+                kind = self._reported[row]
+                if kind == _REPORTED_SKIPPED:
+                    skipped += 1
+                elif kind == _REPORTED_FAILED:
+                    failed += 1
+        return skipped, failed
+
     # -- internals ----------------------------------------------------------
 
     def _widen(self, row_count: int) -> None:
@@ -860,10 +886,11 @@ class RowLedger:
         """Count ``row`` lost, under ``cause``, if no loss was reported for it yet."""
         if self._reported[row]:
             return
-        self._reported[row] = 1
         if cause.error_type == "skipped":
+            self._reported[row] = _REPORTED_SKIPPED
             self._reported_skipped += 1
         else:
+            self._reported[row] = _REPORTED_FAILED
             self._reported_failed += 1
         if len(self._reported_errors) < self.MAX_RECORDED_ROW_ERRORS:
             self._reported_errors.append((row, cause))

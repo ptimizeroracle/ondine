@@ -433,18 +433,16 @@ def _auto_retry(builder, attempts: int):
     return pipeline
 
 
-def test_auto_retry_recovers_empty_rows_but_never_retries_skipped_ones():
-    """Suspected bug, locked as-is: the retry pass cannot see skipped rows.
+def test_auto_retry_recovers_empty_and_skipped_rows():
+    """The retry pass re-asks lost rows as well as empty ones.
 
-    The pass picks rows whose output cells are empty. It runs *before* the
-    step that blanks lost cells, so a row the skip policy dropped still holds
-    the ``[SKIPPED]`` marker, which is a non-empty string: the pass skips
-    over it. Both the permanent row and a transient row whose request-level
-    retries ran out (``max_retries=1``) stay lost, each asked exactly once,
-    while the row that answered ``""`` is re-asked and recovered.
-
-    Under the harness, auto-retry re-runs *failed* rows; that will change the
-    transient row's fate here, on purpose and by editing this test.
+    The pass runs *before* the step that blanks lost cells, so a row the skip
+    policy dropped still holds the ``[SKIPPED]`` marker, a non-empty string.
+    The pass reads the run's ledger to find it anyway. The transient row
+    whose request-level retries ran out (``max_retries=1``) is recovered on
+    the pass and leaves the error list; the permanent row is asked once per
+    pass and stays lost; the row that answered ``""`` is re-asked and
+    recovered.
     """
     empty_row = token_for(1)
     client = ScriptedLedgerClient(
@@ -460,33 +458,29 @@ def test_auto_retry_recovers_empty_rows_but_never_retries_skipped_ones():
 
     assert observe(result) == Outcome(
         columns=["marker", "answer"],
-        rows=answered(0, 1)
-        + [(PERMANENT, None)]
-        + answered(3)
-        + [(TRANSIENT, None)]
-        + answered(5),
-        errors=[skipped(2, failure(PERMANENT)), skipped(4, hiccup(TRANSIENT))],
-        lost=[2, 4],
+        rows=answered(0, 1) + [(PERMANENT, None)] + answered(3, 4, 5),
+        errors=[skipped(2, failure(PERMANENT))],
+        lost=[2],
         complete=False,
-        skipped=2,
+        skipped=1,
         failed=0,
     )
     assert client.calls == Counter(
-        {token_for(row): 1 for row in range(6)} | {empty_row: 2}
+        {token_for(row): 1 for row in range(6)}
+        | {empty_row: 2, TRANSIENT: 2, PERMANENT: 3}
     )
-    # Four answered calls in the first pass (the empty one included), plus the
-    # one recovering call: the retry pass's cost is merged into the result.
-    assert result.costs.total_cost == COST_PER_CALL * 5
+    # Four answered calls in the first pass (the empty one included), plus
+    # the two recovering calls: the retry pass's cost is merged into the result.
+    assert result.costs.total_cost == COST_PER_CALL * 6
 
 
 def test_auto_retry_recovers_an_empty_row_inside_a_mega_batch():
     """The retry pass merges its rows back by position, also after batching.
 
     Row 4 answers ``""`` inside a batch of three; no error is recorded for it
-    (an empty item is not a loss today), the retry pass re-asks only that
-    row, and the recovered answer lands on row 4. The batch the permanent row
-    took down stays lost and is not retried, for the reason given in the
-    previous test.
+    (an empty item is not a loss today), the retry pass re-asks it, and the
+    recovered answer lands on row 4. The batch the permanent row took down
+    is re-asked too, fails again and stays lost.
     """
     client = ScriptedLedgerClient(permanent={PERMANENT}, empty={TRANSIENT: 1})
 
@@ -504,7 +498,9 @@ def test_auto_retry_recovers_an_empty_row_inside_a_mega_batch():
         failed=0,
     )
     assert client.calls == Counter(
-        {token_for(row): 1 for row in range(6)} | {TRANSIENT: 2}
+        {token_for(row): 1 for row in range(6)}
+        | {token_for(row): 2 for row in (0, 1, 2)}
+        | {TRANSIENT: 2}
     )
     assert result.costs.total_cost == COST_PER_CALL * 2
 
