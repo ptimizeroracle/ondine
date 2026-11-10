@@ -150,6 +150,35 @@ def test_each_row_gets_its_status_its_value_and_the_five_columns():
     assert "intent: rejected" in frame["checks"][2]
 
 
+def test_a_wordy_answer_that_opens_by_denying_is_rejected_not_flipped():
+    """Loosely worded prompt, real answer shapes from a live faithfulness run.
+
+    Rows 0 and 1 say "No." first; the allowed value after it describes only a
+    part of the summary. Delivering ``consistent`` would state the opposite of
+    the model's verdict, so each row is rejected. Row 2 says "Yes." first, and
+    the format fix still repairs it.
+    """
+    answers = {
+        0: "No. The summary says Q4, not Q3. The other figures are consistent.",
+        1: "Not entirely. The date, amount, and purpose are consistent.",
+        2: "Yes. The summary is consistent with the document.",
+    }
+    client = ScriptedClient(answers)
+
+    result = (
+        _builder(client, 3, columns=("verdict",))
+        .with_output_field("verdict", allowed=["consistent", "inconsistent"])
+        .build()
+        .execute()
+    )
+    frame = result.to_pandas()
+
+    assert _statuses(frame) == [REJECTED, REJECTED, REPAIRED]
+    assert _cells(frame, "verdict") == [None, None, "consistent"]
+    assert list(frame["repair_method"]) == ["none", "none", "format"]
+    _assert_totals(result.report, 3)
+
+
 def test_rejected_rows_are_blank_and_listed_apart_from_lost_rows():
     """#312: a rejected row is not a lost row, and the run is not complete."""
     client = ScriptedClient(ANSWERS, fail_rows={LOST})

@@ -425,6 +425,77 @@ def test_a_word_that_does_not_qualify_the_value_leaves_the_fix_alone(answer):
     assert verdict["verdict"].format_fixed is True
 
 
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "No. The other figures in the summary are consistent.",
+        "No. The second point is consistent: the Act allows the election.",
+        "No. The timing and location in the summary are otherwise consistent.",
+        "No. The document reports perceptual accuracy. A consistent summary "
+        "would say so.",
+        "Not entirely. The date, amount, and purpose are consistent.",
+        "**No.** The rest is consistent.",
+        "Not really: the figures are consistent but the date is wrong.",
+        "No — the date is wrong. The rest is consistent.",
+        "Nope.\n\nThe other claims are consistent.",
+    ],
+)
+def test_an_answer_that_opens_by_denying_is_not_fixed(answer):
+    """Real GPT-6 Luna answers to "Is this summary consistent?".
+
+    The opening "No." is the verdict; the allowed value that follows describes
+    a part of the summary. Delivering it would state the opposite.
+    """
+    verdict = judge(_consistency(), answer)
+
+    assert verdict["verdict"].outcome == "failed"
+    assert verdict["verdict"].format_fixed is False
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Yes. The summary is consistent with the document.",
+        "Nothing in it conflicts: consistent",
+        "Not a single claim is wrong. It is consistent.",
+    ],
+)
+def test_an_opening_that_is_not_a_short_denial_leaves_the_fix_alone(answer):
+    verdict = judge(_consistency(), answer)
+
+    assert verdict["verdict"].value == "consistent"
+    assert verdict["verdict"].format_fixed is True
+
+
+@pytest.mark.parametrize(
+    ("answer", "value"),
+    [("No.", "no"), ("No. The order was never shipped.", "no"), ("None.", "none")],
+)
+def test_a_denial_that_is_itself_the_allowed_value_is_still_fixed(answer, value):
+    """When "no" is an answer the contract allows, "No." gives it, not a denial."""
+    contract = build_contract(
+        ["shipped"],
+        fields=[
+            OutputField(
+                "shipped", allowed=["yes", "no", "none"], normalise=["casefold"]
+            )
+        ],
+    )
+
+    verdict = judge(contract, answer)
+
+    assert verdict["shipped"].value == value
+    assert verdict["shipped"].format_fixed is True
+
+
+def test_a_short_denial_does_not_stop_an_exact_answer():
+    """Only the format fix reads the opening; an exact value passes as before."""
+    verdict = judge(_consistency(), "inconsistent")
+
+    assert verdict["verdict"].value == "inconsistent"
+    assert verdict["verdict"].format_fixed is False
+
+
 def test_format_fix_finds_an_alias_too():
     verdict = judge(_intent(), "they want their money back now")
 

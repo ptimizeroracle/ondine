@@ -109,6 +109,13 @@ _QUALIFIERS = frozenset(
         "without",
     }
 )
+#: Words that, opening an answer as a short sentence of their own ("No.",
+#: "Not entirely."), deny the question: the verdict is said, and an allowed
+#: value later in the answer describes something else.
+_DENIALS = frozenset({"neither", "never", "no", "none", "nope", "nor", "not"})
+#: The longest opening sentence read as a denial, in words.
+_DENIAL_WORDS = 3
+_SENTENCE_END = re.compile(r"[.!?;:\n—–]")
 #: How many words before a value can qualify it ("not entirely consistent"),
 #: and how many characters to read to find them, so that a check stays constant
 #: time however long the answer is.
@@ -728,8 +735,12 @@ def _format_fix(rules: FieldRules, raw: str) -> Any:
     field stays failed. Numbers must stand alone: "2" is not in "12", "-2" or
     "2.5". A value the answer qualifies stays failed too: "not consistent" and
     "mostly consistent" do not say "consistent", and delivering it would state
-    what the model denied or doubted.
+    what the model denied or doubted. An answer that opens with a short
+    denial ("No. The other figures are consistent.") stays failed: its verdict
+    is the denial, and the value after it describes only a part.
     """
+    if _opens_with_denial(raw) and not _names_a_value(rules, raw):
+        return _MISSING
     numeric = rules.declaration.type in ("integer", "number")
     haystack = rules.key(raw)
     spans: list[tuple[int, int, Any]] = []
@@ -771,6 +782,33 @@ def _is_qualified(text: str, start: int) -> bool:
         word in _QUALIFIERS or word.endswith(("n't", "n’t"))
         for word in _WORD.findall(clause)[-_QUALIFIER_WORDS:]
     )
+
+
+def _opens_with_denial(text: str) -> bool:
+    """Is the answer's first sentence a short denial ("No.", "Not entirely.")?
+
+    The sentence ends at the first stop, colon, semicolon, dash or line break,
+    and holds at most ``_DENIAL_WORDS`` words, the first a negation. "No, I
+    read it twice. It is consistent." opens with a longer sentence and is not
+    a denial. English only, like the qualifier check.
+    """
+    opening = _SENTENCE_END.split(text[:_QUALIFIER_REACH].casefold(), maxsplit=1)[0]
+    words = _WORD.findall(opening)
+    if not words or len(words) > _DENIAL_WORDS:
+        return False
+    first = words[0]
+    return first in _DENIALS or first.endswith(("n't", "n’t"))
+
+
+def _names_a_value(rules: FieldRules, text: str) -> bool:
+    """Does the answer's first sentence name an allowed value or alias itself?
+
+    Then a short opening such as "No." is the value ("no" is allowed), not a
+    denial of some other value.
+    """
+    opening = _SENTENCE_END.split(text[:_QUALIFIER_REACH], maxsplit=1)[0]
+    words = {rules.key(word) for word in _WORD.findall(opening)}
+    return any(key in words for key in rules.lookup)
 
 
 def _stands_alone(text: str, start: int, end: int, *, numeric: bool) -> bool:
