@@ -47,9 +47,7 @@ def run(name: str, model: str, budget: float) -> dict[str, object]:
             output_columns=["answer"],
         )
         .with_prompt(PROMPTS[name])
-        .with_llm(
-            model=MODELS[model], **MODEL_PARAMS.get(model, {"temperature": 0.0})
-        )
+        .with_llm(model=MODELS[model], **MODEL_PARAMS.get(model, {"temperature": 0.0}))
         .with_output_field("answer", allowed=["consistent", "inconsistent"])
         .with_contract_policy(re_ask=1)
         .with_concurrency(6)
