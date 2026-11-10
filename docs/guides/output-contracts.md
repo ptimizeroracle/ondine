@@ -34,7 +34,7 @@ Every input row ends the run with exactly one status. The status decides what ha
 | `failed` | No usable answer: the provider or a stage failed, or the run stopped first. | No, blanked |
 | `unchecked` | No contract was declared. | Yes, as before |
 
-A format fix happens only when exactly one allowed value appears in a wordy answer. For example, "I think it is refund." becomes `refund`. An answer that names two allowed values is rejected. So is an answer that negates or qualifies the value, such as "not consistent" or "mostly consistent": a fix would state what the model denied. This check reads English only.
+A format fix happens only when exactly one allowed value appears in a wordy answer. For example, "I think it is refund." becomes `refund`. An answer that names two allowed values is rejected. So is an answer that negates or qualifies the value, such as "not consistent" or "mostly consistent": a fix would state what the model denied. So is an answer that opens with a short denial, such as "No. The other figures are consistent." or "Not entirely. The rest is consistent.": the denial is the verdict, and the value after it describes only a part. These checks read English only.
 
 `repaired` means a check failed before the fix. A row that auto-retry recovers after a provider failure is `accepted`: its answer failed no check.
 
