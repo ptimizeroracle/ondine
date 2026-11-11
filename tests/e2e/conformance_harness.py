@@ -32,7 +32,7 @@ import json
 import re
 import threading
 import typing
-from collections import Counter
+from collections import Counter, defaultdict
 from decimal import Decimal
 from typing import Any
 
@@ -240,6 +240,47 @@ def _token_in(text: str) -> str:
             f"prompt mixes markers from several rows: {sorted(set(found))}"
         )
     return found[0]
+
+
+class AttemptClient(LedgerClient):
+    """Answers row ``r`` with ``answers[r][k]`` on its ``k``-th call (the last
+    one repeats); raises on the calls listed in ``fail[r]``. Records every
+    prompt and the call options a row was sent with."""
+
+    def __init__(
+        self,
+        answers: dict[int, list[str]],
+        *,
+        fail: dict[int, set[int]] | None = None,
+        default: str = "refund",
+    ) -> None:
+        super().__init__()
+        self._answers = {token_for(r): texts for r, texts in answers.items()}
+        self._fail = {token_for(r): calls for r, calls in (fail or {}).items()}
+        self._default = default
+        self.seen: dict[str, list[tuple[str, dict[str, Any]]]] = defaultdict(list)
+        self._seen_lock = threading.Lock()
+
+    def _answer_token(self, token: str) -> str:
+        call = self._record(token)
+        if call in self._fail.get(token, ()):
+            raise ProviderError(f"scripted failure for {token} (call {call})")
+        texts = self._answers.get(token, [self._default])
+        return texts[min(call, len(texts)) - 1]
+
+    def invoke(self, prompt: str, **kwargs: Any):
+        items = _batch_items(prompt)
+        inputs = [str(item["input"]) for item in items] if items else [prompt]
+        with self._seen_lock:
+            for text in inputs:
+                self.seen[_token_in(text)].append((text, kwargs))
+        return super().invoke(prompt, **kwargs)
+
+    def calls_for(self, row: int) -> int:
+        return self.calls[token_for(row)]
+
+    def prompts_for(self, row: int) -> list[str]:
+        return [prompt for prompt, _ in self.seen[token_for(row)]]
 
 
 # ── structured output ─────────────────────────────────────────────────────

@@ -1711,8 +1711,7 @@ class PipelineBuilder:
         """
         Set how a run treats rows that fail the output contract.
 
-        The policy is validated at ``build()``. Early stop is declared here
-        but not acted on yet (harness step 4): a run never stops early.
+        The policy is validated at ``build()``.
 
         Only meaningful with a contract: declare one with
         :meth:`with_output_field`, :meth:`with_output_relation` or
@@ -1727,10 +1726,12 @@ class PipelineBuilder:
                 every column when any required column fails;
                 "keep_valid_fields" still rejects it but delivers the columns
                 that passed.
-            early_stop_fraction: The run will stop when more than this share
-                of the first ``early_stop_window`` rows (by input order) is
-                rejected, which usually means a broken prompt or contract.
-                Default 0.5. ``None`` turns early stop off.
+            early_stop_fraction: The run stops, raising
+                :class:`~ondine.EarlyStopError`, when more than this share of
+                the first ``early_stop_window`` rows (by input order) is
+                rejected on its first answer, which usually means a broken
+                prompt or contract. Those rows are judged before any other
+                row is asked. Default 0.5. ``None`` turns early stop off.
             early_stop_window: How many rows the share is measured over.
                 Default 50.
             re_ask: Rounds in which a row whose answer failed a check is asked

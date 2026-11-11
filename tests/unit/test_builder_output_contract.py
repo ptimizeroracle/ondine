@@ -611,11 +611,12 @@ def test_every_contract_option_describes_the_enforced_behaviour(method):
     assert "reject" in doc.lower()
 
 
-def test_the_policy_docstring_says_early_stop_is_step_4():
+def test_the_policy_docstring_says_how_early_stop_stops_a_run():
     doc = " ".join((PipelineBuilder.with_contract_policy.__doc__ or "").split())
 
-    assert "step 4" in doc
-    assert "never stops early" in doc
+    assert "EarlyStopError" in doc
+    assert "first answer" in doc
+    assert "never stops early" not in doc
 
 
 def test_the_type_keyword_lists_every_field_type():

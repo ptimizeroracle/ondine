@@ -12,8 +12,6 @@ Design: ``.claude/designs/re-ask.md``, section 6.
 from __future__ import annotations
 
 import json
-import threading
-from collections import defaultdict
 from typing import Any
 
 import pandas as pd
@@ -24,10 +22,8 @@ from ondine.harness.contract import ContractError
 from ondine.harness.status import RowStatus
 from tests.e2e.conformance_harness import (
     COST_PER_CALL,
-    LedgerClient,
+    AttemptClient,
     ProviderError,
-    _batch_items,
-    _token_in,
     conformance_frame,
     token_for,
 )
@@ -40,47 +36,6 @@ UNVERIFIED = RowStatus.UNVERIFIED
 
 #: Names two labels, so the format fix cannot pick one: rejected.
 TWO_LABELS = "It is about a refund, or maybe billing."
-
-
-class AttemptClient(LedgerClient):
-    """Answers row ``r`` with ``answers[r][k]`` on its ``k``-th call (the last
-    one repeats); raises on the calls listed in ``fail[r]``. Records every
-    prompt and the call options a row was sent with."""
-
-    def __init__(
-        self,
-        answers: dict[int, list[str]],
-        *,
-        fail: dict[int, set[int]] | None = None,
-        default: str = "refund",
-    ) -> None:
-        super().__init__()
-        self._answers = {token_for(r): texts for r, texts in answers.items()}
-        self._fail = {token_for(r): calls for r, calls in (fail or {}).items()}
-        self._default = default
-        self.seen: dict[str, list[tuple[str, dict[str, Any]]]] = defaultdict(list)
-        self._seen_lock = threading.Lock()
-
-    def _answer_token(self, token: str) -> str:
-        call = self._record(token)
-        if call in self._fail.get(token, ()):
-            raise ProviderError(f"scripted failure for {token} (call {call})")
-        texts = self._answers.get(token, [self._default])
-        return texts[min(call, len(texts)) - 1]
-
-    def invoke(self, prompt: str, **kwargs: Any):
-        items = _batch_items(prompt)
-        inputs = [str(item["input"]) for item in items] if items else [prompt]
-        with self._seen_lock:
-            for text in inputs:
-                self.seen[_token_in(text)].append((text, kwargs))
-        return super().invoke(prompt, **kwargs)
-
-    def calls_for(self, row: int) -> int:
-        return self.calls[token_for(row)]
-
-    def prompts_for(self, row: int) -> list[str]:
-        return [prompt for prompt, _ in self.seen[token_for(row)]]
 
 
 def _builder(
@@ -327,7 +282,9 @@ def test_rows_past_the_raw_answer_cap_are_re_asked_with_the_reason_only():
     rows = 1002
     client = AttemptClient({row: [TWO_LABELS, "billing"] for row in range(rows)})
 
-    frame = _builder(client, rows).build().execute().to_pandas()
+    # Every first answer fails: early stop would end the run after 50 rows.
+    pipeline = _builder(client, rows, early_stop_fraction=None).build()
+    frame = pipeline.execute().to_pandas()
 
     # A reason quotes the answer too, so look for the line that quotes it whole.
     quoted = "Your previous answer was:\n" + TWO_LABELS

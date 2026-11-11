@@ -387,7 +387,10 @@ def test_a_budget_stop_at_row_120_of_200_fails_every_row_after_it():
         assert outcome.reason.startswith("run stopped before this row")
     report = pipeline.run_report
     _assert_totals(report, 200)
-    assert report.counts[FAILED] == 200
+    # Early stop judges the first 50 rows before asking about any other, so
+    # they are accepted; the 70 answered after them were never judged.
+    assert report.counts[ACCEPTED] == 50
+    assert report.counts[FAILED] == 150
 
 
 # ---------------------------------------------------------------------------
