@@ -2,7 +2,7 @@
 E2E tests for context store anti-hallucination pipeline integration.
 
 Validates the full pipeline path: load -> real LLM -> parse -> context verification -> output.
-Uses a real LLM call via OpenRouter (nvidia/nemotron-3-super-120b-a12b:free) to verify
+Uses a real LLM call via OpenRouter (``live_models.FREE_MODEL``) to verify
 the entire pipeline including PipelineBuilder wiring, Pipeline execution, LLM invocation,
 response parsing, and _apply_context_verification.
 
@@ -25,8 +25,9 @@ import pytest
 
 from ondine.api import PipelineBuilder
 from ondine.context.memory_store import InMemoryContextStore
+from tests.integration.live_models import FREE_MODEL
 
-_MODEL = "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+_MODEL = FREE_MODEL
 _PROMPT_CLASSIFY = (
     "Classify the following product into exactly one food category. "
     "Reply with ONLY the category name, nothing else.\n\n"
