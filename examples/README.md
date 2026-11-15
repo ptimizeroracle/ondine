@@ -114,7 +114,7 @@ pipeline = (
             {
                 "model_name": "fast-llm",
                 "litellm_params": {
-                    "model": "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+                    "model": "openrouter/nvidia/nemotron-3.5-super-vl:free",
                     "api_key": os.getenv("OPENROUTER_API_KEY")
                 }
             },

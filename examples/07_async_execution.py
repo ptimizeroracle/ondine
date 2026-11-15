@@ -38,7 +38,7 @@ async def main():
         )
         .with_prompt("Answer concisely: {question}")
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.0,
         )
         .with_async_execution(max_concurrency=3)  # Async executor

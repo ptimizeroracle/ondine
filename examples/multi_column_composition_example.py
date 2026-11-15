@@ -47,7 +47,7 @@ def example_1_python_api():
             template="Rate product match similarity (0-100%): '{current_product}' vs '{candidate_product}'",
         )
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.0,
             # No max_tokens: a reasoning model spends tokens thinking before
             # it answers, and a tight limit leaves it with nothing to say.
@@ -68,7 +68,7 @@ def example_1_python_api():
             template="Explain why '{current_product}' and '{candidate_product}' have a {match_score}% match score. Consider: brand, model, features, specs.",
         )
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.3,
         )
         .with_batch_size(50)
@@ -138,7 +138,7 @@ Return JSON:
 """,
         )
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.0,
         )
         .build()
