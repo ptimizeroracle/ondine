@@ -267,6 +267,13 @@ override-dependencies = [
     "pygments>=2.20.0",
     "requests>=2.33.0",
     "tornado>=6.5.9",           # GHSA-chx6/c2m8/3hv7 (fixed in 6.5.9)
+    # CVE-2026-126347; 6.6.1 needs Python 3.11, and tornado reaches us only
+    # through the Jupyter dev tools, so 3.10 keeps 6.5.x.
+    "tornado>=6.6.1; python_version >= '3.11'",
+    # CVE-2026-126190..126193; fixed only in 4.x, which needs Python 3.11.5.
+    # Dev-only (beautifulsoup4 via nbconvert).
+    "soupsieve>=4.0.0; python_full_version >= '3.11.5'",
+    "opentelemetry-api>=1.45.2",  # CVE-2026-126360 (ReDoS in traceparent)
     "urllib3>=2.8.0",           # PYSEC-2026-4175/4176/4177
     "virtualenv>=21.7.13",      # PYSEC-2026-4011..4014
     "pip>=25.3",
