@@ -7,12 +7,22 @@ and is not part of its run report.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from dataclasses import field as _field
 from typing import Any
 
-#: The claim kinds. A certificate states accuracy; a check only agreement on
-#: rows the caller picked, with no claim on the column.
+#: The claim kinds. A certificate states accuracy; an audit agreement with a
+#: reference model, never accuracy; a check only agreement on rows the caller
+#: picked, with no claim on the column.
 CERTIFICATE = "certificate"
+AUDIT = "audit"
 CHECK = "check"
+
+#: Printed on every audit. Agreement with a stronger model overstated
+#: accuracy by 4 to 12.5 points on our golden sets (design, section 1).
+AUDIT_WARNING = (
+    "an audit, not accuracy: models share mistakes, across vendors too, so "
+    "agreement can overstate accuracy (by 4 to 12.5 points on our test sets)"
+)
 
 METHOD = "exact hypergeometric 95% range; unresolved rows counted wrong for the low end, right for the high end"
 
@@ -104,6 +114,8 @@ class FieldCertificate:
         wrong_rows: Every compared row the reference contradicts.
         not_delivered: Rows outside the population, by cause (``rejected``,
             ``failed``, ``empty``), never certified.
+        unresolved_causes: Why compared rows have no reference value, by
+            cause, when the reference says (an audit); empty otherwise.
     """
 
     field: str
@@ -116,6 +128,7 @@ class FieldCertificate:
     confusions: tuple[Confusion, ...]
     wrong_rows: tuple[WrongRow, ...]
     not_delivered: dict[str, int]
+    unresolved_causes: dict[str, int] = _field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -123,7 +136,7 @@ class Certificate:
     """A run's certificate or check, bound to the values it measured.
 
     Attributes:
-        claim: :data:`CERTIFICATE` or :data:`CHECK`.
+        claim: :data:`CERTIFICATE`, :data:`AUDIT` or :data:`CHECK`.
         claim_text: What the numbers mean, in words.
         run_id: The run certified.
         fingerprint: Hash of the delivered values measured.
@@ -135,6 +148,8 @@ class Certificate:
         row_accuracy: Rows with every certified field right, when there are
             several fields; None otherwise.
         method: How ranges are computed.
+        reference: An audit's :class:`~ondine.ruler.reference.ReferenceAnswers`
+            (pass it back as ``previous`` to reuse them); None otherwise.
     """
 
     claim: str
@@ -148,6 +163,7 @@ class Certificate:
     not_certified: tuple[tuple[str, str], ...]
     row_accuracy: Estimate | None
     method: str = METHOD
+    reference: Any = None
 
     def __getitem__(self, field: str) -> FieldCertificate:
         for item in self.fields:
@@ -166,14 +182,23 @@ class Certificate:
             values: Delivered values listed per field, largest first.
             wrong: Wrong rows listed per field.
         """
-        title = "Certificate" if self.claim == CERTIFICATE else "Check"
+        title = {CERTIFICATE: "Certificate", AUDIT: "Audit"}.get(self.claim, "Check")
         lines = [f"{title}: {self.claim_text}", f"  Basis:  {self.basis}"]
+        if self.claim == AUDIT:
+            lines.append(f"  Warning: {AUDIT_WARNING}")
+            if self.reference is not None:
+                lines.append(
+                    f"  Reference: {self.reference.model}, cost ${self.reference.cost:.4f}"
+                )
         for item in self.fields:
             lines += _render_field(item, self.claim, values, wrong)
         if self.row_accuracy is not None:
-            lines.append(
-                f"  Rows with every field right: {_headline(self.row_accuracy, self.claim)}"
+            label = (
+                "Rows where every field agrees"
+                if self.claim == AUDIT
+                else "Rows with every field right"
             )
+            lines.append(f"  {label}: {_headline(self.row_accuracy, self.claim)}")
         for name, reason in self.not_certified:
             lines.append(f"  Not certified: {name} ({reason})")
         lines.append(f"  Method: {self.method}")
@@ -189,12 +214,19 @@ def _render_field(
     item: FieldCertificate, claim: str, values: int, wrong: int
 ) -> list[str]:
     est = item.estimate
+    causes = ""
+    if item.unresolved_causes:
+        causes = (
+            " ("
+            + ", ".join(f"{n} {cause}" for cause, n in item.unresolved_causes.items())
+            + ")"
+        )
     lines = [
         "",
         f"  {item.field} ({item.kind})",
         f"    {'Accuracy' if claim == CERTIFICATE else 'Agreement'}: {_headline(est, claim)}",
         f"    Compared: {est.compared} of {est.population} delivered rows; "
-        f"{est.unresolved} unresolved; {item.rule}",
+        f"{est.unresolved} unresolved{causes}; {item.rule}",
     ]
     if item.not_delivered:
         parts = ", ".join(

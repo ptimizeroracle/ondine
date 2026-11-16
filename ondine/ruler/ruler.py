@@ -9,6 +9,9 @@ Three claims, decided by which rows have a reference:
 * a sample Ondine drew: a certificate with a range;
 * every delivered row: a census certificate, exact;
 * rows the caller picked: a check — agreement on those rows, no range.
+
+When the reference is a model's answers (:mod:`ondine.ruler.reference`), the
+same comparison makes an audit: agreement with that model, never accuracy.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import pandas as pd
 
 from ondine.harness.judge import read_field
 from ondine.ruler.certificate import (
+    AUDIT,
     CERTIFICATE,
     CHECK,
     Certificate,
@@ -37,6 +41,7 @@ from ondine.ruler.intervals import hypergeom_bounds
 if TYPE_CHECKING:
     from ondine.harness.contract import OutputContract, OutputField
     from ondine.ruler.delivered import DeliveredValues
+    from ondine.ruler.reference import ReferenceAnswers
     from ondine.ruler.sample import Sample
 
 #: Below this many resolved sampled rows a breakdown line is marked "few rows".
@@ -136,6 +141,7 @@ def certify(
     sample: Sample | None = None,
     tolerance: Mapping[str, float] | None = None,
     read_delivered: bool = False,
+    reference: ReferenceAnswers | None = None,
 ) -> Certificate:
     """Compare delivered values with reference values and state the claim.
 
@@ -149,6 +155,8 @@ def certify(
         tolerance: Field -> allowed absolute difference, for numbers.
         read_delivered: Read delivered values by the contract too (a run with
             no contract delivers raw text).
+        reference: A model's answers on ``sample``, instead of ``gold``: the
+            claim is then an audit.
 
     Raises:
         CertificationError: The sample belongs to another run or other
@@ -156,6 +164,8 @@ def certify(
             listed).
     """
     tolerance = dict(tolerance or {})
+    if reference is not None:
+        gold = reference.values
     if sample is not None:
         _check_sample(sample, delivered, fields)
     declarations = {d.name: d for d in contract.fields}
@@ -188,12 +198,19 @@ def certify(
             outcomes[name],
             claim,
             tolerance.get(name, 0.0),
+            reference.unresolved if reference is not None else None,
         )
         for name in fields
     )
     return Certificate(
-        claim=CERTIFICATE if claim != CHECK else CHECK,
-        claim_text=_claim_text(claim, results),
+        claim=AUDIT
+        if reference is not None
+        else CERTIFICATE
+        if claim != CHECK
+        else CHECK,
+        claim_text=_audit_text(claim, reference.model)
+        if reference is not None
+        else _claim_text(claim, results),
         run_id=delivered.run_id,
         fingerprint=delivered.fingerprint,
         contract_fingerprint=contract.fingerprint,
@@ -204,6 +221,7 @@ def certify(
         row_accuracy=_row_accuracy(delivered, fields, outcomes, claim)
         if len(fields) > 1
         else None,
+        reference=reference,
     )
 
 
@@ -330,7 +348,7 @@ def _estimate(population: int, outcomes: Sequence[str], check: bool) -> Estimate
 
 
 def _field_certificate(
-    delivered, declaration, outcomes, claim, tol
+    delivered, declaration, outcomes, claim, tol, causes=None
 ) -> FieldCertificate:
     name = declaration.name
     population = delivered.population(name)
@@ -371,6 +389,15 @@ def _field_certificate(
             for row, o in wrong
         ),
         not_delivered=_not_delivered(delivered, name, population),
+        unresolved_causes=dict(
+            Counter(
+                causes.get(row, "no answer")
+                for row, o in sorted(outcomes.items())
+                if o[0] == "unresolved"
+            )
+        )
+        if causes is not None
+        else {},
     )
 
 
@@ -425,6 +452,11 @@ def _claim_text(claim: str, results) -> str:
         return "accuracy against your labels, on every delivered row"
     rows = max((r.estimate.compared for r in results), default=0)
     return f"agreement with your labels on the {rows} rows you labelled — not a claim about the column"
+
+
+def _audit_text(claim: str, model: str) -> str:
+    rows = "every delivered row" if claim == "census" else "a sample Ondine drew"
+    return f"agreement with {model}, on {rows} — an audit, not accuracy"
 
 
 def _basis(claim: str, sample, results) -> str:

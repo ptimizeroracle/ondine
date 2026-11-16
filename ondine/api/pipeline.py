@@ -6,7 +6,7 @@ This is the primary entry point that users interact with.
 
 import math
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -37,6 +37,7 @@ from ondine.core.models import (
     ValidationResult,
 )
 from ondine.core.specifications import (
+    LLMSpec,
     PipelineSpecifications,
 )
 from ondine.harness.contract import (
@@ -79,8 +80,16 @@ from ondine.orchestration import (
     create_progress_tracker,
 )
 from ondine.orchestration.progress_tracker import NoOpProgressTracker
-from ondine.ruler.certificate import Certificate
+from ondine.ruler.certificate import AUDIT, Certificate
 from ondine.ruler.delivered import CertificationError, DeliveredValues
+from ondine.ruler.reference import (
+    AuditEstimate,
+    ReferenceAnswers,
+    ask_model,
+    check_previous,
+    reusable,
+    row_estimate,
+)
 from ondine.ruler.ruler import certifiable, resolve_gold
 from ondine.ruler.ruler import certify as certify_values
 from ondine.ruler.sample import Sample
@@ -88,6 +97,7 @@ from ondine.ruler.sample import draw as draw_ruler_sample
 
 if TYPE_CHECKING:
     from ondine.orchestration.backends.provider_batch import ProviderBatchBackend
+from ondine.harness.ledger import RowOutcome
 from ondine.stages import (
     BatchAggregatorStage,
     BatchDisaggregatorStage,
@@ -359,6 +369,35 @@ def _values_contradict(val_a: str, val_b: str, tolerance: int | float | None) ->
         return abs(float(val_a) - float(val_b)) > tolerance
     except (ValueError, TypeError):
         return val_a != val_b
+
+
+@dataclass(frozen=True)
+class _AuditPlan:
+    """What an audit asks, of whom, and against what, once checked.
+
+    Attributes:
+        contract: The run's checked contract; judges the reference too.
+        fields: The fields compared.
+        not_certified: (field, reason) for the output fields left out.
+        delivered: The run's delivered values.
+        outcomes: The run's ledger outcome per row, for pricing.
+        sample: The rows asked.
+        client: The reference client.
+        llm: Its spec when built from a model name; None for a given client.
+        model: The reference model's name.
+        previous: Answers from an earlier audit to reuse, checked.
+    """
+
+    contract: OutputContract
+    fields: list[str]
+    not_certified: list[tuple[str, str]]
+    delivered: DeliveredValues
+    outcomes: dict[int, RowOutcome]
+    sample: Sample
+    client: Any
+    llm: LLMSpec | None
+    model: str
+    previous: ReferenceAnswers | None
 
 
 class Pipeline:
@@ -678,6 +717,209 @@ class Pipeline:
                 result.contract is not None and result.contract.checked
             ),
         )
+
+    def audit(
+        self,
+        result: ExecutionResult,
+        model: str | None = None,
+        *,
+        max_cost: float,
+        client: Any | None = None,
+        sample: Sample | None = None,
+        previous: Certificate | None = None,
+        tolerance: Mapping[str, float] | None = None,
+        **llm_options: Any,
+    ) -> Certificate:
+        """Measure how often a reference model agrees with the delivered values.
+
+        The sampled rows are asked again, by the reference, through this
+        run's own prompt (the same view the run's model had), and its answers
+        are judged by the run's contract, with one re-ask. The claim is
+        agreement with that model: an audit, never accuracy, since models
+        share mistakes. The reference shares nothing with the run (no context
+        store, cache, checkpoints or writer), and the result and its run
+        report are never changed.
+
+        Args:
+            result: A finished result of :meth:`execute`, with a contract.
+            model: The reference model, as :meth:`with_llm` takes it, with
+                the same keyword options. Ondine never picks it.
+            max_cost: The most this audit may spend, in dollars: a hard cap,
+                separate from the run's budget. Rows it cannot pay for are
+                unresolved; answers paid for are kept.
+            client: A client to ask instead of ``model``. Give one of them.
+            sample: The rows to ask; :meth:`draw_sample`'s default otherwise.
+            previous: An earlier audit of this result by the same model and
+                prompt: its answers are reused, and only its unresolved rows
+                are asked again.
+            tolerance: Field -> allowed absolute difference, for numbers.
+
+        Raises:
+            ValueError: Neither or both of ``model`` and ``client``.
+            CertificationError: No contract, a cap that pays for nothing,
+                the run's own model as reference, or a ``previous`` audit of
+                another run, model or prompt.
+        """
+        if max_cost is None or not max_cost > 0:
+            raise CertificationError(
+                "max_cost must be more than 0: the audit's hard cap, in dollars"
+            )
+        plan = self._audit_plan(result, model, client, sample, previous, llm_options)
+        reference = ask_model(
+            plan.sample,
+            plan.fields,
+            plan.outcomes,
+            client=plan.client,
+            model=plan.model,
+            prompt_fingerprint=self._prompt_fingerprint(),
+            max_cost=Decimal(str(max_cost)),
+            ask=lambda frame: self._reference_pass(frame, plan),
+            previous=plan.previous,
+        )
+        return certify_values(
+            plan.delivered,
+            plan.contract,
+            plan.fields,
+            plan.not_certified,
+            {},
+            sample=plan.sample,
+            tolerance=tolerance,
+            reference=reference,
+        )
+
+    def estimate_audit(
+        self,
+        result: ExecutionResult,
+        model: str | None = None,
+        *,
+        client: Any | None = None,
+        sample: Sample | None = None,
+        previous: Certificate | None = None,
+        **llm_options: Any,
+    ) -> AuditEstimate:
+        """Price an :meth:`audit` and say what it would send, spending nothing.
+
+        Takes the arguments :meth:`audit` takes, but ``max_cost``. The price
+        is the most the audit would spend uncapped (two calls per row, with
+        a margin); ``render()`` names the provider, the rows, the columns and
+        whatever else the rendered prompt carries.
+        """
+        plan = self._audit_plan(result, model, client, sample, previous, llm_options)
+        reused = reusable(plan.previous, plan.sample.rows)
+        asked = [row for row in plan.sample.rows if row not in reused]
+        spec = plan.llm or getattr(plan.client, "spec", None)
+        provider = getattr(spec, "provider", None)
+        return AuditEstimate(
+            model=plan.model,
+            provider=str(getattr(provider, "value", provider or "custom")),
+            rows=len(asked),
+            reused=len(reused),
+            columns=tuple(self.specifications.dataset.input_columns),
+            carries=self._prompt_carries(),
+            cost=sum(
+                (row_estimate(plan.outcomes[row], plan.client) for row in asked),
+                Decimal("0"),
+            ),
+        )
+
+    def _audit_plan(
+        self,
+        result: ExecutionResult,
+        model: str | None,
+        client: Any | None,
+        sample: Sample | None,
+        previous: Certificate | None,
+        llm_options: Mapping[str, Any],
+    ) -> _AuditPlan:
+        """What an audit and its estimate share, every refusal checked."""
+        if (model is None) == (client is None):
+            raise ValueError("audit() takes a model or a client, not both")
+        if result.contract is None or not result.contract.checked:
+            raise CertificationError(
+                "an audit judges the reference's answers by the run's output "
+                "contract; declare one (with_output_field and the like)"
+            )
+        contract, names, skipped = self._ruler_fields(result, None)
+        delivered = DeliveredValues.read(result, names)
+        snapshot = result.row_ledger
+        assert snapshot is not None  # DeliveredValues.read refuses a result without
+        if sample is None:
+            sample = self.draw_sample(result)
+        llm: LLMSpec | None = None
+        if client is None:
+            from ondine.api.pipeline_builder import _llm_spec
+
+            assert model is not None
+            options = dict(llm_options)
+            llm = _llm_spec(
+                model,
+                options.pop("provider", None),
+                api_key=options.pop("api_key", None),
+                temperature=options.pop("temperature", 0.0),
+                max_tokens=options.pop("max_tokens", None),
+                input_cost_per_1k_tokens=options.pop("input_cost_per_1k_tokens", None),
+                output_cost_per_1k_tokens=options.pop(
+                    "output_cost_per_1k_tokens", None
+                ),
+                **options,
+            )
+            client = create_llm_client(llm)
+            name = llm.model
+        else:
+            name = str(getattr(client, "model", "custom"))
+        run_models = {self.specifications.llm.model}
+        run_models |= {m for row in sample.rows if (m := delivered.models[row])}
+        if _bare(name) in {_bare(m) for m in run_models}:
+            raise CertificationError(
+                f"{name} delivered this run's values; a model cannot audit itself"
+            )
+        prior = None
+        if previous is not None:
+            prior = previous.reference
+            if previous.claim != AUDIT or prior is None:
+                raise CertificationError("previous must be an audit of this result")
+            check_previous(
+                prior,
+                run_id=delivered.run_id,
+                fingerprint=delivered.fingerprint,
+                model=name,
+                prompt_fingerprint=self._prompt_fingerprint(),
+            )
+        return _AuditPlan(
+            contract=contract,
+            fields=names,
+            not_certified=skipped,
+            delivered=delivered,
+            outcomes={outcome.row: outcome for outcome in snapshot.rows},
+            sample=sample,
+            client=client,
+            llm=llm,
+            model=name,
+            previous=prior,
+        )
+
+    def _prompt_fingerprint(self) -> str:
+        """The run's prompt (template, system prompt, examples), hashed."""
+        import hashlib
+
+        return hashlib.sha256(
+            self.specifications.prompt.model_dump_json().encode()
+        ).hexdigest()
+
+    def _prompt_carries(self) -> tuple[str, ...]:
+        """What the rendered prompt sends besides the row's input columns."""
+        prompt = self.specifications.prompt
+        carries = []
+        if prompt.system_message:
+            carries.append("a system prompt")
+        if prompt.few_shot_examples:
+            carries.append("few-shot examples")
+        metadata = self.specifications.metadata or {}
+        if self._components.knowledge_store is not None and metadata.get(
+            "knowledge_config"
+        ):
+            carries.append("retrieved passages")
+        return tuple(carries)
 
     def _ruler_fields(
         self, result: ExecutionResult, declarations: Sequence[OutputField] | None
@@ -3224,15 +3466,8 @@ class Pipeline:
         cap inside the pass would stop it halfway, with answers paid for and
         lost.
         """
-        from ondine.core.specifications import DataSourceType
-
-        specs = self.specifications.model_copy(deep=True)
-        specs.dataset.source_type = DataSourceType.DATAFRAME
-        specs.dataset.source_path = None
+        specs = self._pass_specs()
         specs.processing.enable_preprocessing = False
-        specs.processing.auto_retry_failed = False
-        specs.processing.max_budget = None
-        specs.output = None
         components = self._components
         if step is not None and step.client is not None:
             # The step asks its own model: its client, under its spec.
@@ -3242,6 +3477,49 @@ class Pipeline:
         pass_pipeline._is_internal_retry = True
         pass_pipeline._is_subpipeline = True
         return pass_pipeline.execute()
+
+    def _reference_pass(self, frame: pd.DataFrame, plan: _AuditPlan) -> ExecutionResult:
+        """Ask an audit's reference model ``frame``'s rows, sharing nothing.
+
+        The run's prompt, preprocessing and knowledge retrieval, so the
+        reference sees what the run's model saw; no context store (so no
+        evidence priming or grounding), no escalation, no cache, no writer.
+        Judged by the run's contract with one re-ask, rejecting what still
+        fails, never stopping early. Uncapped: the audit asks only rows its
+        cap pays for.
+        """
+        specs = self._pass_specs()
+        specs.escalation = None
+        if plan.llm is not None:
+            specs.llm = plan.llm
+        policy = replace(
+            plan.contract.policy,
+            on_failure="reject",
+            early_stop_fraction=None,
+            re_ask=1,
+        )
+        components = replace(
+            self._components,
+            llm_client=plan.client,
+            context_store=None,
+            escalation_client=None,
+            output_contract=replace(plan.contract, policy=policy),
+        )
+        reference_pipeline = Pipeline(specs, dataframe=frame, components=components)
+        reference_pipeline._is_subpipeline = True
+        return reference_pipeline.execute()
+
+    def _pass_specs(self) -> PipelineSpecifications:
+        """This run's specs for a pass over a given frame: no file, cap or output."""
+        from ondine.core.specifications import DataSourceType
+
+        specs = self.specifications.model_copy(deep=True)
+        specs.dataset.source_type = DataSourceType.DATAFRAME
+        specs.dataset.source_path = None
+        specs.processing.auto_retry_failed = False
+        specs.processing.max_budget = None
+        specs.output = None
+        return specs
 
     # ── Provider-batch mode (§5): submit + attach ─────────────────
     #
@@ -3435,3 +3713,8 @@ def _build_rate_limiter(processing_spec):
         burst_size=burst,
         fallback=local,
     )
+
+
+def _bare(model: str) -> str:
+    """A model name without its provider prefix, for comparing names."""
+    return model.rsplit("/", 1)[-1].lower()
