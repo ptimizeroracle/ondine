@@ -2,7 +2,7 @@
 
 A row whose latest answer failed a check is asked again with the prompt it
 was first asked, followed by a correction: the answer it gave and why it was
-not accepted. The pipeline runs the pass (``Pipeline._re_ask_failing_rows``);
+not accepted. The repair passes run it (``ondine.api.repair``);
 the ledger decides the outcome by its usual rule, so a passing re-ask makes
 the row ``repaired`` and a failing one leaves it as it was.
 

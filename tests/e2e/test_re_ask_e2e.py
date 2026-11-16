@@ -240,6 +240,22 @@ def test_a_row_recovered_by_auto_retry_with_a_bad_answer_is_then_re_asked():
     assert _cell(frame, 0, "intent") == "shipping"
 
 
+def test_the_ledger_records_which_pass_made_each_answer():
+    # Call 1 is lost (auto-retry answers it, badly), call 3 is the re-ask.
+    client = AttemptClient({0: ["unused", TWO_LABELS, "shipping"]}, fail={0: {1}})
+    pipeline = _builder(client, 1).build()
+    pipeline.specifications.processing.auto_retry_failed = True
+    pipeline.specifications.processing.max_retry_attempts = 1
+
+    pipeline.execute()
+
+    attempts = pipeline.row_ledger.rows[0].attempts
+    assert [(a.attempt, a.step) for a in attempts] == [
+        (2, "auto-retry"),
+        (3, "re-ask"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # 13-16. Resume, streams, the raw-answer cap, validation
 # ---------------------------------------------------------------------------

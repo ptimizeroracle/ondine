@@ -986,6 +986,21 @@ def test_a_retry_merge_carries_raw_answers_onto_the_parents_attempts():
     assert [(a.attempt, a.raw_answer) for a in row.attempts] == [(2, "bad retry")]
 
 
+def test_a_repair_merge_stamps_its_step_on_the_attempts_it_adds():
+    """Which repair made an answer is recorded, not guessed from the model:
+    under a router, the run's own calls already come from several models."""
+    parent = ledger(1)
+    judged(parent, 0, 1, verdict(intent=failing("no")))
+    repair = ledger(1)
+    judged(repair, 0, 1, verdict(intent=PASS))
+
+    parent.merge(repair, [0], retry=True, step="escalate")
+
+    row = parent.snapshot().rows[0]
+    assert row.status is RowStatus.REPAIRED
+    assert [(a.attempt, a.step) for a in row.attempts] == [(1, None), (2, "escalate")]
+
+
 def test_a_merge_that_delivers_a_row_releases_its_raw_answer():
     parent = ledger(1)
     raw = RawText("bad")

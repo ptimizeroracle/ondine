@@ -596,6 +596,18 @@ class _RowView:
                 return record.model
         return None
 
+    @property
+    def repair_step(self) -> str:
+        """The pass that asked for the final answer, as the ledger recorded it.
+
+        "re-ask" when the answer carries no step: a later attempt from a
+        ledger that did not record one (the only repair those ledgers ran).
+        """
+        for record in self.outcome.attempts:
+            if record.attempt == self.final_attempt and record.step is not None:
+                return record.step
+        return "re-ask"
+
     def cells(
         self,
         outputs: Sequence[str],
@@ -683,15 +695,15 @@ class _RowView:
             if status is RowStatus.ACCEPTED and item is not None and item.absent:
                 text = "absent"
             elif status is RowStatus.REPAIRED and item is not None:
-                text = f"repaired ({'format' if item.format_fixed else 're-ask'})"
+                text = (
+                    f"repaired ({'format' if item.format_fixed else self.repair_step})"
+                )
             parts.append(f"{name}: {text}")
         return "; ".join(parts)
 
     def repair_method(self) -> str:
-        """The step that made the delivered answer: none, format or re-ask.
-
-        A repaired row without a format fix was repaired by a later attempt
-        (the ledger's only other repair), which F1/F2 call re-ask.
+        """The step that made the delivered answer: none, format, or the pass
+        that asked for it (re-ask, escalate), as :attr:`repair_step` reads it.
         """
         status = self.outcome.status
         if status not in (RowStatus.REPAIRED, RowStatus.UNVERIFIED):
@@ -700,10 +712,10 @@ class _RowView:
         if verdict is not None and any(f.format_fixed for f in verdict.fields):
             return "format"
         if status is RowStatus.REPAIRED:
-            return "re-ask"
+            return self.repair_step
         final = self.final_attempt or 0
         earlier = [a for a, _ in self.outcome.verdicts if a < final]
-        return "re-ask" if earlier else "none"
+        return self.repair_step if earlier else "none"
 
     def failures(self) -> list[CheckFailure]:
         """Every failed check of every judged attempt, by attempt then field."""
