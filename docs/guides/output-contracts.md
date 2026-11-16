@@ -12,6 +12,7 @@ Contracts are opt-in. A pipeline with no contract behaves exactly as before.
 | `with_output_relation()` | A rule between two columns | `end >= start` |
 | `with_structured_output(..., as_contract=True)` | The Pydantic schema's rules | `Literal` values, bounds, validators |
 | `with_contract_policy()` | What to do with failing rows | Reject or deliver flagged |
+| `with_escalation()` | A stronger model for rows still failing | `with_escalation(model="openai/gpt-6-luna")` |
 
 ## What a contract checks
 
@@ -132,6 +133,33 @@ Reply with only one of these values, and nothing else: consistent, inconsistent.
 
 In a live test, GPT-6 Luna judged 200 summaries for faithfulness from a loosely worded prompt ("Is this summary consistent with the document?"). It answered "Yes" or "No" with an explanation, so 175 of 200 first answers were rejected. With `re_ask=1`, all 175 were fixed and 142 of them were right against the dataset's labels. Accuracy over all 200 rows was 78.5%, the same as with a strict prompt, for 77% more spend. That test ran with early stop off. With the default policy, early stop would end such a run after its first 50 rows (see [Early stop](#early-stop)).
 
+## Escalation
+
+Re-ask fixes answers the model got right but wrote wrong. It cannot fix answers the model cannot give: asked again, a weak model fails the same way. Escalation asks a stronger model for exactly those rows, so a run can use a cheap model for most rows and pay for a strong one only where it fails.
+
+```python
+pipeline = (
+    PipelineBuilder.create()
+    .from_csv("tickets.csv", input_columns=["text"], output_columns=["intent"])
+    .with_prompt("Classify: {text}")
+    .with_llm(model="openai/gpt-oss-20b")
+    .with_output_field("intent", allowed=["refund", "billing", "shipping"])
+    .with_contract_policy(re_ask=1)
+    .with_escalation(model="openai/gpt-6-luna")
+    .build()
+)
+```
+
+- **Which rows:** rows still failing a check after every re-ask round (`rejected`, or `unverified` under `deliver_flagged`). With `re_ask=0`, the rows that failed on their first answer.
+- **What the stronger model sees:** the original prompt, then the correction built from the latest failed answer, the same text re-ask sends.
+- **Outcome:** an answer that passes makes the row `repaired`, with `repair_method` `escalate` and `delivered_by` naming the stronger model. One that fails leaves the row as it was, with every attempt in the `reason` path and the quarantine. A provider failure leaves the row `rejected`, sub-reason `provider`.
+- **Configuration:** `with_escalation()` takes a model with the same arguments as `with_llm()`, or `client=` for a custom client (as `with_custom_llm_client()`). `rounds` is 1 (default) to 3. An escalation with nothing declared to check fails `build()`.
+- **Cost:** each escalation call is billed to its row. With `with_max_budget()`, a round asks only the rows the remaining budget can pay for, estimated at the stronger model's prices: the row's tokens priced as both input and output, plus 25%, so the estimate errs high.
+- **Early stop** judges the run's own first answers, before any repair. A run that stops early escalates nothing.
+- **Resume:** the escalation model is model configuration, like `with_llm()`, not part of the contract. Resuming with a different escalation model is allowed.
+
+In a live test, gpt-oss-20b judged 200 summaries for faithfulness from the loosely worded prompt, with `re_ask=0` and GPT-6 Luna as the escalation model. Alone, it delivered 75 rows (29.5% right over all 200). With escalation, Luna was asked for the 135 rows that failed, fixed all 135, and 119 of those were right: 84.5% over all 200, for $0.049. On the same task, `re_ask=1` on gpt-oss-20b alone reached 84.0% for $0.027, so escalation pays off where re-ask cannot fix a row, not as a replacement for it. Escalation never sees an answer that passes its checks but is wrong; for those, certify the column (see [Certified columns](certified-columns.md)).
+
 ## Early stop
 
 When more than half of the first 50 rows are rejected, the prompt or the contract is usually broken. Ondine judges those 50 rows before it asks the model about any other row. If more than `early_stop_fraction` of them are rejected, the run stops and raises `EarlyStopError`.
@@ -168,7 +196,7 @@ With a contract, the result's dataframe has five more columns after your output 
 | `status` | One of the six statuses. |
 | `reason` | The check that blocked delivery last, then the path taken, for example `[path: attempt 1 failed check]`. |
 | `checks` | The result per field, for example `intent: accepted; score: rejected`. |
-| `repair_method` | `none`, `format`, or `re-ask` (see [Re-ask](#re-ask)). |
+| `repair_method` | `none`, `format`, `re-ask` (see [Re-ask](#re-ask)) or `escalate` (see [Escalation](#escalation)). |
 | `delivered_by` | The model that produced the delivered value. |
 
 If an input or output column already uses one of these names, `build()` refuses the pipeline and lists every clash. A column in your data that the prompt never reads, such as a ticket's own `status`, is refused when the data loads, before the first model call. Either way nothing is spent. Rename the column. Without a contract, these names are free: no column is added.
@@ -243,7 +271,6 @@ Two outputs are new and sit next to the result: `result.quarantine` lists the fa
 | Limit | What happens today |
 |---|---|
 | No provider-batch mode | `submit()` with a contract raises an error. See [Provider Batch API Mode](provider-batch.md). |
-| No escalation yet | A failing row is asked again by the same model (with `re_ask`); no stronger model is tried. |
 | A loosely worded prompt blanks many rows without re-ask | If the prompt does not ask for the value alone, the model explains its choice. An explanation that names more than one allowed value, or qualifies one ("mostly consistent"), is rejected rather than repaired. Ask for the value alone. If more than half of the first 50 rows are rejected, early stop ends the run; to pay for re-asking them instead, set `re_ask=1` and `early_stop_fraction=None`. |
 
 ## Related

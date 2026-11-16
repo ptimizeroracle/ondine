@@ -22,6 +22,7 @@ from ondine.core.components import PipelineComponents
 from ondine.core.specifications import (
     DatasetSpec,
     DataSourceType,
+    EscalationSpec,
     LLMProvider,
     LLMSpec,
     MergeStrategy,
@@ -106,6 +107,8 @@ class PipelineBuilder:
         self._contract_fields: list[OutputField] = []
         self._contract_relations: list[Relation] = []
         self._contract_policy: RunPolicy | None = None
+        self._escalation: EscalationSpec | None = None
+        self._escalation_client: Any | None = None
         self._schema_as_contract: bool = False
 
     @staticmethod
@@ -563,37 +566,9 @@ class PipelineBuilder:
             )
             ```
         """
-        from ondine.adapters.provider_registry import ProviderRegistry
-
-        # Auto-detect provider from model string if not explicitly provided
-        if provider is None:
-            if "/" in model:
-                # LiteLLM format: "provider/model"
-                provider_enum = LLMProvider.LITELLM
-            else:
-                raise ValueError(
-                    "Provider parameter required when model doesn't include provider prefix.\n"
-                    "Either use LiteLLM format (e.g., 'groq/openai/gpt-oss-120b') or specify provider explicitly."
-                )
-        else:
-            # Try to convert to enum for built-in providers
-            try:
-                provider_enum = LLMProvider(provider.lower())
-            except ValueError:
-                # Not a built-in provider - check if it's a custom provider
-                if ProviderRegistry.is_registered(provider):
-                    # Use a dummy enum value for validation, but store the actual provider string
-                    provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
-                    kwargs["custom_provider_id"] = provider
-                else:
-                    raise ValueError(
-                        f"Unknown provider: {provider}. "
-                        f"Available providers: {', '.join(ProviderRegistry.list_providers())}"
-                    )
-
-        self._llm_spec = LLMSpec(
-            provider=provider_enum,
-            model=model,
+        self._llm_spec = _llm_spec(
+            model,
+            provider,
             api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -1772,6 +1747,82 @@ class PipelineBuilder:
         )
         return self
 
+    def with_escalation(
+        self,
+        model: str | None = None,
+        *,
+        client: Any | None = None,
+        rounds: int = 1,
+        provider: str | None = None,
+        api_key: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        input_cost_per_1k_tokens: Decimal | None = None,
+        output_cost_per_1k_tokens: Decimal | None = None,
+        **kwargs: Any,
+    ) -> PipelineBuilder:
+        """
+        Ask a stronger model for rows still failing a check after re-ask.
+
+        After the run's own pass and every re-ask round, each row whose
+        answer still fails a check is asked once more by this model, with its
+        original prompt and the reason its latest answer was not accepted. A
+        row it fixes is ``repaired``, with the repair method ``escalate`` and
+        ``delivered_by`` naming this model. A row it cannot fix keeps its
+        status. Early stop still judges the run's first answers, before any
+        repair.
+
+        Only meaningful with a contract (``with_output_field`` and the like).
+        Off unless called.
+
+        Args:
+            model: The model, as :meth:`with_llm` takes it; the keyword
+                arguments after ``rounds`` mean what they mean there.
+            client: A client to call instead (as
+                :meth:`with_custom_llm_client`). Give a model or a client.
+            rounds: Most rounds, 1 (default) to 3; each asks only the rows
+                still failing.
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: Neither or both of ``model`` and ``client`` given.
+
+        Example:
+            ```python
+            builder.with_llm(model="openai/gpt-oss-20b")
+            builder.with_contract_policy(re_ask=1)
+            builder.with_escalation(model="openai/gpt-6-luna")
+            ```
+
+        Note:
+            Each escalation call is billed to its row and runs within the
+            run's remaining budget, estimated at this model's prices: rows it
+            cannot afford keep their status. Invalid ``rounds``, or an
+            escalation with nothing declared to check, fail ``build()`` with
+            the other contract problems.
+        """
+        if (model is None) == (client is None):
+            raise ValueError("with_escalation() takes a model or a client, not both")
+        llm = (
+            None
+            if model is None
+            else _llm_spec(
+                model,
+                provider,
+                api_key=api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                input_cost_per_1k_tokens=input_cost_per_1k_tokens,
+                output_cost_per_1k_tokens=output_cost_per_1k_tokens,
+                **kwargs,
+            )
+        )
+        self._escalation = EscalationSpec(llm=llm, rounds=rounds)
+        self._escalation_client = client
+        return self
+
     def _compile_output_contract(
         self, dataset: DatasetSpec, prompt: PromptSpec
     ) -> OutputContract | None:
@@ -1788,10 +1839,18 @@ class PipelineBuilder:
         )
         declared = self._contract_fields or self._contract_relations
         if not declared and schema is None:
-            if self._contract_policy is not None:
+            called = [
+                name
+                for name, value in (
+                    ("with_contract_policy()", self._contract_policy),
+                    ("with_escalation()", self._escalation),
+                )
+                if value is not None
+            ]
+            if called:
                 raise ContractError(
                     [
-                        "with_contract_policy() was called but nothing is "
+                        f"{' and '.join(called)} called but nothing is "
                         "declared to check: add with_output_field(), "
                         "with_output_relation() or "
                         "with_structured_output(..., as_contract=True)"
@@ -1813,6 +1872,7 @@ class PipelineBuilder:
             if clashes
             else []
         )
+        problems.extend(_escalation_problems(self._escalation))
         try:
             contract = build_contract(
                 dataset.output_columns,
@@ -2253,6 +2313,7 @@ class PipelineBuilder:
             llm=llm_spec,
             processing=self._processing_spec,
             output=self._output_spec,
+            escalation=self._escalation,
             metadata=metadata,
         )
 
@@ -2268,5 +2329,80 @@ class PipelineBuilder:
                 structured_output_model=self._structured_output_model,
                 custom_parser=self._custom_parser,
                 output_contract=output_contract,
+                escalation_client=self._escalation_client,
             ),
         )
+
+
+def _llm_spec(
+    model: str,
+    provider: str | None,
+    *,
+    api_key: str | None,
+    temperature: float,
+    max_tokens: int | None,
+    input_cost_per_1k_tokens: Decimal | None,
+    output_cost_per_1k_tokens: Decimal | None,
+    **kwargs: Any,
+) -> LLMSpec:
+    """The spec ``with_llm`` and ``with_escalation`` build from their arguments."""
+    from ondine.adapters.provider_registry import ProviderRegistry
+
+    # Auto-detect provider from model string if not explicitly provided
+    if provider is None:
+        if "/" in model:
+            # LiteLLM format: "provider/model"
+            provider_enum = LLMProvider.LITELLM
+        else:
+            raise ValueError(
+                "Provider parameter required when model doesn't include provider prefix.\n"
+                "Either use LiteLLM format (e.g., 'groq/openai/gpt-oss-120b') or specify provider explicitly."
+            )
+    else:
+        # Try to convert to enum for built-in providers
+        try:
+            provider_enum = LLMProvider(provider.lower())
+        except ValueError:
+            # Not a built-in provider - check if it's a custom provider
+            if ProviderRegistry.is_registered(provider):
+                # Use a dummy enum value for validation, but store the actual provider string
+                provider_enum = LLMProvider.OPENAI  # Dummy for Pydantic validation
+                kwargs["custom_provider_id"] = provider
+            else:
+                raise ValueError(
+                    f"Unknown provider: {provider}. "
+                    f"Available providers: {', '.join(ProviderRegistry.list_providers())}"
+                )
+
+    return LLMSpec(
+        provider=provider_enum,
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        input_cost_per_1k_tokens=input_cost_per_1k_tokens,
+        output_cost_per_1k_tokens=output_cost_per_1k_tokens,
+        **kwargs,
+    )
+
+
+def _escalation_problems(escalation: EscalationSpec | None) -> list[str]:
+    """What is wrong with ``escalation``'s settings, for ``build()`` to report."""
+    if escalation is None:
+        return []
+    rounds = escalation.rounds
+    if (
+        isinstance(rounds, bool)
+        or not isinstance(rounds, int)
+        or not 1 <= rounds <= MAX_ESCALATION_ROUNDS
+    ):
+        return [
+            f"escalation rounds {rounds!r}: use a whole number from 1 to "
+            f"{MAX_ESCALATION_ROUNDS}"
+        ]
+    return []
+
+
+#: The most rounds an escalation may run: like re-ask's, a model that keeps
+#: failing a check is not going to pass it.
+MAX_ESCALATION_ROUNDS = 3

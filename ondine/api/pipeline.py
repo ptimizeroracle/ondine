@@ -6,6 +6,7 @@ This is the primary entry point that users interact with.
 
 import math
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -973,7 +974,11 @@ class Pipeline:
             # Re-ask after auto-retry, so a row auto-retry recovered with an
             # answer that fails a check is asked again too. A pass is never
             # re-asked on its own: the run it belongs to runs every round.
-            plan = () if self._is_internal_retry else repair_plan(contract)
+            plan = (
+                ()
+                if self._is_internal_retry
+                else repair_plan(contract, self._escalation_step())
+            )
             inputs = context.full_input()
             if plan and inputs is not None:
                 run_repairs(
@@ -3195,6 +3200,18 @@ class Pipeline:
             self._drop_recovered_losses(result, retried, output_cols, ledger)
         return result
 
+    def _escalation_step(self) -> RepairStep | None:
+        """The escalation step ``with_escalation`` set up, its client built."""
+        escalation = self.specifications.escalation
+        if escalation is None:
+            return None
+        client = self._components.escalation_client
+        if client is None and escalation.llm is not None:
+            client = create_llm_client(escalation.llm)
+        return RepairStep(
+            "escalate", escalation.rounds, client=client, llm=escalation.llm
+        )
+
     def _run_pass(
         self, frame: pd.DataFrame, step: RepairStep | None = None
     ) -> ExecutionResult:
@@ -3216,7 +3233,12 @@ class Pipeline:
         specs.processing.auto_retry_failed = False
         specs.processing.max_budget = None
         specs.output = None
-        pass_pipeline = Pipeline(specs, dataframe=frame, components=self._components)
+        components = self._components
+        if step is not None and step.client is not None:
+            # The step asks its own model: its client, under its spec.
+            specs.llm = step.llm or specs.llm
+            components = replace(components, llm_client=step.client)
+        pass_pipeline = Pipeline(specs, dataframe=frame, components=components)
         pass_pipeline._is_internal_retry = True
         pass_pipeline._is_subpipeline = True
         return pass_pipeline.execute()

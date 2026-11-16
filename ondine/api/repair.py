@@ -8,8 +8,8 @@ the run's as later attempts stamped with the step's name, so the ledger's
 usual rule decides each row (a passing answer makes it ``repaired``) and
 delivery names the step that made it.
 
-Today's plan has one step, re-ask, on the run's own model. A step that names
-another model asks that one instead: the shape escalation takes.
+The plan is re-ask on the run's own model, then escalation: the same pass,
+asking a stronger model the rows re-ask could not fix.
 
 Designs: ``.claude/designs/re-ask.md``, ``.claude/designs/escalation.md``.
 """
@@ -35,6 +35,7 @@ from ondine.utils import get_logger
 
 if TYPE_CHECKING:
     from ondine.core.models import ExecutionResult
+    from ondine.core.specifications import LLMSpec
     from ondine.harness.contract import OutputContract
     from ondine.harness.ledger import RowLedger, RowOutcome
 
@@ -53,10 +54,15 @@ class RepairStep:
         name: Stamped on every answer the step adds (``AttemptRecord.step``)
             and shown as the row's ``repair_method``.
         rounds: Most rounds; each asks only the rows still failing.
+        client: The client this step asks; None for the run's own.
+        llm: The spec that client was built from, when there is one; the
+            step's passes run under it, so its provider options apply.
     """
 
     name: str
     rounds: int
+    client: Any | None = None
+    llm: LLMSpec | None = None
 
 
 #: Runs one round: the rows to ask (input columns plus the correction) and the
@@ -64,11 +70,22 @@ class RepairStep:
 RunPass = Callable[[pd.DataFrame, RepairStep], "ExecutionResult"]
 
 
-def repair_plan(contract: OutputContract) -> tuple[RepairStep, ...]:
-    """The repairs ``contract``'s policy asks for, in the order they run."""
-    if not contract.checked or not contract.policy.re_ask:
+def repair_plan(
+    contract: OutputContract, escalation: RepairStep | None = None
+) -> tuple[RepairStep, ...]:
+    """The repairs a run asks for, in the order they run.
+
+    Re-ask, when ``contract``'s policy sets it, then ``escalation``. Nothing
+    without a checked contract: no check, nothing to repair.
+    """
+    if not contract.checked:
         return ()
-    return (RepairStep("re-ask", contract.policy.re_ask),)
+    steps = []
+    if contract.policy.re_ask:
+        steps.append(RepairStep("re-ask", contract.policy.re_ask))
+    if escalation is not None:
+        steps.append(escalation)
+    return tuple(steps)
 
 
 def run_repairs(
@@ -89,9 +106,12 @@ def run_repairs(
     them.
 
     Budget: a round asks only the leading rows (in input order) the run's
-    remaining budget can pay for, each estimated from its own earlier answers
-    with :data:`COST_MARGIN`. The round itself runs uncapped, so it never
-    stops halfway with answers paid for and lost.
+    remaining budget can pay for, each estimated with :data:`COST_MARGIN`:
+    on the run's model, from the row's own earlier answers; on another
+    model, the row's tokens priced at that model's rates, every token at
+    both its input and output price, so the estimate errs high. The round
+    itself runs uncapped, so it never stops halfway with answers paid for
+    and lost.
 
     Args:
         inputs: The run's input rows, by input position.
@@ -105,7 +125,7 @@ def run_repairs(
                 remaining = Decimal(str(max_budget)) - Decimal(
                     str(result.costs.total_cost)
                 )
-                failing = _affordable(failing, remaining)
+                failing = _affordable(failing, remaining, step)
             if not failing:
                 break
             logger.info(
@@ -159,15 +179,25 @@ def _run_round(
     result.costs.total_tokens += pass_result.costs.total_tokens
 
 
-def _affordable(failing: Sequence[RowOutcome], remaining: Decimal) -> list[RowOutcome]:
+def _affordable(
+    failing: Sequence[RowOutcome], remaining: Decimal, step: RepairStep
+) -> list[RowOutcome]:
     """The leading rows of ``failing`` whose estimated repairs fit ``remaining``."""
     chosen = []
     spent = Decimal("0")
     for outcome in failing:
-        attempts = len(outcome.attempts) or 1
-        estimate = outcome.cost / attempts * COST_MARGIN
+        estimate = _estimate(outcome, step) * COST_MARGIN
         if spent + estimate > remaining:
             break
         spent += estimate
         chosen.append(outcome)
     return chosen
+
+
+def _estimate(outcome: RowOutcome, step: RepairStep) -> Decimal:
+    """One call's cost for ``outcome``'s row on ``step``'s model, before margin."""
+    attempts = len(outcome.attempts) or 1
+    if step.client is None:
+        return outcome.cost / attempts
+    tokens = sum(record.tokens for record in outcome.attempts) // attempts
+    return Decimal(str(step.client.calculate_cost(tokens, tokens)))
