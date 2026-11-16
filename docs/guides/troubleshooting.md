@@ -45,7 +45,7 @@ pipeline = (
     PipelineBuilder.create()
     .from_csv("data.csv", input_columns=["text"], output_columns=["result"])
     .with_prompt("Process: {text}")
-    .with_llm(model="openrouter/nvidia/nemotron-3-super-120b-a12b:free")
+    .with_llm(model="openrouter/nvidia/nemotron-3.5-super-vl:free")
     .with_rate_limit(30)   # requests per minute — match your provider's limit
     .build()
 )

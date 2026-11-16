@@ -2,8 +2,10 @@
 
 Hosted models are retired without notice. Groq dropped every Llama model it
 served, and twenty-eight tests across fifteen files went red at once because
-each of them spelled ``llama-3.3-70b-versatile`` out by hand. A retired model
-should cost one edit here, not a sweep of the suite.
+each of them spelled ``llama-3.3-70b-versatile`` out by hand. OpenRouter then
+moved ``nvidia/nemotron-3-super-120b-a12b`` off its free tier (2026-10-18), and
+the daily smoke test stayed red for four weeks. A retired model should cost one
+edit here, not a sweep of the suite.
 
 Two models are named:
 
@@ -36,7 +38,7 @@ import os
 
 FREE_PROVIDER = os.getenv("ONDINE_TEST_FREE_PROVIDER", "litellm")
 FREE_MODEL = os.getenv(
-    "ONDINE_TEST_FREE_MODEL", "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+    "ONDINE_TEST_FREE_MODEL", "openrouter/nvidia/nemotron-3.5-super-vl:free"
 )
 FREE_KEY_ENV = os.getenv("ONDINE_TEST_FREE_KEY_ENV", "OPENROUTER_API_KEY")
 

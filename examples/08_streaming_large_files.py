@@ -42,7 +42,7 @@ def streaming_example():
         )
         .with_prompt("Summarize in 3 words: {text}")
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.0,
         )
         .with_streaming(chunk_size=100)  # Process 100 rows at a time

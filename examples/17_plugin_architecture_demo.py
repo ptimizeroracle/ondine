@@ -169,7 +169,7 @@ def demo_custom_stage():
             template="Based on this review: {review}\n\nGenerate a customer service response in 20 words."
         )
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.7,
             api_key=os.getenv("OPENROUTER_API_KEY"),
             input_cost_per_1k_tokens="0.0",

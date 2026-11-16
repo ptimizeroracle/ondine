@@ -51,7 +51,7 @@ def example_1_basic_system_prompt():
             "3) Choose the most specific category",
         )
         .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            model="openrouter/nvidia/nemotron-3.5-super-vl:free",
             temperature=0.0,
         )
         .build()
@@ -98,9 +98,7 @@ def example_2_different_personas():
             "Be empathetic, apologetic, and offer solutions. "
             "Keep responses concise and actionable.",
         )
-        .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.3
-        )
+        .with_llm(model="openrouter/nvidia/nemotron-3.5-super-vl:free", temperature=0.3)
         .build()
     )
 
@@ -118,9 +116,7 @@ def example_2_different_personas():
             "Be warm, understanding, and conversational. "
             "Use a casual tone but remain helpful.",
         )
-        .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.3
-        )
+        .with_llm(model="openrouter/nvidia/nemotron-3.5-super-vl:free", temperature=0.3)
         .build()
     )
 
@@ -164,9 +160,7 @@ def example_3_json_extraction_with_system():
             "Always respond with valid JSON only, no explanations. "
             'Format: {"product": "name", "quantity": "amount", "price": "$X.XX"}',
         )
-        .with_llm(
-            model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", temperature=0.0
-        )
+        .with_llm(model="openrouter/nvidia/nemotron-3.5-super-vl:free", temperature=0.0)
         .with_parser(JSONParser(strict=False))
         .build()
     )
@@ -202,7 +196,7 @@ prompt:
 
 llm:
   provider: litellm
-  model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+  model: openrouter/nvidia/nemotron-3.5-super-vl:free
   temperature: 0.0
 
 processing:
@@ -266,7 +260,7 @@ prompt:
 
 llm:
   provider: litellm
-  model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+  model: openrouter/nvidia/nemotron-3.5-super-vl:free
 """)
 
     print("\nThen run:")
