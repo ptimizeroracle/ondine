@@ -195,6 +195,11 @@ class AttemptRecord:
     (:meth:`RowLedger.record_answer`) or with a verdict that did not pass
     (:meth:`RowLedger.record_verdict`). In a snapshot it is kept only for
     quarantined rows within the D3 cap, and is None everywhere else.
+
+    ``step`` names the pass that asked for this answer: None for the run's own
+    pass, otherwise the name a merge stamped on it (``"auto-retry"``,
+    ``"re-ask"``, ``"escalate"``). It is recorded, never inferred from the
+    model, because a router already spreads one pass's calls across models.
     """
 
     attempt: int
@@ -202,6 +207,7 @@ class AttemptRecord:
     tokens: int
     cost: Decimal
     raw_answer: Any = None
+    step: str | None = None
 
 
 @dataclass(frozen=True)
@@ -645,6 +651,7 @@ class RowLedger:
         parent_rows: Sequence[int],
         *,
         retry: bool = False,
+        step: str | None = None,
     ) -> None:
         """Fold a sub-pipeline's ledger into this one.
 
@@ -660,6 +667,10 @@ class RowLedger:
                 latest attempt and replaces the failure. False for a streaming
                 chunk, whose attempts are compared as reported, so a row seen
                 by two chunks keeps the higher attempt.
+            step: The pass the child ran (``"auto-retry"``, ``"re-ask"``,
+                ``"escalate"``), stamped on every answer it adds; see
+                :attr:`AttemptRecord.step`. None for a streaming chunk, whose
+                answers come from the run's own pass.
 
         Two ledgers reporting the same row on the same attempt with different
         content (two answers, or two different verdicts) means two pipelines
@@ -694,8 +705,9 @@ class RowLedger:
 
             for child_row, record in answers:
                 attempt = record.attempt + offset(child_row)
-                if attempt != record.attempt:
-                    record = replace(record, attempt=attempt)
+                stamped = record.step if step is None else step
+                if attempt != record.attempt or stamped != record.step:
+                    record = replace(record, attempt=attempt, step=stamped)
                 self._add_answer(checked[child_row], record, merged=True)
             for child_row, attempt, judgement in verdicts:
                 self._add_verdict(
@@ -1463,8 +1475,12 @@ class _CompactRows:
     # -- storing: each returns False when the row must take a full record ---
 
     def store_answer(self, row: int, record: AttemptRecord) -> bool:
-        """Keep ``record`` as ``row``'s only event, if it fits."""
-        if self.model[row] or self.failure[row]:
+        """Keep ``record`` as ``row``'s only event, if it fits.
+
+        A stamped record takes a full one: the columns hold no step, and a
+        repair's answer always follows an earlier event anyway.
+        """
+        if self.model[row] or self.failure[row] or record.step is not None:
             return False
         if type(record.attempt) is not int or record.attempt not in _SMALL:
             return False

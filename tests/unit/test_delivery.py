@@ -434,6 +434,27 @@ class TestHarnessColumns:
             "[path: attempt 1 failed check -> attempt 2 passed]"
         )
 
+    @pytest.mark.parametrize("step", ["re-ask", "escalate"])
+    def test_a_repaired_row_names_the_step_that_made_its_answer(self, step):
+        run = Run(_contract(INTENT), 1)
+        run.answer(0, 1, _json(intent="upgrade"), model="small")
+        repair = RowLedger(1, run.ledger.policy, strict=True)
+        repair.record_answer(0, 1, model="small", tokens=10, cost=Decimal("0.01"))
+        repair.record_verdict(
+            0,
+            1,
+            judge(run.contract, _json(intent="cancel"), run.inputs[0]),
+            stage=PARSER,
+        )
+        run.values[0] = {"intent": "cancel"}
+
+        run.ledger.merge(repair, [0], retry=True, step=step)
+        row = run.deliver().records()[0]
+
+        assert row["status"] == "repaired"
+        assert row["repair_method"] == step
+        assert row["checks"] == f"intent: repaired ({step})"
+
     def test_reason_is_the_last_blocking_check_plus_the_path(self):
         run = Run(_contract(INTENT), 1)
         run.answer(0, 1, _json(intent="upgrade"))

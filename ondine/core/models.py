@@ -303,6 +303,7 @@ class ExecutionResult:
         *,
         retry: bool,
         keep: bool = False,
+        step: str | None = None,
     ) -> None:
         """Fold this sub-pipeline run's ledger into ``parent``, at ``parent_rows``.
 
@@ -320,11 +321,14 @@ class ExecutionResult:
         can still be taken if :attr:`row_ledger` is read later. For a chunk
         whose report is rarely read: the compact ledger is far smaller than
         a snapshot, and it goes when the caller drops the chunk.
+
+        ``step`` names the pass this run was (``"auto-retry"``, ``"re-ask"``),
+        stamped on every answer it adds (see ``RowLedger.merge``).
         """
         live = self._live_ledger
         if live is None:
             return
-        parent.merge(live, parent_rows, retry=retry)
+        parent.merge(live, parent_rows, retry=retry, step=step)
         if not keep:
             self._live_ledger = None
         self._awaiting_merge = False
