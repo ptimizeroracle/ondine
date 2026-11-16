@@ -113,6 +113,10 @@ class LedgerClient(LLMClient):
     class exists to detect.
     """
 
+    #: What each call reports costing. A class default, so subclasses with
+    #: their own ``__init__`` keep it.
+    cost_per_call: Decimal = COST_PER_CALL
+
     def __init__(
         self,
         spec: LLMSpec | None = None,
@@ -120,8 +124,10 @@ class LedgerClient(LLMClient):
         fail_tokens: set[str] | None = None,
         fail_times: int | None = None,
         transient: bool = False,
+        cost_per_call: Decimal = COST_PER_CALL,
     ) -> None:
         super().__init__(spec or conformance_spec())
+        self.cost_per_call = cost_per_call
         self._fail_tokens = set(fail_tokens or ())
         self._fail_times = fail_times
         self._failure_type = NetworkError if transient else ProviderError
@@ -183,7 +189,7 @@ class LedgerClient(LLMClient):
             tokens_in=TOKENS_IN_PER_CALL,
             tokens_out=TOKENS_OUT_PER_CALL,
             model=self.model,
-            cost=COST_PER_CALL,
+            cost=self.cost_per_call,
             latency_ms=1.0,
         )
 
@@ -253,8 +259,10 @@ class AttemptClient(LedgerClient):
         *,
         fail: dict[int, set[int]] | None = None,
         default: str = "refund",
+        spec: LLMSpec | None = None,
+        cost_per_call: Decimal = COST_PER_CALL,
     ) -> None:
-        super().__init__()
+        super().__init__(spec, cost_per_call=cost_per_call)
         self._answers = {token_for(r): texts for r, texts in answers.items()}
         self._fail = {token_for(r): calls for r, calls in (fail or {}).items()}
         self._default = default

@@ -561,6 +561,20 @@ class OutputSpec(BaseModel):
         return Path(v) if isinstance(v, str) else v
 
 
+class EscalationSpec(BaseModel):
+    """A stronger model, asked for rows still failing a check after re-ask.
+
+    Attributes:
+        llm: The model, configured as ``with_llm`` configures the run's.
+            None when a client was given instead (``with_escalation(client=)``).
+        rounds: Most rounds; each asks only the rows still failing. Checked
+            (1 to 3) at ``build()``, with the rest of the output contract.
+    """
+
+    llm: LLMSpec | None = None
+    rounds: Any = 1
+
+
 class PipelineSpecifications(BaseModel):
     """Container for all pipeline specifications."""
 
@@ -574,6 +588,7 @@ class PipelineSpecifications(BaseModel):
     llm: LLMSpec
     processing: ProcessingSpec = Field(default_factory=ProcessingSpec)
     output: OutputSpec | None = None
+    escalation: EscalationSpec | None = None
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Custom metadata"
     )

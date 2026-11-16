@@ -40,6 +40,8 @@ class PipelineComponents:
             contract derived from a structured-output schema holds the schema
             model, which does not serialize. The pipeline resolves the contract
             a run uses in one place, falling back to the unchecked contract.
+        escalation_client: The client ``with_escalation(client=...)`` gave,
+            asked instead of one built from ``specifications.escalation``.
     """
 
     llm_client: Any | None = None
@@ -48,3 +50,4 @@ class PipelineComponents:
     structured_output_model: Any | None = None
     custom_parser: Any | None = None
     output_contract: OutputContract | None = None
+    escalation_client: Any | None = None
