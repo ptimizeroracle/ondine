@@ -22,6 +22,7 @@ from ondine import PipelineBuilder
 from ondine.context.memory_store import InMemoryContextStore
 from ondine.core.specifications import LLMProvider, LLMSpec
 from ondine.ruler import CertificationError
+from ondine.ruler.intervals import hypergeom_bounds
 from tests.e2e.conformance_harness import AttemptClient, conformance_frame
 
 LABELS = ["refund", "billing"]
@@ -112,7 +113,11 @@ def test_a_sampled_audit_gives_an_exact_range_on_agreement():
     expected_right = sum(row not in wrong for row in sample.rows)
     assert intent.estimate.compared == 50
     assert intent.estimate.right == expected_right
-    assert intent.estimate.low < 0.9 < intent.estimate.high
+    low, high = hypergeom_bounds([expected_right], 50, 300)
+    assert (intent.estimate.low, intent.estimate.high) == (
+        int(low[0]) / 300,
+        int(high[0]) / 300,
+    )
     assert reference.tokens_seen == {f"row-{row:04d}" for row in sample.rows}
 
 
