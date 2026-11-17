@@ -13,7 +13,11 @@ it (:mod:`ondine.ruler.source`). Its kind and the rows it covers decide the clai
 * labels, on rows the caller picked: a check — agreement on those rows, no
   range;
 * a reference model's answers: the same comparison makes an audit, agreement
-  with that model, never accuracy.
+  with that model, never accuracy;
+* people's labels from a review sheet, on a sample Ondine drew: a
+  certificate, "accuracy against blind human labels". Two labellers may have
+  answered the same row; their answers are judged one by one against the
+  delivered value (:func:`_compare`), and their agreement is a number of its own.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
@@ -30,16 +34,23 @@ from ondine.ruler.certificate import (
     AUDIT,
     CERTIFICATE,
     CHECK,
+    FEW_ROWS,
     Certificate,
     Confusion,
     Estimate,
     FieldCertificate,
     Group,
+    LabellerAgreement,
     WrongRow,
 )
 from ondine.ruler.delivered import CertificationError
 from ondine.ruler.intervals import hypergeom_bounds
-from ondine.ruler.source import NO_ANSWER, ReferenceProblem
+from ondine.ruler.source import (
+    ABSENT,
+    LABELLERS_DISAGREE,
+    NO_ANSWER,
+    ReferenceProblem,
+)
 
 if TYPE_CHECKING:
     from ondine.harness.contract import OutputContract, OutputField
@@ -47,10 +58,29 @@ if TYPE_CHECKING:
     from ondine.ruler.sample import Sample
     from ondine.ruler.source import Reference
 
-#: Below this many resolved sampled rows a breakdown line is marked "few rows".
-FEW_ROWS = 20
 #: Confusions listed per field.
 TOP_CONFUSIONS = 5
+
+
+class Outcome(NamedTuple):
+    """What comparing one row's delivered value with its reference found.
+
+    Attributes:
+        state: "right", "wrong" or "unresolved".
+        value: The delivered value.
+        accepted: The acceptable references; for a row two labellers
+            answered, the first's answers, then the second's others.
+        cause: Why the row is unresolved, when the comparison itself knows
+            (the labellers disagree); None when the reference says, or says nothing.
+        pair: For a row two labellers were given: each one's acceptable
+            answers (empty when they gave none); None for any other row.
+    """
+
+    state: str
+    value: Any
+    accepted: tuple[Any, ...]
+    cause: str | None = None
+    pair: tuple[tuple[Any, ...], tuple[Any, ...]] | None = None
 
 
 def certifiable(contract: OutputContract) -> tuple[list[str], list[tuple[str, str]]]:
@@ -169,20 +199,20 @@ def certify(
 
     Raises:
         CertificationError: The sample belongs to another run or other
-            values, the reference's kind is not supported yet, or reference
-            values break the field's rules (every one listed).
+            values, or reference values break the field's rules (every one
+            listed).
     """
-    if reference.kind == "people":
-        raise CertificationError("labels from people are not certified yet")
     tolerance = dict(tolerance or {})
     if sample is not None:
-        _check_sample(sample, delivered, fields)
+        sample.check(delivered, fields)
     declarations = {d.name: d for d in contract.fields}
+    labellers = reference.labellers
     problems: list[ReferenceProblem] = []
-    outcomes: dict[str, dict[int, tuple[str, Any, tuple[Any, ...]]]] = {}
+    outcomes: dict[str, dict[int, Outcome]] = {}
     for name in fields:
         population = delivered.population(name)
         answers = reference.answers[name]
+        second_answers = labellers.second.get(name, {}) if labellers else {}
         rows = _compared_rows(population, answers, sample)
         outcomes[name] = {}
         for row in rows:
@@ -193,7 +223,17 @@ def certify(
             if row in answers:
                 accepted, found = read_reference(contract, name, answers[row], row)
                 problems += found
-            outcomes[name][row] = _compare(value, accepted, tolerance.get(name, 0.0))
+            second: tuple[Any, ...] | None = None
+            if labellers is not None and row in labellers.doubled:
+                second = ()
+                if row in second_answers:
+                    second, found = read_reference(
+                        contract, name, second_answers[row], row
+                    )
+                    problems += found
+            outcomes[name][row] = _compare(
+                value, accepted, tolerance.get(name, 0.0), second
+            )
     if problems:
         shown = "\n  ".join(problem.line() for problem in problems[:50])
         more = f"\n  … {len(problems) - 50} more" if len(problems) > 50 else ""
@@ -211,6 +251,14 @@ def certify(
             tolerance.get(name, 0.0),
             # Labels give no cause for an unresolved row; other sources do.
             None if reference.kind == "labels" else reference.causes.get(name, {}),
+            labeller_agreement(
+                outcomes[name],
+                labellers.count,
+                _kind(declarations[name]),
+                tolerance.get(name, 0.0),
+            )
+            if labellers is not None
+            else None,
         )
         for name in fields
     )
@@ -227,27 +275,8 @@ def certify(
         row_accuracy=_row_accuracy(delivered, fields, outcomes, coverage)
         if len(fields) > 1
         else None,
+        sheet=reference.sheet,
     )
-
-
-def _check_sample(
-    sample: Sample, delivered: DeliveredValues, fields: Sequence[str]
-) -> None:
-    if sample.run_id != delivered.run_id:
-        raise CertificationError(
-            f"the sample was drawn from run {sample.run_id[:8]}…, not this run "
-            f"({delivered.run_id[:8]}…); draw a sample from this result"
-        )
-    if sample.fingerprint != delivered.fingerprint:
-        raise CertificationError(
-            "the delivered values changed since the sample was drawn; "
-            "the sample no longer represents the column"
-        )
-    outside = [name for name in fields if name not in sample.fields]
-    if outside:
-        raise CertificationError(
-            f"the sample was not drawn for {', '.join(map(repr, outside))}"
-        )
 
 
 def _compared_rows(
@@ -306,6 +335,8 @@ def read_reference(
     skipped. Each is read as a model's answer would be, no more loosely.
     A value that breaks the field's rules, or would need a format fix, is not
     accepted: it becomes a problem and the others are still read.
+    :data:`~ondine.ruler.source.ABSENT` means "no value", which only an
+    optional field can have.
 
     Returns:
         The accepted values (``None`` for an answer that means "no value"),
@@ -315,6 +346,13 @@ def read_reference(
     accepted: list[Any] = []
     problems: list[ReferenceProblem] = []
     for item in raws:
+        if item is ABSENT:
+            if declaration_of(contract, name).required:
+                reason = "'-' means no value, but this field is required"
+                problems.append(ReferenceProblem(name, row, "-", (reason,)))
+            else:
+                accepted.append(None)
+            continue
         if _missing(item):
             continue
         verdict = read_field(contract, name, item)
@@ -326,14 +364,40 @@ def read_reference(
     return tuple(accepted), problems
 
 
+def declaration_of(contract: OutputContract, name: str) -> OutputField:
+    """The declaration of output field ``name``."""
+    return next(d for d in contract.fields if d.name == name)
+
+
 def _compare(
-    value: Any, accepted: tuple[Any, ...], tol: float
-) -> tuple[str, Any, tuple[Any, ...]]:
-    """("right" | "wrong" | "unresolved", delivered, acceptable references)."""
-    if not accepted:
-        return ("unresolved", value, ())
-    right = any(_equal(value, a, tol) for a in accepted)
-    return ("right" if right else "wrong", value, accepted)
+    value: Any,
+    accepted: tuple[Any, ...],
+    tol: float,
+    second: tuple[Any, ...] | None = None,
+) -> Outcome:
+    """Judge a delivered value against its reference.
+
+    ``second`` is the second labeller's acceptable answers on a row two
+    labellers were given (empty if they gave none), None on any other row.
+    Each labeller's answers are judged on their own: both right is right,
+    both wrong is wrong, one of each is unresolved ("labellers disagree").
+    If only one answered, that answer counts; if neither, the row is
+    unresolved and its cause is the reference's.
+    """
+    if second is None:  # the common row, and the one that runs per delivered row
+        if not accepted:
+            return Outcome("unresolved", value, ())
+        right = any(_equal(value, a, tol) for a in accepted)
+        return Outcome("right" if right else "wrong", value, accepted)
+    pair = (accepted, second)
+    if accepted and second:
+        first_right = any(_equal(value, a, tol) for a in accepted)
+        second_right = any(_equal(value, a, tol) for a in second)
+        merged = accepted + tuple(a for a in second if a not in accepted)
+        if first_right != second_right:
+            return Outcome("unresolved", value, merged, LABELLERS_DISAGREE, pair)
+        return Outcome("right" if first_right else "wrong", value, merged, None, pair)
+    return _compare(value, accepted or second, tol)._replace(pair=pair)
 
 
 def _equal(value: Any, ref: Any, tol: float) -> bool:
@@ -374,20 +438,21 @@ def _estimate(population: int, outcomes: Sequence[str], check: bool) -> Estimate
 
 
 def _field_certificate(
-    delivered, declaration, outcomes, coverage, tol, causes=None
+    delivered, declaration, outcomes, coverage, tol, causes=None, agreement=None
 ) -> FieldCertificate:
-    """``causes``: row -> why it has no answer, or None to report none."""
+    """``causes``: row -> the reference's cause for a row with no answer, or
+    None to report none; a cause the comparison found (an outcome's own) wins."""
     name = declaration.name
     population = delivered.population(name)
     check = coverage == CHECK
-    states = [outcomes[row][0] for row in sorted(outcomes)]
+    states = [outcomes[row].state for row in sorted(outcomes)]
     estimate = _estimate(len(population), states, check)
 
     def groups(key) -> tuple[Group, ...]:
         sizes = Counter(key(row) for row in population)
         compared: dict[Any, list[str]] = {}
         for row in sorted(outcomes):
-            compared.setdefault(key(row), []).append(outcomes[row][0])
+            compared.setdefault(key(row), []).append(outcomes[row].state)
         lines = []
         for value, size in sizes.most_common():
             est = _estimate(size, compared.get(value, []), check)
@@ -395,9 +460,9 @@ def _field_certificate(
             lines.append(Group(str(value), est, few))
         return tuple(lines)
 
-    wrong = [(row, o) for row, o in sorted(outcomes.items()) if o[0] == "wrong"]
+    wrong = [(row, o) for row, o in sorted(outcomes.items()) if o.state == "wrong"]
     confusions = Counter(
-        (repr(o[1]) if isinstance(o[1], _Unreadable) else o[1], o[2][0])
+        (repr(o.value) if isinstance(o.value, _Unreadable) else o.value, o.accepted[0])
         for _, o in wrong
     )
     return FieldCertificate(
@@ -412,19 +477,75 @@ def _field_certificate(
             Confusion(d, r, c) for (d, r), c in confusions.most_common(TOP_CONFUSIONS)
         ),
         wrong_rows=tuple(
-            WrongRow(row, o[1] if not isinstance(o[1], _Unreadable) else o[1].raw, o[2])
+            WrongRow(
+                row,
+                o.value if not isinstance(o.value, _Unreadable) else o.value.raw,
+                o.accepted,
+            )
             for row, o in wrong
         ),
         not_delivered=_not_delivered(delivered, name, population),
         unresolved_causes=dict(
             Counter(
-                causes.get(row, NO_ANSWER)
+                o.cause or causes.get(row, NO_ANSWER)
                 for row, o in sorted(outcomes.items())
-                if o[0] == "unresolved"
+                if o.state == "unresolved"
             )
         )
         if causes is not None
         else {},
+        labellers=agreement,
+    )
+
+
+def cohens_kappa(pairs: Sequence[tuple[Any, Any]]) -> float | None:
+    """Cohen's kappa of two labellers' single answers, row by row.
+
+    Observed agreement corrected for the agreement their label frequencies
+    give by chance: 1 for perfect agreement, 0 for chance, negative below it.
+    ``None`` has no value to say: no pair, or both only ever used one label.
+    """
+    n = len(pairs)
+    if n == 0:
+        return None
+    observed = sum(a == b for a, b in pairs) / n
+    first = Counter(a for a, _ in pairs)
+    second = Counter(b for _, b in pairs)
+    chance = sum(first[label] * second[label] for label in first) / (n * n)
+    if chance == 1:
+        return None
+    return float((observed - chance) / (1 - chance))
+
+
+def labeller_agreement(
+    outcomes: Mapping[int, Outcome], labellers: int, kind: str | None, tol: float
+) -> LabellerAgreement:
+    """How far the labellers agreed, on a field's compared rows they both had.
+
+    With one labeller nothing is measured. Kappa is for labels and booleans,
+    and uses the rows where each person gave exactly one answer.
+    """
+    if labellers < 2:
+        return LabellerAgreement(labellers, 0, 0, 0, 0, None, 0)
+    pairs = [o.pair for _, o in sorted(outcomes.items()) if o.pair is not None]
+    both = [(a, b) for a, b in pairs if a and b]
+    singles = [(a[0], b[0]) for a, b in both if len(a) == 1 and len(b) == 1]
+    scored = kind in ("labels", "boolean")
+    return LabellerAgreement(
+        labellers=labellers,
+        doubled=len(pairs),
+        both_answered=len(both),
+        agree=sum(_share(a, b, tol) for a, b in both),
+        split=sum(o.cause == LABELLERS_DISAGREE for o in outcomes.values()),
+        kappa=cohens_kappa(singles) if scored else None,
+        kappa_rows=len(singles) if scored else 0,
+    )
+
+
+def _share(first: tuple[Any, ...], second: tuple[Any, ...], tol: float) -> bool:
+    """Whether two answer sets have a value in common (no value agrees with no value)."""
+    return any(
+        (a is None and b is None) or _equal(a, b, tol) for a in first for b in second
     )
 
 
@@ -461,7 +582,7 @@ def _row_accuracy(delivered, fields, outcomes, coverage) -> Estimate:
     compared = [row for row in population if all(row in outcomes[n] for n in fields)]
     states = []
     for row in compared:
-        per = [outcomes[n][row][0] for n in fields]
+        per = [outcomes[n][row].state for n in fields]
         states.append(
             "wrong"
             if "wrong" in per
@@ -476,6 +597,9 @@ def _claim_text(reference, coverage: str, results) -> str:
     if reference.kind == "model":
         rows = "every delivered row" if coverage == "census" else "a sample Ondine drew"
         return f"agreement with {reference.model}, on {rows} — an audit, not accuracy"
+    if reference.kind == "people":
+        rows = "every delivered row" if coverage == "census" else "a sample Ondine drew"
+        return f"accuracy against blind human labels, on {rows}"
     if coverage == "sample":
         return "accuracy against your labels, on a sample Ondine drew"
     if coverage == "census":

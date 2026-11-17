@@ -9,16 +9,18 @@ Design: ``.claude/designs/certified-columns.md`` section 13.0.2.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
-import pytest
+import pandas as pd
 
 from ondine.harness.contract import OutputField, build_contract
 from ondine.harness.status import RowStatus
-from ondine.ruler import CertificationError, ReferenceAnswers
+from ondine.ruler import ReferenceAnswers
 from ondine.ruler.delivered import DeliveredValues
 from ondine.ruler.ruler import certify, read_reference
-from ondine.ruler.source import Reference
+from ondine.ruler.sample import Sample
+from ondine.ruler.source import ABSENT, Labellers, Reference
 
 LABELS = ["refund", "billing"]
 CONTRACT = build_contract(fields=[OutputField("intent", allowed=LABELS)])
@@ -149,6 +151,88 @@ def test_labels_report_no_unresolved_cause_even_when_the_reference_has_some():
     assert model["intent"].unresolved_causes == {"cannot tell": 1}
 
 
-def test_labels_from_people_are_refused_until_they_have_a_producer():
-    with pytest.raises(CertificationError, match="people"):
-        _certify(Reference("people", ANSWERS))
+def test_labels_from_people_make_a_certificate_worded_for_blind_labels():
+    people = _certify(Reference("people", ANSWERS, sheet="a91e3c"))
+
+    assert people.claim == "certificate"
+    assert people.claim_text == (
+        "accuracy against blind human labels, on every delivered row"
+    )
+    assert people.sheet == "a91e3c"
+    labels = _certify(Reference("labels", ANSWERS))
+    assert people["intent"].estimate == labels["intent"].estimate
+
+
+def test_a_people_reference_reports_causes_per_field_and_labels_stay_silent():
+    answers = {"intent": {0: "refund", 1: []}}
+    causes = {"intent": {1: "not labelled"}}
+
+    people = _certify(Reference("people", answers, causes))
+
+    assert people["intent"].unresolved_causes == {"not labelled": 1}
+
+
+# ---------------------------------------------------------------------------
+# Two labellers on a row: a second answer set, and a cause only comparing can know
+# ---------------------------------------------------------------------------
+
+
+def _doubled(first, second, delivered=("refund", "billing")):
+    """Two rows both labellers were given: ``first`` is A's answers, ``second`` B's."""
+    view = replace(_delivered(), values={"intent": delivered})
+    reference = Reference(
+        "people",
+        {"intent": first},
+        {"intent": {0: "cannot tell", 1: "cannot tell"}},
+        labellers=Labellers(2, frozenset({0, 1}), {"intent": second}),
+    )
+    sample = Sample("run", "f", 1, ("intent",), 2, (0, 1), "census", pd.DataFrame())
+    return certify(view, CONTRACT, ["intent"], [], reference, sample=sample)["intent"]
+
+
+def test_each_labellers_answers_are_judged_against_the_delivered_value_on_their_own():
+    # Row 0 delivered refund: both right. Row 1 delivered billing: A right, B wrong.
+    field = _doubled({0: "refund", 1: "billing"}, {0: "refund", 1: "refund"})
+
+    assert (field.estimate.right, field.estimate.unresolved) == (1, 1)
+    assert field.unresolved_causes == {"labellers disagree": 1}
+    assert field.labellers.split == 1
+
+
+def test_both_wrong_is_wrong_naming_the_first_labellers_answers_then_the_seconds_others():
+    # Delivered refund and billing; row 0 both say billing, row 1 A refund, B billing/refund.
+    field = _doubled(
+        {0: "billing", 1: "refund"},
+        {0: "billing", 1: ["refund", "billing"]},
+        delivered=("refund", "complaint"),
+    )
+
+    assert field.estimate.wrong == 2
+    assert [(w.row, w.reference) for w in field.wrong_rows] == [
+        (0, ("billing",)),
+        (1, ("refund", "billing")),
+    ]
+
+
+def test_an_answer_from_one_labeller_counts_and_none_uses_the_references_cause():
+    one = _doubled({0: "refund"}, {1: "billing"})
+    nobody = _doubled({}, {})
+
+    assert (one.estimate.right, one.estimate.unresolved) == (2, 0)
+    assert nobody.estimate.unresolved == 2
+    assert nobody.unresolved_causes == {"cannot tell": 2}
+    assert nobody.labellers.both_answered == 0
+
+
+def test_no_value_is_read_by_an_optional_field_and_refused_by_a_required_one():
+    optional = build_contract(
+        fields=[OutputField("note", allowed=["x"], required=False)]
+    )
+    required = build_contract(fields=[OutputField("note", allowed=["x"])])
+
+    assert read_reference(optional, "note", ABSENT, 3) == ((None,), [])
+    assert read_reference(optional, "note", ["x", ABSENT], 3) == (("x", None), [])
+    accepted, problems = read_reference(required, "note", ABSENT, 3)
+    assert accepted == ()
+    assert problems[0].raw == "-"
+    assert "required" in problems[0].reasons[0]

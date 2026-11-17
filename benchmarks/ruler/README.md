@@ -32,3 +32,14 @@ What the widths showed (results/simulation.md):
   intent mistakes, because that gold was settled partly by model votes.
   Against the original gold it shares 33–70% of them. Two-tier cells use
   the original-gold rate.
+
+## Human pilot (step 3)
+
+Two people label 100 intent rows, blind, through the review sheet. It measures their agreement, the time per row, and whether the adjudicated gold matches people. It makes no API call, and it has **not been run yet**. The pass rule is fixed in [`PILOT.md`](PILOT.md), before anyone labels.
+
+```bash
+uv run python benchmarks/ruler/pilot.py export --out pilot-review
+uv run python benchmarks/ruler/pilot.py score --folder pilot-review --minutes-a 55 --minutes-b 70
+```
+
+`score` writes `results/pilot.md`. Send nobody `pilot-review/keep_private/`.

@@ -26,6 +26,14 @@ AUDIT_WARNING = (
 
 METHOD = "exact hypergeometric 95% range; unresolved rows counted wrong for the low end, right for the high end"
 
+#: Below this many resolved sampled rows a breakdown line is marked "few rows";
+#: so is an agreement measured on fewer rows answered by both labellers.
+FEW_ROWS = 20
+
+#: Labeller agreement below either of these prints the noisy-labels warning.
+MIN_AGREEMENT = 0.8
+MIN_KAPPA = 0.6
+
 
 @dataclass(frozen=True)
 class Estimate:
@@ -99,6 +107,36 @@ class WrongRow:
 
 
 @dataclass(frozen=True)
+class LabellerAgreement:
+    """How far two people agreed on the rows both labelled, for one field.
+
+    Counted on the field's compared rows that both labellers were given.
+
+    Attributes:
+        labellers: 1 or 2; with 1, nothing below is measured.
+        doubled: Compared rows labelled twice.
+        both_answered: Of those, rows both people gave an answer for (not
+            "cannot tell", not empty).
+        agree: Of those, rows whose answer sets share a value (numbers within
+            the tolerance).
+        split: Rows the two judged differently against the delivered value, so
+            they are unresolved ("labellers disagree").
+        kappa: Cohen's kappa on the rows where each person gave exactly one
+            answer, for labels and booleans; None for numbers, or when both
+            always used one label (kappa is undefined).
+        kappa_rows: Rows kappa was computed on.
+    """
+
+    labellers: int
+    doubled: int
+    both_answered: int
+    agree: int
+    split: int
+    kappa: float | None
+    kappa_rows: int
+
+
+@dataclass(frozen=True)
 class FieldCertificate:
     """The claim for one output field, on that field's own population.
 
@@ -115,7 +153,10 @@ class FieldCertificate:
         not_delivered: Rows outside the population, by cause (``rejected``,
             ``failed``, ``empty``), never certified.
         unresolved_causes: Why compared rows have no reference value, by
-            cause, when the reference says (an audit); empty otherwise.
+            cause, when the reference says (an audit, people's labels);
+            empty otherwise.
+        labellers: People's agreement on this field; None for any other
+            reference.
     """
 
     field: str
@@ -129,6 +170,7 @@ class FieldCertificate:
     wrong_rows: tuple[WrongRow, ...]
     not_delivered: dict[str, int]
     unresolved_causes: dict[str, int] = _field(default_factory=dict)
+    labellers: LabellerAgreement | None = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +193,7 @@ class Certificate:
         reference: An audit's :class:`~ondine.ruler.reference.ReferenceAnswers`,
             attached by ``Pipeline.audit`` (pass the certificate back as
             ``previous`` to reuse them); None otherwise.
+        sheet: The review sheet's id, when people's labels were the reference.
     """
 
     claim: str
@@ -165,6 +208,7 @@ class Certificate:
     row_accuracy: Estimate | None
     method: str = METHOD
     reference: Any = None
+    sheet: str | None = None
 
     def __getitem__(self, field: str) -> FieldCertificate:
         for item in self.fields:
@@ -173,8 +217,18 @@ class Certificate:
         raise KeyError(field)
 
     def to_dict(self) -> dict[str, Any]:
-        """Plain data, for storing or comparing certificates."""
-        return asdict(self)
+        """Plain data, for storing or comparing certificates.
+
+        What only people's labels have (``sheet``, ``labellers``) is left out
+        when a certificate has none, so other certificates' data is as before.
+        """
+        data = asdict(self)
+        if self.sheet is None:
+            del data["sheet"]
+        for entry, item in zip(data["fields"], self.fields, strict=True):
+            if item.labellers is None:
+                del entry["labellers"]
+        return data
 
     def render(self, *, values: int = 10, wrong: int = 10) -> str:
         """The certificate as text.
@@ -207,6 +261,7 @@ class Certificate:
             f"  Bound to: run {self.run_id[:8]}…, delivered values {self.fingerprint[:8]}…, "
             f"contract {self.contract_fingerprint[:8]}…"
             + (f", seed {self.seed}" if self.seed is not None else "")
+            + (f", sheet {self.sheet}" if self.sheet is not None else "")
         )
         return "\n".join(lines)
 
@@ -229,6 +284,8 @@ def _render_field(
         f"    Compared: {est.compared} of {est.population} delivered rows; "
         f"{est.unresolved} unresolved{causes}; {item.rule}",
     ]
+    if item.labellers is not None:
+        lines += _render_agreement(item.labellers)
     if item.not_delivered:
         parts = ", ".join(
             f"{count} {cause}" for cause, count in item.not_delivered.items()
@@ -260,6 +317,40 @@ def _render_field(
             else ""
         )
         lines.append(f"    Wrong rows ({len(item.wrong_rows)}): {rows}{more}")
+    return lines
+
+
+def _render_agreement(agreement: LabellerAgreement) -> list[str]:
+    """The labeller line, and a warning line when the labels look noisy."""
+    if agreement.labellers < 2:
+        return ["    Labellers: 1; agreement not measured (one labeller)"]
+    twice, both = agreement.doubled, agreement.both_answered
+    text = f"    Labellers: 2 (one sheet each); {twice} rows labelled twice"
+    noisy = False
+    if both == 0:
+        text += ", no row answered by both"
+    else:
+        if both != twice:
+            text += f", {both} answered by both"
+        share = agreement.agree / both
+        few = ", few rows" if both < FEW_ROWS else ""
+        text += f": agree on {agreement.agree} ({share:.1%}{few})"
+        if agreement.kappa is not None:
+            rows = agreement.kappa_rows
+            noun = "row" if rows == 1 else "rows"
+            text += f", kappa {agreement.kappa:.2f} on {rows} single-answer {noun}"
+        elif agreement.kappa_rows:
+            text += ", kappa not defined (one label used)"
+        noisy = share < MIN_AGREEMENT or (
+            agreement.kappa is not None and agreement.kappa < MIN_KAPPA
+        )
+    text += f"; {agreement.split} split on the delivered value (unresolved)"
+    lines = [text]
+    if noisy:
+        lines.append(
+            "    Warning: labellers often disagree; the labels are noisy, so "
+            "accuracy against them is loose (guide: Labels from people)"
+        )
     return lines
 
 

@@ -106,7 +106,7 @@ class DeliveredValues:
                 "certify the result as execute() returned it"
             )
         values = {
-            name: tuple(_cell(v) for v in frame[name].tolist()) for name in fields
+            name: tuple(cell_value(v) for v in frame[name].tolist()) for name in fields
         }
         declared = result.contract
         contract = declared if declared is not None and declared.checked else None
@@ -283,7 +283,7 @@ def _plain(value: Any) -> bool:
     return type(value) is float and math.isfinite(value)
 
 
-def _cell(value: Any) -> Any:
+def cell_value(value: Any) -> Any:
     """A frame cell as a plain value: None for every kind of empty."""
     if value is None:
         return None

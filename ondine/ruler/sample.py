@@ -14,17 +14,16 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 
 from ondine.ruler.delivered import CertificationError
 from ondine.ruler.intervals import hypergeom_bounds
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    import pandas as pd
+    from collections.abc import Mapping, Sequence
 
     from ondine.ruler.delivered import DeliveredValues
 
@@ -62,6 +61,78 @@ class Sample:
         """True when every row of the population was drawn: no sampling range."""
         return len(self.rows) == self.population_size
 
+    def check(self, delivered: DeliveredValues, fields: Sequence[str]) -> None:
+        """Refuse a run, values or fields this sample was not drawn for.
+
+        Raises:
+            CertificationError: The sample is of another run, the delivered
+                values changed since it was drawn, or it was not drawn for
+                one of ``fields``.
+        """
+        if self.run_id != delivered.run_id:
+            raise CertificationError(
+                f"the sample was drawn from run {self.run_id[:8]}…, not this run "
+                f"({delivered.run_id[:8]}…); draw a sample from this result"
+            )
+        if self.fingerprint != delivered.fingerprint:
+            raise CertificationError(
+                "the delivered values changed since the sample was drawn; "
+                "the sample no longer represents the column"
+            )
+        outside = [name for name in fields if name not in self.fields]
+        if outside:
+            raise CertificationError(
+                f"the sample was not drawn for {', '.join(map(repr, outside))}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """What :meth:`restore` needs to redraw this sample: plain data, no inputs."""
+        return {
+            "seed": self.seed,
+            "fields": list(self.fields),
+            "population_size": self.population_size,
+            "rows": list(self.rows),
+            "rule": self.rule,
+        }
+
+    @classmethod
+    def restore(
+        cls, saved: Mapping[str, Any], delivered: DeliveredValues, fields: Sequence[str]
+    ) -> Sample:
+        """The sample saved by :meth:`to_dict`, redrawn from ``delivered`` and compared.
+
+        The draw is derived from the run, so redrawing with the saved size
+        must give the saved rows. If it does not (another numpy, or other
+        values), the saved rows are refused: they are not a random sample of
+        what is certified. The restored sample holds no input columns.
+
+        Raises:
+            CertificationError: The redraw differs from the saved sample.
+        """
+        rows = tuple(saved["rows"])
+        seed, redrawn, _, population = _pick(delivered, fields, len(rows), None)
+        if (seed, redrawn, population) != (
+            saved["seed"],
+            rows,
+            saved["population_size"],
+        ) or list(fields) != list(saved["fields"]):
+            raise CertificationError(
+                "the saved sample cannot be redrawn from this run's values "
+                f"(redraw gives {len(redrawn)} rows of {population}, seed {seed}; "
+                f"saved: {len(rows)} rows of {saved['population_size']}, "
+                f"seed {saved['seed']}); it is not a random sample of them"
+            )
+        return cls(
+            run_id=delivered.run_id,
+            fingerprint=delivered.fingerprint,
+            seed=seed,
+            fields=tuple(fields),
+            population_size=population,
+            rows=rows,
+            rule=str(saved["rule"]),
+            inputs=pd.DataFrame(index=list(rows)),
+        )
+
 
 def draw(
     delivered: DeliveredValues,
@@ -84,6 +155,30 @@ def draw(
     Raises:
         CertificationError: Both or a non-positive ``size``/``precision``, or
             no delivered row to draw from.
+    """
+    seed, rows, rule, population = _pick(delivered, fields, size, precision)
+    return Sample(
+        run_id=delivered.run_id,
+        fingerprint=delivered.fingerprint,
+        seed=seed,
+        fields=tuple(fields),
+        population_size=population,
+        rows=rows,
+        rule=rule,
+        inputs=inputs.iloc[list(rows)].copy(),
+    )
+
+
+def _pick(
+    delivered: DeliveredValues,
+    fields: Sequence[str],
+    size: int | None,
+    precision: float | None,
+) -> tuple[int, tuple[int, ...], str, int]:
+    """The derived seed, the drawn rows, the rule and the population size.
+
+    The one draw: :func:`draw` makes a sample of it, :meth:`Sample.restore`
+    redraws it to compare.
     """
     if size is not None and precision is not None:
         raise CertificationError("give a size or a precision, not both")
@@ -114,16 +209,7 @@ def draw(
             len(union), size=size, replace=False
         )
         rows = tuple(union[i] for i in sorted(picked))
-    return Sample(
-        run_id=delivered.run_id,
-        fingerprint=delivered.fingerprint,
-        seed=seed,
-        fields=tuple(fields),
-        population_size=len(union),
-        rows=rows,
-        rule=rule,
-        inputs=inputs.iloc[list(rows)].copy(),
-    )
+    return seed, rows, rule, len(union)
 
 
 def size_for_precision(precision: float, population: int) -> int:
