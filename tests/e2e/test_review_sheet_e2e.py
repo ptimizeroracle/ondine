@@ -1475,8 +1475,15 @@ def _edit_manifest(folder, change):
     [
         lambda m: m.__setitem__("doubled", m["doubled"][1:]),
         lambda m: m["sheets"]["A"]["items"].reverse(),
+        # A row only sheet B has: B's first item may be a doubled row that
+        # A also starts with, which would make the edit a no-op.
         lambda m: m["sheets"]["A"]["items"][0].__setitem__(
-            "row", m["sheets"]["B"]["items"][0]["row"]
+            "row",
+            next(
+                b["row"]
+                for b in m["sheets"]["B"]["items"]
+                if b["row"] not in {a["row"] for a in m["sheets"]["A"]["items"]}
+            ),
         ),
         lambda m: m["sheets"]["A"]["items"][0].__setitem__("item", "ffffff-A001"),
         lambda m: m.__setitem__("sheet_seed", m["sheet_seed"] + 1),
