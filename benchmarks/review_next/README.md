@@ -107,3 +107,90 @@ At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
   pre-registered check on the held-out faithfulness rows.
 - Exploratory, not a verdict: the free per-value ranker R1 lifts intent
   review to 1.82x random with no extra model call.
+
+## Confirmation
+
+The result above was found on dev rows, so it is confirmed on fresh rows before
+anything ships. The design is pre-registered and locked:
+[`DESIGN-confirm.md`](DESIGN-confirm.md). Every constant is in the
+`PREREG_CONFIRM` dict of `confirm.py`; the results embed its hash and the
+parent's. It reuses `review_next.py`, `replay.py` and `addendum1.py` by import,
+changes none of them, and reads no held-out split: every data read goes through
+`guard_confirm`, which allows only the confirm rows, the Haiku sample files, the
+dev rows (ids only) and the intent label names.
+
+**One ranker per task, R2** (dissent D over three extra Haiku samples, then R1),
+against random (R0) and the free per-value rate (R1). Rows: 770 intent and 320
+faithfulness, never used by dev. Faithfulness bootstraps over documents. The
+verdict is CONFIRMED_GENERAL, CONFIRMED(faithfulness), NOT_REPLICATED or
+INCONCLUSIVE (design section 5).
+
+Run order (each step needs the one before):
+
+```bash
+# 1. Build the rows. Deterministic; never downloads, never writes dev or the second split.
+uv run python benchmarks/golden/build.py --confirm
+# 2. Commit the manifest's confirm hashes and fill confirm_split_sha256 in PREREG_CONFIRM.
+# 3. Smoke (3 rows, $0.01 cap), then four sample runs per task: OpenRouter Haiku, $1.00 total cap.
+uv run python benchmarks/golden/label.py --task faithfulness --model haiku --split confirm --sample 1 --limit 3
+uv run python benchmarks/golden/label.py --task faithfulness --model haiku --split confirm --sample 1   # ... --sample 4, then intent
+# 4. Check, lock the data, commit the lock file, then the one full run from the clean commit.
+uv run python benchmarks/review_next/confirm.py --check    # exit 0 ok, 2 failed, 3 data not all there yet
+uv run python benchmarks/review_next/confirm.py --lock
+uv run python benchmarks/review_next/confirm.py
+```
+
+Rules:
+
+- `label.py --split confirm` needs `--model haiku` and `--sample 1` to `5`, always
+  uses OpenRouter and writes `labels/<task>/confirm/haiku-s<N>.jsonl`. Every cost
+  file there (smoke and aborted runs too) counts toward one $1.00 cap, checked
+  before any call. Per-run defaults: intent $0.14, faithfulness $0.09, `--limit`
+  $0.01; `--budget` may only lower them. `haiku-s5` is the single replacement for
+  one file that fails V4, and `label.py` refuses it until one of `haiku-s1` to
+  `s4` exists for that task. A run writes a hold file for its whole budget before
+  any call and deletes it only once its cost file exists, so a crash at any point
+  stays on the books; `confirm.py --lock` refuses while a hold file exists.
+- `--check` exits 3 and lists what is missing until the rows, the four sample
+  files per task and the lock exist. It never reports ok on incomplete data.
+- The full run exits 2 on uncommitted changes under `benchmarks/review_next`
+  (not `results/`), `benchmarks/planner`, `benchmarks/golden` or `tests/unit`, on
+  an existing `results/confirm.json`, or when a data file no longer matches the
+  lock. `--quick` is refused on the real data until the full result exists.
+- Results go to `results/confirm.md` and `results/confirm.json`.
+
+Tests: `tests/unit/test_review_next_confirm.py`, `tests/unit/test_golden_build_confirm.py`
+and `tests/unit/test_golden_label_confirm.py`, all on synthetic data.
+
+### Confirmation result (2026-11-17)
+
+One full run from clean commit `e87e8fc`. Overall verdict **INCONCLUSIVE** (design
+section 5: intent PASS, faithfulness INCONCLUSIVE). Spend $0.6206 of the $1.00
+cap. Full tables: [`results/confirm.md`](results/confirm.md).
+
+At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
+
+| Task | Ranker | errors per 100 reviewed | lift L (LB) | gain G over R1 (LB) | status |
+|---|---|---|---|---|---|
+| intent (770 fresh, independent rows) | R1 (free) | 32.1 | 1.78 | - | - |
+| intent | R2 (dissent) | 53.9 | 2.98 (2.41) | +21.8 (+10.6) | PASS |
+| faithfulness (320 fresh rows, dev documents) | R1 (free) | 19.0 | 1.04 | - | - |
+| faithfulness | R2 (dissent) | 35.0 | 1.92 (1.16) | +16.0 (+1.8) | INCONCLUSIVE |
+
+- Intent passes all four pre-registered conditions on rows that share nothing
+  with dev. Dev had left it INCONCLUSIVE (lower bound -7.4); the extra 540 rows
+  settle it. The mean gain (+21.8) clears the +10 floor, and its lower bound
+  (+10.6) clears the required 0 by a wide margin. The bootstrap SE is 6.0 points,
+  so read the gain as about +22 with a range of roughly +10 to +34.
+- Faithfulness misses one condition: mean lift 1.92 is under the 2.0 floor. Its
+  other three conditions pass (G +16.0, LB(G) +1.8, LB(L) 1.16). It is not a
+  KILL (G >= 5 and L >= 1.5). The effect shrank from dev (54.9 errors per 100
+  reviewed, G +38.8): the regression the design warned about, larger than the
+  ~30-point gain it expected.
+- DOMAIN flag: the gain is negative in 3 of 8 domains (news, qmsumm,
+  sales_call). Each domain has about 2 reviewed rows per split, so this is
+  descriptive and noisy.
+- The design has no outcome "intent passes, faithfulness inconclusive": the
+  rule gives INCONCLUSIVE, and that stands. The per-task PASS is the finding.
+- Faithfulness shares documents with dev; only the release split tests new
+  documents. The release split was never read.
