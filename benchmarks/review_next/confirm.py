@@ -83,8 +83,8 @@ PREREG_CONFIRM: dict[str, Any] = {
         "rows": {"intent": 770, "faithfulness": 320},
     },
     "confirm_split_sha256": {
-        "intent": "<filled by the lead after build.py --confirm>",
-        "faithfulness": "<filled by the lead after build.py --confirm>",
+        "intent": "6ccee5cc9550152cd0c8ab298cc7f4ebb81a09f2a34e49f54d9fa972858899f5",
+        "faithfulness": "6c8e98e0163ee7bceb1d9f7a2efca64f2aa1622edcc7f17a1a59b475cf3fcc9d",
     },
     "sample_files": ["haiku-s1", "haiku-s2", "haiku-s3", "haiku-s4"],
     "replacement_file": "haiku-s5",
