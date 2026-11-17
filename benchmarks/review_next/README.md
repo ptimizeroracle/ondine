@@ -77,7 +77,33 @@ signals, the key order, the bootstrap pairing and bound, the verdict rules and
 `--check` on synthetic data and a golden-layout fixture. It reads no real
 policy number.
 
-## Result: pending
+## Result (2026-11-17)
 
-No ranker has been evaluated on the real dev rows. This section is filled in
-after the one full run from the reviewed commit.
+One full run from clean commit `a1b4367`: **BUILD_SCOPED(faithfulness, R2)**.
+Full tables: [`results/review-next.md`](results/review-next.md).
+
+At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
+
+| Task | Ranker | errors per 100 reviewed | lift L (LB) | gain G over R1 (LB) | status |
+|---|---|---|---|---|---|
+| faithfulness | R1 (free, per value) | 16.1 | 0.90 | - | - |
+| faithfulness | R2 (dissent) | 54.9 | 3.06 (1.72) | +38.8 (+11.5) | PASS |
+| faithfulness | R4 (dissent + pair) | 56.5 | 3.16 (1.81) | +40.4 (+12.1) | PASS |
+| intent | R1 (free, per value) | 34.7 | 1.82 | - | - |
+| intent | R2 (dissent) | 52.2 | 2.73 (1.50) | +17.5 (-7.4) | INCONCLUSIVE |
+| intent | R4 (dissent + pair) | 53.9 | 2.82 (1.63) | +19.2 (-8.0) | INCONCLUSIVE |
+
+- R4 does not beat R2 by the pre-registered margin (faithfulness +1.6 points,
+  paired LB -2.8), so R2 is the selected ranker: it needs one model only.
+- Intent is underpowered, as the design predicted: only 20 rows are flagged,
+  and the bootstrap SE of G is about 11 points. A gain of +17.5 with a lower
+  bound of -7.4 is not a finding in either direction. Intent carries the
+  SUBSET flag (one of the two-sample variants gains under 10 points).
+- Faithfulness carries no flag. On the adjudicated gold R2 reaches lift 7.6
+  and recall 0.78 at k = 10%.
+- The faithfulness gain is largely implied by Addendum 1's flag precision, and
+  R1 cannot rank a two-value column (lift 0.90). Dev was reused: the flag was
+  found on these rows. **Nothing ships on dev alone.** The next step is a
+  pre-registered check on the held-out faithfulness rows.
+- Exploratory, not a verdict: the free per-value ranker R1 lifts intent
+  review to 1.82x random with no extra model call.
