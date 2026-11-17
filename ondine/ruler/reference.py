@@ -27,7 +27,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from ondine.harness.pricing import COST_MARGIN, call_cost
-from ondine.ruler.delivered import CertificationError, _cell
+from ondine.ruler.delivered import CertificationError, cell_value
 from ondine.ruler.source import NO_ANSWER, Reference
 
 if TYPE_CHECKING:
@@ -282,7 +282,7 @@ def _read(
     for position, row in enumerate(chunk):
         missing = False
         for name in fields:
-            value = _cell(frame[name].iloc[position])
+            value = cell_value(frame[name].iloc[position])
             if value is None:
                 missing = True
             else:

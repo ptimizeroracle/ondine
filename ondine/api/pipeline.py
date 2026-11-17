@@ -94,6 +94,13 @@ from ondine.ruler.ruler import certifiable, resolve_gold
 from ondine.ruler.ruler import certify as certify_values
 from ondine.ruler.sample import Sample
 from ondine.ruler.sample import draw as draw_ruler_sample
+from ondine.ruler.sheet import (
+    ReviewExport,
+    ReviewLabels,
+    load_review,
+    read_labels,
+)
+from ondine.ruler.sheet import export as export_review_files
 from ondine.ruler.source import Reference
 
 if TYPE_CHECKING:
@@ -721,7 +728,9 @@ class Pipeline:
                 with the input rows, or a mapping row -> label; with several
                 fields, a mapping field -> any of those. A cell may hold a list
                 of acceptable answers; an empty cell leaves the row unresolved.
-                A saved view has no frame, so a column name is refused.
+                A saved view has no frame, so a column name is refused. Or the
+                :class:`ReviewLabels` that :meth:`read_review` returned: people's
+                blind labels, which carry the sample they were made for.
             sample: The sample the labels were made for.
             fields: Declarations to read the outputs by, for a run with no
                 contract.
@@ -733,7 +742,20 @@ class Pipeline:
                 another contract, or nothing can be certified.
         """
         contract, names, skipped = self._ruler_fields(result, fields)
-        if isinstance(gold, Mapping) and gold and all(key in names for key in gold):
+        people = isinstance(gold, ReviewLabels)
+        if people:
+            if sample is not None:
+                raise CertificationError(
+                    "the labels carry their own sample, the one the sheets were "
+                    "made for; pass no sample"
+                )
+            if gold.fields != tuple(names):
+                raise CertificationError(
+                    f"the labels are for {', '.join(gold.fields)}, not for "
+                    f"{', '.join(names)}, which this pipeline certifies"
+                )
+            certified = names
+        elif isinstance(gold, Mapping) and gold and all(key in names for key in gold):
             certified = [name for name in names if name in gold]
             skipped = [
                 *skipped,
@@ -747,16 +769,129 @@ class Pipeline:
         else:
             delivered = DeliveredValues.read(result, names)
             frame = result.to_pandas()
-        labels = resolve_gold(gold, certified, delivered.row_count, frame)
+        if people:
+            reference, sample = gold.reference, gold.sample
+        else:
+            labels = resolve_gold(gold, certified, delivered.row_count, frame)
+            reference = Reference(kind="labels", answers=labels)
         return certify_values(
             delivered,
             contract,
             certified,
             skipped,
-            Reference(kind="labels", answers=labels),
+            reference,
             sample=sample,
             tolerance=tolerance,
             read_delivered=not delivered.checked,
+        )
+
+    def export_review(
+        self,
+        result: ExecutionResult,
+        folder: str | Path,
+        *,
+        sample: Sample | None = None,
+        labellers: int = 2,
+        double: float = 0.2,
+        format: str = "xlsx",
+        task: str | None = None,
+        fields: Sequence[OutputField] | None = None,
+    ) -> ReviewExport:
+        """Write the sheets people label to certify ``result``, blind.
+
+        Each labeller gets one file with the sample's input columns, the task
+        and each field's allowed values, in a shuffled order and under opaque
+        item ids. They never see the delivered value. ``folder`` also gets
+        ``keep_private/``: the manifest that binds the sheets to this run, and
+        ``run.json`` with the run's answers. Never send ``keep_private/``;
+        ``review.render()`` says who gets which file.
+
+        Days later, in any process built from the same pipeline code:
+        :meth:`read_review`, then ``certify(labels.run, gold=labels)``.
+
+        Args:
+            result: A finished result of :meth:`execute`.
+            folder: A new or empty folder. A folder with anything in it is
+                refused, so sheets that came back are never overwritten.
+            sample: The rows to label; :meth:`draw_sample`'s default otherwise,
+                the rows an audit uses.
+            labellers: 1 or 2. With 2, each gets their own sheet.
+            double: The share of rows both labellers get, at least 0.2; with
+                1, every row is labelled twice. Agreement is measured on them.
+            format: "xlsx" (needs the ``excel`` extra) or "csv".
+            task: Your labelling guide, instead of the prompt template and
+                system prompt.
+            fields: Declarations to read the outputs by, for a run with no
+                contract. Pass the same ones to :meth:`read_review`.
+
+        Raises:
+            CertificationError: The arguments cannot make a sheet, the folder
+                is not empty, the sample is another run's, or nothing can be
+                certified.
+            ImportError: ``format="xlsx"`` without openpyxl.
+        """
+        if isinstance(result, DeliveredValues):
+            raise CertificationError(
+                "a saved view holds no input columns; export the result of execute()"
+            )
+        contract, names, _ = self._ruler_fields(result, fields)
+        delivered = DeliveredValues.read(result, names)
+        if sample is None:
+            sample = self.draw_sample(result, fields=fields)
+        prompt = self.specifications.prompt
+        return export_review_files(
+            folder,
+            delivered,
+            sample,
+            contract,
+            names,
+            labellers=labellers,
+            double=double,
+            fmt=format,
+            task=task,
+            system_prompt=prompt.system_message,
+            template=prompt.template,
+            prompt_fingerprint=self._prompt_fingerprint(),
+            declared=bool(fields),
+        )
+
+    def read_review(
+        self,
+        folder: str | Path,
+        *,
+        result: ExecutionResult | None = None,
+        sheets: Mapping[str, str | Path] | None = None,
+        fields: Sequence[OutputField] | None = None,
+    ) -> ReviewLabels:
+        """Read the sheets people labelled and check every cell.
+
+        Everything wrong is listed at once, in one :class:`ReviewSheetError`:
+        each problem names the file, the sheet row, the item and the column,
+        and a label that nearly matches an allowed value gets a suggestion. A
+        typo is never silently unresolved; only ``?`` and an empty cell are.
+        ``labels.render()`` shows each sheet's progress. Certify with
+        ``certify(labels.run, gold=labels)``: the labels carry the run's saved
+        view, so no result is needed, in this process or another.
+
+        Args:
+            folder: The folder :meth:`export_review` wrote.
+            result: If given, checked to be the exported run.
+            sheets: Labeller letter -> a returned file kept somewhere else,
+                such as ``{"A": "mail/ada.xlsx"}``.
+            fields: The declarations :meth:`export_review` got, for a run with
+                no contract.
+
+        Raises:
+            ReviewSheetError: The review is refused (another run, values,
+                contract or sample) or the sheets have problems.
+            CertificationError: The pipeline's contract is not the run's.
+        """
+        saved = load_review(folder)
+        contract, names, _ = self._ruler_fields(saved.view, fields)
+        saved.view.require_fields(names)
+        current = DeliveredValues.read(result, names) if result is not None else None
+        return read_labels(
+            saved, contract, names, folder, sheets=sheets, current=current
         )
 
     def audit(
