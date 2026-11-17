@@ -161,3 +161,35 @@ Rules:
 
 Tests: `tests/unit/test_review_next_confirm.py`, `tests/unit/test_golden_build_confirm.py`
 and `tests/unit/test_golden_label_confirm.py`, all on synthetic data.
+
+### Confirmation result (2026-11-17)
+
+One full run from clean commit `e87e8fc`. Overall verdict **INCONCLUSIVE** (design
+section 5: intent PASS, faithfulness INCONCLUSIVE). Spend $0.6206 of the $1.00
+cap. Full tables: [`results/confirm.md`](results/confirm.md).
+
+At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
+
+| Task | Ranker | errors per 100 reviewed | lift L (LB) | gain G over R1 (LB) | status |
+|---|---|---|---|---|---|
+| intent (770 fresh, independent rows) | R1 (free) | 32.1 | 1.78 | - | - |
+| intent | R2 (dissent) | 53.9 | 2.98 (2.41) | +21.8 (+10.6) | PASS |
+| faithfulness (320 fresh rows, dev documents) | R1 (free) | 19.0 | 1.04 | - | - |
+| faithfulness | R2 (dissent) | 35.0 | 1.92 (1.16) | +16.0 (+1.8) | INCONCLUSIVE |
+
+- Intent passes all four pre-registered conditions on rows that share nothing
+  with dev. Dev had left it INCONCLUSIVE (lower bound -7.4); the extra 540 rows
+  settle it. Its lower bound on the gain is +10.6, only just above the +10
+  threshold's neighbourhood, so read the gain as "about +20 +- 12", not +21.8.
+- Faithfulness misses one condition: mean lift 1.92 is under the 2.0 floor. Its
+  other three conditions pass (G +16.0, LB(G) +1.8, LB(L) 1.16). It is not a
+  KILL (G >= 5 and L >= 1.5). The effect shrank from dev (54.9 errors per 100
+  reviewed, G +38.8): the regression the design warned about, larger than the
+  ~30-point gain it expected.
+- DOMAIN flag: the gain is negative in 3 of 8 domains (news, qmsumm,
+  sales_call). Each domain has about 2 reviewed rows per split, so this is
+  descriptive and noisy.
+- The design has no outcome "intent passes, faithfulness inconclusive": the
+  rule gives INCONCLUSIVE, and that stands. The per-task PASS is the finding.
+- Faithfulness shares documents with dev; only the release split tests new
+  documents. The release split was never read.
