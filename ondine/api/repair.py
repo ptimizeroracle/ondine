@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from ondine.adapters.containers.result_container import ResultContainerImpl
+from ondine.harness.pricing import COST_MARGIN, call_cost
 from ondine.harness.reask import (
     REASK_COLUMN,
     correction,
@@ -40,10 +41,6 @@ if TYPE_CHECKING:
     from ondine.harness.ledger import RowLedger, RowOutcome
 
 logger = get_logger(__name__)
-
-#: Margin on a repair's estimated cost: the correction makes its prompt longer
-#: than the row's first one.
-COST_MARGIN = Decimal("1.25")
 
 
 @dataclass(frozen=True)
@@ -186,18 +183,9 @@ def _affordable(
     chosen = []
     spent = Decimal("0")
     for outcome in failing:
-        estimate = _estimate(outcome, step) * COST_MARGIN
+        estimate = call_cost(outcome, step.client) * COST_MARGIN
         if spent + estimate > remaining:
             break
         spent += estimate
         chosen.append(outcome)
     return chosen
-
-
-def _estimate(outcome: RowOutcome, step: RepairStep) -> Decimal:
-    """One call's cost for ``outcome``'s row on ``step``'s model, before margin."""
-    attempts = len(outcome.attempts) or 1
-    if step.client is None:
-        return outcome.cost / attempts
-    tokens = sum(record.tokens for record in outcome.attempts) // attempts
-    return Decimal(str(step.client.calculate_cost(tokens, tokens)))

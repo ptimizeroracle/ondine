@@ -13,6 +13,7 @@ Certification is opt-in. It never changes the delivered frame or the run report.
 | `pipeline.certify(result, gold="true_label")` | You have a label for every delivered row (a labelled dev set) | The exact accuracy |
 | `pipeline.draw_sample(result)`, then `pipeline.certify(result, gold=labels, sample=sample)` | You label only the rows Ondine draws | The accuracy with an exact 95% range |
 | `pipeline.certify(result, gold={row: label, ...})` | You labelled rows you picked yourself | A **check**: agreement on those rows only |
+| `pipeline.audit(result, model="openai/gpt-6-luna", max_cost=0.50)` | You have no labels, and a stronger model to compare with | An **audit**: agreement with that model, with an exact 95% range. Never accuracy |
 
 ## Labels for every row
 
@@ -85,12 +86,41 @@ cert = pipeline.certify(
 )
 ```
 
+## Audit against a model
+
+With no labels, a stronger model can stand in for them. Ondine asks it the sampled rows again, through the run's own prompt, and compares its answers with the delivered values.
+
+```python
+estimate = pipeline.estimate_audit(result, model="openai/gpt-6-luna")
+print(estimate.render())   # what leaves, to whom, and the most it costs; spends nothing
+
+audit = pipeline.audit(result, model="openai/gpt-6-luna", max_cost=0.50)
+print(audit.render())
+```
+
+**An audit is not accuracy.** Models share mistakes, across vendors too. When a reference agrees with a wrong answer, the audit counts it as right. On our golden sets, agreement with a stronger model overstated accuracy by 4 to 12.5 points. In a live run, gpt-oss-20b classified 231 bank-support messages into 77 intents. On 200 sampled rows, it agreed with GPT-6 Luna on 90.5% (range 88.7%–91.7%), but matched the labels on only 79.5%. Luna flagged 19 rows, and 13 of them were really wrong. It agreed with the other 28 wrong answers, so the audit missed them. Use an audit to compare runs and to find wrong rows to review. For a number you can claim, certify against labels.
+
+- **What the reference sees:** the prompt the run's model saw for each sampled row, with the same system prompt, examples, preprocessing and retrieved passages. It never sees the run's answer. `estimate.render()` names everything that leaves.
+- **What it shares with the run:** nothing. No context store, no response cache, no checkpoints, no output file. Its answers never reach the run's ledger. The result and its run report are unchanged.
+- **How its answers are read:** by the run's contract. An answer that breaks it is asked again once, with the reason. A row still without a valid answer is **unresolved** ("broke the contract"), and so is a provider failure ("provider"). The certificate prints the causes next to the count.
+- **Cost:** `max_cost` is required. It is a hard cap for the audit, separate from the run's budget. Ondine asks the rows in chunks of 50. It asks only the rows whose high estimate fits what is left of the cap, so the cap is never crossed and no answer paid for is lost. Rows left over are unresolved ("over the cost cap").
+- **Asking the rest later:** pass the first audit back. Its answers are reused, and only its unresolved rows are asked:
+
+  ```python
+  audit = pipeline.audit(result, model="openai/gpt-6-luna", max_cost=1.0, previous=audit)
+  ```
+
+  An audit of another run or another delivered frame, by another model or with another prompt, is refused.
+- **Refused:** the run's own model as the reference ("a model cannot audit itself"), a run with no contract, and `max_cost` of 0 or less.
+- **The estimate errs high,** sometimes far above the real cost: it prices every token of the run's answers (reasoning included) at both the reference's rates, for two calls. In the live run above it said at most $0.23; the audit spent $0.016.
+- `model=` takes the same options as `with_llm()`. `client=` takes a client instead. Ondine never picks the reference for you.
+
 ## Current limits
 
 | Limit | What happens today |
 |---|---|
 | No stream certification | Certify the result of `execute()`. A streaming chunk is refused. |
-| Labels only | Audits against a stronger model, and review sheets for people, come later. |
+| No review sheet yet | Label `sample.inputs` your own way, then certify. A built-in sheet for people comes later. |
 | No free text | Free-text fields are listed as not certified. |
 
 ## Related

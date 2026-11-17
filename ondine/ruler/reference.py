@@ -1,0 +1,241 @@
+"""A reference model's answers for a run's sampled rows: the audit's source.
+
+The rows are asked in chunks through an injected ``ask``: the pipeline runs
+each chunk as an isolated pass of the run's own prompt, on the reference
+model, judged by the run's contract with one re-ask. This module knows which
+rows to ask, what that may cost, and what each row's answer, or reason for
+having none, is. It never sees the pipeline.
+
+Cost: before each chunk, only the leading rows whose estimate fits what is
+left of the cap are asked. A row's estimate is two calls (an answer and its
+re-ask) by :func:`ondine.harness.pricing.call_cost`, with the margin; it errs
+high, so the cap is never crossed and no answer paid for is lost. Rows left
+over are unresolved, "over the cost cap".
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
+
+from ondine.harness.pricing import COST_MARGIN, call_cost
+from ondine.ruler.delivered import CertificationError, _cell
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from ondine.core.models import ExecutionResult
+    from ondine.harness.ledger import RowOutcome
+    from ondine.ruler.sample import Sample
+
+#: Rows sent per pass; the cap is checked against actual spending between.
+CHUNK_ROWS = 50
+#: Calls a row may take: its answer, and one re-ask when that breaks the contract.
+CALLS_PER_ROW = 2
+
+OVER_CAP = "over the cost cap"
+#: Why a row has no reference answer, by the status its pass gave it.
+_CAUSES = {"failed": "provider", "rejected": "broke the contract"}
+
+#: Runs one chunk: the rows' input columns, in sample order. Returns the
+#: pass's result, one row per input row, in the same order.
+Ask = Callable[["pd.DataFrame"], "ExecutionResult"]
+
+
+@dataclass(frozen=True)
+class ReferenceAnswers:
+    """What a reference model answered for one run's sample.
+
+    Attributes:
+        model: The reference model.
+        prompt_fingerprint: The prompt it was asked with.
+        run_id: The run whose rows were asked.
+        fingerprint: The run's delivered values the sample is bound to.
+        rows: Every sampled row this audit covers, answered or not.
+        values: Field -> row -> the reference's value, read by the contract.
+        unresolved: Row -> why it has no value for some field.
+        cost: Everything paid for these answers, reused ones included.
+    """
+
+    model: str
+    prompt_fingerprint: str
+    run_id: str
+    fingerprint: str
+    rows: tuple[int, ...]
+    values: dict[str, dict[int, Any]] = field(repr=False)
+    unresolved: dict[int, str]
+    cost: Decimal
+
+
+@dataclass(frozen=True)
+class AuditEstimate:
+    """The price of an audit, and what would leave, before anything is sent.
+
+    Attributes:
+        model: The reference model.
+        provider: Its provider.
+        rows: Rows that would be asked.
+        reused: Rows a previous audit already answered (not asked, not paid).
+        columns: The input columns the prompt reads, sent for each row.
+        carries: What else the rendered prompt sends, e.g. "a system prompt".
+        cost: The high estimate: the most the audit would spend uncapped.
+    """
+
+    model: str
+    provider: str
+    rows: int
+    reused: int
+    columns: tuple[str, ...]
+    carries: tuple[str, ...]
+    cost: Decimal
+
+    def render(self) -> str:
+        extra = f", with {', '.join(self.carries)}" if self.carries else ""
+        reused = f" ({self.reused} reused, not asked again)" if self.reused else ""
+        return (
+            f"Audit estimate: {self.model} ({self.provider})\n"
+            f"  Sends: {self.rows} rows{reused}; columns {', '.join(self.columns)}{extra}\n"
+            f"  Price: at most ${self.cost:.4f} (estimate errs high; the audit "
+            "stops at its max_cost)"
+        )
+
+
+def row_estimate(outcome: RowOutcome, client: Any) -> Decimal:
+    """The most one row's reference answer is expected to cost."""
+    return call_cost(outcome, client) * CALLS_PER_ROW * COST_MARGIN
+
+
+def check_previous(
+    previous: ReferenceAnswers,
+    *,
+    run_id: str,
+    fingerprint: str,
+    model: str,
+    prompt_fingerprint: str,
+) -> None:
+    """Refuse answers given for another run, values, model or prompt."""
+    if previous.run_id != run_id:
+        raise CertificationError(
+            f"the previous audit is of another run ({previous.run_id[:8]}…, "
+            f"not {run_id[:8]}…)"
+        )
+    if previous.fingerprint != fingerprint:
+        raise CertificationError(
+            "the delivered values changed since the previous audit; audit again "
+            "without it"
+        )
+    if previous.model != model:
+        raise CertificationError(
+            f"the previous audit asked {previous.model}, not {model}; its answers "
+            "are not this model's"
+        )
+    if previous.prompt_fingerprint != prompt_fingerprint:
+        raise CertificationError(
+            "the previous audit asked with another prompt; audit again without it"
+        )
+
+
+def reusable(previous: ReferenceAnswers | None, rows: Sequence[int]) -> set[int]:
+    """The rows of ``rows`` a previous audit already answered."""
+    if previous is None:
+        return set()
+    covered = set(previous.rows) - set(previous.unresolved)
+    return {row for row in rows if row in covered}
+
+
+def ask_model(
+    sample: Sample,
+    fields: Sequence[str],
+    outcomes: Mapping[int, RowOutcome],
+    *,
+    client: Any,
+    model: str,
+    prompt_fingerprint: str,
+    max_cost: Decimal,
+    ask: Ask,
+    previous: ReferenceAnswers | None = None,
+) -> ReferenceAnswers:
+    """The reference's answers for ``sample``'s rows, within ``max_cost``.
+
+    Args:
+        sample: The rows to ask, with their input columns.
+        fields: The fields compared; a row lacking any of them is unresolved.
+        outcomes: The run's ledger outcome per row, for pricing.
+        client: The reference client (its prices).
+        max_cost: The most this call may spend; answers reused cost nothing.
+        ask: Runs one chunk (see :data:`Ask`).
+        previous: Answers to reuse, already checked by :func:`check_previous`.
+    """
+    values: dict[str, dict[int, Any]] = {name: {} for name in fields}
+    unresolved: dict[int, str] = {}
+    reused = reusable(previous, sample.rows)
+    if previous is not None:
+        for row in sorted(reused):
+            for name in fields:
+                if row in previous.values.get(name, {}):
+                    values[name][row] = previous.values[name][row]
+
+    todo = [row for row in sample.rows if row not in reused]
+    spent = Decimal("0")
+    while todo:
+        chunk = _affordable(todo[:CHUNK_ROWS], outcomes, client, max_cost - spent)
+        if not chunk:
+            break
+        result = ask(sample.inputs.loc[chunk].reset_index(drop=True))
+        spent += Decimal(str(result.costs.total_cost))
+        _read(result, chunk, fields, values, unresolved)
+        todo = todo[len(chunk) :]
+    for row in todo:
+        unresolved[row] = OVER_CAP
+
+    return ReferenceAnswers(
+        model=model,
+        prompt_fingerprint=prompt_fingerprint,
+        run_id=sample.run_id,
+        fingerprint=sample.fingerprint,
+        rows=tuple(sample.rows),
+        values=values,
+        unresolved=unresolved,
+        cost=spent + (previous.cost if previous is not None else Decimal("0")),
+    )
+
+
+def _affordable(
+    rows: Sequence[int],
+    outcomes: Mapping[int, RowOutcome],
+    client: Any,
+    remaining: Decimal,
+) -> list[int]:
+    chosen = []
+    spent = Decimal("0")
+    for row in rows:
+        estimate = row_estimate(outcomes[row], client)
+        if spent + estimate > remaining:
+            break
+        spent += estimate
+        chosen.append(row)
+    return chosen
+
+
+def _read(
+    result: ExecutionResult,
+    chunk: Sequence[int],
+    fields: Sequence[str],
+    values: dict[str, dict[int, Any]],
+    unresolved: dict[int, str],
+) -> None:
+    """Each chunk row's answers, or the cause it has none, from its pass."""
+    frame = result.to_pandas()
+    for position, row in enumerate(chunk):
+        missing = False
+        for name in fields:
+            value = _cell(frame[name].iloc[position])
+            if value is None:
+                missing = True
+            else:
+                values[name][row] = value
+        if missing:
+            status = str(frame["status"].iloc[position])
+            unresolved[row] = _CAUSES.get(status, "no answer")
