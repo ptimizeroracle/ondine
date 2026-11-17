@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -104,14 +105,17 @@ def design_hash(path: Path = DESIGN) -> str | None:
 
 
 _DEV_FILES = ("dev.jsonl", "dev-adjudicated.jsonl")
+#: Extra Haiku samples drawn for Addendum 1 (``haiku-s1`` to ``haiku-s9``).
+_SAMPLE_STEM = re.compile(r"haiku-s[1-9]")
 
 
 def guard_path(path: Path | str, data_dir: Path = DATA) -> Path:
     """Return `path` if the study may read it, else raise.
 
     Allowed: ``<task>/dev.jsonl``, ``<task>/dev-adjudicated.jsonl``,
-    ``labels/<task>/<model>.jsonl`` and ``.cost.json``, the intent label
-    names, and the baseline report. The held-out split is never allowed.
+    ``labels/<task>/<model>.jsonl`` and ``.cost.json`` (also for the extra
+    Haiku samples ``haiku-s1`` to ``haiku-s9``), the intent label names, and
+    the baseline report. The held-out split is never allowed.
     """
     resolved = Path(path).resolve()
     try:
@@ -127,7 +131,10 @@ def guard_path(path: Path | str, data_dir: Path = DATA) -> Path:
             len(parts) == 3
             and parts[0] == "labels"
             and parts[1] in TASKS
-            and parts[2].split(".")[0] in MODELS
+            and (
+                parts[2].split(".")[0] in MODELS
+                or _SAMPLE_STEM.fullmatch(parts[2].split(".")[0])
+            )
             and parts[2].endswith((".jsonl", ".cost.json"))
         )
         or parts in (("intent", "labels.json"), ("baseline-report.json",))
