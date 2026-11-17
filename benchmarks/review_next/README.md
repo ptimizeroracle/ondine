@@ -179,8 +179,9 @@ At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
 
 - Intent passes all four pre-registered conditions on rows that share nothing
   with dev. Dev had left it INCONCLUSIVE (lower bound -7.4); the extra 540 rows
-  settle it. Its lower bound on the gain is +10.6, only just above the +10
-  threshold's neighbourhood, so read the gain as "about +20 +- 12", not +21.8.
+  settle it. The mean gain (+21.8) clears the +10 floor, and its lower bound
+  (+10.6) clears the required 0 by a wide margin. The bootstrap SE is 6.0 points,
+  so read the gain as about +22 with a range of roughly +10 to +34.
 - Faithfulness misses one condition: mean lift 1.92 is under the 2.0 floor. Its
   other three conditions pass (G +16.0, LB(G) +1.8, LB(L) 1.16). It is not a
   KILL (G >= 5 and L >= 1.5). The effect shrank from dev (54.9 errors per 100
