@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/ptimizeroracle/ondine/compare/v2.2.0...v2.3.0) (2026-11-17)
+
+
+### Features
+
+* **harness:** escalate rows re-ask could not fix to a stronger model ([#356](https://github.com/ptimizeroracle/ondine/issues/356)) ([e2f174e](https://github.com/ptimizeroracle/ondine/commit/e2f174ed843069b96bdcaf813bbbf97effdf499d))
+* **harness:** re-ask rows whose answer failed a check ([#348](https://github.com/ptimizeroracle/ondine/issues/348)) ([fda9f41](https://github.com/ptimizeroracle/ondine/commit/fda9f41cbdb0dc0ace662358467e777896accea0))
+* **harness:** stop a run whose first rows fail the contract ([#352](https://github.com/ptimizeroracle/ondine/issues/352)) ([60ca894](https://github.com/ptimizeroracle/ondine/commit/60ca89428cc054f820761fb822f8279d92294aff))
+* **ruler:** audit delivered values against a reference model ([#357](https://github.com/ptimizeroracle/ondine/issues/357)) ([833b21e](https://github.com/ptimizeroracle/ondine/commit/833b21e4d71a6619bb60f9dc80f4b13447da24ab))
+* **ruler:** certify against blind human labels with a review sheet ([#362](https://github.com/ptimizeroracle/ondine/issues/362)) ([3288969](https://github.com/ptimizeroracle/ondine/commit/3288969b5924cfa6dd093f0efd3aec38311e1b6a))
+* **ruler:** certify delivered columns against your labels ([#346](https://github.com/ptimizeroracle/ondine/issues/346)) ([3d2dea3](https://github.com/ptimizeroracle/ondine/commit/3d2dea373cf9ff715b532ed3da8f629824e8fa6a))
+
+
+### Bug Fixes
+
+* **harness:** do not format-fix an answer that opens with a short denial ([#351](https://github.com/ptimizeroracle/ondine/issues/351)) ([93cf168](https://github.com/ptimizeroracle/ondine/commit/93cf168d2db91b244de6892983bb3658f00c4ef4))
+* **pipeline:** keep auto-retry passes within the run's budget ([#349](https://github.com/ptimizeroracle/ondine/issues/349)) ([a24d4a3](https://github.com/ptimizeroracle/ondine/commit/a24d4a3e692dbb6298410192bf1b47ad1077531b))
+* **retry:** auto-retry re-runs rows a provider error skipped ([#350](https://github.com/ptimizeroracle/ondine/issues/350)) ([67e68c1](https://github.com/ptimizeroracle/ondine/commit/67e68c1b5086760b9f22e49685896f2c9ee53d2b))
+* **ruler:** price later audit chunks from what the reference charged ([#358](https://github.com/ptimizeroracle/ondine/issues/358)) ([2ee964d](https://github.com/ptimizeroracle/ondine/commit/2ee964d353235b81dd6d1f149ab14269df80d632))
+* **tests:** move the live smoke test to a model that is still free ([#353](https://github.com/ptimizeroracle/ondine/issues/353)) ([77d4e32](https://github.com/ptimizeroracle/ondine/commit/77d4e32aa202f058d3abf38fc3e8d435ecbfd5a5))
+
 ## [2.2.0](https://github.com/ptimizeroracle/ondine/compare/v2.1.1...v2.2.0) (2026-11-04)
 
 
