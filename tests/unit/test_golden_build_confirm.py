@@ -399,12 +399,21 @@ def test_rows_sha256_is_the_hash_write_jsonl_returns(tmp_path):
     assert build.rows_sha256(rows) == build.write_jsonl(tmp_path / "x.jsonl", rows)
 
 
+def test_write_jsonl_ends_every_line_with_a_bare_newline(tmp_path):
+    # Catches Windows text-mode newline translation: the manifest hashes are
+    # byte-for-byte, so a CRLF file would never match the hash recorded on macOS.
+    path = tmp_path / "x.jsonl"
+    build.write_jsonl(path, [{"id": "a"}, {"id": "b"}])
+
+    assert path.read_bytes() == b'{"id": "a"}\n{"id": "b"}\n'
+
+
 # ── main --confirm ───────────────────────────────────────────────────────
 
 
 def tree(root: Path) -> dict[str, bytes]:
     return {
-        str(p.relative_to(root)): p.read_bytes()
+        p.relative_to(root).as_posix(): p.read_bytes()
         for p in sorted(root.rglob("*"))
         if p.is_file()
     }

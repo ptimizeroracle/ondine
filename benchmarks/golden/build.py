@@ -148,7 +148,9 @@ def fetch(name: str) -> Path:
 
 def write_jsonl(path: Path, rows: list[dict]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    # newline="\n": the manifest hashes are byte-for-byte, so Windows must not
+    # translate the line ends to CRLF.
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return sha256_prefix(path)
