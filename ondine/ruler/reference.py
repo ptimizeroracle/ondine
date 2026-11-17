@@ -7,10 +7,14 @@ rows to ask, what that may cost, and what each row's answer, or reason for
 having none, is. It never sees the pipeline.
 
 Cost: before each chunk, only the leading rows whose estimate fits what is
-left of the cap are asked. A row's estimate is two calls (an answer and its
-re-ask) by :func:`ondine.harness.pricing.call_cost`, with the margin; it errs
-high, so the cap is never crossed and no answer paid for is lost. Rows left
-over are unresolved, "over the cost cap".
+left of the cap are asked. A row's static estimate is two calls (an answer and
+its re-ask) by :func:`ondine.harness.pricing.call_cost`, with the margin; it
+errs high, and the first chunk is priced at it. Later chunks are priced at the
+observed ratio of what the reference charged to what the static estimate
+charged those rows, times a safety factor of 2, never above the static
+estimate. So the cap is respected unless later rows cost more than twice as
+much, relative to their size, as the rows already asked. Rows left over are
+unresolved, "over the cost cap".
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ if TYPE_CHECKING:
 CHUNK_ROWS = 50
 #: Calls a row may take: its answer, and one re-ask when that breaks the contract.
 CALLS_PER_ROW = 2
+#: Later rows may cost up to this many times what the asked ones did, relative
+#: to their size, and still fit the cap.
+SAFETY = Decimal("2")
 
 OVER_CAP = "over the cost cap"
 #: Why a row has no reference answer, by the status its pass gave it.
@@ -165,6 +172,11 @@ def ask_model(
         outcomes: The run's ledger outcome per row, for pricing.
         client: The reference client (its prices).
         max_cost: The most this call may spend; answers reused cost nothing.
+            The first chunk is priced at the static high estimate; later
+            chunks at the observed ratio of spending to estimate with a
+            safety factor of :data:`SAFETY`, never above the static estimate.
+            The cap is respected unless later rows cost more than twice as
+            much, relative to their size, as the rows already asked.
         ask: Runs one chunk (see :data:`Ask`).
         previous: Answers to reuse, already checked by :func:`check_previous`.
     """
@@ -179,12 +191,19 @@ def ask_model(
 
     todo = [row for row in sample.rows if row not in reused]
     spent = Decimal("0")
+    estimated = Decimal("0")  # what the static estimate charged the rows asked
     while todo:
-        chunk = _affordable(todo[:CHUNK_ROWS], outcomes, client, max_cost - spent)
+        factor = _factor(spent, estimated)
+        chunk = _affordable(
+            todo[:CHUNK_ROWS], outcomes, client, max_cost - spent, factor
+        )
         if not chunk:
             break
         result = ask(sample.inputs.loc[chunk].reset_index(drop=True))
         spent += Decimal(str(result.costs.total_cost))
+        estimated += sum(
+            (row_estimate(outcomes[row], client) for row in chunk), Decimal("0")
+        )
         _read(result, chunk, fields, values, unresolved)
         todo = todo[len(chunk) :]
     for row in todo:
@@ -202,16 +221,27 @@ def ask_model(
     )
 
 
+def _factor(spent: Decimal, estimated: Decimal) -> Decimal:
+    """How much of the static estimate the next rows are priced at, 0 to 1.
+
+    1 until a row is asked, or when the asked rows had no estimate to compare.
+    """
+    if estimated <= 0:
+        return Decimal("1")
+    return min(Decimal("1"), SAFETY * spent / estimated)
+
+
 def _affordable(
     rows: Sequence[int],
     outcomes: Mapping[int, RowOutcome],
     client: Any,
     remaining: Decimal,
+    factor: Decimal,
 ) -> list[int]:
     chosen = []
     spent = Decimal("0")
     for row in rows:
-        estimate = row_estimate(outcomes[row], client)
+        estimate = row_estimate(outcomes[row], client) * factor
         if spent + estimate > remaining:
             break
         spent += estimate

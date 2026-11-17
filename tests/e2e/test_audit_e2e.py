@@ -18,7 +18,7 @@ from decimal import Decimal
 import pandas as pd
 import pytest
 
-from ondine import PipelineBuilder
+from ondine import Pipeline, PipelineBuilder
 from ondine.context.memory_store import InMemoryContextStore
 from ondine.core.specifications import LLMProvider, LLMSpec
 from ondine.ruler import CertificationError
@@ -35,7 +35,9 @@ REFERENCE_COST = Decimal("0.00012")
 ROW_ESTIMATE = Decimal("0.01") * 24 / 1000 * 2 * Decimal("1.25")
 
 
-def _reference(answers: dict[int, list[str]], **options) -> AttemptClient:
+def _reference(
+    answers: dict[int, list[str]], cost_per_call: Decimal = REFERENCE_COST, **options
+) -> AttemptClient:
     spec = LLMSpec(
         provider=LLMProvider.OPENAI,
         model="reference-1",
@@ -43,7 +45,7 @@ def _reference(answers: dict[int, list[str]], **options) -> AttemptClient:
         output_cost_per_1k_tokens=Decimal("0.01"),
     )
     return AttemptClient(
-        answers, spec=spec, cost_per_call=REFERENCE_COST, default="refund", **options
+        answers, spec=spec, cost_per_call=cost_per_call, default="refund", **options
     )
 
 
@@ -287,22 +289,92 @@ def test_each_field_is_audited_on_its_own_rows_with_its_own_causes():
 # ---------------------------------------------------------------------------
 
 
+def _passes(monkeypatch) -> list[int]:
+    """Rows sent in each reference pass, in order, as the audit makes them."""
+    sizes: list[int] = []
+    original = Pipeline._reference_pass
+
+    def spy(self, frame, plan):
+        sizes.append(len(frame))
+        return original(self, frame, plan)
+
+    monkeypatch.setattr(Pipeline, "_reference_pass", spy)
+    return sizes
+
+
 def test_the_cap_is_never_crossed_and_rows_over_it_are_unresolved():
     pipeline, result, _ = _run(10)
     reference = _reference({})
     # Room for two rows at their estimate; real calls cost a fifth of it, so
-    # later chunks fit a few more, one at a time, until none fits.
+    # later chunks, priced at what the asked rows cost, fit more.
     cap = float(ROW_ESTIMATE * 2)
 
     audit = pipeline.audit(result, client=reference, max_cost=cap)
 
     intent = audit["intent"]
     asked = len(reference.tokens_seen)
-    assert asked == 6
+    # Chunk 1 at the static estimate (0.0006): 2 rows, spending 0.00024.
+    # Ratio 0.00024 / 0.0012 = 0.2, factor min(1, 2 * 0.2) = 0.4, so a row
+    # is priced 0.00024. Chunk 2: 0.00096 left, 4 rows (spent 0.00072).
+    # Chunk 3: 0.00048 left, 2 rows (spent 0.00096). Chunk 4: 0.00024 left,
+    # 1 row (spent 0.00108). 0.00012 left: no row fits. 2+4+2+1 = 9.
+    assert asked == 9
     assert audit.reference.cost == asked * REFERENCE_COST
     assert audit.reference.cost <= Decimal(str(cap))
     assert intent.unresolved_causes == {"over the cost cap": 10 - asked}
     assert intent.estimate.right == asked
+
+
+def test_later_chunks_are_priced_by_what_the_reference_charged(monkeypatch):
+    pipeline, result, _ = _run(10)
+    cap = float(ROW_ESTIMATE * 2)
+    reference = _reference({})
+    passes = _passes(monkeypatch)
+
+    pipeline.audit(result, client=reference, max_cost=cap)
+
+    # The static rule asks [2, 1, 1, 1, 1]: 6 rows in 5 passes. Calibrated,
+    # the same cap asks 9 rows in 4 passes, and never spends past it.
+    assert passes == [2, 4, 2, 1]
+    assert sum(passes[:2]) > 2 + 1
+    assert len(passes) < 5
+    assert sum(passes) * REFERENCE_COST <= Decimal(str(cap))
+
+
+def test_a_later_chunk_is_never_priced_above_the_static_estimate(monkeypatch):
+    pipeline, result, _ = _run(12)
+    # A call costs 0.0005, so the asked rows cost 5/6 of their estimate:
+    # twice that is above 1, and the factor stays 1. Cap: 6 rows at estimate.
+    reference = _reference({}, cost_per_call=Decimal("0.0005"))
+    passes = _passes(monkeypatch)
+    cap = float(ROW_ESTIMATE * 6)
+
+    pipeline.audit(result, client=reference, max_cost=cap)
+
+    # Chunk 1: 6 rows, spent 0.003. Left 0.0006: the static estimate fits
+    # one row. A factor of 2 * 5/6 would price a row 0.001 and fit none.
+    assert passes == [6, 1]
+    assert sum(passes) * Decimal("0.0005") <= Decimal(str(cap))
+
+
+def test_a_free_reference_is_asked_every_row_without_dividing_by_zero(monkeypatch):
+    pipeline, result, _ = _run(60)
+    free = AttemptClient(
+        {},
+        spec=LLMSpec(provider=LLMProvider.OPENAI, model="free-1"),
+        cost_per_call=Decimal("0"),
+        default="refund",
+    )
+    passes = _passes(monkeypatch)
+
+    audit = pipeline.audit(result, client=free, max_cost=0.001)
+
+    # Nothing is priced, so nothing is left over; the second chunk has no
+    # static estimate to compare the (zero) spending with.
+    assert passes == [50, 10]
+    assert len(free.tokens_seen) == 60
+    assert audit.reference.cost == 0
+    assert audit["intent"].unresolved_causes == {}
 
 
 def test_a_second_audit_with_the_first_asks_only_the_rows_left_unresolved():
