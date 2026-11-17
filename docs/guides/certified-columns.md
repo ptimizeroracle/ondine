@@ -103,7 +103,7 @@ print(audit.render())
 - **What the reference sees:** the prompt the run's model saw for each sampled row, with the same system prompt, examples, preprocessing and retrieved passages. It never sees the run's answer. `estimate.render()` names everything that leaves.
 - **What it shares with the run:** nothing. No context store, no response cache, no checkpoints, no output file. Its answers never reach the run's ledger. The result and its run report are unchanged.
 - **How its answers are read:** by the run's contract. An answer that breaks it is asked again once, with the reason. A row still without a valid answer is **unresolved** ("broke the contract"), and so is a provider failure ("provider"). The certificate prints the causes next to the count.
-- **Cost:** `max_cost` is required. It is a hard cap for the audit, separate from the run's budget. Ondine asks the rows in chunks of 50. It asks only the rows whose high estimate fits what is left of the cap, so the cap is never crossed and no answer paid for is lost. Rows left over are unresolved ("over the cost cap").
+- **Cost:** `max_cost` is required. It is a hard cap for the audit, separate from the run's budget. Ondine asks the rows in chunks of 50. It asks only the rows whose estimate fits what is left of the cap. The first chunk is priced at the high estimate. Later chunks are priced at what the reference has actually charged so far, times a safety factor of 2, never above the high estimate. The cap holds unless later rows cost more than twice as much, relative to their size, as the rows already asked. Rows left over are unresolved ("over the cost cap").
 - **Asking the rest later:** pass the first audit back. Its answers are reused, and only its unresolved rows are asked:
 
   ```python
