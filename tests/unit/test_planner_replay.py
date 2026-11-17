@@ -1095,6 +1095,29 @@ class TestHoldoutGuard:
             with pytest.raises(PermissionError):
                 replay.guard_path(layout / rel, layout)
 
+    def test_the_extra_haiku_samples_are_readable_and_nothing_near_them(self, layout):
+        for task in replay.TASKS:
+            for i in range(1, 10):
+                for ext in (".jsonl", ".cost.json"):
+                    rel = f"labels/{task}/haiku-s{i}{ext}"
+                    assert replay.guard_path(layout / rel, layout)
+        for rel in (
+            "labels/intent/haiku-s1-smoke3.jsonl",
+            "labels/intent/haiku-s1-smoke3.cost.json",
+            "labels/intent/haiku-s1-candidates.jsonl",
+            "labels/intent/haiku-s0.jsonl",
+            "labels/intent/haiku-s10.jsonl",
+            "labels/intent/haiku-sx.jsonl",
+            "labels/intent/haiku-s.jsonl",
+            "labels/intent/luna-s1.jsonl",
+            "labels/holdout/haiku-s1.jsonl",
+            "labels/intent/haiku-s1-holdout.jsonl",
+            "intent/haiku-s1.jsonl",
+            "haiku-s1.jsonl",
+        ):
+            with pytest.raises(PermissionError):
+                replay.guard_path(layout / rel, layout)
+
     def test_a_path_that_escapes_the_data_directory_is_refused(self, layout):
         with pytest.raises(PermissionError):
             replay.guard_path(
