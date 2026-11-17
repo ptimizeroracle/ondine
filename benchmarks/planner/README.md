@@ -98,3 +98,18 @@ Why, from the diagnostics:
 - **100 labels are too thin per value.** On 77 intents, C2 fitted on every row would gain 5.7 points over C2 fitted on 100 (O3 − C2): the per-value error rates the Ruler can measure from a sample do not transfer.
 
 What this does and does not kill: routing on agreement or on per-value error rates from ~100 labels. It does not test signals we hold no data for (token probabilities, self-consistency across samples, a verifier model); those need new API runs.
+
+## Addendum 1 (2026-11-17): Haiku self-consistency, KILL STANDS
+
+Pre-registered in [`DESIGN-addendum-1.md`](DESIGN-addendum-1.md) (commit `a9dd6db`) before any sample was drawn; run once from that commit, clean tree. Full tables: [`results/addendum-1.md`](results/addendum-1.md). Three extra Haiku samples per row, through OpenRouter, cost $0.19; every route check passed (accuracy 79.7–81.0% vs 81.0% originally, 93–97 output tokens per row vs 95, agreement among new samples 95.4% vs 95.2% with the original).
+
+**Intent (decides): neither policy passes.**
+
+| Policy | cost vs Opus | accuracy | lift at equal cost (lower bound) |
+|---|---:|---:|---:|
+| C4: route unless all 4 Haiku answers agree | 19% | 83.1% | +0.2 (−2.7) |
+| C5: C4 or Haiku–Luna disagreement | 25% | 84.0% | +0.4 (−2.6) |
+
+**Mechanism: not useful.** Self-consistency flags 4 of the 33 rows Haiku and Luna get wrong together (12%; pre-registered "useful" needed ≥ 14). Haiku repeats its own mistakes: the errors the cheap pair shares are stable across samples too.
+
+**Faithfulness (scope only, cannot change the verdict):** C4 passes by CUT, narrowly (lift +2.7, lower bound +0.2; D2 lower bound −1.9 against −2.0). On adjudicated gold it flags 10 of Haiku's 13 wrong rows with 5% false flags. This is a lead for judgment tasks, not a finding: it was seen after the fact on one task, so it needs its own pre-registration and the faithfulness holdout before anyone builds on it.
