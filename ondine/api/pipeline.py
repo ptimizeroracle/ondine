@@ -94,6 +94,7 @@ from ondine.ruler.ruler import certifiable, resolve_gold
 from ondine.ruler.ruler import certify as certify_values
 from ondine.ruler.sample import Sample
 from ondine.ruler.sample import draw as draw_ruler_sample
+from ondine.ruler.source import Reference
 
 if TYPE_CHECKING:
     from ondine.orchestration.backends.provider_batch import ProviderBatchBackend
@@ -629,7 +630,7 @@ class Pipeline:
 
     def draw_sample(
         self,
-        result: ExecutionResult,
+        result: ExecutionResult | DeliveredValues,
         *,
         size: int | None = None,
         precision: float | None = None,
@@ -643,7 +644,8 @@ class Pipeline:
         pass the labels and the sample to :meth:`certify`.
 
         Args:
-            result: A finished result of :meth:`execute`.
+            result: A finished result of :meth:`execute`. A saved
+                ``DeliveredValues`` is refused: it holds no input columns.
             size: Rows to draw; 200 by default.
             precision: Instead of ``size``: the half-width the range should not
                 exceed at worst, e.g. 0.03 for ±3 points.
@@ -653,6 +655,11 @@ class Pipeline:
         Raises:
             CertificationError: Nothing to certify, or the arguments conflict.
         """
+        if isinstance(result, DeliveredValues):
+            raise CertificationError(
+                "a saved view holds no input columns; draw the sample from the "
+                "result of execute()"
+            )
         _, names, _ = self._ruler_fields(result, fields)
         delivered = DeliveredValues.read(result, names)
         inputs = result.to_pandas()[list(self.specifications.dataset.input_columns)]
@@ -660,9 +667,35 @@ class Pipeline:
             delivered, names, inputs, size=size, precision=precision
         )
 
-    def certify(
+    def save_view(
         self,
         result: ExecutionResult,
+        *,
+        fields: Sequence[OutputField] | None = None,
+    ) -> DeliveredValues:
+        """The Ruler's view of ``result``, to save and certify later.
+
+        The one way to make a view: it holds this pipeline's certifiable
+        fields, so a sample drawn on ``result`` binds to the same values as
+        the view. ``view.to_dict()`` is plain data for ``json.dumps``;
+        ``DeliveredValues.from_dict`` restores it in any process, and
+        :meth:`certify` takes it in place of the result.
+
+        Args:
+            result: A finished result of :meth:`execute`.
+            fields: Declarations to read the outputs by, for a run with no
+                contract.
+
+        Raises:
+            CertificationError: Nothing to certify, or the result is not one
+                a view can be made of (a stream's chunk, no row ledger).
+        """
+        _, names, _ = self._ruler_fields(result, fields)
+        return DeliveredValues.read(result, names)
+
+    def certify(
+        self,
+        result: ExecutionResult | DeliveredValues,
         gold: Any,
         *,
         sample: Sample | None = None,
@@ -679,11 +712,16 @@ class Pipeline:
         result and its run report are never changed.
 
         Args:
-            result: A finished result of :meth:`execute`.
+            result: A finished result of :meth:`execute`, or the view
+                :meth:`save_view` made of one, read back in any process
+                (``DeliveredValues.from_dict``). A saved view is certified by
+                this pipeline's own output contract, which must be the one the
+                run was judged by; the sample must be drawn from the result.
             gold: The labels: a column of the data by name, values aligned
                 with the input rows, or a mapping row -> label; with several
                 fields, a mapping field -> any of those. A cell may hold a list
                 of acceptable answers; an empty cell leaves the row unresolved.
+                A saved view has no frame, so a column name is refused.
             sample: The sample the labels were made for.
             fields: Declarations to read the outputs by, for a run with no
                 contract.
@@ -691,11 +729,10 @@ class Pipeline:
 
         Raises:
             CertificationError: The labels break the field's rules (every one
-                is listed), the sample is from another run, or nothing can be
-                certified.
+                is listed), the sample is from another run, a saved view is of
+                another contract, or nothing can be certified.
         """
         contract, names, skipped = self._ruler_fields(result, fields)
-        delivered = DeliveredValues.read(result, names)
         if isinstance(gold, Mapping) and gold and all(key in names for key in gold):
             certified = [name for name in names if name in gold]
             skipped = [
@@ -704,18 +741,22 @@ class Pipeline:
             ]
         else:
             certified = names
-        labels = resolve_gold(gold, certified, result.to_pandas())
+        if isinstance(result, DeliveredValues):
+            result.require_fields(names)
+            delivered, frame = result, None
+        else:
+            delivered = DeliveredValues.read(result, names)
+            frame = result.to_pandas()
+        labels = resolve_gold(gold, certified, delivered.row_count, frame)
         return certify_values(
             delivered,
             contract,
             certified,
             skipped,
-            labels,
+            Reference(kind="labels", answers=labels),
             sample=sample,
             tolerance=tolerance,
-            read_delivered=not (
-                result.contract is not None and result.contract.checked
-            ),
+            read_delivered=not delivered.checked,
         )
 
     def audit(
@@ -776,16 +817,17 @@ class Pipeline:
             ask=lambda frame: self._reference_pass(frame, plan),
             previous=plan.previous,
         )
-        return certify_values(
+        certificate = certify_values(
             plan.delivered,
             plan.contract,
             plan.fields,
             plan.not_certified,
-            {},
+            reference.as_reference(),
             sample=plan.sample,
             tolerance=tolerance,
-            reference=reference,
         )
+        # The answers ride on the certificate, to be passed back as ``previous``.
+        return replace(certificate, reference=reference)
 
     def estimate_audit(
         self,
@@ -921,12 +963,37 @@ class Pipeline:
             carries.append("retrieved passages")
         return tuple(carries)
 
+    def _run_contract(
+        self, run: ExecutionResult | DeliveredValues
+    ) -> OutputContract | None:
+        """The checked contract the run was judged by, or None if it had none.
+
+        A saved view carries only the contract's fingerprint; the rules come
+        from this pipeline's own contract, and a view of another one is
+        refused: its values were judged by rules this pipeline cannot show.
+        """
+        if isinstance(run, DeliveredValues):
+            if not run.checked:
+                return None
+            own = self._components.output_contract
+            if own is None or own.fingerprint != run.contract_fingerprint:
+                raise CertificationError(
+                    "the saved view was judged by another output contract "
+                    f"({str(run.contract_fingerprint)[:8]}…) than this pipeline's "
+                    "(build the pipeline with the same declarations and contract policy)"
+                )
+            return own
+        contract = run.contract
+        return contract if contract is not None and contract.checked else None
+
     def _ruler_fields(
-        self, result: ExecutionResult, declarations: Sequence[OutputField] | None
+        self,
+        result: ExecutionResult | DeliveredValues,
+        declarations: Sequence[OutputField] | None,
     ) -> tuple[OutputContract, list[str], list[tuple[str, str]]]:
         """The contract values are read by, its certifiable fields, the rest."""
-        run_contract = result.contract
-        if run_contract is not None and run_contract.checked:
+        run_contract = self._run_contract(result)
+        if run_contract is not None:
             if declarations:
                 raise CertificationError(
                     "the run has an output contract; its rules are used, so pass no fields"
