@@ -1,3 +1,4 @@
 # Pre-registered designs and their results are hash-locked: check them out
 # with the same bytes on every OS (Windows runners convert to CRLF otherwise).
 benchmarks/planner/** text eol=lf
+benchmarks/review_next/** text eol=lf
