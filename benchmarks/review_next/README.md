@@ -107,3 +107,57 @@ At k = 10% of the unsampled rows, original gold, mean over 1000 splits:
   pre-registered check on the held-out faithfulness rows.
 - Exploratory, not a verdict: the free per-value ranker R1 lifts intent
   review to 1.82x random with no extra model call.
+
+## Confirmation
+
+The result above was found on dev rows, so it is confirmed on fresh rows before
+anything ships. The design is pre-registered and locked:
+[`DESIGN-confirm.md`](DESIGN-confirm.md). Every constant is in the
+`PREREG_CONFIRM` dict of `confirm.py`; the results embed its hash and the
+parent's. It reuses `review_next.py`, `replay.py` and `addendum1.py` by import,
+changes none of them, and reads no held-out split: every data read goes through
+`guard_confirm`, which allows only the confirm rows, the Haiku sample files, the
+dev rows (ids only) and the intent label names.
+
+**One ranker per task, R2** (dissent D over three extra Haiku samples, then R1),
+against random (R0) and the free per-value rate (R1). Rows: 770 intent and 320
+faithfulness, never used by dev. Faithfulness bootstraps over documents. The
+verdict is CONFIRMED_GENERAL, CONFIRMED(faithfulness), NOT_REPLICATED or
+INCONCLUSIVE (design section 5).
+
+Run order (each step needs the one before):
+
+```bash
+# 1. Build the rows. Deterministic; never downloads, never writes dev or the second split.
+uv run python benchmarks/golden/build.py --confirm
+# 2. Commit the manifest's confirm hashes and fill confirm_split_sha256 in PREREG_CONFIRM.
+# 3. Smoke (3 rows, $0.01 cap), then four sample runs per task: OpenRouter Haiku, $1.00 total cap.
+uv run python benchmarks/golden/label.py --task faithfulness --model haiku --split confirm --sample 1 --limit 3
+uv run python benchmarks/golden/label.py --task faithfulness --model haiku --split confirm --sample 1   # ... --sample 4, then intent
+# 4. Check, lock the data, commit the lock file, then the one full run from the clean commit.
+uv run python benchmarks/review_next/confirm.py --check    # exit 0 ok, 2 failed, 3 data not all there yet
+uv run python benchmarks/review_next/confirm.py --lock
+uv run python benchmarks/review_next/confirm.py
+```
+
+Rules:
+
+- `label.py --split confirm` needs `--model haiku` and `--sample 1` to `5`, always
+  uses OpenRouter and writes `labels/<task>/confirm/haiku-s<N>.jsonl`. Every cost
+  file there (smoke and aborted runs too) counts toward one $1.00 cap, checked
+  before any call. Per-run defaults: intent $0.14, faithfulness $0.09, `--limit`
+  $0.01; `--budget` may only lower them. `haiku-s5` is the single replacement for
+  one file that fails V4, and `label.py` refuses it until one of `haiku-s1` to
+  `s4` exists for that task. A run writes a hold file for its whole budget before
+  any call and deletes it only once its cost file exists, so a crash at any point
+  stays on the books; `confirm.py --lock` refuses while a hold file exists.
+- `--check` exits 3 and lists what is missing until the rows, the four sample
+  files per task and the lock exist. It never reports ok on incomplete data.
+- The full run exits 2 on uncommitted changes under `benchmarks/review_next`
+  (not `results/`), `benchmarks/planner`, `benchmarks/golden` or `tests/unit`, on
+  an existing `results/confirm.json`, or when a data file no longer matches the
+  lock. `--quick` is refused on the real data until the full result exists.
+- Results go to `results/confirm.md` and `results/confirm.json`.
+
+Tests: `tests/unit/test_review_next_confirm.py`, `tests/unit/test_golden_build_confirm.py`
+and `tests/unit/test_golden_label_confirm.py`, all on synthetic data.
