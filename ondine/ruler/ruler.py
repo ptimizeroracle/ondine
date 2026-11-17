@@ -1,17 +1,19 @@
 """How reference answers become a claim about each field.
 
-Reads each reference (gold) value by the field's own contract rules, the way
-the model's answer was read; compares it with the delivered value; and turns
-the comparisons into exact ranges, breakdowns, confusions and wrong rows.
+Reads each reference value by the field's own contract rules, the way the
+model's answer was read (:func:`read_reference`); compares it with the
+delivered value (:func:`_compare`); and turns the comparisons into exact
+ranges, breakdowns, confusions and wrong rows.
 
-Three claims, decided by which rows have a reference:
+The reference is one :class:`~ondine.ruler.source.Reference`, whoever made
+it (:mod:`ondine.ruler.source`). Its kind and the rows it covers decide the claim:
 
-* a sample Ondine drew: a certificate with a range;
-* every delivered row: a census certificate, exact;
-* rows the caller picked: a check — agreement on those rows, no range.
-
-When the reference is a model's answers (:mod:`ondine.ruler.reference`), the
-same comparison makes an audit: agreement with that model, never accuracy.
+* labels, on a sample Ondine drew: a certificate with a range;
+* labels, on every delivered row: a census certificate, exact;
+* labels, on rows the caller picked: a check — agreement on those rows, no
+  range;
+* a reference model's answers: the same comparison makes an audit, agreement
+  with that model, never accuracy.
 """
 
 from __future__ import annotations
@@ -37,19 +39,18 @@ from ondine.ruler.certificate import (
 )
 from ondine.ruler.delivered import CertificationError
 from ondine.ruler.intervals import hypergeom_bounds
+from ondine.ruler.source import NO_ANSWER, ReferenceProblem
 
 if TYPE_CHECKING:
     from ondine.harness.contract import OutputContract, OutputField
     from ondine.ruler.delivered import DeliveredValues
-    from ondine.ruler.reference import ReferenceAnswers
     from ondine.ruler.sample import Sample
+    from ondine.ruler.source import Reference
 
 #: Below this many resolved sampled rows a breakdown line is marked "few rows".
 FEW_ROWS = 20
 #: Confusions listed per field.
 TOP_CONFUSIONS = 5
-
-_UNRESOLVED = object()
 
 
 def certifiable(contract: OutputContract) -> tuple[list[str], list[tuple[str, str]]]:
@@ -78,14 +79,18 @@ def _kind(declaration: OutputField) -> str | None:
 
 
 def resolve_gold(
-    gold: Any, fields: Sequence[str], frame: pd.DataFrame
+    gold: Any,
+    fields: Sequence[str],
+    row_count: int,
+    frame: pd.DataFrame | None = None,
 ) -> dict[str, dict[int, Any]]:
     """Each field's reference value per row, from what the caller passed.
 
     ``gold`` is a column name of the result frame; values aligned with the
     input rows; a mapping (or a pandas Series) row → value; or, for several
     fields, a mapping field → any of those. Missing cells are left out
-    (unresolved).
+    (unresolved). Without ``frame`` (a saved view of a run has none) a column
+    name is refused.
     """
     if isinstance(gold, Mapping) and gold and all(key in fields for key in gold):
         per_field = dict(gold)
@@ -99,6 +104,12 @@ def resolve_gold(
     out: dict[str, dict[int, Any]] = {}
     for name, source in per_field.items():
         if isinstance(source, str):
+            if frame is None:
+                raise CertificationError(
+                    f"gold for {name!r} names the column {source!r}, but a saved "
+                    "view has no result frame; pass the labels as values or a "
+                    "mapping row -> label"
+                )
             if source not in frame.columns:
                 raise CertificationError(
                     f"no column {source!r} in the result for field {name!r}"
@@ -110,9 +121,9 @@ def resolve_gold(
             cells = {int(row): value for row, value in source.items()}
         else:
             values = list(source)
-            if len(values) != len(frame):
+            if len(values) != row_count:
                 raise CertificationError(
-                    f"gold for {name!r} has {len(values)} values; the run has {len(frame)} rows"
+                    f"gold for {name!r} has {len(values)} values; the run has {row_count} rows"
                 )
             cells = dict(enumerate(values))
         out[name] = {row: value for row, value in cells.items() if not _missing(value)}
@@ -136,92 +147,86 @@ def certify(
     contract: OutputContract,
     fields: Sequence[str],
     not_certified: Sequence[tuple[str, str]],
-    gold: Mapping[str, Mapping[int, Any]],
+    reference: Reference,
     *,
     sample: Sample | None = None,
     tolerance: Mapping[str, float] | None = None,
     read_delivered: bool = False,
-    reference: ReferenceAnswers | None = None,
 ) -> Certificate:
-    """Compare delivered values with reference values and state the claim.
+    """Compare delivered values with a reference and state the claim.
 
     Args:
         delivered: The run's delivered values.
         contract: The rules values are read and compared by.
         fields: The fields to certify (all certifiable).
         not_certified: Output fields left out, with the reason.
-        gold: Field -> row -> reference value, missing rows left out.
-        sample: The run's Ondine-drawn sample, if the references cover it.
+        reference: What to compare with; its kind and coverage decide the
+            claim (a certificate, an audit or a check).
+        sample: The run's Ondine-drawn sample, if the reference covers it.
         tolerance: Field -> allowed absolute difference, for numbers.
         read_delivered: Read delivered values by the contract too (a run with
             no contract delivers raw text).
-        reference: A model's answers on ``sample``, instead of ``gold``: the
-            claim is then an audit.
 
     Raises:
         CertificationError: The sample belongs to another run or other
-            values, or reference values break the field's rules (every one
-            listed).
+            values, the reference's kind is not supported yet, or reference
+            values break the field's rules (every one listed).
     """
+    if reference.kind == "people":
+        raise CertificationError("labels from people are not certified yet")
     tolerance = dict(tolerance or {})
-    if reference is not None:
-        gold = reference.values
     if sample is not None:
         _check_sample(sample, delivered, fields)
     declarations = {d.name: d for d in contract.fields}
-    problems: list[str] = []
+    problems: list[ReferenceProblem] = []
     outcomes: dict[str, dict[int, tuple[str, Any, tuple[Any, ...]]]] = {}
     for name in fields:
         population = delivered.population(name)
-        rows = _compared_rows(population, gold[name], sample)
+        answers = reference.answers[name]
+        rows = _compared_rows(population, answers, sample)
         outcomes[name] = {}
         for row in rows:
-            ref = gold[name].get(row, _UNRESOLVED)
             value = delivered.values[name][row]
             if read_delivered:
                 value = _read_delivered(contract, name, value)
-            outcomes[name][row] = _compare(
-                contract, name, value, ref, tolerance.get(name, 0.0), row, problems
-            )
+            accepted: tuple[Any, ...] = ()
+            if row in answers:
+                accepted, found = read_reference(contract, name, answers[row], row)
+                problems += found
+            outcomes[name][row] = _compare(value, accepted, tolerance.get(name, 0.0))
     if problems:
-        shown = "\n  ".join(problems[:50])
+        shown = "\n  ".join(problem.line() for problem in problems[:50])
         more = f"\n  … {len(problems) - 50} more" if len(problems) > 50 else ""
         raise CertificationError(
             f"{len(problems)} reference value(s) break the field's rules; fix them and certify again:\n  {shown}{more}"
         )
 
-    claim = _claim(delivered, fields, gold, sample)
+    coverage = _coverage(delivered, fields, reference, sample)
     results = tuple(
         _field_certificate(
             delivered,
             declarations[name],
             outcomes[name],
-            claim,
+            coverage,
             tolerance.get(name, 0.0),
-            reference.unresolved if reference is not None else None,
+            # Labels give no cause for an unresolved row; other sources do.
+            None if reference.kind == "labels" else reference.causes.get(name, {}),
         )
         for name in fields
     )
     return Certificate(
-        claim=AUDIT
-        if reference is not None
-        else CERTIFICATE
-        if claim != CHECK
-        else CHECK,
-        claim_text=_audit_text(claim, reference.model)
-        if reference is not None
-        else _claim_text(claim, results),
+        claim=_claim(reference, coverage),
+        claim_text=_claim_text(reference, coverage, results),
         run_id=delivered.run_id,
         fingerprint=delivered.fingerprint,
         contract_fingerprint=contract.fingerprint,
-        basis=_basis(claim, sample, results),
+        basis=_basis(coverage, sample, results),
         seed=sample.seed if sample is not None else None,
         fields=results,
         not_certified=tuple(not_certified),
-        row_accuracy=_row_accuracy(delivered, fields, outcomes, claim)
+        row_accuracy=_row_accuracy(delivered, fields, outcomes, coverage)
         if len(fields) > 1
         else None,
-        reference=reference,
     )
 
 
@@ -254,14 +259,22 @@ def _compared_rows(
     return [row for row in population if row in gold]
 
 
-def _claim(delivered, fields, gold, sample) -> str:
-    """ "sample", "census" or CHECK, for the run as a whole."""
+def _coverage(delivered, fields, reference, sample) -> str:
+    """ "sample", "census" or CHECK: which rows the reference covers."""
     if sample is not None:
         return "census" if sample.census else "sample"
     full = all(
-        all(row in gold[name] for row in delivered.population(name)) for name in fields
+        all(row in reference.answers[name] for row in delivered.population(name))
+        for name in fields
     )
     return "census" if full else CHECK
+
+
+def _claim(reference, coverage) -> str:
+    """CERTIFICATE, AUDIT or CHECK: what kind of statement this is."""
+    if reference.kind == "model":
+        return AUDIT
+    return CHECK if coverage == CHECK else CERTIFICATE
 
 
 def _read_delivered(contract: OutputContract, name: str, value: Any) -> Any:
@@ -284,30 +297,43 @@ class _Unreadable:
     __hash__ = object.__hash__
 
 
-def _compare(
-    contract, name, value, ref, tol, row, problems
-) -> tuple[str, Any, tuple[Any, ...]]:
-    """("right" | "wrong" | "unresolved", delivered, acceptable references)."""
-    if ref is _UNRESOLVED:
-        return ("unresolved", value, ())
-    raws = list(ref) if isinstance(ref, list | tuple | set | frozenset) else [ref]
+def read_reference(
+    contract: OutputContract, name: str, raw: Any, row: int
+) -> tuple[tuple[Any, ...], list[ReferenceProblem]]:
+    """The values a reference cell accepts, read by the field's contract rules.
+
+    ``raw`` is one answer or a list of acceptable answers; an empty answer is
+    skipped. Each is read as a model's answer would be, no more loosely.
+    A value that breaks the field's rules, or would need a format fix, is not
+    accepted: it becomes a problem and the others are still read.
+
+    Returns:
+        The accepted values (``None`` for an answer that means "no value"),
+        empty when the cell gives no usable answer; and the problems found.
+    """
+    raws = list(raw) if isinstance(raw, list | tuple | set | frozenset) else [raw]
     accepted: list[Any] = []
-    for raw in raws:
-        if _missing(raw):
+    problems: list[ReferenceProblem] = []
+    for item in raws:
+        if _missing(item):
             continue
-        verdict = read_field(contract, name, raw)
+        verdict = read_field(contract, name, item)
         if verdict.outcome == "failed" or verdict.format_fixed:
-            why = (
-                "; ".join(r.text for r in verdict.reasons)
-                or "needs a format fix; give the exact value"
-            )
-            problems.append(f"row {row}, {name}: {raw!r} — {why}")
+            reasons = tuple(r.text for r in verdict.reasons)
+            problems.append(ReferenceProblem(name, row, item, reasons))
             continue
         accepted.append(verdict.value if verdict.outcome == "value" else None)
+    return tuple(accepted), problems
+
+
+def _compare(
+    value: Any, accepted: tuple[Any, ...], tol: float
+) -> tuple[str, Any, tuple[Any, ...]]:
+    """("right" | "wrong" | "unresolved", delivered, acceptable references)."""
     if not accepted:
         return ("unresolved", value, ())
     right = any(_equal(value, a, tol) for a in accepted)
-    return ("right" if right else "wrong", value, tuple(accepted))
+    return ("right" if right else "wrong", value, accepted)
 
 
 def _equal(value: Any, ref: Any, tol: float) -> bool:
@@ -348,11 +374,12 @@ def _estimate(population: int, outcomes: Sequence[str], check: bool) -> Estimate
 
 
 def _field_certificate(
-    delivered, declaration, outcomes, claim, tol, causes=None
+    delivered, declaration, outcomes, coverage, tol, causes=None
 ) -> FieldCertificate:
+    """``causes``: row -> why it has no answer, or None to report none."""
     name = declaration.name
     population = delivered.population(name)
-    check = claim == CHECK
+    check = coverage == CHECK
     states = [outcomes[row][0] for row in sorted(outcomes)]
     estimate = _estimate(len(population), states, check)
 
@@ -364,7 +391,7 @@ def _field_certificate(
         lines = []
         for value, size in sizes.most_common():
             est = _estimate(size, compared.get(value, []), check)
-            few = claim == "sample" and est.resolved < FEW_ROWS
+            few = coverage == "sample" and est.resolved < FEW_ROWS
             lines.append(Group(str(value), est, few))
         return tuple(lines)
 
@@ -391,7 +418,7 @@ def _field_certificate(
         not_delivered=_not_delivered(delivered, name, population),
         unresolved_causes=dict(
             Counter(
-                causes.get(row, "no answer")
+                causes.get(row, NO_ANSWER)
                 for row, o in sorted(outcomes.items())
                 if o[0] == "unresolved"
             )
@@ -427,7 +454,7 @@ def _rule(declaration, tol) -> str:
     )
 
 
-def _row_accuracy(delivered, fields, outcomes, claim) -> Estimate:
+def _row_accuracy(delivered, fields, outcomes, coverage) -> Estimate:
     population = sorted(
         set.intersection(*(set(delivered.population(n)) for n in fields))
     )
@@ -442,26 +469,24 @@ def _row_accuracy(delivered, fields, outcomes, claim) -> Estimate:
             if "unresolved" in per
             else "right"
         )
-    return _estimate(len(population), states, claim == CHECK)
+    return _estimate(len(population), states, coverage == CHECK)
 
 
-def _claim_text(claim: str, results) -> str:
-    if claim == "sample":
+def _claim_text(reference, coverage: str, results) -> str:
+    if reference.kind == "model":
+        rows = "every delivered row" if coverage == "census" else "a sample Ondine drew"
+        return f"agreement with {reference.model}, on {rows} — an audit, not accuracy"
+    if coverage == "sample":
         return "accuracy against your labels, on a sample Ondine drew"
-    if claim == "census":
+    if coverage == "census":
         return "accuracy against your labels, on every delivered row"
-    rows = max((r.estimate.compared for r in results), default=0)
-    return f"agreement with your labels on the {rows} rows you labelled — not a claim about the column"
+    labelled = max((r.estimate.compared for r in results), default=0)
+    return f"agreement with your labels on the {labelled} rows you labelled — not a claim about the column"
 
 
-def _audit_text(claim: str, model: str) -> str:
-    rows = "every delivered row" if claim == "census" else "a sample Ondine drew"
-    return f"agreement with {model}, on {rows} — an audit, not accuracy"
-
-
-def _basis(claim: str, sample, results) -> str:
+def _basis(coverage: str, sample, results) -> str:
     if sample is not None:
         return f"sample of {len(sample.rows)} of {sample.population_size} delivered rows ({sample.rule})"
-    if claim == "census":
+    if coverage == "census":
         return "every delivered row has a label"
     return "rows you labelled, not drawn by Ondine"

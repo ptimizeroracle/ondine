@@ -1,5 +1,7 @@
 """A reference model's answers for a run's sampled rows: the audit's source.
 
+:class:`ReferenceAnswers` turns into the Ruler's :class:`~ondine.ruler.source.Reference`.
+
 The rows are asked in chunks through an injected ``ask``: the pipeline runs
 each chunk as an isolated pass of the run's own prompt, on the reference
 model, judged by the run's contract with one re-ask. This module knows which
@@ -26,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from ondine.harness.pricing import COST_MARGIN, call_cost
 from ondine.ruler.delivered import CertificationError, _cell
+from ondine.ruler.source import NO_ANSWER, Reference
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -74,6 +77,24 @@ class ReferenceAnswers:
     values: dict[str, dict[int, Any]] = field(repr=False)
     unresolved: dict[int, str]
     cost: Decimal
+
+    def as_reference(self) -> Reference:
+        """These answers as the Ruler's reference.
+
+        A row's cause (it is kept per row) applies to every field the row has
+        no answer for.
+        """
+        causes = {
+            name: {
+                row: self.unresolved.get(row, NO_ANSWER)
+                for row in self.rows
+                if row not in answers
+            }
+            for name, answers in self.values.items()
+        }
+        return Reference(
+            kind="model", answers=self.values, causes=causes, model=self.model
+        )
 
 
 @dataclass(frozen=True)
@@ -268,4 +289,4 @@ def _read(
                 values[name][row] = value
         if missing:
             status = str(frame["status"].iloc[position])
-            unresolved[row] = _CAUSES.get(status, "no answer")
+            unresolved[row] = _CAUSES.get(status, NO_ANSWER)

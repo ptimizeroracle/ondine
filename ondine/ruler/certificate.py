@@ -148,8 +148,9 @@ class Certificate:
         row_accuracy: Rows with every certified field right, when there are
             several fields; None otherwise.
         method: How ranges are computed.
-        reference: An audit's :class:`~ondine.ruler.reference.ReferenceAnswers`
-            (pass it back as ``previous`` to reuse them); None otherwise.
+        reference: An audit's :class:`~ondine.ruler.reference.ReferenceAnswers`,
+            attached by ``Pipeline.audit`` (pass the certificate back as
+            ``previous`` to reuse them); None otherwise.
     """
 
     claim: str
