@@ -1,0 +1,27 @@
+{
+  "prereg_sha256": "fb7d2c3ff926bebff322e57aa96cb2c95446c86a2a5e8545bcd3b34b532e9ced",
+  "design_sha256": "b8de9ba652b1bddfde4e586693ef90945cdd9ce2b5de662b3f41a95bd96c539a",
+  "data_sha256": {
+    "intent/labels.json": "e64b29ebfc59f9bdbf4d4756fadd29669ab8fe623203b66790cce6d1e1b8f5f8",
+    "intent/confirm.jsonl": "6ccee5cc9550152cd0c8ab298cc7f4ebb81a09f2a34e49f54d9fa972858899f5",
+    "intent/dev.jsonl": "f8d3b90ef99131fd438caf91876766fcd66c1a48b80f7f9f32abc8c0523e9fa0",
+    "labels/intent/confirm/haiku-s1.jsonl": "f92585a6237b1a86ea105aa2b57c9fd2f7367f4c7198b90ecccd9e9e8cc78cb6",
+    "labels/intent/confirm/haiku-s1.cost.json": "3a4cc7fb627de3c11fba0d68242ffbc7865f35893a9385e9c6f626850ed1e9c2",
+    "labels/intent/confirm/haiku-s2.jsonl": "4f594f329586b04464f8dfd6af188cf472768f4eea025b3d0a6014ffc315e267",
+    "labels/intent/confirm/haiku-s2.cost.json": "0cae51b6af6207ccc971d7e64cdf01421b503748b3354be531d9b1323239259c",
+    "labels/intent/confirm/haiku-s3.jsonl": "49bc8ce15fe6b4bb202c0833dd68f6ef04d24fc4c2fb8ffdb8a796323b34e29d",
+    "labels/intent/confirm/haiku-s3.cost.json": "95eb129a20ef5c4996427bf8fd2e021de10f696741e21afc1e47c0e84585dde7",
+    "labels/intent/confirm/haiku-s4.jsonl": "ae98bd73b0467621e53ce9be8dfb4043bec10508f90e4abd0862a0a9a62b6370",
+    "labels/intent/confirm/haiku-s4.cost.json": "ee30d5b1f02424a25fb52fbd3b47be778b670cd1668dcdd9262b16cd746c0ac6",
+    "faithfulness/confirm.jsonl": "6c8e98e0163ee7bceb1d9f7a2efca64f2aa1622edcc7f17a1a59b475cf3fcc9d",
+    "faithfulness/dev.jsonl": "d0fb8fd50518e1d3fb0a6319738611998d5ce3646e22c90aada8220bf4a8f821",
+    "labels/faithfulness/confirm/haiku-s1.jsonl": "0d8900ec86f243aec68df037e093c062342dd81008c050a386e5dbf38badea02",
+    "labels/faithfulness/confirm/haiku-s1.cost.json": "3f500bcb300ab1fadae4304a23ecd7de481bb97f5fd6810ceaa66eac6920c92e",
+    "labels/faithfulness/confirm/haiku-s2.jsonl": "746ab82df7e735a51d8d121cfae72adb9f45bc6cd9087463bf38097db3a309e0",
+    "labels/faithfulness/confirm/haiku-s2.cost.json": "499805286e8203c2757ea7da5ce3de0b6903f878421ba81de2179c848f5cfdb6",
+    "labels/faithfulness/confirm/haiku-s3.jsonl": "dcbe8df0364f35d17bdecbe96c5ecfb6eb2680235b57b90e191fa8d5bbed9f35",
+    "labels/faithfulness/confirm/haiku-s3.cost.json": "47573e7f811a0650434da307389ae53115bc5dcf9b90cc8ac41d7dd5a044588d",
+    "labels/faithfulness/confirm/haiku-s4.jsonl": "dd2075f1dccb47e2fdb79edd7766229716498099129fc484518a749f92267ead",
+    "labels/faithfulness/confirm/haiku-s4.cost.json": "094530707e5179e08f6d8414b3e87f184787fdbd76f08cfb0527f9aae737f6f7"
+  }
+}
