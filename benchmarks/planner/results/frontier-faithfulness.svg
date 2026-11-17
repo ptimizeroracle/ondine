@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 500" width="760" height="500" role="img">
+<title>Cost and accuracy frontier: faithfulness</title>
+<style>text{fill:#1f2328;font-family:system-ui,sans-serif;font-size:12px}.bg{fill:#fff}.grid{stroke:#d8dee4}.hull{stroke:#0969da;fill:none;stroke-width:2}.blue{fill:#0969da}.grey{fill:#8c959f;fill-opacity:.55}.note{fill:#57606a;font-size:11px}.red{fill:#cf222e;font-weight:600}.redmark{fill:#cf222e}.green{fill:#1a7f37}.greenline{stroke:#1a7f37;fill:none}@media (prefers-color-scheme: dark){text{fill:#e6edf3}.bg{fill:#0d1117}.grid{stroke:#30363d}.hull{stroke:#58a6ff}.blue{fill:#58a6ff}.grey{fill:#8b949e}.note{fill:#8b949e}.red{fill:#ff7b72}.redmark{fill:#ff7b72}.green{fill:#3fb950}.greenline{stroke:#3fb950}}</style>
+<rect class="bg" width="760" height="500"/>
+<text x="70" y="24" font-size="15" font-weight="600">faithfulness: cost against balanced (s = sol)</text>
+<line class="grid" x1="217.9" y1="50" x2="217.9" y2="420"/>
+<text x="217.9" y="438" text-anchor="middle">0.3</text>
+<line class="grid" x1="404.0" y1="50" x2="404.0" y2="420"/>
+<text x="404.0" y="438" text-anchor="middle">1</text>
+<line class="grid" x1="573.8" y1="50" x2="573.8" y2="420"/>
+<text x="573.8" y="438" text-anchor="middle">3</text>
+<line class="grid" x1="70" y1="322.2" x2="730" y2="322.2"/>
+<text x="62" y="326.2" text-anchor="end">0.80</text>
+<line class="grid" x1="70" y1="221.9" x2="730" y2="221.9"/>
+<text x="62" y="225.9" text-anchor="end">0.85</text>
+<line class="grid" x1="70" y1="121.6" x2="730" y2="121.6"/>
+<text x="62" y="125.6" text-anchor="end">0.90</text>
+<text x="400.0" y="462" text-anchor="middle">$ per 1k rows (log scale)</text>
+<text x="16" y="235.0" transform="rotate(-90 16 235.0)" text-anchor="middle">metric</text>
+<polyline class="hull" points="104.5,359.8 109.4,347.8 114.3,335.4 119.2,322.7 124.2,309.5 129.1,295.9 134.0,282.6 138.9,282.3 143.8,282.1 148.8,281.8 153.7,281.4 158.6,281.1 163.5,280.8 168.4,280.4 173.3,280.1 178.3,279.7 183.2,279.3 188.1,279.0 193.0,278.6 197.9,278.1 202.9,277.7 207.8,277.3 212.7,276.8 217.6,276.3 222.5,275.9 227.5,275.4 232.4,274.8 237.3,274.3 242.2,273.7 247.1,273.2 252.0,272.6 257.0,272.0 261.9,271.4 266.8,270.7 271.7,270.0 276.6,269.3 281.6,268.6 286.5,267.9 291.4,267.1 296.3,266.4 301.2,265.5 306.2,264.7 311.1,263.8 316.0,263.0 320.9,262.0 325.8,261.1 330.7,260.1 335.7,259.1 340.6,258.0 345.5,257.0 350.4,255.9 355.3,254.7 360.3,253.5 365.2,252.3 370.1,251.0 375.0,249.7 379.9,248.4 384.8,247.0 389.8,245.6 394.7,244.1 399.6,242.5 404.5,241.0 409.4,239.3 414.4,237.7 419.3,235.9 424.2,234.1 429.1,232.3 434.0,230.4 439.0,228.4 443.9,226.3 448.8,224.2 453.7,222.1 458.6,219.8 463.5,217.5 468.5,215.1 473.4,212.7 478.3,210.1 483.2,207.5 488.1,204.8 493.1,202.0 498.0,201.5 502.9,201.5 507.8,201.5 512.7,201.5 517.6,201.5 522.6,201.5 527.5,201.5 532.4,201.5 537.3,201.5 542.2,201.5 547.2,201.5 552.1,201.5 557.0,201.5 561.9,201.5 566.8,201.5 571.8,201.5 576.7,201.5 581.6,201.5 586.5,201.5 591.4,201.5 596.3,201.5 601.3,201.5 606.2,201.5 611.1,201.5 616.0,201.5 620.9,201.5 625.9,201.5 630.8,201.5 635.7,201.5 640.6,201.5 645.5,201.5 650.5,201.5 655.4,201.5 660.3,201.5 665.2,201.5 670.1,201.5 675.0,201.5 680.0,201.5 684.9,201.5 689.8,201.5"/>
+<line class="greenline" x1="70" y1="110.2" x2="730" y2="110.2" stroke-dasharray="5 4"/>
+<text class="green" x="726" y="105.2" text-anchor="end">O2: any model right (unreachable)</text>
+<circle class="grey" cx="375.0" cy="253.2" r="3"><title>C1:sonnet</title></circle>
+<circle class="grey" cx="332.9" cy="221.8" r="3"><title>C1:sol</title></circle>
+<circle class="grey" cx="459.3" cy="274.4" r="3"><title>C1:opus</title></circle>
+<circle class="grey" cx="135.2" cy="282.5" r="3"><title>C2:haiku:sonnet:n50:t0.6</title></circle>
+<circle class="grey" cx="202.4" cy="283.8" r="3"><title>C2:haiku:sonnet:n50:t0.7</title></circle>
+<circle class="grey" cx="436.9" cy="275.0" r="3"><title>C2:haiku:sonnet:n50:t0.8</title></circle>
+<circle class="grey" cx="564.4" cy="249.0" r="3"><title>C2:haiku:sonnet:n50:t0.9</title></circle>
+<circle class="grey" cx="133.7" cy="280.7" r="3"><title>C2:haiku:sonnet:n100:t0.6</title></circle>
+<circle class="grey" cx="136.5" cy="280.8" r="3"><title>C2:haiku:sonnet:n100:t0.7</title></circle>
+<circle class="grey" cx="417.5" cy="283.1" r="3"><title>C2:haiku:sonnet:n100:t0.8</title></circle>
+<circle class="grey" cx="576.3" cy="245.5" r="3"><title>C2:haiku:sonnet:n100:t0.9</title></circle>
+<circle class="grey" cx="134.6" cy="282.4" r="3"><title>C2:haiku:sol:n50:t0.6</title></circle>
+<circle class="grey" cx="179.3" cy="282.0" r="3"><title>C2:haiku:sol:n50:t0.7</title></circle>
+<circle class="grey" cx="374.4" cy="260.1" r="3"><title>C2:haiku:sol:n50:t0.8</title></circle>
+<circle class="grey" cx="494.6" cy="211.9" r="3"><title>C2:haiku:sol:n50:t0.9</title></circle>
+<circle class="grey" cx="133.7" cy="280.7" r="3"><title>C2:haiku:sol:n100:t0.6</title></circle>
+<circle class="grey" cx="135.4" cy="280.7" r="3"><title>C2:haiku:sol:n100:t0.7</title></circle>
+<circle class="grey" cx="356.7" cy="269.3" r="3"><title>C2:haiku:sol:n100:t0.8</title></circle>
+<circle class="grey" cx="506.1" cy="203.8" r="3"><title>C2:haiku:sol:n100:t0.9</title></circle>
+<circle class="grey" cx="136.9" cy="282.5" r="3"><title>C2:haiku:opus:n50:t0.6</title></circle>
+<circle class="grey" cx="256.9" cy="285.1" r="3"><title>C2:haiku:opus:n50:t0.7</title></circle>
+<circle class="grey" cx="544.9" cy="286.5" r="3"><title>C2:haiku:opus:n50:t0.8</title></circle>
+<circle class="grey" cx="679.4" cy="277.8" r="3"><title>C2:haiku:opus:n50:t0.9</title></circle>
+<circle class="grey" cx="133.7" cy="280.7" r="3"><title>C2:haiku:opus:n100:t0.6</title></circle>
+<circle class="grey" cx="139.6" cy="280.8" r="3"><title>C2:haiku:opus:n100:t0.7</title></circle>
+<circle class="grey" cx="523.9" cy="293.6" r="3"><title>C2:haiku:opus:n100:t0.8</title></circle>
+<circle class="grey" cx="691.7" cy="276.3" r="3"><title>C2:haiku:opus:n100:t0.9</title></circle>
+<circle class="grey" cx="132.0" cy="357.8" r="3"><title>C2:luna:sonnet:n50:t0.6</title></circle>
+<circle class="grey" cx="316.6" cy="335.7" r="3"><title>C2:luna:sonnet:n50:t0.7</title></circle>
+<circle class="grey" cx="499.0" cy="271.7" r="3"><title>C2:luna:sonnet:n50:t0.8</title></circle>
+<circle class="grey" cx="568.3" cy="242.9" r="3"><title>C2:luna:sonnet:n50:t0.9</title></circle>
+<circle class="grey" cx="104.5" cy="359.8" r="3"><title>C2:luna:sonnet:n100:t0.6</title></circle>
+<circle class="grey" cx="207.5" cy="352.5" r="3"><title>C2:luna:sonnet:n100:t0.7</title></circle>
+<circle class="grey" cx="507.6" cy="255.1" r="3"><title>C2:luna:sonnet:n100:t0.8</title></circle>
+<circle class="grey" cx="574.2" cy="243.3" r="3"><title>C2:luna:sonnet:n100:t0.9</title></circle>
+<circle class="grey" cx="121.9" cy="357.5" r="3"><title>C2:luna:sol:n50:t0.6</title></circle>
+<circle class="grey" cx="263.9" cy="330.6" r="3"><title>C2:luna:sol:n50:t0.7</title></circle>
+<circle class="grey" cx="430.7" cy="249.2" r="3"><title>C2:luna:sol:n50:t0.8</title></circle>
+<circle class="grey" cx="497.5" cy="204.5" r="3"><title>C2:luna:sol:n50:t0.9</title></circle>
+<circle class="grey" cx="104.5" cy="359.8" r="3"><title>C2:luna:sol:n100:t0.6</title></circle>
+<circle class="grey" cx="175.3" cy="350.7" r="3"><title>C2:luna:sol:n100:t0.7</title></circle>
+<circle class="grey" cx="438.9" cy="231.6" r="3"><title>C2:luna:sol:n100:t0.8</title></circle>
+<circle class="grey" cx="503.1" cy="202.0" r="3"><title>C2:luna:sol:n100:t0.9</title></circle>
+<circle class="grey" cx="159.2" cy="358.2" r="3"><title>C2:luna:opus:n50:t0.6</title></circle>
+<circle class="grey" cx="414.1" cy="341.7" r="3"><title>C2:luna:opus:n50:t0.7</title></circle>
+<circle class="grey" cx="612.6" cy="293.9" r="3"><title>C2:luna:opus:n50:t0.8</title></circle>
+<circle class="grey" cx="684.4" cy="273.8" r="3"><title>C2:luna:opus:n50:t0.9</title></circle>
+<circle class="grey" cx="104.5" cy="359.8" r="3"><title>C2:luna:opus:n100:t0.6</title></circle>
+<circle class="grey" cx="277.6" cy="353.9" r="3"><title>C2:luna:opus:n100:t0.7</title></circle>
+<circle class="grey" cx="621.5" cy="282.0" r="3"><title>C2:luna:opus:n100:t0.8</title></circle>
+<circle class="grey" cx="690.4" cy="274.6" r="3"><title>C2:luna:opus:n100:t0.9</title></circle>
+<circle class="grey" cx="374.9" cy="252.8" r="3"><title>C3:haiku:sonnet:n50:t0.6</title></circle>
+<circle class="grey" cx="388.2" cy="253.2" r="3"><title>C3:haiku:sonnet:n50:t0.7</title></circle>
+<circle class="grey" cx="486.3" cy="250.8" r="3"><title>C3:haiku:sonnet:n50:t0.8</title></circle>
+<circle class="grey" cx="574.5" cy="244.5" r="3"><title>C3:haiku:sonnet:n50:t0.9</title></circle>
+<circle class="grey" cx="375.0" cy="253.2" r="3"><title>C3:haiku:sonnet:n100:t0.6</title></circle>
+<circle class="grey" cx="375.5" cy="253.2" r="3"><title>C3:haiku:sonnet:n100:t0.7</title></circle>
+<circle class="grey" cx="474.5" cy="253.7" r="3"><title>C3:haiku:sonnet:n100:t0.8</title></circle>
+<circle class="grey" cx="583.8" cy="243.9" r="3"><title>C3:haiku:sonnet:n100:t0.9</title></circle>
+<circle class="grey" cx="332.8" cy="222.1" r="3"><title>C3:haiku:sol:n50:t0.6</title></circle>
+<circle class="grey" cx="343.6" cy="221.9" r="3"><title>C3:haiku:sol:n50:t0.7</title></circle>
+<circle class="grey" cx="427.9" cy="216.2" r="3"><title>C3:haiku:sol:n50:t0.8</title></circle>
+<circle class="grey" cx="508.8" cy="204.2" r="3"><title>C3:haiku:sol:n50:t0.9</title></circle>
+<circle class="grey" cx="332.9" cy="221.8" r="3"><title>C3:haiku:sol:n100:t0.6</title></circle>
+<circle class="grey" cx="333.3" cy="221.8" r="3"><title>C3:haiku:sol:n100:t0.7</title></circle>
+<circle class="grey" cx="417.3" cy="217.9" r="3"><title>C3:haiku:sol:n100:t0.8</title></circle>
+<circle class="grey" cx="517.5" cy="201.9" r="3"><title>C3:haiku:sol:n100:t0.9</title></circle>
+<circle class="grey" cx="459.2" cy="273.6" r="3"><title>C3:haiku:opus:n50:t0.6</title></circle>
+<circle class="grey" cx="475.9" cy="274.1" r="3"><title>C3:haiku:opus:n50:t0.7</title></circle>
+<circle class="grey" cx="590.1" cy="275.0" r="3"><title>C3:haiku:opus:n50:t0.8</title></circle>
+<circle class="grey" cx="685.7" cy="274.4" r="3"><title>C3:haiku:opus:n50:t0.9</title></circle>
+<circle class="grey" cx="459.3" cy="274.4" r="3"><title>C3:haiku:opus:n100:t0.6</title></circle>
+<circle class="grey" cx="460.0" cy="274.4" r="3"><title>C3:haiku:opus:n100:t0.7</title></circle>
+<circle class="grey" cx="576.9" cy="276.7" r="3"><title>C3:haiku:opus:n100:t0.8</title></circle>
+<circle class="grey" cx="695.5" cy="275.0" r="3"><title>C3:haiku:opus:n100:t0.9</title></circle>
+<circle class="blue" cx="133.7" cy="282.6" r="5"/>
+<text x="140.7" y="286.6">haiku</text>
+<circle class="blue" cx="104.5" cy="359.8" r="5"/>
+<text x="111.5" y="363.8">luna</text>
+<circle class="blue" cx="569.5" cy="242.5" r="5"/>
+<text x="576.5" y="246.5">sonnet</text>
+<circle class="blue" cx="493.9" cy="201.5" r="5"/>
+<text x="500.9" y="205.5">sol</text>
+<circle class="blue" cx="689.8" cy="274.6" r="5"/>
+<text x="696.8" y="278.6">opus</text>
+<path class="redmark" d="M332.9,214.8 L339.9,221.8 L332.9,228.8 L325.9,221.8 Z"/>
+<text class="red" x="341.9" y="215.8">C1</text>
+<path class="redmark" d="M356.7,262.3 L363.7,269.3 L356.7,276.3 L349.7,269.3 Z"/>
+<text class="red" x="365.7" y="263.3">C2</text>
+<path class="redmark" d="M417.3,210.9 L424.3,217.9 L417.3,224.9 L410.3,217.9 Z"/>
+<text class="red" x="426.3" y="211.9">C3</text>
+<circle class="greenline" cx="136.5" cy="110.2" r="5" stroke-width="2"/>
+<text class="green" x="144.5" y="114.2">O1</text>
+<text class="note" x="70" y="486">blue: single models and their hull (all rows); red: confirmatory C1-C3; grey: exploratory grid; policies are means over splits.</text>
+</svg>

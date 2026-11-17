@@ -78,3 +78,23 @@ held-out split at release, by someone who has not seen these results.
 - **The bootstrap fit is slightly conservative for C2 and C3.** A labelled row drawn twice counts twice, so the fit sees fewer distinct rows than the point estimate. `delta_boot_mean` in `replay.json` sits a little below the point estimate.
 - **Intent length weighting counts only `text`.** Every intent prompt also carries the 77-name label list, so per-row cost varies less than the weights say. It cannot cause a false pass: a policy must pass under both cost models.
 - **Provenance:** results record the design's hash, the PREREG hash, the script's own hash, and the git commit with a dirty flag.
+
+## Result (2026-11-17): KILL
+
+Run once, unchanged, from the pre-registration commit `91e5352` (clean tree). Full tables: [`results/replay.md`](results/replay.md).
+
+No confirmatory policy passes on any task. On intent (the deciding task, original gold, out of sample):
+
+| Policy | cost vs Opus | accuracy | lift over the hull at equal cost (lower bound) |
+|---|---:|---:|---:|
+| C1 cheap-pair cascade | 14% | 83.1% | +0.8 (−1.7) |
+| C2 value router, 100 labels | 34% | 84.0% | −0.0 (−3.0) |
+| C3 both | 41% | 85.3% | +0.9 (−2.0) |
+
+Why, from the diagnostics:
+
+- **The money is there; the signals cannot find it.** The unreachable per-row oracle reaches 91.3% at 7% of Opus's cost (Opus alone: 88.3%).
+- **Cheap models share their mistakes.** Haiku and Luna agree on 75% of Haiku's wrong intent answers (61% on faithfulness), so disagreement misses most errors.
+- **100 labels are too thin per value.** On 77 intents, C2 fitted on every row would gain 5.7 points over C2 fitted on 100 (O3 − C2): the per-value error rates the Ruler can measure from a sample do not transfer.
+
+What this does and does not kill: routing on agreement or on per-value error rates from ~100 labels. It does not test signals we hold no data for (token probabilities, self-consistency across samples, a verifier model); those need new API runs.
