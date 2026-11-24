@@ -102,7 +102,8 @@
       "hashes": {
         "dev": "d0fb8fd50518e1d3",
         "holdout": "a49f95032361ebff",
-        "dev-adjudicated": "0328b6c4fa5a9f35"
+        "dev-adjudicated": "0328b6c4fa5a9f35",
+        "confirm": "6c8e98e0163ee7bc"
       },
       "counts": {
         "dev": {
@@ -130,6 +131,19 @@
             "samsum": 38,
             "scitldr": 38
           }
+        },
+        "confirm": {
+          "rows": 320,
+          "by_domain": {
+            "billsum": 40,
+            "ectsum": 40,
+            "news": 40,
+            "qmsumm": 40,
+            "sales_call": 40,
+            "sales_email": 40,
+            "samsum": 40,
+            "scitldr": 40
+          }
         }
       }
     },
@@ -137,7 +151,8 @@
       "hashes": {
         "dev": "f8d3b90ef99131fd",
         "holdout": "53d57e41986b8d74",
-        "dev-adjudicated": "90ca4889002f5b28"
+        "dev-adjudicated": "90ca4889002f5b28",
+        "confirm": "6ccee5cc9550152c"
       },
       "counts": {
         "dev": {
@@ -302,6 +317,88 @@
             "why_verify_identity": 4,
             "wrong_amount_of_cash_received": 4,
             "wrong_exchange_rate_for_cash_withdrawal": 4
+          }
+        },
+        "confirm": {
+          "rows": 770,
+          "by_label": {
+            "Refund_not_showing_up": 10,
+            "activate_my_card": 10,
+            "age_limit": 10,
+            "apple_pay_or_google_pay": 10,
+            "atm_support": 10,
+            "automatic_top_up": 10,
+            "balance_not_updated_after_bank_transfer": 10,
+            "balance_not_updated_after_cheque_or_cash_deposit": 10,
+            "beneficiary_not_allowed": 10,
+            "cancel_transfer": 10,
+            "card_about_to_expire": 10,
+            "card_acceptance": 10,
+            "card_arrival": 10,
+            "card_delivery_estimate": 10,
+            "card_linking": 10,
+            "card_not_working": 10,
+            "card_payment_fee_charged": 10,
+            "card_payment_not_recognised": 10,
+            "card_payment_wrong_exchange_rate": 10,
+            "card_swallowed": 10,
+            "cash_withdrawal_charge": 10,
+            "cash_withdrawal_not_recognised": 10,
+            "change_pin": 10,
+            "compromised_card": 10,
+            "contactless_not_working": 10,
+            "country_support": 10,
+            "declined_card_payment": 10,
+            "declined_cash_withdrawal": 10,
+            "declined_transfer": 10,
+            "direct_debit_payment_not_recognised": 10,
+            "disposable_card_limits": 10,
+            "edit_personal_details": 10,
+            "exchange_charge": 10,
+            "exchange_rate": 10,
+            "exchange_via_app": 10,
+            "extra_charge_on_statement": 10,
+            "failed_transfer": 10,
+            "fiat_currency_support": 10,
+            "get_disposable_virtual_card": 10,
+            "get_physical_card": 10,
+            "getting_spare_card": 10,
+            "getting_virtual_card": 10,
+            "lost_or_stolen_card": 10,
+            "lost_or_stolen_phone": 10,
+            "order_physical_card": 10,
+            "passcode_forgotten": 10,
+            "pending_card_payment": 10,
+            "pending_cash_withdrawal": 10,
+            "pending_top_up": 10,
+            "pending_transfer": 10,
+            "pin_blocked": 10,
+            "receiving_money": 10,
+            "request_refund": 10,
+            "reverted_card_payment?": 10,
+            "supported_cards_and_currencies": 10,
+            "terminate_account": 10,
+            "top_up_by_bank_transfer_charge": 10,
+            "top_up_by_card_charge": 10,
+            "top_up_by_cash_or_cheque": 10,
+            "top_up_failed": 10,
+            "top_up_limits": 10,
+            "top_up_reverted": 10,
+            "topping_up_by_card": 10,
+            "transaction_charged_twice": 10,
+            "transfer_fee_charged": 10,
+            "transfer_into_account": 10,
+            "transfer_not_received_by_recipient": 10,
+            "transfer_timing": 10,
+            "unable_to_verify_identity": 10,
+            "verify_my_identity": 10,
+            "verify_source_of_funds": 10,
+            "verify_top_up": 10,
+            "virtual_card_not_working": 10,
+            "visa_or_mastercard": 10,
+            "why_verify_identity": 10,
+            "wrong_amount_of_cash_received": 10,
+            "wrong_exchange_rate_for_cash_withdrawal": 10
           }
         }
       }
